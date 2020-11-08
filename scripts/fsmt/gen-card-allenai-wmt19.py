@@ -85,7 +85,7 @@ Pretrained weights were left identical to the original model released by allenai
 Here are the BLEU scores:
 
 model   |  transformers
--------|---------|----------
+-------|---------
 {model_name}  |  {scores[model_name][1]}
 
 The score was calculated using this code:

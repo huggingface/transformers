@@ -61,7 +61,7 @@ Pretrained weights were left identical to the original model released by allenai
 Here are the BLEU scores:
 
 model   |  transformers
--------|---------|----------
+-------|---------
 wmt19-de-en-6-6-big  |  39.9
 
 The score was calculated using this code:
