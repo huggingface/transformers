@@ -177,7 +177,7 @@ class TestFinetuneTrainer(TestCasePlus):
             --num_train_epochs {str(num_train_epochs)}
             --per_device_train_batch_size 4
             --per_device_eval_batch_size 4
-            --learning_rate 3e-4
+            --learning_rate 3e-3
             --warmup_steps 8
             --evaluate_during_training
             --predict_with_generate
