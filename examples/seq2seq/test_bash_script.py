@@ -13,7 +13,7 @@ from distillation import BartSummarizationDistiller, distill_main
 from finetune import SummarizationModule, main
 from transformers import MarianMTModel
 from transformers.file_utils import cached_path
-from transformers.testing_utils import TestCasePlus, require_torch_non_multigpu_but_fix_me, require_torch_gpu, slow
+from transformers.testing_utils import TestCasePlus, require_torch_gpu, require_torch_non_multigpu_but_fix_me, slow
 from utils import load_json
 
 
