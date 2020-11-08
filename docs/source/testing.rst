@@ -736,10 +736,11 @@ This code creates a unique temporary directory, and sets :obj:`tmp_dir` to its l
     def test_whatever(self):
         tmp_dir = self.get_auto_remove_tmp_dir("./xxx")
 
-This is useful for debug when you want to monitor a specific directory and want to make sure the previous tests didn't leave any data in there.
+This is useful for debug when you want to monitor a specific directory and want to make sure the previous tests didn't
+leave any data in there.
 
-* You can override the first two options by directly overriding the ``before`` and ``after`` args, leading to the
-  following behavior:
+* You can override the default behavior by directly overriding the ``before`` and ``after`` args, leading to one of the
+  following behaviors:
 
     - ``before=True``: the temporary dir will always be cleared at the beginning of the test.
     - ``before=False``: if the temporary dir already existed, any existing files will remain there.
