@@ -328,7 +328,7 @@ class Trainer:
         self.hp_search_backend = None
         self.use_tune_checkpoints = False
         default_label_names = (
-            ["start_positions, end_positions"]
+            ["start_positions", "end_positions"]
             if type(self.model) in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values()
             else ["labels"]
         )
