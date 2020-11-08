@@ -660,7 +660,7 @@ class TestCasePlus(unittest.TestCase):
         Args:
             tmp_dir (:obj:`string`, `optional`):
                 if not :obj:`None` use this path, otherwise, use a unique tmp path will be created
-            before (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            before (:obj:`bool`, `optional`):
                 if :obj:`True` and the tmp dir already exists make sure to empty it right away
             after (:obj:`bool`, `optional`, defaults to :obj:`None`):
                 if :obj:`True` delete the tmp dir at the end of the test
