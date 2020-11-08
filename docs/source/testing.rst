@@ -727,7 +727,7 @@ This code creates a unique temporary directory, and sets :obj:`tmp_dir` to its l
     def test_whatever(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
 
-    ``tmp_dir`` will contain the path to the created temp dir. It will be automatically removed at the end of the test.
+``tmp_dir`` will contain the path to the created temp dir. It will be automatically removed at the end of the test.
 
 * Create a temporary dir of my choice, ensure it's empty before the test starts and don't empty it after the test.
 
@@ -736,8 +736,7 @@ This code creates a unique temporary directory, and sets :obj:`tmp_dir` to its l
     def test_whatever(self):
         tmp_dir = self.get_auto_remove_tmp_dir("./xxx")
 
-
-    This is useful for debug when you want to monitor a specific directory and want to make sure the previous tests didn't leave any data in there.
+This is useful for debug when you want to monitor a specific directory and want to make sure the previous tests didn't leave any data in there.
 
 * You can override the first two options by directly overriding the ``before`` and ``after`` args, leading to the
   following behavior:
@@ -799,7 +798,7 @@ or the ``xfail`` way:
     @pytest.mark.xfail
     def test_feature_x():
 
-Here is how to skip a test based on some internal check inside the test:
+- Here is how to skip a test based on some internal check inside the test:
 
 .. code-block:: python
 
@@ -822,7 +821,7 @@ or the ``xfail`` way:
     def test_feature_x():
         pytest.xfail("expected to fail until bug XYZ is fixed")
 
-Here is how to skip all tests in a module if some import is missing:
+- Here is how to skip all tests in a module if some import is missing:
 
 .. code-block:: python
 
