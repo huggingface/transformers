@@ -15,7 +15,7 @@ from distillation import BartSummarizationDistiller, distill_main
 from finetune import SummarizationModule, main
 from test_seq2seq_examples import CUDA_AVAILABLE, MBART_TINY
 from transformers import BartForConditionalGeneration, MarianMTModel
-from transformers.testing_utils import TestCasePlus, slow
+from transformers.testing_utils import TestCasePlus, require_torch_non_multigpu_but_fix_me, slow
 from utils import load_json
 
 
@@ -26,6 +26,7 @@ MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
 class TestAll(TestCasePlus):
     @slow
     @pytest.mark.skipif(not CUDA_AVAILABLE, reason="too slow to run on CPU")
+    @require_torch_non_multigpu_but_fix_me
     def test_model_download(self):
         """This warms up the cache so that we can time the next test without including download time, which varies between machines."""
         BartForConditionalGeneration.from_pretrained(MODEL_NAME)
@@ -34,6 +35,7 @@ class TestAll(TestCasePlus):
     @timeout_decorator.timeout(120)
     @slow
     @pytest.mark.skipif(not CUDA_AVAILABLE, reason="too slow to run on CPU")
+    @require_torch_non_multigpu_but_fix_me
     def test_train_mbart_cc25_enro_script(self):
         data_dir = "examples/seq2seq/test_data/wmt_en_ro"
         env_vars_to_replace = {
@@ -110,6 +112,7 @@ class TestAll(TestCasePlus):
     @timeout_decorator.timeout(600)
     @slow
     @pytest.mark.skipif(not CUDA_AVAILABLE, reason="too slow to run on CPU")
+    @require_torch_non_multigpu_but_fix_me
     def test_opus_mt_distill_script(self):
         data_dir = "examples/seq2seq/test_data/wmt_en_ro"
         env_vars_to_replace = {
