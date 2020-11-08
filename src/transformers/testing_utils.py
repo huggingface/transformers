@@ -518,41 +518,41 @@ class TestCasePlus(unittest.TestCase):
 
     Feature 2: Flexible auto-removable temp dirs which are guaranteed to get removed at the end of test.
 
-    In all the following scenarios the temp dir will be cleared out at the beginning of the test (unless `before=False`) 
-    and auto-removed at the end of test (unless `after=False`).
-
-    1. create a unique temp dir, `tmp_dir` will contain the path to the created temp dir
+    1. Create a unique temporary dir:
 
     ::
 
         def test_whatever(self):
             tmp_dir = self.get_auto_remove_tmp_dir()
 
-    2. create a temp dir of my choice and delete it at the end - useful for debug when you want to monitor a
-    specific directory
+    ``tmp_dir`` will contain the path to the created temp dir. It will be automatically removed at the end of the test.
+
+
+    2. Create a temporary dir of my choice, ensure it's empty before the test starts and don't
+    empty it after the test.
 
     ::
 
         def test_whatever(self):
-            tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test")
+            tmp_dir = self.get_auto_remove_tmp_dir("./xxx")
 
-    3. create a temp dir of my choice and do not delete it at the end - useful for when you want to look at the
-    temp results
+    This is useful for debug when you want to monitor a specific directory and want to make sure the previous tests
+    didn't leave any data in there.
 
-    ::
-        def test_whatever(self):
-            tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test", after=False)
+    3. You can override the first two options by directly overriding the ``before`` and ``after`` args.
 
-    4. create a temp dir of my choice, but if it already exists leave its contents as they are
+    When ``before=True`` is passed the temporary dir will always be cleared at the beginning of the test.
 
-    ::
+    With ``before=False``if the temporary dir already existed and contained some files they will remain there.
 
-        def test_whatever(self):
-            tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test", before=False)
+    When ``after=True`` is passed the temporary dir will always be deleted at the end of the test.
 
-    Note 1: In order to run the equivalent of `rm -r` safely, only subdirs of the project repository checkout are
-    allowed if an explicit `tmp_dir` is used, so that by mistake no `/tmp` or similar important part of the filesystem
-    will get nuked. i.e. please always pass paths that start with `./`
+    When ``after=False`` is passed the temporary dir will always be left intact at the end of the test.
+
+
+    Note 1: In order to run the equivalent of ``rm -r`` safely, only subdirs of the project repository checkout are
+    allowed if an explicit ``tmp_dir`` is used, so that by mistake no ``/tmp`` or similar important part of the
+    filesystem will get nuked. i.e. please always pass paths that start with ``./``
 
     Note 2: Each test can register multiple temp dirs and they all will get auto-removed, unless requested otherwise.
 
@@ -567,6 +567,7 @@ class TestCasePlus(unittest.TestCase):
     """
 
     def setUp(self):
+        # get_auto_remove_tmp_dir feature:
         self.teardown_tmp_dirs = []
 
         # figure out the resolved paths for repo_root, tests, examples, etc.
@@ -654,21 +655,31 @@ class TestCasePlus(unittest.TestCase):
         env["PYTHONPATH"] = ":".join(paths)
         return env
 
-    def get_auto_remove_tmp_dir(self, tmp_dir=None, after=True, before=True):
+    def get_auto_remove_tmp_dir(self, tmp_dir=None, before=None, after=None):
         """
         Args:
             tmp_dir (:obj:`string`, `optional`):
-                use this path, if None a unique path will be assigned
-            before (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                if `True` and tmp dir already exists make sure to empty it right away
-            after (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                if `True` delete the tmp dir at the end of the test
+                if not :obj:`None` use this path, otherwise, use a unique tmp path will be created
+            before (:obj:`bool`, `optional`, defaults to :obj:`None`):
+                if :obj:`True` and the tmp dir already exists make sure to empty it right away
+            after (:obj:`bool`, `optional`, defaults to :obj:`None`):
+                if :obj:`True` delete the tmp dir at the end of the test
 
         Returns:
             tmp_dir(:obj:`string`): either the same value as passed via `tmp_dir` or the path to the auto-created tmp
             dir
         """
         if tmp_dir is not None:
+
+            # defining the most likely desired behavior for when a custom path is provided.
+            # this most likely indicates the debug mode where we want an easily locatable dir that:
+            # 1. gets cleared out before the test (if it already exists)
+            # 2. is left intact after the test
+            if before is None:
+                before = True
+            if after is None:
+                after = False
+
             # using provided path
             path = Path(tmp_dir).resolve()
 
@@ -685,6 +696,15 @@ class TestCasePlus(unittest.TestCase):
             path.mkdir(parents=True, exist_ok=True)
 
         else:
+            # defining the most likely desired behavior for when a unique tmp path is auto generated
+            # (not a debug mode), here we require a unique tmp dir that:
+            # 1. is empty before the test (it will be empty in this situation anyway)
+            # 2. gets fully removed after the test
+            if before is None:
+                before = True
+            if after is None:
+                after = True
+
             # using unique tmp dir (always empty, regardless of `before`)
             tmp_dir = tempfile.mkdtemp()
 
@@ -695,7 +715,8 @@ class TestCasePlus(unittest.TestCase):
         return tmp_dir
 
     def tearDown(self):
-        # remove registered temp dirs
+
+        # get_auto_remove_tmp_dir feature: remove registered temp dirs
         for path in self.teardown_tmp_dirs:
             shutil.rmtree(path, ignore_errors=True)
         self.teardown_tmp_dirs = []
