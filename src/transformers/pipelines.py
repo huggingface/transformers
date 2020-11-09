@@ -1756,20 +1756,12 @@ class QuestionAnsweringPipeline(Pipeline):
             for example in examples:
                 # Define the side we want to truncate / pad and the text/pair sorting
                 question_first = bool(self.tokenizer.padding_side == "right")
-                if question_first:
-                    texts = example.question_text
-                    pairs = example.context_text
-                    truncation = "only_second"
-                else:
-                    texts = example.context_text
-                    pairs = example.question_text
-                    truncation = "only_first"
 
                 encoded_inputs = self.tokenizer(
-                    texts,
-                    pairs,
+                    text=example.question_text if question_first else example.context_text,
+                    text_pair=example.context_text if question_first else example.question_text,
                     padding=kwargs["padding"],
-                    truncation=truncation,
+                    truncation="only_second" if question_first else "only_first",
                     max_length=kwargs["max_seq_len"],
                     stride=kwargs["doc_stride"],
                     return_tensors="np",
@@ -1779,27 +1771,28 @@ class QuestionAnsweringPipeline(Pipeline):
                     return_special_tokens_mask=True,
                 )
 
+                num_spans = len(encoded_inputs["input_ids"])
+
                 # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
                 p_mask = encoded_inputs["token_type_ids"] == (0 if question_first else 1)  # Mask the question
                 p_mask = p_mask | encoded_inputs["special_tokens_mask"]  # And mask the special tokens
-                cls_index = 0
                 if self.tokenizer.cls_token_id:
-                    # kKep the cls_token unmasked (some models use it to indicate unanswerable questions)
-                    cls_index = np.where(encoded_inputs["input_ids"] == self.tokenizer.cls_token_id)
+                    # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
+                    cls_index = np.nonzero(encoded_inputs["input_ids"] == self.tokenizer.cls_token_id)
                     p_mask[cls_index] = 0
 
                 features = []
-                num_spans = len(encoded_inputs["input_ids"])
                 for span_idx in range(num_spans):
                     features.append(
                         SquadFeatures(
-                            encoded_inputs["input_ids"][span_idx],
-                            encoded_inputs["attention_mask"][span_idx],
-                            encoded_inputs["token_type_ids"][span_idx],
-                            cls_index[span_idx],
-                            p_mask[span_idx].tolist(),
+                            input_ids=encoded_inputs["input_ids"][span_idx],
+                            attention_mask=encoded_inputs["attention_mask"][span_idx],
+                            token_type_ids=encoded_inputs["token_type_ids"][span_idx],
+                            p_mask=p_mask[span_idx].tolist(),
                             encoding=encoded_inputs[span_idx],
-                            # We don't use the rest of the values
+                            # We don't use the rest of the values - and actually
+                            # for Fast tokenizer we could totally avoid using SquadFeatures and SquadExample
+                            cls_index=None,
                             token_to_orig_map={},
                             example_index=0,
                             unique_id=0,
@@ -1860,6 +1853,10 @@ class QuestionAnsweringPipeline(Pipeline):
                     char_to_word = np.array(example.char_to_word_offset)
 
                     # Convert the answer (tokens) back to the original text
+                    # Score: score from the model
+                    # Start: Index of the first character of the answer in the context string
+                    # End: Index of the character following the last character of the answer in the context string
+                    # Answer: Plain text of the answer
                     answers += [
                         {
                             "score": score.item(),
@@ -1873,14 +1870,32 @@ class QuestionAnsweringPipeline(Pipeline):
                     ]
                 else:
                     # Convert the answer (tokens) back to the original text
+                    # Score: score from the model
+                    # Start: Index of the first character of the answer in the context string
+                    # End: Index of the character following the last character of the answer in the context string
+                    # Answer: Plain text of the answer
+                    question_first = bool(self.tokenizer.padding_side == "right")
+                    enc = feature.encoding
+
+                    # Sometimes the max probability token is in the middle of a word so:
+                    # - we start by finding the right word containing the token with `token_to_word`
+                    # - then we convert this word in a character span with `word_to_chars`
                     answers += [
                         {
                             "score": score.item(),
-                            "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
-                            "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
-                            "answer": " ".join(
-                                example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
-                            ),
+                            "start": enc.word_to_chars(
+                                enc.token_to_word(s), sequence_index=1 if question_first else 0
+                            )[0],
+                            "end": enc.word_to_chars(enc.token_to_word(e), sequence_index=1 if question_first else 0)[
+                                1
+                            ],
+                            "answer": example.context_text[
+                                enc.word_to_chars(enc.token_to_word(s), sequence_index=1 if question_first else 0)[
+                                    0
+                                ] : enc.word_to_chars(enc.token_to_word(e), sequence_index=1 if question_first else 0)[
+                                    1
+                                ]
+                            ],
                         }
                         for s, e, score in zip(starts, ends, scores)
                     ]

@@ -26,6 +26,7 @@ from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_
 from transformers.tokenization_dpr import DPRQuestionEncoderTokenizer
 from transformers.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 
+
 if is_faiss_available():
     import faiss
 

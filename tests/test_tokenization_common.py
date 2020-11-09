@@ -1896,6 +1896,114 @@ class TokenizerTesterMixin:
                     batch_encoding.word_to_chars(last_batch_index, last_word_index).end, last_char_index + 1
                 )
 
+                # Pair of input sequences
+
+                words = ["Wonderful", "no", "inspiration", "example", "with", "subtoken"]
+                text = " ".join(words)
+                pair_words = ["Amazing", "example", "full", "of", "inspiration"]
+                pair_text = " ".join(pair_words)
+                batch_size = 3
+                index_word_in_first_seq = words.index("inspiration")
+                index_word_in_pair_seq = pair_words.index("inspiration")
+                index_char_in_first_seq = text.find("inspiration")
+                index_char_in_pair_seq = pair_text.find("inspiration")
+
+                pair_encoding = tokenizer_r.encode_plus(text, pair_text, add_special_tokens=False)
+
+                pair_batch_encoding = tokenizer_r.batch_encode_plus(
+                    [(text, pair_text)] * batch_size, add_special_tokens=False
+                )
+                num_tokens = len(encoding["input_ids"])
+
+                last_word_index = len(words) - 1
+                last_token_index = num_tokens - 1
+                last_batch_index = batch_size - 1
+                last_char_index = len(text) - 1
+
+                # Assert word_to_tokens
+                self.assertNotEqual(
+                    pair_encoding.word_to_tokens(index_word_in_first_seq, sequence_index=0).start,
+                    pair_encoding.word_to_tokens(index_word_in_pair_seq, sequence_index=1).start,
+                )
+                self.assertEqual(
+                    pair_encoding["input_ids"][
+                        pair_encoding.word_to_tokens(index_word_in_first_seq, sequence_index=0).start
+                    ],
+                    pair_encoding["input_ids"][
+                        pair_encoding.word_to_tokens(index_word_in_pair_seq, sequence_index=1).start
+                    ],
+                )
+                self.assertNotEqual(
+                    pair_batch_encoding.word_to_tokens(1, index_word_in_first_seq, sequence_index=0).start,
+                    pair_batch_encoding.word_to_tokens(1, index_word_in_pair_seq, sequence_index=1).start,
+                )
+                self.assertEqual(
+                    pair_batch_encoding["input_ids"][1][
+                        pair_batch_encoding.word_to_tokens(1, index_word_in_first_seq, sequence_index=0).start
+                    ],
+                    pair_batch_encoding["input_ids"][1][
+                        pair_batch_encoding.word_to_tokens(1, index_word_in_pair_seq, sequence_index=1).start
+                    ],
+                )
+
+                # Assert char_to_token
+                self.assertNotEqual(
+                    pair_encoding.char_to_token(index_char_in_first_seq, sequence_index=0),
+                    pair_encoding.char_to_token(index_char_in_pair_seq, sequence_index=1),
+                )
+                self.assertEqual(
+                    pair_encoding["input_ids"][pair_encoding.char_to_token(index_char_in_first_seq, sequence_index=0)],
+                    pair_encoding["input_ids"][pair_encoding.char_to_token(index_char_in_pair_seq, sequence_index=1)],
+                )
+                self.assertNotEqual(
+                    pair_batch_encoding.char_to_token(1, index_char_in_first_seq, sequence_index=0),
+                    pair_batch_encoding.char_to_token(1, index_char_in_pair_seq, sequence_index=1),
+                )
+                self.assertEqual(
+                    pair_batch_encoding["input_ids"][1][
+                        pair_batch_encoding.char_to_token(1, index_char_in_first_seq, sequence_index=0)
+                    ],
+                    pair_batch_encoding["input_ids"][1][
+                        pair_batch_encoding.char_to_token(1, index_char_in_pair_seq, sequence_index=1)
+                    ],
+                )
+
+                # Assert char_to_word
+                self.assertNotEqual(
+                    pair_encoding.char_to_word(index_char_in_first_seq, sequence_index=0),
+                    pair_encoding.char_to_word(index_char_in_pair_seq, sequence_index=1),
+                )
+                self.assertEqual(
+                    words[pair_encoding.char_to_word(index_char_in_first_seq, sequence_index=0)],
+                    pair_words[pair_encoding.char_to_word(index_char_in_pair_seq, sequence_index=1)],
+                )
+                self.assertNotEqual(
+                    pair_batch_encoding.char_to_word(1, index_char_in_first_seq, sequence_index=0),
+                    pair_batch_encoding.char_to_word(1, index_char_in_pair_seq, sequence_index=1),
+                )
+                self.assertEqual(
+                    words[pair_batch_encoding.char_to_word(1, index_char_in_first_seq, sequence_index=0)],
+                    pair_words[pair_batch_encoding.char_to_word(1, index_char_in_pair_seq, sequence_index=1)],
+                )
+
+                # Assert word_to_chars
+                self.assertNotEqual(
+                    pair_encoding.word_to_chars(index_word_in_first_seq, sequence_index=0).start,
+                    pair_encoding.word_to_chars(index_word_in_pair_seq, sequence_index=1).start,
+                )
+                self.assertEqual(
+                    text[pair_encoding.word_to_chars(index_word_in_first_seq, sequence_index=0).start],
+                    pair_text[pair_encoding.word_to_chars(index_word_in_pair_seq, sequence_index=1).start],
+                )
+                self.assertNotEqual(
+                    pair_batch_encoding.word_to_chars(1, index_word_in_first_seq, sequence_index=0).start,
+                    pair_batch_encoding.word_to_chars(1, index_word_in_pair_seq, sequence_index=1).start,
+                )
+                self.assertEqual(
+                    text[pair_batch_encoding.word_to_chars(1, index_word_in_first_seq, sequence_index=0).start],
+                    pair_text[pair_batch_encoding.word_to_chars(1, index_word_in_pair_seq, sequence_index=1).start],
+                )
+
     def test_tokenization_python_rust_equals(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest("{} ({})".format(tokenizer.__class__.__name__, pretrained_name)):
