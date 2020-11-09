@@ -89,6 +89,7 @@ CHEAP_ARGS = {
     "freeze_encoder": False,
     "auto_scale_batch_size": False,
     "overwrite_output_dir": False,
+    "student": None,
 }
 
 

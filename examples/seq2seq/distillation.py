@@ -69,7 +69,6 @@ class BartSummarizationDistiller(SummarizationModule):
             student_decoder_layers = student.config.decoder_layers
 
         self.different_encoder = student_encoder_layers != teacher_encoder_layers
-        self.different_decoder = student_decoder_layers != teacher_decoder_layers
 
         if e_layer_ids is None or d_layer_ids is None:
            e_layer_ids = list(range(student_encoder_layers))
@@ -246,10 +245,9 @@ class BartSummarizationDistiller(SummarizationModule):
         masked_mse = (mse * mask.unsqueeze(0).unsqueeze(-1)).sum() / valid_count
         return masked_mse
 
-    @staticmethod
-    def maybe_calc_hidden_loss(attention_mask, hidden_states, hidden_states_T, matches, normalize_hidden):
+    def maybe_calc_hidden_loss(self, attention_mask, hidden_states, hidden_states_T, matches, normalize_hidden):
         if matches:
-            return calc_hidden_loss(attention_mask, hidden_states, hidden_states_T, matches, normalize_hidden)
+            return self.calc_hidden_loss(attention_mask, hidden_states, hidden_states_T, matches, normalize_hidden)
         else:
             return torch.tensor(0.0)
 
