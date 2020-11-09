@@ -581,7 +581,6 @@ class TokenizerTesterMixin:
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 seq_0 = "Test this method."
-                seq_1 = "With these inputs."
 
                 # We want to have sequence 0 and sequence 1 are tagged
                 # respectively with 0 and 1 token_ids
@@ -590,9 +589,28 @@ class TokenizerTesterMixin:
                 output = tokenizer(seq_0, return_token_type_ids=True)
                 self.assertIn(0, output["token_type_ids"])
 
-                output = tokenizer(seq_0, seq_1, return_token_type_ids=True)
-                self.assertIn(0, output["token_type_ids"])
-                self.assertIn(1, output["token_type_ids"])
+    def test_sequence_ids(self):
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            if not tokenizer.is_fast:
+                continue
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                seq_0 = "Test this method."
+                seq_1 = "With these inputs."
+
+                # We want to have sequence 0 and sequence 1 are tagged
+                # respectively with 0 and 1 token_ids
+                # (regardeless of weither the model use token type ids)
+                # We use this assumption in the QA pipeline among other place
+                output = tokenizer(seq_0)
+                self.assertIn(0, output.sequence_ids())
+
+                output = tokenizer(seq_0, seq_1)
+                self.assertIn(0, output.sequence_ids())
+                self.assertIn(1, output.sequence_ids())
+
+                if tokenizer.num_special_tokens_to_add(pair=True):
+                    self.assertIn(None, output.sequence_ids())
 
     def test_number_of_added_tokens(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
@@ -1896,6 +1914,13 @@ class TokenizerTesterMixin:
                     batch_encoding.word_to_chars(last_batch_index, last_word_index).end, last_char_index + 1
                 )
 
+                # Assert token_to_sequence
+                self.assertEqual(encoding.token_to_sequence(num_tokens // 2), 0)
+                self.assertEqual(encoding.token_to_sequence(0, num_tokens // 2), 0)
+                self.assertEqual(batch_encoding.token_to_sequence(1, num_tokens // 2), 0)
+                self.assertEqual(batch_encoding.token_to_sequence(0, num_tokens // 2), 0)
+                self.assertEqual(batch_encoding.token_to_sequence(last_batch_index, num_tokens // 2), 0)
+
                 # Pair of input sequences
 
                 words = ["Wonderful", "no", "inspiration", "example", "with", "subtoken"]
@@ -2003,6 +2028,29 @@ class TokenizerTesterMixin:
                     text[pair_batch_encoding.word_to_chars(1, index_word_in_first_seq, sequence_index=0).start],
                     pair_text[pair_batch_encoding.word_to_chars(1, index_word_in_pair_seq, sequence_index=1).start],
                 )
+
+                # Assert token_to_sequence
+                pair_encoding = tokenizer_r.encode_plus(text, pair_text, add_special_tokens=True)
+
+                pair_sequence_ids = [
+                    pair_encoding.token_to_sequence(i) for i in range(len(pair_encoding["input_ids"]))
+                ]
+                self.assertIn(0, pair_sequence_ids)
+                self.assertIn(1, pair_sequence_ids)
+                if tokenizer_r.num_special_tokens_to_add(pair=True):
+                    self.assertIn(None, pair_sequence_ids)
+
+                pair_batch_encoding = tokenizer_r.batch_encode_plus(
+                    [(text, pair_text)] * batch_size, add_special_tokens=True
+                )
+                pair_batch_sequence_ids = [
+                    pair_batch_encoding.token_to_sequence(1, i)
+                    for i in range(len(pair_batch_encoding["input_ids"][0]))
+                ]
+                self.assertIn(0, pair_batch_sequence_ids)
+                self.assertIn(1, pair_batch_sequence_ids)
+                if tokenizer_r.num_special_tokens_to_add(pair=True):
+                    self.assertIn(None, pair_batch_sequence_ids)
 
     def test_tokenization_python_rust_equals(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:

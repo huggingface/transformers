@@ -216,6 +216,9 @@ class BatchEncoding(UserDict):
             initialization.
         prepend_batch_axis (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to add a batch axis when converting to tensors (see :obj:`tensor_type` above).
+        n_sequences (:obj:`Optional[int]`, `optional`):
+            You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
+            initialization.
     """
 
     def __init__(
@@ -224,6 +227,7 @@ class BatchEncoding(UserDict):
         encoding: Optional[Union[EncodingFast, Sequence[EncodingFast]]] = None,
         tensor_type: Union[None, str, TensorType] = None,
         prepend_batch_axis: bool = False,
+        n_sequences: Optional[int] = None,
     ):
         super().__init__(data)
 
@@ -232,7 +236,21 @@ class BatchEncoding(UserDict):
 
         self._encodings = encoding
 
+        if n_sequences is None and encoding is not None and len(encoding):
+            n_sequences = encoding[0].n_sequences
+
+        self._n_sequences = n_sequences
+
         self.convert_to_tensors(tensor_type=tensor_type, prepend_batch_axis=prepend_batch_axis)
+
+    @property
+    def n_sequences(self) -> Optional[int]:
+        """
+        :obj:`Optional[int]`: The number of sequences used to generate each sample from the batch encoded in this
+        :class:`~transformers.BatchEncoding`. Currently can be one of :obj:`None` (unknown), :obj:`1` (a single
+        sentence) or :obj:`2` (a pair of sentences)
+        """
+        return self.n_sequences
 
     @property
     def is_fast(self) -> bool:
@@ -311,6 +329,27 @@ class BatchEncoding(UserDict):
             raise ValueError("tokens() is not available when using Python-based tokenizers")
         return self._encodings[batch_index].tokens
 
+    def sequence_ids(self, batch_index: int = 0) -> List[Optional[int]]:
+        """
+        Return a list mapping the tokens to the id of their original sentences:
+
+            - :obj:`None` for special tokens added around or between sequences,
+            - :obj:`0` for tokens coresponding to words in the first sequence,
+            - :obj:`1` for tokens coresponding to words in the second sequence when a pair of sequences was jointly
+              encoded.
+
+        Args:
+            batch_index (:obj:`int`, `optional`, defaults to 0): The index to access in the batch.
+
+        Returns:
+            :obj:`List[Optional[int]]`: A list indicating the sequence id corresponding to each token. Special tokens
+            added by the tokenizer are mapped to :obj:`None` and other tokens are mapped to the index of their
+            corresponding sequence.
+        """
+        if not self._encodings:
+            raise ValueError("sequence_ids() is not available when using Python-based tokenizers")
+        return self._encodings[batch_index].sequences
+
     def words(self, batch_index: int = 0) -> List[Optional[int]]:
         """
         Return a list mapping the tokens to their actual word in the initial sentence for a fast tokenizer.
@@ -325,7 +364,67 @@ class BatchEncoding(UserDict):
         """
         if not self._encodings:
             raise ValueError("words() is not available when using Python-based tokenizers")
+        warnings.warn(
+            "`BatchEncoding.words(batch_index: int = 0)` propperty is deprecated and should be replaced with the identical, "
+            "but more self-explanatory `BatchEncoding.words(batch_index: int = 0)` property.",
+            FutureWarning,
+        )
+        return self.word_ids(batch_index)
+
+    def word_ids(self, batch_index: int = 0) -> List[Optional[int]]:
+        """
+        Return a list mapping the tokens to their actual word in the initial sentence for a fast tokenizer.
+
+        Args:
+            batch_index (:obj:`int`, `optional`, defaults to 0): The index to access in the batch.
+
+        Returns:
+            :obj:`List[Optional[int]]`: A list indicating the word corresponding to each token. Special tokens added by
+            the tokenizer are mapped to :obj:`None` and other tokens are mapped to the index of their corresponding
+            word (several tokens will be mapped to the same word index if they are parts of that word).
+        """
+        if not self._encodings:
+            raise ValueError("word_ids() is not available when using Python-based tokenizers")
         return self._encodings[batch_index].words
+
+    def token_to_sequence(self, batch_or_token_index: int, token_index: Optional[int] = None) -> int:
+        """
+        Get the index of the sequence represented by the given token. In the general use case, this method returns
+        :obj:`0` for a single sequence or the first sequence of a pair, and :obj:`1` for the second sequence of a pair
+
+        Can be called as:
+
+        - ``self.token_to_sequence(token_index)`` if batch size is 1
+        - ``self.token_to_sequence(batch_index, token_index)`` if batch size is greater than 1
+
+        This method is particularly suited when the input sequences are provided as pre-tokenized sequences (i.e.,
+        words are defined by the user). In this case it allows to easily associate encoded tokens with provided
+        tokenized words.
+
+        Args:
+            batch_or_token_index (:obj:`int`):
+                Index of the sequence in the batch. If the batch only comprise one sequence, this can be the index of
+                the token in the sequence.
+            token_index (:obj:`int`, `optional`):
+                If a batch index is provided in `batch_or_token_index`, this can be the index of the token in the
+                sequence.
+
+        Returns:
+            :obj:`int`: Index of the word in the input sequence.
+        """
+
+        if not self._encodings:
+            raise ValueError("token_to_sequence() is not available when using Python based tokenizers")
+        if token_index is not None:
+            batch_index = batch_or_token_index
+        else:
+            batch_index = 0
+            token_index = batch_or_token_index
+        if batch_index < 0:
+            batch_index = self._batch_size + batch_index
+        if token_index < 0:
+            token_index = self._seq_len + token_index
+        return self._encodings[batch_index].token_to_sequence(token_index)
 
     def token_to_word(self, batch_or_token_index: int, token_index: Optional[int] = None) -> int:
         """
