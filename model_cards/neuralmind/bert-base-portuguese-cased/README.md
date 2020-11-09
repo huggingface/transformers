@@ -29,7 +29,7 @@ For further information or requests, please go to [BERTimbau repository](https:/
 
 ```python
 from transformers import AutoTokenizer  # Or BertTokenizer
-from transformers import AutoModelForPretraining  # Or BertForPreTraining for loading pretraining heads
+from transformers import AutoModelForPreTraining  # Or BertForPreTraining for loading pretraining heads
 from transformers import AutoModel  # or BertModel, for BERT without pretraining heads
 
 model = AutoModelForPreTraining.from_pretrained('neuralmind/bert-base-portuguese-cased')

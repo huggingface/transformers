@@ -824,7 +824,7 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
             if self.num_labels == 1:
                 #  We are doing regression
                 loss_fct = MSELoss()
-                loss = loss_fct(pooled_logits.view(-1), labels.view(-1))
+                loss = loss_fct(pooled_logits.view(-1), labels.to(self.dtype).view(-1))
             else:
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))

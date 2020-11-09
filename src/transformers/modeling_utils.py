@@ -1047,7 +1047,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
                     f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
                     f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
-                    f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPretraining model).\n"
+                    f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).\n"
                     f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
                     f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
                 )

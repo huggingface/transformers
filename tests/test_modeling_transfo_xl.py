@@ -42,7 +42,7 @@ class TransfoXLModelTester:
         self.mem_len = 30
         self.key_length = self.seq_length + self.mem_len
         self.clamp_len = 15
-        self.is_training = True
+        self.is_training = False
         self.use_labels = True
         self.vocab_size = 99
         self.cutoffs = [10, 50, 80]

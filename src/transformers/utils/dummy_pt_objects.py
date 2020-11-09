@@ -256,6 +256,9 @@ MODEL_FOR_MASKED_LM_MAPPING = None
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = None
 
 
+MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = None
+
+
 MODEL_FOR_PRETRAINING_MAPPING = None
 
 
@@ -305,6 +308,15 @@ class AutoModelForMaskedLM:
 
 
 class AutoModelForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class AutoModelForNextSentencePrediction:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
