@@ -516,7 +516,7 @@ class TestCasePlus(unittest.TestCase):
        - ``repo_root_dir_str``
        - ``src_dir_str``
 
-    Feature 2: Flexible auto-removable temp dirs which are guaranteed to get removed at the end of test.
+    Feature 2: Flexible auto-removable temporary dirs which are guaranteed to get removed at the end of test.
 
     1. Create a unique temporary dir:
 
@@ -525,7 +525,8 @@ class TestCasePlus(unittest.TestCase):
         def test_whatever(self):
             tmp_dir = self.get_auto_remove_tmp_dir()
 
-    ``tmp_dir`` will contain the path to the created temp dir. It will be automatically removed at the end of the test.
+    ``tmp_dir`` will contain the path to the created temporary dir. It will be automatically removed at the end of the
+    test.
 
 
     2. Create a temporary dir of my choice, ensure it's empty before the test starts and don't
@@ -554,7 +555,8 @@ class TestCasePlus(unittest.TestCase):
     allowed if an explicit ``tmp_dir`` is used, so that by mistake no ``/tmp`` or similar important part of the
     filesystem will get nuked. i.e. please always pass paths that start with ``./``
 
-    Note 2: Each test can register multiple temp dirs and they all will get auto-removed, unless requested otherwise.
+    Note 2: Each test can register multiple temporary dirs and they all will get auto-removed, unless requested
+    otherwise.
 
     Feature 3: Get a copy of the ``os.environ`` object that sets up ``PYTHONPATH`` specific to the current test suite.
     This is useful for invoking external programs from the test suite - e.g. distributed training.
@@ -661,20 +663,20 @@ class TestCasePlus(unittest.TestCase):
             tmp_dir (:obj:`string`, `optional`):
                 if :obj:`None`:
 
-                   - a unique tmp path will be created
+                   - a unique temporary path will be created
                    - sets ``before=True`` if ``before`` is :obj:`None`
                    - sets ``after=True`` if ``after`` is :obj:`None`
                 else:
 
-                   - a unique tmp path will be chosen and created
+                   - a unique temporary path will be chosen and created
                    - sets ``before=True`` if ``before`` is :obj:`None`
                    - sets ``after=False`` if ``after`` is :obj:`None`
             before (:obj:`bool`, `optional`):
-                If :obj:`True` and the :obj:`tmp_dir` already exists, make sure to empty it right away if :obj:`False` and the
-                :obj:`tmp_dir` already exists, any existing files will remain there.
+                If :obj:`True` and the :obj:`tmp_dir` already exists, make sure to empty it right away if :obj:`False`
+                and the :obj:`tmp_dir` already exists, any existing files will remain there.
             after (:obj:`bool`, `optional`):
-                If :obj:`True`, delete the :obj:`tmp_dir` at the end of the test if :obj:`False`, leave the :obj:`tmp_dir` and its
-                contents intact at the end of the test.
+                If :obj:`True`, delete the :obj:`tmp_dir` at the end of the test if :obj:`False`, leave the
+                :obj:`tmp_dir` and its contents intact at the end of the test.
 
         Returns:
             tmp_dir(:obj:`string`): either the same value as passed via `tmp_dir` or the path to the auto-created tmp

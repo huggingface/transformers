@@ -700,11 +700,11 @@ Temporary files and directories
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Using unique temporary files and directories are essential for parallel test running, so that the tests won't overwrite
-each other's data. Also we want to get the temp files and directories removed at the end of each test that created
+each other's data. Also we want to get the temporary files and directories removed at the end of each test that created
 them. Therefore, using packages like ``tempfile``, which address these needs is essential.
 
-However, when debugging tests, you need to be able to see what goes into the temp file or directory and you want to
-know it's exact path and not having it randomized on every test re-run.
+However, when debugging tests, you need to be able to see what goes into the temporary file or directory and you want
+to know it's exact path and not having it randomized on every test re-run.
 
 A helper class :obj:`transformers.test_utils.TestCasePlus` is best used for such purposes. It's a sub-class of
 :obj:`unittest.TestCase`, so we can easily inherit from it in the test modules.
@@ -727,7 +727,8 @@ This code creates a unique temporary directory, and sets :obj:`tmp_dir` to its l
     def test_whatever(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
 
-``tmp_dir`` will contain the path to the created temp dir. It will be automatically removed at the end of the test.
+``tmp_dir`` will contain the path to the created temporary dir. It will be automatically removed at the end of the
+test.
 
 * Create a temporary dir of my choice, ensure it's empty before the test starts and don't empty it after the test.
 
