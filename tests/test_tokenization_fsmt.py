@@ -151,6 +151,13 @@ class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             decoded_text = tokenizer_dec.decode(encoded_ids, skip_special_tokens=True)
             self.assertEqual(decoded_text, src_text)
 
+    @slow
+    def test_tokenizer_lower(self):
+        tokenizer = FSMTTokenizer.from_pretrained("facebook/wmt19-ru-en", do_lower_case=True)
+        tokens = tokenizer.tokenize("USA is United States of America")
+        expected = ["us", "a</w>", "is</w>", "un", "i", "ted</w>", "st", "ates</w>", "of</w>", "am", "er", "ica</w>"]
+        self.assertListEqual(tokens, expected)
+
     @unittest.skip("FSMTConfig.__init__  requires non-optional args")
     def test_torch_encode_plus_sent_to_model(self):
         pass

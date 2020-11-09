@@ -133,6 +133,14 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     with open(src_vocab_file, "w", encoding="utf-8") as f:
         f.write(json.dumps(src_vocab, ensure_ascii=False, indent=json_indent))
 
+    # detect whether this is a do_lower_case situation, which can be derived by checking whether we
+    # have at least one upcase letter in the source vocab
+    do_lower_case = True
+    for k in src_vocab.keys():
+        if not k.islower():
+            do_lower_case = False
+            break
+
     tgt_dict = Dictionary.load(tgt_dict_file)
     tgt_vocab = rewrite_dict_keys(tgt_dict.indices)
     tgt_vocab_size = len(tgt_vocab)
@@ -207,6 +215,7 @@ def convert_fsmt_checkpoint_to_pytorch(fsmt_checkpoint_path, pytorch_dump_folder
     tokenizer_conf = {
         "langs": [src_lang, tgt_lang],
         "model_max_length": 1024,
+        "do_lower_case": do_lower_case,
     }
 
     print(f"Generating {fsmt_tokenizer_config_file}")
