@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 import run_glue_deebert
-from transformers.testing_utils import slow
+from transformers.testing_utils import require_torch_non_multigpu_but_fix_me, slow
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -26,6 +26,7 @@ class DeeBertTests(unittest.TestCase):
         logger.addHandler(stream_handler)
 
     @slow
+    @require_torch_non_multigpu_but_fix_me
     def test_glue_deebert_train(self):
 
         train_args = """
