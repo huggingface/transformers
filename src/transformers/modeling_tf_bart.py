@@ -570,7 +570,7 @@ class TFBartDecoder(Layer):
             x = self.layernorm_embedding(x + positions)
         x = tf.nn.dropout(x, rate=self.dropout if training else 0)
 
-        # Convert to Bart output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
+        # Convert to Bart output format: (BS, seq_len, model_dim) ->  (seq_len, BS, model_dim)
         x = tf.transpose(x, perm=(1, 0, 2))
         assert len(shape_list(encoder_hidden_states)) == 3, "encoder_hidden_states must be a 3D tensor"
         encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))
