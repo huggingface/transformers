@@ -62,8 +62,8 @@ Multilingual Models
 - Note that if a model is only multilingual on the source side, like :obj:`Helsinki-NLP/opus-mt-roa-en`, no language
   codes are required.
 
-New multi-lingual models from the `Tatoeba-Challenge repo <https://github.com/Helsinki-NLP/Tatoeba-Challenge>`__ require
-3 character language codes:
+New multi-lingual models from the `Tatoeba-Challenge repo <https://github.com/Helsinki-NLP/Tatoeba-Challenge>`__
+require 3 character language codes:
 
 .. code-block:: python
 
