@@ -96,8 +96,12 @@ class BartSummarizationDistiller(SummarizationModule):
         if hparams.student is None or hparams.teacher == hparams.student:
             # Intermediate supervision: Decide which layers to supervise
             if hparams.supervise_forward:
-                self.e_matches = get_layers_to_supervise(n_student=len(self.e_layer_ids), n_teacher=teacher_encoder_layers)
-                self.d_matches = get_layers_to_supervise(n_student=len(self.d_layer_ids), n_teacher=teacher_decoder_layers)
+                self.e_matches = get_layers_to_supervise(
+                    n_student=len(self.e_layer_ids), n_teacher=teacher_encoder_layers
+                )
+                self.d_matches = get_layers_to_supervise(
+                    n_student=len(self.d_layer_ids), n_teacher=teacher_decoder_layers
+                )
             else:  # student layer should emulate hidden states of the teacher layer it was copied from
                 self.e_matches = self.e_layer_ids
                 self.d_matches = self.d_layer_ids
@@ -206,7 +210,7 @@ class BartSummarizationDistiller(SummarizationModule):
             outputs = self.teacher(
                 input_ids,
                 attention_mask=teacher_mask,
-                encoder_outputs=(teacher_enc_outputs, ),
+                encoder_outputs=(teacher_enc_outputs,),
                 decoder_input_ids=decoder_input_ids,
                 lm_labels=labels,
                 output_hidden_states=True,
