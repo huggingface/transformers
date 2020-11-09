@@ -15,8 +15,6 @@
 # limitations under the License.
 """ XLNet configuration """
 
-import warnings
-
 from .configuration_utils import PretrainedConfig
 from .utils import logging
 
