@@ -78,11 +78,6 @@ class AlbertConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         classifier_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for attached classifiers.
-        position_embedding_type (:obj:`str`, `optional`, defaults to :obj:`"absolute"`):
-            Position embedding type. :obj:`"absolute"`, BERT default absolute position embedding,
-            :obj:`"relative_key"`, position embedding in Shaw et al. Self-Attention with Relative Position
-            Representations, https://arxiv.org/abs/1803.02155, :obj:`"relative_key_query"`: Method 4 in Huang et al.
-            Improve Transformer Models with Better Relative Position Embeddings, https://arxiv.org/abs/2009.13658
 
     Examples::
 
@@ -127,7 +122,6 @@ class AlbertConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=2,
         eos_token_id=3,
-        position_embedding_type="absolute",
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -148,4 +142,3 @@ class AlbertConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.classifier_dropout_prob = classifier_dropout_prob
-        self.position_embedding_type = position_embedding_type
