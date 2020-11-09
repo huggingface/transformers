@@ -239,7 +239,7 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
                 )
-                inputs_dict["next_sentence_label"] = torch.zeros(
+                inputs_dict["sentence_order_label"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
         return inputs_dict
