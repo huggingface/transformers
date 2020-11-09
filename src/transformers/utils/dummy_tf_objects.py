@@ -1714,6 +1714,16 @@ class TFTrainer:
         requires_tf(self)
 
 
+class KeepNCheckpoints:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class LearningRateLoggingCallback:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+
 class F1AndAccuracyMeanScore:
     def __init__(self, *args, **kwargs):
         requires_tf(self)
