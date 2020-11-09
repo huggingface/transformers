@@ -244,7 +244,7 @@ jobs:
         if: ${{ always() }}
         run: cat reports/tests_torch_multiple_gpu_failures_short.txt
 
-      - name: Run ported examples tests on multi-GPU
+      - name: Run examples tests on multi-GPU
         env:
           OMP_NUM_THREADS: 1
           RUN_SLOW: yes
