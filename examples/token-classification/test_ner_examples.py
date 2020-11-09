@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 import run_ner_old as run_ner
-from transformers.testing_utils import slow
+from transformers.testing_utils import require_torch_non_multigpu_but_fix_me, slow
 
 
 logging.basicConfig(level=logging.INFO)
@@ -14,6 +14,7 @@ logger = logging.getLogger()
 
 class ExamplesTests(unittest.TestCase):
     @slow
+    @require_torch_non_multigpu_but_fix_me
     def test_run_ner(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -34,6 +35,7 @@ class ExamplesTests(unittest.TestCase):
             result = run_ner.main()
             self.assertLess(result["eval_loss"], 1.5)
 
+    @require_torch_non_multigpu_but_fix_me
     def test_run_ner_pl(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)

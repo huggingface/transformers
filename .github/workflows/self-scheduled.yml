@@ -1,3 +1,8 @@
+# configuration notes:
+#
+# - `source .env/bin/activate` is currently needed to be run first thing first in each step. Otherwise
+# the step uses the system-wide python interpreter.
+
 name: Self-hosted runner (scheduled)
 
 on:
@@ -227,7 +232,7 @@ jobs:
           python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
           python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
 
-      - name: Run all tests on GPU
+      - name: Run all tests on multi-GPU
         env:
           OMP_NUM_THREADS: 1
           RUN_SLOW: yes
@@ -238,8 +243,20 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_torch_multiple_gpu_failures_short.txt
-        
-      - name: Run all pipeline tests on GPU
+
+      - name: Run examples tests on multi-GPU
+        env:
+          OMP_NUM_THREADS: 1
+          RUN_SLOW: yes
+        run: |
+          source .env/bin/activate
+          python -m pytest -n 1 --dist=loadfile -s --make-reports=examples_torch_multiple_gpu examples
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/examples_torch_multiple_gpu_failures_short.txt
+
+      - name: Run all pipeline tests on multi-GPU
         if: ${{ always() }}
         env:
           TF_FORCE_GPU_ALLOW_GROWTH: "true"
@@ -306,7 +323,7 @@ jobs:
           TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
           TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
 
-      - name: Run all tests on GPU
+      - name: Run all tests on multi-GPU
         env:
           OMP_NUM_THREADS: 1
           RUN_SLOW: yes
@@ -318,7 +335,7 @@ jobs:
         if: ${{ always() }}
         run: cat reports/tests_tf_multiple_gpu_failures_short.txt
 
-      - name: Run all pipeline tests on GPU
+      - name: Run all pipeline tests on multi-GPU
         if: ${{ always() }}
         env:
           TF_FORCE_GPU_ALLOW_GROWTH: "true"

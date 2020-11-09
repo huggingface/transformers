@@ -19,7 +19,13 @@ import unittest
 
 from parameterized import parameterized
 from transformers import FSMTForConditionalGeneration, FSMTTokenizer
-from transformers.testing_utils import get_tests_dir, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    get_tests_dir,
+    require_torch,
+    require_torch_non_multigpu_but_fix_me,
+    slow,
+    torch_device,
+)
 from utils import calculate_bleu
 
 
@@ -48,6 +54,7 @@ class ModelEvalTester(unittest.TestCase):
         ]
     )
     @slow
+    @require_torch_non_multigpu_but_fix_me
     def test_bleu_scores(self, pair, min_bleu_score):
         # note: this test is not testing the best performance since it only evals a small batch
         # but it should be enough to detect a regression in the output quality
