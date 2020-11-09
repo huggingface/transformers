@@ -316,6 +316,15 @@ class AutoModelForMultipleChoice:
         requires_pytorch(self)
 
 
+class AutoModelForNextSentencePrediction:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class AutoModelForPreTraining:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -353,15 +362,6 @@ class AutoModelForSequenceClassification:
 
 
 class AutoModelForTokenClassification:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
-class AutoModelForNextSentencePrediction:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 

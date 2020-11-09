@@ -36,7 +36,6 @@ if is_torch_available():
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
-        MODEL_FOR_PRETRAINING_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -96,19 +95,6 @@ class ModelTesterMixin:
                 *MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.values(),
             ]:
                 inputs_dict["labels"] = torch.zeros(
-                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
-                )
-            elif model_class in MODEL_FOR_PRETRAINING_MAPPING.values() and model_class not in [
-                *MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.values(),
-                *MODEL_FOR_CAUSAL_LM_MAPPING.values(),
-                *MODEL_FOR_MASKED_LM_MAPPING.values(),
-                *MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.values(),
-            ]:
-                # special case for models like BERT that use multi-loss training for PreTraining
-                inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
-                )
-                inputs_dict["next_sentence_label"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
             elif model_class in [
@@ -238,6 +224,10 @@ class ModelTesterMixin:
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
+            if loss is None:
+                import ipdb
+
+                ipdb.set_trace()
             loss.backward()
 
     def test_training_gradient_checkpointing(self):

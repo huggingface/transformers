@@ -27,6 +27,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        MODEL_FOR_PRETRAINING_MAPPING,
         FunnelBaseModel,
         FunnelConfig,
         FunnelForMaskedLM,
@@ -359,6 +360,17 @@ class FunnelModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+
+    # special case for ForPreTraining model
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class in MODEL_FOR_PRETRAINING_MAPPING.values():
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+        return inputs_dict
 
     def setUp(self):
         self.model_tester = FunnelModelTester(self)
