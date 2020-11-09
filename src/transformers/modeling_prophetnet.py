@@ -16,6 +16,7 @@
 
 import copy
 import math
+import warnings
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
@@ -25,7 +26,12 @@ from torch import Tensor, nn
 
 from .activations import ACT2FN
 from .configuration_prophetnet import ProphetNetConfig
-from .file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_callable, replace_return_docstrings
+from .file_utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
 from .modeling_outputs import BaseModelOutput
 from .modeling_utils import PreTrainedModel
 from .utils import logging
@@ -220,7 +226,7 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
-            Languaged modeling loss.
+            Language modeling loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, decoder_sequence_length, config.vocab_size)`):
             Prediction scores of the main stream language modeling head (scores for each vocabulary token before
             SoftMax).
@@ -256,7 +262,7 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
 
             Attentions weights of the predict stream of the decoder, after the attention softmax, used to compute the
             weighted average in the self-attention heads.
-        decoder_cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
             encoder_sequence_length, decoder_sequence_length)`.
 
@@ -283,10 +289,18 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
     decoder_ngram_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     decoder_ngram_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+    @property
+    def decoder_cross_attentions(self):
+        warnings.warn(
+            "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions` instead.",
+            FutureWarning,
+        )
+        return self.cross_attentions
 
 
 @dataclass
@@ -332,7 +346,7 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
 
             Attentions weights of the predict stream of the decoder, after the attention softmax, used to compute the
             weighted average in the
-        decoder_cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
             encoder_sequence_length, decoder_sequence_length)`.
 
@@ -360,10 +374,18 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
     decoder_ngram_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     decoder_ngram_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+    @property
+    def decoder_cross_attentions(self):
+        warnings.warn(
+            "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions` instead.",
+            FutureWarning,
+        )
+        return self.cross_attentions
 
 
 @dataclass
@@ -433,7 +455,7 @@ class ProphetNetDecoderLMOutput(ModelOutput):
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
-            Languaged modeling loss.
+            Language modeling loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, decoder_sequence_length, config.vocab_size)`):
             Prediction scores of the main stream language modeling head (scores for each vocabulary token before
             SoftMax).
@@ -1138,7 +1160,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
     def set_input_embeddings(self, value):
         self.word_embeddings = value
 
-    @add_start_docstrings_to_callable(PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1254,7 +1276,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
     def set_input_embeddings(self, value):
         self.word_embeddings = value
 
-    @add_start_docstrings_to_callable(PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ProphetNetDecoderModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1570,7 +1592,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    @add_start_docstrings_to_callable(PROPHETNET_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(PROPHETNET_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ProphetNetSeq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1646,7 +1668,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
             decoder_ngram_hidden_states=decoder_outputs.hidden_states_ngram,
             decoder_attentions=decoder_outputs.attentions,
             decoder_ngram_attentions=decoder_outputs.ngram_attentions,
-            decoder_cross_attentions=decoder_outputs.cross_attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
@@ -1674,7 +1696,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     def get_input_embeddings(self):
         return self.prophetnet.word_embeddings
 
-    @add_start_docstrings_to_callable(PROPHETNET_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(PROPHETNET_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ProphetNetSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1761,7 +1783,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
                 decoder_ngram_hidden_states=outputs.decoder_ngram_hidden_states,
                 decoder_attentions=outputs.decoder_attentions,
                 decoder_ngram_attentions=outputs.decoder_ngram_attentions,
-                decoder_cross_attentions=outputs.decoder_cross_attentions,
+                cross_attentions=outputs.cross_attentions,
                 encoder_last_hidden_state=outputs.encoder_last_hidden_state,
                 encoder_hidden_states=outputs.encoder_hidden_states,
                 encoder_attentions=outputs.encoder_attentions,
@@ -1795,7 +1817,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         return loss
 
     def prepare_inputs_for_generation(
-        self, decoder_input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs
+        self, decoder_input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
     ):
         assert encoder_outputs is not None, "`encoder_outputs` have to be passed for generation."
 
@@ -1865,7 +1887,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
-    @add_start_docstrings_to_callable(PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ProphetNetDecoderLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1981,6 +2003,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
                 hidden_states_ngram=outputs.hidden_states_ngram,
                 attentions=outputs.attentions,
                 ngram_attentions=outputs.ngram_attentions,
+                cross_attentions=outputs.cross_attentions,
             )
 
     def _compute_loss(self, logits, labels):

@@ -129,10 +129,10 @@ DPRReaderOutput = collections.namedtuple("DPRReaderOutput", ["start_logits", "en
 
 
 CUSTOM_DPR_READER_DOCSTRING = r"""
-        Return a dictionary with the token ids of the input strings and other information to give to
-        :obj:`.decode_best_spans`. It converts the strings of a question and different passages (title and text) in a
-        sequence of IDs (integers), using the tokenizer and vocabulary. The resulting :obj:`input_ids` is a matrix of
-        size :obj:`(n_passages, sequence_length)` with the format:
+    Return a dictionary with the token ids of the input strings and other information to give to
+    :obj:`.decode_best_spans`. It converts the strings of a question and different passages (title and text) in a
+    sequence of IDs (integers), using the tokenizer and vocabulary. The resulting :obj:`input_ids` is a matrix of size
+    :obj:`(n_passages, sequence_length)` with the format:
 
     ::
 
@@ -189,12 +189,12 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
 
             `What are attention masks? <../glossary.html#attention-mask>`__
 
-    Return:
+    Returns:
         :obj:`Dict[str, List[List[int]]]`: A dictionary with the following keys:
 
         - ``input_ids``: List of token ids to be fed to a model.
         - ``attention_mask``: List of indices specifying which tokens should be attended to by the model.
-        """
+    """
 
 
 @add_start_docstrings(CUSTOM_DPR_READER_DOCSTRING)

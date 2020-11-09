@@ -26,6 +26,22 @@ import warnings
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+
+# Integrations must be imported before ML frameworks:
+from .integrations import (  # isort: split
+    default_hp_search_backend,
+    hp_params,
+    is_azureml_available,
+    is_comet_available,
+    is_mlflow_available,
+    is_optuna_available,
+    is_ray_available,
+    is_tensorboard_available,
+    is_wandb_available,
+    run_hp_search_optuna,
+    run_hp_search_ray,
+)
+
 import numpy as np
 import torch
 from packaging import version
@@ -37,18 +53,6 @@ from torch.utils.data.sampler import RandomSampler, SequentialSampler
 
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .file_utils import WEIGHTS_NAME, is_datasets_available, is_in_notebook, is_torch_tpu_available
-from .integrations import (
-    default_hp_search_backend,
-    hp_params,
-    is_comet_available,
-    is_mlflow_available,
-    is_optuna_available,
-    is_ray_available,
-    is_tensorboard_available,
-    is_wandb_available,
-    run_hp_search_optuna,
-    run_hp_search_ray,
-)
 from .modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from .modeling_utils import PreTrainedModel
 from .optimization import AdamW, get_linear_schedule_with_warmup
@@ -151,6 +155,11 @@ if is_optuna_available():
 if is_ray_available():
     from ray import tune
 
+if is_azureml_available():
+    from .integrations import AzureMLCallback
+
+    DEFAULT_CALLBACKS.append(AzureMLCallback)
+
 logger = logging.get_logger(__name__)
 
 
@@ -191,18 +200,21 @@ class Trainer:
 
             The function may have zero argument, or a single one containing the optuna/Ray Tune trial object, to be
             able to choose different architectures according to hyper parameters (such as layer count, sizes of inner
-            layers, dropout probabilities etc). compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
+            layers, dropout probabilities etc).
+        compute_metrics (:obj:`Callable[[EvalPrediction], Dict]`, `optional`):
             The function that will be used to compute metrics at evaluation. Must take a
-            :class:`~transformers.EvalPrediction` and return a dictionary string to metric values. callbacks (List of
-            :obj:`~transformers.TrainerCallback`, `optional`): A list of callbacks to customize the training loop. Will
-            add those to the list of default callbacks detailed in :doc:`here <callback>`.
+            :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
+        callbacks (List of :obj:`~transformers.TrainerCallback`, `optional`):
+            A list of callbacks to customize the training loop. Will add those to the list of default callbacks
+            detailed in :doc:`here <callback>`.
 
             If you want to remove one of the default callbacks used, use the :meth:`Trainer.remove_callback` method.
-            optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`): A tuple
+        optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`): A tuple
             containing the optimizer and the scheduler to use. Will default to an instance of
             :class:`~transformers.AdamW` on your model and a scheduler given by
-            :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`. kwargs: Deprecated keyword
-            arguments.
+            :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
+        kwargs:
+            Deprecated keyword arguments.
     """
 
     def __init__(
@@ -316,7 +328,7 @@ class Trainer:
         self.hp_search_backend = None
         self.use_tune_checkpoints = False
         default_label_names = (
-            ["start_positions, end_positions"]
+            ["start_positions", "end_positions"]
             if type(self.model) in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values()
             else ["labels"]
         )
@@ -378,7 +390,9 @@ class Trainer:
         dataset.set_format(type=dataset.format["type"], columns=columns)
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
-        if not isinstance(self.train_dataset, collections.abc.Sized):
+        if isinstance(self.train_dataset, torch.utils.data.IterableDataset) or not isinstance(
+            self.train_dataset, collections.abc.Sized
+        ):
             return None
         elif is_torch_tpu_available():
             return get_tpu_sampler(self.train_dataset)
@@ -715,6 +729,7 @@ class Trainer:
 
         tr_loss = torch.tensor(0.0).to(self.args.device)
         self._logging_loss_scalar = 0
+        self._globalstep_last_logged = 0
         self._total_flos = self.state.total_flos
         model.zero_grad()
 
@@ -835,7 +850,9 @@ class Trainer:
         if self.control.should_log:
             logs: Dict[str, float] = {}
             tr_loss_scalar = tr_loss.item()
-            logs["loss"] = (tr_loss_scalar - self._logging_loss_scalar) / self.args.logging_steps
+            logs["loss"] = (tr_loss_scalar - self._logging_loss_scalar) / (
+                self.state.global_step - self._globalstep_last_logged
+            )
             # backward compatibility for pytorch schedulers
             logs["learning_rate"] = (
                 self.lr_scheduler.get_last_lr()[0]
@@ -843,6 +860,7 @@ class Trainer:
                 else self.lr_scheduler.get_lr()[0]
             )
             self._logging_loss_scalar = tr_loss_scalar
+            self._globalstep_last_logged = self.state.global_step
 
             self.log(logs)
 
@@ -1279,14 +1297,21 @@ class Trainer:
                 :obj:`__len__` method.
 
         Returns:
-            A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
+            A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
+            dictionary also contains the epoch number which comes from the training state.
         """
         if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
             raise ValueError("eval_dataset must implement __len__")
 
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
 
-        output = self.prediction_loop(eval_dataloader, description="Evaluation")
+        output = self.prediction_loop(
+            eval_dataloader,
+            description="Evaluation",
+            # No point gathering the predictions if there are no metrics, otherwise we defer to
+            # self.args.prediction_loss_only
+            prediction_loss_only=True if self.compute_metrics is None else None,
+        )
 
         self.log(output.metrics)
 
@@ -1308,6 +1333,12 @@ class Trainer:
             test_dataset (:obj:`Dataset`):
                 Dataset to run the predictions on. If it is an :obj:`datasets.Dataset`, columns not accepted by the
                 ``model.forward()`` method are automatically removed. Has to implement the method :obj:`__len__`
+
+        .. note::
+
+            If your predictions or labels have different sequence length (for instance because you're doing dynamic
+            padding in a token classification task) the predictions will be padded (on the right) to allow for
+            concatenation into one array. The padding index is -100.
 
         Returns: `NamedTuple` A namedtuple with the following keys:
 
@@ -1368,8 +1399,9 @@ class Trainer:
         world_size = max(1, world_size)
 
         eval_losses_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=batch_size)
-        preds_gatherer = DistributedTensorGatherer(world_size, num_examples)
-        labels_gatherer = DistributedTensorGatherer(world_size, num_examples)
+        if not prediction_loss_only:
+            preds_gatherer = DistributedTensorGatherer(world_size, num_examples)
+            labels_gatherer = DistributedTensorGatherer(world_size, num_examples)
 
         model.eval()
 
@@ -1387,16 +1419,17 @@ class Trainer:
                 losses = loss.repeat(batch_size)
                 losses_host = losses if losses_host is None else torch.cat((losses_host, losses), dim=0)
             if logits is not None:
-                preds_host = logits if preds_host is None else nested_concat(preds_host, logits, dim=0)
+                preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
             if labels is not None:
-                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, dim=0)
+                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
             self.control = self.callback_handler.on_prediction_step(self.args, self.state, self.control)
 
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
             if self.args.eval_accumulation_steps is not None and (step + 1) % self.args.eval_accumulation_steps == 0:
                 eval_losses_gatherer.add_arrays(self._gather_and_numpify(losses_host, "eval_losses"))
-                preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
-                labels_gatherer.add_arrays(self._gather_and_numpify(labels_host, "eval_label_ids"))
+                if not prediction_loss_only:
+                    preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
+                    labels_gatherer.add_arrays(self._gather_and_numpify(labels_host, "eval_label_ids"))
 
                 # Set back to None to begin a new accumulation
                 losses_host, preds_host, labels_host = None, None, None
@@ -1407,12 +1440,13 @@ class Trainer:
 
         # Gather all remaining tensors and put them back on the CPU
         eval_losses_gatherer.add_arrays(self._gather_and_numpify(losses_host, "eval_losses"))
-        preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
-        labels_gatherer.add_arrays(self._gather_and_numpify(labels_host, "eval_label_ids"))
+        if not prediction_loss_only:
+            preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
+            labels_gatherer.add_arrays(self._gather_and_numpify(labels_host, "eval_label_ids"))
 
         eval_loss = eval_losses_gatherer.finalize()
-        preds = preds_gatherer.finalize()
-        label_ids = labels_gatherer.finalize()
+        preds = preds_gatherer.finalize() if not prediction_loss_only else None
+        label_ids = labels_gatherer.finalize() if not prediction_loss_only else None
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
@@ -1510,8 +1544,6 @@ class Trainer:
         method in the model or subclass and override this method.
 
         Args:
-            model (:obj:`nn.Module`):
-                The model to evaluate.
             inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
                 The inputs and targets of the model.
 

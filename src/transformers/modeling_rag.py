@@ -21,7 +21,8 @@ import torch
 
 from .configuration_rag import RagConfig
 from .configuration_utils import PretrainedConfig
-from .file_utils import add_start_docstrings_to_callable, replace_return_docstrings
+from .file_utils import add_start_docstrings_to_model_forward, replace_return_docstrings
+from .generation_beam_search import BeamSearchScorer
 from .modeling_outputs import ModelOutput
 from .modeling_utils import PreTrainedModel
 from .retrieval_rag import RagRetriever
@@ -40,7 +41,7 @@ class RetrievAugLMMarginOutput(ModelOutput):
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
-            Languaged modeling loss.
+            Language modeling loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head. The score is possibly marginalized over all documents for
             each vocabulary token.
@@ -413,7 +414,7 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
 
             Used by the (:class:`~transformers.RagModel`) model during decoding.
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Provide for generation tasks. `None` by default, constuct as per instructions for the generator model
+            Provide for generation tasks. `None` by default, construct as per instructions for the generator model
             you're using with your RAG instance.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size,  target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
@@ -424,7 +425,7 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
             :obj:`past_key_values` are used in the (:class:`~transformers.RagTokenForGeneration`) model during
             decoding.
         doc_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.n_docs)`):
-            Score between each retrieved document embeddigs (see :obj:`retrieved_doc_embeds`) and
+            Score between each retrieved document embeddings (see :obj:`retrieved_doc_embeds`) and
             :obj:`question_encoder_last_hidden_state`. If the model has is not initialized with a ``retriever``
             :obj:`doc_scores` has to be provided to the forward pass. :obj:`doc_scores` can be computed via
             :obj:`question_encoder_last_hidden_state` and :obj:`retrieved_doc_embeds`, see examples for more
@@ -459,7 +460,7 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
 """
 
 
-@add_start_docstrings_to_callable(RAG_START_DOCSTRING)
+@add_start_docstrings_to_model_forward(RAG_START_DOCSTRING)
 class RagModel(RagPreTrainedModel):
     def __init__(
         self,
@@ -502,7 +503,7 @@ class RagModel(RagPreTrainedModel):
         self.question_encoder = question_encoder
         self.generator = generator
 
-    @add_start_docstrings_to_callable(RAG_FORWARD_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(RAG_FORWARD_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=RetrievAugLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -658,9 +659,9 @@ class RagModel(RagPreTrainedModel):
         )
 
 
-@add_start_docstrings_to_callable(
+@add_start_docstrings_to_model_forward(
     """
-    A RAG-sequence model impementation. It performs RAG-sequence specific marginalization in the forward pass.
+    A RAG-sequence model implementation. It performs RAG-sequence specific marginalization in the forward pass.
     """,
     RAG_START_DOCSTRING,
 )
@@ -687,7 +688,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
 
-    @add_start_docstrings_to_callable(RAG_FORWARD_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(RAG_FORWARD_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=RetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -736,7 +737,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             >>> input_ids = input_dict["input_ids"]
             >>> outputs = model(input_ids=input_ids, labels=input_dict["labels"])
 
-            >>> # or use retriever seperately
+            >>> # or use retriever separately
             >>> model = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", use_dummy_dataset=True)
             >>> # 1. Encode
             >>> question_hidden_states = model.question_encoder(input_ids)[0]
@@ -825,7 +826,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         num_return_sequences=None,  # defaults to 1
         num_beams=None,  # defaults to 1
         n_docs=None,
-        **kwargs
+        **model_kwargs
     ):
         """
         Implements RAG sequence "thorough" decoding. Read the :meth:`~transformers.PreTrainedModel.generate``
@@ -872,7 +873,6 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         )
         num_beams = num_beams if num_beams is not None else self.config.num_beams
 
-        # TODO(patrick) - clean up generate here
         if self.retriever is not None and context_input_ids is None:
             question_hidden_states = self.question_encoder(input_ids, attention_mask=attention_mask)[0]
             context_input_ids = self.retriever(
@@ -887,10 +887,9 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             context_input_ids = context_input_ids.to(input_ids)
 
         hypos = []
-        kwargs["num_beams"] = num_beams
-        kwargs["num_return_sequences"] = num_beams
-        kwargs["attention_mask"] = None
-        kwargs["n_docs"] = n_docs
+        model_kwargs["num_beams"] = num_beams
+        model_kwargs["num_return_sequences"] = num_beams
+        model_kwargs["attention_mask"] = None
 
         for index in range(len(input_ids)):
             # first, generate beams from documents:
@@ -898,7 +897,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
             output_sequences = self.generator.generate(
                 generator_input_ids,
-                **kwargs,
+                **model_kwargs,
             )  # n_docs * n_beam, tgt_len
             if do_deduplication:
                 # do_deduplication, max_output_len
@@ -940,13 +939,13 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         )  # batch_size x n_docs x tgt_len x dim
         doc_logprobs = torch.nn.functional.log_softmax(doc_scores, dim=1).unsqueeze(-1).unsqueeze(-1)
 
-        # RAG-sequence marginaliation
+        # RAG-sequence marginalization
         first_token_scores = seq_logprobs[:, :, :1, :]
         second_token_scores = seq_logprobs[:, :, 1:2, :]
         remainder = seq_logprobs[:, :, 2:, :]
         rag_logprobs = torch.cat([first_token_scores, second_token_scores + doc_logprobs, remainder], dim=2)
 
-        # calcualate loss
+        # calculate loss
         target = target.unsqueeze(1).unsqueeze(-1).repeat(1, n_docs, 1, 1)
         assert target.dim() == rag_logprobs.dim()
 
@@ -984,9 +983,9 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         return output
 
 
-@add_start_docstrings_to_callable(
+@add_start_docstrings_to_model_forward(
     """
-    A RAG-token model impementation. It performs RAG-token specific marginalization in the forward pass.
+    A RAG-token model implementation. It performs RAG-token specific marginalization in the forward pass.
     """,
     RAG_START_DOCSTRING,
 )
@@ -1018,7 +1017,15 @@ class RagTokenForGeneration(RagPreTrainedModel):
         return self.rag.generator.adjust_logits_during_generation(logits, cur_len=cur_len, max_length=max_length)
 
     def prepare_inputs_for_generation(
-        self, decoder_input_ids, past, attention_mask, use_cache, encoder_outputs, doc_scores, n_docs=None, **kwargs
+        self,
+        decoder_input_ids,
+        past=None,
+        attention_mask=None,
+        use_cache=None,
+        encoder_outputs=None,
+        doc_scores=None,
+        n_docs=None,
+        **kwargs
     ):
         return {
             "input_ids": None,
@@ -1080,7 +1087,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         log_prob_sum = seq_logprobs + doc_logprobs.unsqueeze(-1).unsqueeze(-1)
         return torch.logsumexp(log_prob_sum, dim=1)
 
-    @add_start_docstrings_to_callable(RAG_FORWARD_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(RAG_FORWARD_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=RetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1129,7 +1136,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             >>> input_ids = input_dict["input_ids"]
             >>> outputs = model(input_ids=input_ids, labels=input_dict["labels"])
 
-            >>> # or use retriever seperately
+            >>> # or use retriever separately
             >>> model = RagTokenForGeneration.from_pretrained("facebook/rag-token-nq", use_dummy_dataset=True)
             >>> # 1. Encode
             >>> question_hidden_states = model.question_encoder(input_ids)[0]
@@ -1222,11 +1229,12 @@ class RagTokenForGeneration(RagPreTrainedModel):
         eos_token_id=None,
         length_penalty=None,
         no_repeat_ngram_size=None,
+        repetition_penalty=None,
         bad_words_ids=None,
         num_return_sequences=None,
         decoder_start_token_id=None,
         n_docs=None,
-        **kwargs
+        **model_kwargs
     ):
         """
         Implements RAG token decoding.
@@ -1257,7 +1265,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 to the forward pass. :obj:`context_input_ids` are returned by
                 :meth:`~transformers.RagRetriever.__call__`.
             doc_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.n_docs)`):
-                Score between each retrieved document embeddigs (see :obj:`retrieved_doc_embeds`) and
+                Score between each retrieved document embeddings (see :obj:`retrieved_doc_embeds`) and
                 :obj:`question_encoder_last_hidden_state`.
 
                 If the model has is not initialized with a ``retriever``, :obj:`context_input_ids` has to be provided
@@ -1307,22 +1315,15 @@ class RagTokenForGeneration(RagPreTrainedModel):
         """
         # set default parameters
         n_docs = n_docs if n_docs is not None else self.config.n_docs
-        max_length = max_length if max_length is not None else self.config.max_length
-        min_length = min_length if min_length is not None else self.config.min_length
-        early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
         num_beams = num_beams if num_beams is not None else self.config.num_beams
-        bos_token_id = bos_token_id if bos_token_id is not None else self.config.generator.bos_token_id
-        pad_token_id = pad_token_id if pad_token_id is not None else self.config.generator.pad_token_id
-        eos_token_id = eos_token_id if eos_token_id is not None else self.config.generator.eos_token_id
-        length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
-        no_repeat_ngram_size = (
-            no_repeat_ngram_size if no_repeat_ngram_size is not None else self.config.no_repeat_ngram_size
-        )
-        bad_words_ids = bad_words_ids if bad_words_ids is not None else self.config.bad_words_ids
+        max_length = max_length if max_length is not None else self.config.max_length
         num_return_sequences = (
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
         )
+        bos_token_id = bos_token_id if bos_token_id is not None else self.config.generator.bos_token_id
+        eos_token_id = eos_token_id if eos_token_id is not None else self.config.generator.eos_token_id
+        pad_token_id = pad_token_id if pad_token_id is not None else self.config.generator.pad_token_id
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         decoder_start_token_id = (
             decoder_start_token_id
             if decoder_start_token_id is not None
@@ -1365,7 +1366,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         encoder = self.rag.generator.get_encoder()
         encoder_outputs = encoder(input_ids=context_input_ids, attention_mask=context_attention_mask, return_dict=True)
 
-        decoder_input_ids = torch.full(
+        input_ids = torch.full(
             (batch_size * num_beams, 1),
             decoder_start_token_id,
             dtype=torch.long,
@@ -1388,64 +1389,57 @@ class RagTokenForGeneration(RagPreTrainedModel):
         doc_scores = doc_scores.repeat_interleave(num_beams, dim=0)
 
         # define start_len & additional parameters
-        cur_len = 1
-        vocab_size = self.config.generator.vocab_size
-        kwargs["doc_scores"] = doc_scores
-        kwargs["encoder_outputs"] = encoder_outputs
-        kwargs["n_docs"] = n_docs
+        model_kwargs["doc_scores"] = doc_scores
+        model_kwargs["encoder_outputs"] = encoder_outputs
+        model_kwargs["attention_mask"] = context_attention_mask
+        model_kwargs["n_docs"] = n_docs
 
-        # not needed. TODO(PVP): change after generate refactor
-        do_sample = False
-        temperature = self.config.temperature
-        top_k = self.config.top_k
-        top_p = self.config.top_p
-        repetition_penalty = self.config.repetition_penalty
+        pre_processor = self._get_logits_processor(
+            repetition_penalty=repetition_penalty,
+            no_repeat_ngram_size=no_repeat_ngram_size,
+            bad_words_ids=bad_words_ids,
+            min_length=min_length,
+            eos_token_id=eos_token_id,
+        )
 
-        if num_beams > 1:
-            return self._generate_beam_search(
-                decoder_input_ids,
-                cur_len=cur_len,
+        if num_beams == 1:
+            if num_return_sequences > 1:
+                raise ValueError(
+                    f"num_return_sequences has to be 1, but is {num_return_sequences} when doing greedy search."
+                )
+            return self.greedy_search(
+                input_ids,
+                pre_processor=pre_processor,
                 max_length=max_length,
-                min_length=min_length,
-                do_sample=do_sample,
-                early_stopping=early_stopping,
-                temperature=temperature,
-                top_k=top_k,
-                top_p=top_p,
-                repetition_penalty=repetition_penalty,
-                no_repeat_ngram_size=no_repeat_ngram_size,
-                bad_words_ids=bad_words_ids,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
+                **model_kwargs,
+            )
+        elif num_beams > 1:
+            length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
+            early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
+            if num_return_sequences > num_beams:
+                raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
+            beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
-                num_return_sequences=num_return_sequences,
-                length_penalty=length_penalty,
+                max_length=max_length,
                 num_beams=num_beams,
-                vocab_size=vocab_size,
-                attention_mask=context_attention_mask,
-                use_cache=use_cache,
-                model_kwargs=kwargs,
+                device=self.device,
+                length_penalty=length_penalty,
+                do_early_stopping=early_stopping,
+                num_beam_hyps_to_keep=num_return_sequences,
+            )
+            return self.beam_search(
+                input_ids,
+                beam_scorer,
+                pre_processor=pre_processor,
+                max_length=max_length,
+                pad_token_id=pad_token_id,
+                eos_token_id=eos_token_id,
+                **model_kwargs,
             )
         else:
-            return self._generate_no_beam_search(
-                decoder_input_ids,
-                cur_len=cur_len,
-                max_length=max_length,
-                min_length=min_length,
-                do_sample=do_sample,
-                temperature=temperature,
-                top_k=top_k,
-                top_p=top_p,
-                repetition_penalty=repetition_penalty,
-                no_repeat_ngram_size=no_repeat_ngram_size,
-                bad_words_ids=bad_words_ids,
-                pad_token_id=pad_token_id,
-                eos_token_id=eos_token_id,
-                batch_size=batch_size,
-                attention_mask=context_attention_mask,
-                use_cache=use_cache,
-                model_kwargs=kwargs,
-            )
+            raise ValueError(f"`num_beams` has to be an integer strictly superior to 0 (≥ 1), but is {num_beams}")
 
     def get_input_embeddings(self):
         return self.rag.generator.get_input_embeddings()

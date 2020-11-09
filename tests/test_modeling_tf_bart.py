@@ -17,7 +17,9 @@
 import tempfile
 import unittest
 
-from transformers import is_tf_available
+import numpy as np
+
+from transformers import BartConfig, BartTokenizer, is_tf_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import is_pt_tf_cross_test, require_tf, slow
 
@@ -28,12 +30,16 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import BartConfig, TFBartForConditionalGeneration, TFBartModel
-    from transformers.tokenization_bart import BartTokenizer
+    from transformers import TFBartForConditionalGeneration, TFBartModel
+    from transformers.modeling_tf_bart import TFSinusoidalPositionalEmbedding
 
 
 @require_tf
-class ModelTester:
+class TFBartModelTester:
+    config_cls = BartConfig
+    config_updates = {}
+    hidden_act = "gelu"
+
     def __init__(self, parent):
         self.parent = parent
         self.batch_size = 13
@@ -45,14 +51,13 @@ class ModelTester:
         self.num_hidden_layers = 5
         self.num_attention_heads = 4
         self.intermediate_size = 37
-        self.hidden_act = "gelu"
+
         self.hidden_dropout_prob = 0.1
         self.attention_probs_dropout_prob = 0.1
         self.max_position_embeddings = 20
         self.eos_token_ids = [2]
         self.pad_token_id = 1
         self.bos_token_id = 0
-        # torch.manual_seed(0)
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
@@ -60,7 +65,7 @@ class ModelTester:
         input_ids = tf.concat([input_ids, eos_tensor], axis=1)
         input_ids = tf.clip_by_value(input_ids, 3, self.vocab_size + 1)
 
-        config = BartConfig(
+        config = self.config_cls(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -76,6 +81,7 @@ class ModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.pad_token_id,
+            **self.config_updates,
         )
         inputs_dict = prepare_bart_inputs_dict(config, input_ids)
         return config, inputs_dict
@@ -101,9 +107,10 @@ class TestTFBart(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
+    model_tester_cls = TFBartModelTester
 
     def setUp(self):
-        self.model_tester = ModelTester(self)
+        self.model_tester = self.model_tester_cls(self)
         self.config_tester = ConfigTester(self, config_class=BartConfig)
 
     def test_config(self):
@@ -120,7 +127,7 @@ class TestTFBart(TFModelTesterMixin, unittest.TestCase):
         loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
 
-        model_class = TFBartForConditionalGeneration
+        model_class = self.all_generative_model_classes[0]
         input_ids = {
             "decoder_input_ids": tf.keras.Input(batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"),
             "input_ids": tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32"),
@@ -354,3 +361,29 @@ class FasterTFBartModelIntegrationTests(unittest.TestCase):
 
         expected = np.array([[-0.0828, -0.0251, -0.0674], [0.1277, 0.3311, -0.0255], [0.2613, -0.0840, -0.2763]])
         assert np.allclose(features[0, :3, :3].numpy(), expected, atol=1e-3)
+
+
+@require_tf
+class TestTFSinusoidalPositionalEmbeddings(unittest.TestCase):
+    desired_weights = [
+        [0, 0, 0, 0, 0],
+        [0.84147096, 0.82177866, 0.80180490, 0.78165019, 0.76140374],
+        [0.90929741, 0.93651021, 0.95829457, 0.97505713, 0.98720258],
+    ]
+
+    def test_positional_emb_cache_logic(self):
+        input_ids = _long_tensor([[4, 10]])
+        emb1 = TFSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=6)
+        no_cache = emb1(input_ids, use_cache=False)
+        yes_cache = emb1(input_ids, use_cache=True)
+        self.assertEqual((1, 1, 6), yes_cache.shape)  # extra dim to allow broadcasting, feel free to delete!
+
+        np.testing.assert_almost_equal(no_cache[-1].numpy(), yes_cache[0][0].numpy())
+
+    def test_positional_emb_weights_against_marian(self):
+        emb1 = TFSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512)
+        emb1.build(None)
+        weights = emb1.embeddings.numpy()
+        for i, (expected_weight, actual_weight) in enumerate(zip(self.desired_weights, weights)):
+            for j in range(5):
+                self.assertAlmostEqual(expected_weight[j], actual_weight[j], places=3)

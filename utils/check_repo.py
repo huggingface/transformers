@@ -67,6 +67,7 @@ MODEL_NAME_TO_DOC_FILE = {
     "xlm_prophetnet": "xlmprophetnet.rst",
     "xlm_roberta": "xlmroberta.rst",
     "bert_generation": "bertgeneration.rst",
+    "marian": "marian.rst",
 }
 
 # This is to make sure the transformers module imported is the one in the repo.
@@ -148,7 +149,6 @@ def get_model_doc_files():
     _ignore_modules = [
         "auto",
         "dialogpt",
-        "marian",
         "retribert",
     ]
     doc_files = []
@@ -163,7 +163,7 @@ def get_model_doc_files():
 def find_tested_models(test_file):
     """ Parse the content of test_file to detect what's in all_model_classes"""
     # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the class
-    with open(os.path.join(PATH_TO_TESTS, test_file)) as f:
+    with open(os.path.join(PATH_TO_TESTS, test_file), "r", encoding="utf-8") as f:
         content = f.read()
     all_models = re.findall(r"all_model_classes\s+=\s+\(\s*\(([^\)]*)\)", content)
     # Check with one less parenthesis
@@ -221,7 +221,7 @@ def check_all_models_are_tested():
 
 def find_documented_classes(doc_file):
     """ Parse the content of doc_file to detect which classes it documents"""
-    with open(os.path.join(PATH_TO_DOC, doc_file)) as f:
+    with open(os.path.join(PATH_TO_DOC, doc_file), "r", encoding="utf-8") as f:
         content = f.read()
     return re.findall(r"autoclass:: transformers.(\S+)\s+", content)
 
@@ -245,6 +245,7 @@ def check_models_are_documented(module, doc_file):
 def _get_model_name(module):
     """ Get the model name for the module defining it."""
     splits = module.__name__.split("_")
+
     # Secial case for transfo_xl
     if splits[-1] == "xl":
         return "_".join(splits[-2:])
