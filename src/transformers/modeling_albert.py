@@ -738,7 +738,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        sentence_order_label=None,
+        next_sentence_label=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -749,7 +749,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
             Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
             config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
-        sentence_order_label (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
+        next_sentence_label (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
             Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
             (see :obj:`input_ids` docstring) Indices should be in ``[0, 1]``. ``0`` indicates original order (sequence
             A, then sequence B), ``1`` indicates switched order (sequence B, then sequence A).
@@ -780,6 +780,12 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
                 FutureWarning,
             )
             labels = kwargs.pop("masked_lm_labels")
+        if "sentence_order_label" in kwargs:
+            warnings.warn(
+                "The `sentence_order_label` argument is deprecated and will be removed in a future version, use `next_sentence_label` instead.",
+                FutureWarning,
+            )
+            next_sentence_label = kwargs.pop("sentence_order_label")
         assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -801,10 +807,10 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
         sop_scores = self.sop_classifier(pooled_output)
 
         total_loss = None
-        if labels is not None and sentence_order_label is not None:
+        if labels is not None and next_sentence_label is not None:
             loss_fct = CrossEntropyLoss()
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-            sentence_order_loss = loss_fct(sop_scores.view(-1, 2), sentence_order_label.view(-1))
+            sentence_order_loss = loss_fct(sop_scores.view(-1, 2), next_sentence_label.view(-1))
             total_loss = masked_lm_loss + sentence_order_loss
 
         if not return_dict:
