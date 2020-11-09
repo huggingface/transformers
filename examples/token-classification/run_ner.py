@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2020 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,29 +12,33 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Fine-tuning the library models for named entity recognition on CoNLL-2003. """
+"""
+Fine-tuning the library models for token classification.
+"""
+# You can also adapt this script on your own token classification task and datasets. Pointers for this are left as comments.
+
 import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from importlib import import_module
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import numpy as np
+from datasets import load_dataset
 from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_score
-from torch import nn
 
+import transformers
 from transformers import (
     AutoConfig,
     AutoModelForTokenClassification,
     AutoTokenizer,
-    EvalPrediction,
+    DataCollatorForTokenClassification,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
     set_seed,
 )
-from utils_ner import Split, TokenClassificationDataset, TokenClassificationTask
+from transformers.trainer_utils import is_main_process
 
 
 logger = logging.getLogger(__name__)
@@ -53,15 +56,9 @@ class ModelArguments:
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
-    task_type: Optional[str] = field(
-        default="NER", metadata={"help": "Task type to fine tune in training (e.g. NER, POS, etc)"}
-    )
     tokenizer_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
-    use_fast: bool = field(default=False, metadata={"help": "Set this flag to use fast tokenization."})
-    # If you want to tweak more attributes on your tokenizer, you should do it in a distinct script,
-    # or just modify its tokenizer_config.json.
     cache_dir: Optional[str] = field(
         default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
     )
@@ -73,23 +70,58 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    data_dir: str = field(
-        metadata={"help": "The input data dir. Should contain the .txt files for a CoNLL-2003-formatted task."}
+    task_name: Optional[str] = field(default="ner", metadata={"help": "The name of the task (ner, pos...)."})
+    dataset_name: Optional[str] = field(
+        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
     )
-    labels: Optional[str] = field(
+    dataset_config_name: Optional[str] = field(
+        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+    )
+    train_file: Optional[str] = field(
+        default=None, metadata={"help": "The input training data file (a csv or JSON file)."}
+    )
+    validation_file: Optional[str] = field(
         default=None,
-        metadata={"help": "Path to a file containing all labels. If not specified, CoNLL-2003 labels are used."},
+        metadata={"help": "An optional input evaluation data file to evaluate on (a csv or JSON file)."},
     )
-    max_seq_length: int = field(
-        default=128,
-        metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
-        },
+    test_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "An optional input test data file to predict on (a csv or JSON file)."},
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
+    preprocessing_num_workers: Optional[int] = field(
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
+    )
+    pad_to_max_length: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to pad all samples to model maximum sentence length. "
+            "If False, will pad the samples dynamically when batching to the maximum length in the batch. More "
+            "efficient on GPU but very bad for TPU."
+        },
+    )
+    label_all_tokens: bool = field(
+        default=False,
+        metadata={
+            "help": "Whether to put the label for one word on all tokens of generated by that word or just on the "
+            "one (in which case the other tokens will have a padding index)."
+        },
+    )
+
+    def __post_init__(self):
+        if self.dataset_name is None and self.train_file is None and self.validation_file is None:
+            raise ValueError("Need either a dataset name or a training/validation file.")
+        else:
+            if self.train_file is not None:
+                extension = self.train_file.split(".")[-1]
+                assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+            if self.validation_file is not None:
+                extension = self.validation_file.split(".")[-1]
+                assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+        self.task_name = self.task_name.lower()
 
 
 def main():
@@ -112,60 +144,90 @@ def main():
         and not training_args.overwrite_output_dir
     ):
         raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
-        )
-
-    module = import_module("tasks")
-    try:
-        token_classification_task_clazz = getattr(module, model_args.task_type)
-        token_classification_task: TokenClassificationTask = token_classification_task_clazz()
-    except AttributeError:
-        raise ValueError(
-            f"Task {model_args.task_type} needs to be defined as a TokenClassificationTask subclass in {module}. "
-            f"Available tasks classes are: {TokenClassificationTask.__subclasses__()}"
+            f"Output directory ({training_args.output_dir}) already exists and is not empty."
+            "Use --overwrite_output_dir to overcome."
         )
 
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO if training_args.local_rank in [-1, 0] else logging.WARN,
+        level=logging.INFO if is_main_process(training_args.local_rank) else logging.WARN,
     )
+
+    # Log on each process the small summary:
     logger.warning(
-        "Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
-        training_args.local_rank,
-        training_args.device,
-        training_args.n_gpu,
-        bool(training_args.local_rank != -1),
-        training_args.fp16,
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
+        + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
+    # Set the verbosity to info of the Transformers logger (on main process only):
+    if is_main_process(training_args.local_rank):
+        transformers.utils.logging.set_verbosity_info()
     logger.info("Training/evaluation parameters %s", training_args)
 
-    # Set seed
+    # Set seed before initializing model.
     set_seed(training_args.seed)
 
-    # Prepare CONLL-2003 task
-    labels = token_classification_task.get_labels(data_args.labels)
-    label_map: Dict[int, str] = {i: label for i, label in enumerate(labels)}
-    num_labels = len(labels)
+    # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
+    # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
+    # (the dataset will be downloaded automatically from the datasets Hub).
+    #
+    # For CSV/JSON files, this script will use the column called 'text' or the first column if no column called
+    # 'text' is found. You can easily tweak this behavior (see below).
+    #
+    # In distributed training, the load_dataset function guarantee that only one local process can concurrently
+    # download the dataset.
+    if data_args.dataset_name is not None:
+        # Downloading and loading a dataset from the hub.
+        datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name)
+    else:
+        data_files = {}
+        if data_args.train_file is not None:
+            data_files["train"] = data_args.train_file
+        if data_args.validation_file is not None:
+            data_files["validation"] = data_args.validation_file
+        if data_args.test_file is not None:
+            data_files["test"] = data_args.test_file
+        extension = data_args.train_file.split(".")[-1]
+        datasets = load_dataset(extension, data_files=data_files)
+    # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
+    # https://huggingface.co/docs/datasets/loading_datasets.html.
+
+    if training_args.do_train:
+        column_names = datasets["train"].column_names
+    else:
+        column_names = datasets["validation"].column_names
+    text_column_name = "words" if "words" in column_names else column_names[0]
+    label_column_name = data_args.task_name if data_args.task_name in column_names else column_names[1]
+
+    # Labeling (this part will be easier when https://github.com/huggingface/datasets/issues/797 is solved)
+    def get_label_list(labels):
+        unique_labels = set()
+        for label in labels:
+            unique_labels = unique_labels | set(label)
+        label_list = list(unique_labels)
+        label_list.sort()
+        return label_list
+
+    label_list = get_label_list(datasets["train"][label_column_name])
+    label_to_id = {l: i for i, l in enumerate(label_list)}
+    num_labels = len(label_list)
 
     # Load pretrained model and tokenizer
     #
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
-
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         num_labels=num_labels,
-        id2label=label_map,
-        label2id={label: i for i, label in enumerate(labels)},
+        finetuning_task=data_args.task_name,
         cache_dir=model_args.cache_dir,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
-        use_fast=model_args.use_fast,
+        use_fast=True,
     )
     model = AutoModelForTokenClassification.from_pretrained(
         model_args.model_name_or_path,
@@ -174,67 +236,85 @@ def main():
         cache_dir=model_args.cache_dir,
     )
 
-    # Get datasets
-    train_dataset = (
-        TokenClassificationDataset(
-            token_classification_task=token_classification_task,
-            data_dir=data_args.data_dir,
-            tokenizer=tokenizer,
-            labels=labels,
-            model_type=config.model_type,
-            max_seq_length=data_args.max_seq_length,
-            overwrite_cache=data_args.overwrite_cache,
-            mode=Split.train,
+    # Preprocessing the dataset
+    # Padding strategy
+    padding = "max_length" if data_args.pad_to_max_length else False
+
+    # Tokenize all texts and align the labels with them.
+    def tokenize_and_align_labels(examples):
+        tokenized_inputs = tokenizer(
+            examples[text_column_name],
+            padding=padding,
+            truncation=True,
+            # We use this argument because the texts in our dataset are lists of words (with a label for each word).
+            is_split_into_words=True,
+            return_offsets_mapping=True,
         )
-        if training_args.do_train
-        else None
+        offset_mappings = tokenized_inputs.pop("offset_mapping")
+        labels = []
+        for label, offset_mapping in zip(examples[label_column_name], offset_mappings):
+            label_index = 0
+            current_label = -100
+            label_ids = []
+            for offset in offset_mapping:
+                # We set the label for the first token of each word. Special characters will have an offset of (0, 0)
+                # so the test ignores them.
+                if offset[0] == 0 and offset[1] != 0:
+                    current_label = label_to_id[label[label_index]]
+                    label_index += 1
+                    label_ids.append(current_label)
+                # For special tokens, we set the label to -100 so it's automatically ignored in the loss function.
+                elif offset[0] == 0 and offset[1] == 0:
+                    label_ids.append(-100)
+                # For the other tokens in a word, we set the label to either the current label or -100, depending on
+                # the label_all_tokens flag.
+                else:
+                    label_ids.append(current_label if data_args.label_all_tokens else -100)
+
+            labels.append(label_ids)
+        tokenized_inputs["labels"] = labels
+        return tokenized_inputs
+
+    tokenized_datasets = datasets.map(
+        tokenize_and_align_labels,
+        batched=True,
+        num_proc=data_args.preprocessing_num_workers,
+        load_from_cache_file=not data_args.overwrite_cache,
     )
-    eval_dataset = (
-        TokenClassificationDataset(
-            token_classification_task=token_classification_task,
-            data_dir=data_args.data_dir,
-            tokenizer=tokenizer,
-            labels=labels,
-            model_type=config.model_type,
-            max_seq_length=data_args.max_seq_length,
-            overwrite_cache=data_args.overwrite_cache,
-            mode=Split.dev,
-        )
-        if training_args.do_eval
-        else None
-    )
 
-    def align_predictions(predictions: np.ndarray, label_ids: np.ndarray) -> Tuple[List[int], List[int]]:
-        preds = np.argmax(predictions, axis=2)
+    # Data collator
+    data_collator = DataCollatorForTokenClassification(tokenizer)
 
-        batch_size, seq_len = preds.shape
+    # Metrics
+    def compute_metrics(p):
+        predictions, labels = p
+        predictions = np.argmax(predictions, axis=2)
 
-        out_label_list = [[] for _ in range(batch_size)]
-        preds_list = [[] for _ in range(batch_size)]
+        # Remove ignored index (special tokens)
+        true_predictions = [
+            [label_list[p] for (p, l) in zip(prediction, label) if l != -100]
+            for prediction, label in zip(predictions, labels)
+        ]
+        true_labels = [
+            [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
+            for prediction, label in zip(predictions, labels)
+        ]
 
-        for i in range(batch_size):
-            for j in range(seq_len):
-                if label_ids[i, j] != nn.CrossEntropyLoss().ignore_index:
-                    out_label_list[i].append(label_map[label_ids[i][j]])
-                    preds_list[i].append(label_map[preds[i][j]])
-
-        return preds_list, out_label_list
-
-    def compute_metrics(p: EvalPrediction) -> Dict:
-        preds_list, out_label_list = align_predictions(p.predictions, p.label_ids)
         return {
-            "accuracy_score": accuracy_score(out_label_list, preds_list),
-            "precision": precision_score(out_label_list, preds_list),
-            "recall": recall_score(out_label_list, preds_list),
-            "f1": f1_score(out_label_list, preds_list),
+            "accuracy_score": accuracy_score(true_labels, true_predictions),
+            "precision": precision_score(true_labels, true_predictions),
+            "recall": recall_score(true_labels, true_predictions),
+            "f1": f1_score(true_labels, true_predictions),
         }
 
     # Initialize our Trainer
     trainer = Trainer(
         model=model,
         args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
+        train_dataset=tokenized_datasets["train"] if training_args.do_train else None,
+        eval_dataset=tokenized_datasets["validation"] if training_args.do_eval else None,
+        tokenizer=tokenizer,
+        data_collator=data_collator,
         compute_metrics=compute_metrics,
     )
 
@@ -243,58 +323,50 @@ def main():
         trainer.train(
             model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
         )
-        trainer.save_model()
-        # For convenience, we also re-save the tokenizer to the same directory,
-        # so that you can share your model easily on huggingface.co/models =)
-        if trainer.is_world_master():
-            tokenizer.save_pretrained(training_args.output_dir)
+        trainer.save_model()  # Saves the tokenizer too for easy upload
 
     # Evaluation
     results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
-        result = trainer.evaluate()
+        results = trainer.evaluate()
 
-        output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
-        if trainer.is_world_master():
+        output_eval_file = os.path.join(training_args.output_dir, "eval_results_ner.txt")
+        if trainer.is_world_process_zero():
             with open(output_eval_file, "w") as writer:
                 logger.info("***** Eval results *****")
-                for key, value in result.items():
-                    logger.info("  %s = %s", key, value)
-                    writer.write("%s = %s\n" % (key, value))
-
-            results.update(result)
+                for key, value in results.items():
+                    logger.info(f"  {key} = {value}")
+                    writer.write(f"{key} = {value}\n")
 
     # Predict
     if training_args.do_predict:
-        test_dataset = TokenClassificationDataset(
-            token_classification_task=token_classification_task,
-            data_dir=data_args.data_dir,
-            tokenizer=tokenizer,
-            labels=labels,
-            model_type=config.model_type,
-            max_seq_length=data_args.max_seq_length,
-            overwrite_cache=data_args.overwrite_cache,
-            mode=Split.test,
-        )
+        logger.info("*** Predict ***")
 
-        predictions, label_ids, metrics = trainer.predict(test_dataset)
-        preds_list, _ = align_predictions(predictions, label_ids)
+        test_dataset = datasets["test"]
+        predictions, labels, metrics = trainer.predict(test_dataset)
+        predictions = np.argmax(predictions, axis=2)
+
+        # Remove ignored index (special tokens)
+        true_predictions = [
+            [label_list[p] for (p, l) in zip(prediction, label) if l != -100]
+            for prediction, label in zip(predictions, labels)
+        ]
 
         output_test_results_file = os.path.join(training_args.output_dir, "test_results.txt")
         if trainer.is_world_master():
             with open(output_test_results_file, "w") as writer:
                 for key, value in metrics.items():
-                    logger.info("  %s = %s", key, value)
-                    writer.write("%s = %s\n" % (key, value))
+                    logger.info(f"  {key} = {value}")
+                    writer.write(f"{key} = {value}\n")
 
         # Save predictions
         output_test_predictions_file = os.path.join(training_args.output_dir, "test_predictions.txt")
         if trainer.is_world_master():
             with open(output_test_predictions_file, "w") as writer:
-                with open(os.path.join(data_args.data_dir, "test.txt"), "r") as f:
-                    token_classification_task.write_predictions_to_file(writer, f, preds_list)
+                for prediction in true_predictions:
+                    writer.write(" ".join(prediction) + "\n")
 
     return results
 

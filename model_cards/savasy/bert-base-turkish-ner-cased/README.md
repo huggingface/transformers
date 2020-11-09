@@ -32,7 +32,7 @@ export SEED=1
 ```
 Then run pre-training:
 ```
-python3 run_ner.py --data_dir ./tr-data3 \
+python3 run_ner_old.py --data_dir ./tr-data3 \
 --model_type bert \
 --labels ./tr-data/labels.txt \
 --model_name_or_path $BERT_MODEL \
