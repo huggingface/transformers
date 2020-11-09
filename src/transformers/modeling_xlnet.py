@@ -17,7 +17,6 @@
  PyTorch XLNet model.
 """
 import warnings
-
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
