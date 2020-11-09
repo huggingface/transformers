@@ -44,7 +44,7 @@ if SRC_DIRS is not None:
     import run_generation
     import run_glue
     import run_mlm
-    import run_ner_new as run_ner
+    import run_ner
     import run_pl_glue
     import run_squad
 

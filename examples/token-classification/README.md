@@ -1,6 +1,38 @@
-## Named Entity Recognition
+## Token classification
 
-Based on the scripts [`run_ner.py`](https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner.py) for Pytorch and
+Fine-tuning the library models for token classification task such as Named Entity Recognition (NER) or Parts-of-speech
+tagging (POS). The main scrip `run_ner.py` leverages the 🤗 Datasets library and the Trainer API. You can easily
+customize it to your needs if you need extra processing on your datasets.
+
+It will either run on a datasets hosted on our [hub](https://huggingface.co/datasets) or with your own text files for
+training and validation.
+
+The following example fine-tunes BERT on CoNLL-2003:
+
+```bash
+python run_ner.py \
+  --model_name_or_path bert-base-uncased \
+  --dataset_name conll2003 \
+  --output_dir /tmp/test-ner \
+  --do_train \
+  --do_eval
+```
+
+To run on your own training and validation files, use the following command:
+
+```bash
+python run_ner.py \
+  --model_name_or_path bert-base-uncased \
+  --train_file path_to_train_file \
+  --validation_file path_to_validation_file \
+  --output_dir /tmp/test-ner \
+  --do_train \
+  --do_eval
+```
+
+## Old version of the script
+
+Based on the scripts [`run_ner_old.py`](https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner_old.py) for Pytorch and
 [`run_tf_ner.py`](https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_tf_ner.py) for Tensorflow 2.
 
 The following examples are covered in this section:
@@ -69,7 +101,7 @@ export SEED=1
 To start training, just run:
 
 ```bash
-python3 run_ner.py --data_dir ./ \
+python3 run_ner_old.py --data_dir ./ \
 --labels ./labels.txt \
 --model_name_or_path $BERT_MODEL \
 --output_dir $OUTPUT_DIR \
