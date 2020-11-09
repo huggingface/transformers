@@ -31,6 +31,7 @@ from .configuration_auto import (
     FunnelConfig,
     GPT2Config,
     LongformerConfig,
+    LxmertConfig,
     MobileBertConfig,
     OpenAIGPTConfig,
     RobertaConfig,
@@ -113,6 +114,7 @@ from .modeling_tf_funnel import (
 )
 from .modeling_tf_gpt2 import TFGPT2LMHeadModel, TFGPT2Model
 from .modeling_tf_longformer import TFLongformerForMaskedLM, TFLongformerForQuestionAnswering, TFLongformerModel
+from .modeling_tf_lxmert import TFLxmertForPreTraining, TFLxmertModel
 from .modeling_tf_marian import TFMarianMTModel
 from .modeling_tf_mbart import TFMBartForConditionalGeneration
 from .modeling_tf_mobilebert import (
@@ -168,6 +170,7 @@ logger = logging.get_logger(__name__)
 
 TF_MODEL_MAPPING = OrderedDict(
     [
+        (LxmertConfig, TFLxmertModel),
         (T5Config, TFT5Model),
         (DistilBertConfig, TFDistilBertModel),
         (AlbertConfig, TFAlbertModel),
@@ -192,6 +195,7 @@ TF_MODEL_MAPPING = OrderedDict(
 
 TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
+        (LxmertConfig, TFLxmertForPreTraining),
         (T5Config, TFT5ForConditionalGeneration),
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForPreTraining),
