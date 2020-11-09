@@ -3,7 +3,7 @@ import sys
 import unittest
 from unittest.mock import patch
 
-import run_ner
+import run_ner_old as run_ner
 from transformers.testing_utils import require_torch_non_multigpu_but_fix_me, slow
 
 

@@ -95,7 +95,7 @@ class TestSummarizationDistillerMultiGPU(TestCasePlus):
         args = f"""
             --model_name Helsinki-NLP/opus-mt-en-ro
             --save_dir {output_dir}
-            --data_dir test_data/wmt_en_ro
+            --data_dir {self.test_file_dir_str}/test_data/wmt_en_ro
             --num_beams 2
             --task translation
         """.split()
