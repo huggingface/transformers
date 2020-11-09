@@ -129,6 +129,7 @@ from .modeling_fsmt import FSMTForConditionalGeneration, FSMTModel
 from .modeling_funnel import (
     FunnelForMaskedLM,
     FunnelForMultipleChoice,
+    FunnelForPreTraining,
     FunnelForQuestionAnswering,
     FunnelForSequenceClassification,
     FunnelForTokenClassification,
@@ -288,6 +289,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (CTRLConfig, CTRLLMHeadModel),
         (ElectraConfig, ElectraForPreTraining),
         (LxmertConfig, LxmertForPreTraining),
+        (FunnelConfig, FunnelForPreTraining),
     ]
 )
 
