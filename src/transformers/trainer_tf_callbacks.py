@@ -1,5 +1,5 @@
-import os
 import operator
+import os
 
 import tensorflow as tf
 
@@ -23,29 +23,30 @@ class KeepNCheckpoints(tf.keras.callbacks.Callback):
         if self.num_keep > 0:
             checkpoints = self.sort_checkpoints(self.checkpoints_dir)
 
-            for checkpoint in checkpoints[self.num_keep:]:
-                checkpoint_files = tf.io.gfile.glob(checkpoint + '*')
+            for checkpoint in checkpoints[self.num_keep :]:
+                checkpoint_files = tf.io.gfile.glob(checkpoint + "*")
 
                 for file in checkpoint_files:
                     tf.io.gfile.remove(file)
 
-    
     def sort_checkpoints(self, model_dir: str):
         """
-        Get all checkpoints in descending order sorted by epoch.
+        Get all checkpoints in descending order sorted by epoch
+
         Args:
             model_dir (:obj:`str`):
-                The location of the checkpoints.
+                The location of the checkpoints
+
         Returns:
             sorted list of checkpoints
         """
-        checkpoints = tf.io.gfile.glob(os.path.join(model_dir, 'weights-*.index'))
-        checkpoints = map(lambda s: s.strip('.index'), checkpoints)
+        checkpoints = tf.io.gfile.glob(os.path.join(model_dir, "weights-*.index"))
+        checkpoints = map(lambda s: s.strip(".index"), checkpoints)
         by_epoch = []
 
         for checkpoint in checkpoints:
             checkpoint_name = os.path.basename(checkpoint)
-            epoch = checkpoint_name.split('-')[1]
+            epoch = checkpoint_name.split("-")[1]
 
             by_epoch.append((epoch, checkpoint))
 

@@ -32,7 +32,7 @@ import tensorflow as tf
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import create_optimizer
-from .trainer_tf_callbacks import LearningRateLoggingCallback, KeepNCheckpoints
+from .trainer_tf_callbacks import KeepNCheckpoints, LearningRateLoggingCallback
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, PredictionOutput, set_seed
 from .training_args_tf import TFTrainingArguments
 from .utils import logging
