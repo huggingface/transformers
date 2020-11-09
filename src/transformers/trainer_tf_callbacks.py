@@ -11,6 +11,26 @@ class LearningRateLoggingCallback(tf.keras.callbacks.Callback):
         tf.summary.scalar("learning rate", data=lr, step=self.model.optimizer.iterations)
 
 
+class PastStateCallback(tf.keras.callbacks.Callback):
+    def on_epoch_begin(self, epoch, logs):
+        self.model.past = None
+
+    def on_train_end(self, logs):
+        delattr(self.model, "past")
+
+    def on_test_begin(self, logs):
+        self.model.past = None
+
+    def on_test_end(self, logs):
+        delattr(self.model, "past")
+
+    def on_predict_begin(self, logs):
+        self.model.past = None
+
+    def on_predict_end(self, logs):
+        delattr(self.model, "past")
+
+
 class KeepNCheckpoints(tf.keras.callbacks.Callback):
     def __init__(self, checkpoints_dir, num_keep=5):
         super().__init__()

@@ -660,6 +660,21 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 The output returned by the model.
         """
         raise NotImplementedError
+    def compile(
+        self,
+        optimizer="rmsprop",
+        loss=None,
+        metrics=None,
+        loss_weights=None,
+        weighted_metrics=None,
+        run_eagerly=None,
+        past_index=-1,
+        **kwargs
+    ):
+        self.past_index = past_index
+
+        super().compile(optimizer, loss, metrics, loss_weights, weighted_metrics, run_eagerly, **kwargs)
+
     def train_step(self, data):
         """
         Model training step.
@@ -670,9 +685,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         """
         x, y = data
 
+        if self.past_index >= 0 and getattr(self, "past", None) is not None:
+            x["mems"] = self.past
+
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)
             loss = self.compiled_loss(y, y_pred.logits, regularization_losses=self.losses)
+
+        if self.past_index >= 0:
+            self.past = y_pred[self.past_index]
 
         gradients = tape.gradient(loss, self.trainable_variables)
 

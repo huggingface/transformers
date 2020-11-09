@@ -32,7 +32,7 @@ import tensorflow as tf
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import create_optimizer
-from .trainer_tf_callbacks import KeepNCheckpoints, LearningRateLoggingCallback
+from .trainer_tf_callbacks import KeepNCheckpoints, LearningRateLoggingCallback, PastStateCallback
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, PredictionOutput, set_seed
 from .training_args_tf import TFTrainingArguments
 from .utils import logging
@@ -316,6 +316,7 @@ class TFTrainer:
                 optimizer=self.optimizer,
                 experimental_steps_per_execution=np.gcd.reduce([self.steps_per_epoch, self.args.logging_steps]),
                 metrics=self.compute_metrics,
+                past_index=self.args.past_index,
             )
 
             folder = os.path.join(self.args.output_dir, PREFIX_CHECKPOINT_DIR)
@@ -362,6 +363,9 @@ class TFTrainer:
             self.callbacks.append(LearningRateLoggingCallback())
             self.callbacks.append(model_checkpoint_callback)
             self.callbacks.append(KeepNCheckpoints(folder, self.args.save_total_limit))
+
+            if self.args.past_index >= 0:
+                self.callbacks.append(PastStateCallback())
 
             if is_wandb_available():
                 self.callbacks.append(

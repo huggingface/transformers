@@ -1724,6 +1724,11 @@ class LearningRateLoggingCallback:
         requires_tf(self)
 
 
+class PastStateCallback:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+
 class F1AndAccuracyMeanScore:
     def __init__(self, *args, **kwargs):
         requires_tf(self)
