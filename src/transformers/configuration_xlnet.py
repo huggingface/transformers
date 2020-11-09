@@ -142,7 +142,7 @@ class XLNetConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         dropout=0.1,
-        mem_len=None,
+        mem_len=512,
         reuse_len=None,
         bi_data=False,
         clamp_len=-1,
