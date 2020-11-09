@@ -671,6 +671,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         past_index=-1,
         **kwargs
     ):
+        """
+        Overwrite the compile() method from the `tf.keras.models.Model` class. See:
+        https://www.tensorflow.org/api_docs/python/tf/keras/Model#compile for more details.
+        """
         self.past_index = past_index
 
         super().compile(optimizer, loss, metrics, loss_weights, weighted_metrics, run_eagerly, **kwargs)
