@@ -43,19 +43,17 @@ members/contributors which may be interested in your PR.
  Trainer: @sgugger
  Benchmarks: @patrickvonplaten
  Model Cards: @julien-c
- Translation: @sshleifer
- Summarization: @sshleifer
  examples/distillation: @VictorSanh
  nlp datasets: [different repo](https://github.com/huggingface/nlp)
  rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
  Text Generation: @patrickvonplaten, @TevenLeScao
- Blenderbot, Bart, Marian, Pegasus: @sshleifer
+ Blenderbot, Bart, Marian, Pegasus: @patrickvonplaten
  T5: @patrickvonplaten
  Rag: @patrickvonplaten, @lhoestq
  EncoderDecoder: @patrickvonplaten
  Longformer, Reformer: @patrickvonplaten
  TransfoXL, XLNet: @TevenLeScao, @patrickvonplaten
- examples/seq2seq: @sshleifer
+ examples/seq2seq: @patil-suraj
  examples/bert-loses-patience: @JetRunner
  tensorflow: @jplu
  examples/token-classification: @stefan-it

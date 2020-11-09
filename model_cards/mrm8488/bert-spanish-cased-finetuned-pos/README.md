@@ -19,7 +19,7 @@ I preprocessed the dataset and split it as train / dev (80/20)
 | Dev                    | 50 K |
 
 
-- [Fine-tune on NER script provided by Huggingface](https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner.py)
+- [Fine-tune on NER script provided by Huggingface](https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner_old.py)
 
 - **60** Labels covered:
 

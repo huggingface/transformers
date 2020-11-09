@@ -1069,7 +1069,7 @@ class LongformerEncoder(nn.Module):
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
+                        return module(*inputs, is_global_attn)
 
                     return custom_forward
 
@@ -1079,7 +1079,6 @@ class LongformerEncoder(nn.Module):
                     attention_mask,
                     is_index_masked,
                     is_index_global_attn,
-                    is_global_attn,
                 )
             else:
                 layer_outputs = layer_module(

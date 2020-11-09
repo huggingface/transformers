@@ -3,7 +3,7 @@ Pegasus
 
 **DISCLAIMER:** If you see something strange, file a `Github Issue
 <https://github.com/huggingface/transformers/issues/new?assignees=sshleifer&labels=&template=bug-report.md&title>`__
-and assign @sshleifer.
+and assign @patrickvonplaten.
 
 
 Overview
