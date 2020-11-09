@@ -670,11 +670,11 @@ class TestCasePlus(unittest.TestCase):
                    - sets ``before=True`` if ``before`` is :obj:`None`
                    - sets ``after=False`` if ``after`` is :obj:`None`
             before (:obj:`bool`, `optional`):
-                if :obj:`True` and the tmp dir already exists, make sure to empty it right away if :obj:`False` and the
-                tmp dir already exists, any existing files will remain there.
+                If :obj:`True` and the :obj:`tmp_dir` already exists, make sure to empty it right away if :obj:`False` and the
+                :obj:`tmp_dir` already exists, any existing files will remain there.
             after (:obj:`bool`, `optional`):
-                if :obj:`True`, delete the tmp dir at the end of the test if :obj:`False`, leave the tmp dir and its
-                contents intact at the end of the test
+                If :obj:`True`, delete the :obj:`tmp_dir` at the end of the test if :obj:`False`, leave the :obj:`tmp_dir` and its
+                contents intact at the end of the test.
 
         Returns:
             tmp_dir(:obj:`string`): either the same value as passed via `tmp_dir` or the path to the auto-created tmp
