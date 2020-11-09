@@ -16,7 +16,7 @@
 """
  PyTorch XLNet model.
 """
-
+import warnings
 
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
@@ -1087,6 +1087,18 @@ class XLNetModel(XLNetPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+
+        if self.config.mem_len is None or self.config.mem_len == 0:
+            warnings.warn(
+                "This XLNet config doesn't use attention memories, a core feature of XLNet."
+                " Consider setting `mem_len` to a non-zero value, for example "
+                "`xlnet = XLNetLMHeadModel.from_pretrained('xlnet-base-cased'', mem_len=1024)`,"
+                " for accurate training performance as well as an order of magnitude faster inference."
+                " Starting from version 3.5.0, the default parameter will be 1024, following"
+                " the implementation in https://arxiv.org/abs/1906.08237",
+                FutureWarning,
+            )
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
