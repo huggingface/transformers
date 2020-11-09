@@ -1038,7 +1038,7 @@ class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMix
     is_encoder_decoder = False
 
     def setUp(self):
-        self.model_tester = ProphetNetStandaloneEncoderModelTester(self, is_training=False)
+        self.model_tester = ProphetNetStandaloneDecoderModelTester(self, is_training=False)
         self.config_tester = ConfigTester(self, config_class=ProphetNetConfig)
 
     def test_config(self):

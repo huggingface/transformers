@@ -705,12 +705,12 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         hidden_states = transformer_outputs[0]
 
         lm_logits = self.lm_head(hidden_states)
-        mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids).view(-1, self.config.num_labels)
+        mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids).squeeze(-1)
 
         lm_loss, mc_loss = None, None
         if mc_labels is not None:
             loss_fct = CrossEntropyLoss()
-            mc_loss = loss_fct(mc_logits, mc_labels)
+            mc_loss = loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1))
         if labels is not None:
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
