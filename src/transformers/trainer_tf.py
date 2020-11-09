@@ -32,7 +32,7 @@ import tensorflow as tf
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import create_optimizer
-from .trainer_tf_callbacks import LearningRateLoggingCallback
+from .trainer_tf_callbacks import LearningRateLoggingCallback, KeepNCheckpoints
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, PredictionOutput, set_seed
 from .training_args_tf import TFTrainingArguments
 from .utils import logging
@@ -352,7 +352,7 @@ class TFTrainer:
             eval_ds, steps, _ = self.get_test_eval_tfdataset()
 
             model_checkpoint_callback = tf.keras.callbacks.ModelCheckpoint(
-                filepath=os.path.join(folder, "weights.{epoch:04d}.ckpt"),
+                filepath=os.path.join(folder, "weights-{epoch:04d}"),
                 save_weights_only=True,
             )
 
@@ -361,6 +361,7 @@ class TFTrainer:
             )
             self.callbacks.append(LearningRateLoggingCallback())
             self.callbacks.append(model_checkpoint_callback)
+            self.callbacks.append(KeepNCheckpoints(folder, self.args.save_total_limit))
 
             if is_wandb_available():
                 self.callbacks.append(
