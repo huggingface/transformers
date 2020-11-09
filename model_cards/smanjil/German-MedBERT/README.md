@@ -1,6 +1,12 @@
 ---
 language: de
+tags: 
+- exbert
 ---
+
+<a href="https://huggingface.co/exbert/?model=smanjil/German-MedBERT">
+	<img width="300px" src="https://cdn-media.huggingface.co/exbert/button.png">
+</a>
 
 # German Medical BERT
 
