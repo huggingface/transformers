@@ -63,16 +63,16 @@ class MBartTokenizer(XLMRobertaTokenizer):
     :class:`~transformers.MBartTokenizer` is a subclass of :class:`~transformers.XLMRobertaTokenizer` and adds a new
     :meth:`~transformers.MBartTokenizer.prepare_seq2seq_batch`
 
-    Refer to superclass :class:`~transformers.XLMRobertaTokenizer` for usage examples and documentation concerning
-    the initialization parameters and other methods.
+    Refer to superclass :class:`~transformers.XLMRobertaTokenizer` for usage examples and documentation concerning the
+    initialization parameters and other methods.
 
     .. warning::
 
         ``prepare_seq2seq_batch`` should be used to encode inputs. Other tokenizer methods like ``encode`` do not work
         properly.
 
-    The tokenization method is ``<tokens> <eos> <language code>`` for source language documents, and
-    ``<language code> <tokens> <eos>``` for target language documents.
+    The tokenization method is ``<tokens> <eos> <language code>`` for source language documents, and ``<language code>
+    <tokens> <eos>``` for target language documents.
 
     Examples::
 
@@ -93,8 +93,8 @@ class MBartTokenizer(XLMRobertaTokenizer):
     prefix_tokens: List[int] = []
     suffix_tokens: List[int] = []
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args, tokenizer_file=None, **kwargs):
+        super().__init__(*args, tokenizer_file=tokenizer_file, **kwargs)
 
         self.sp_model_size = len(self.sp_model)
         self.lang_code_to_id = {
@@ -108,6 +108,10 @@ class MBartTokenizer(XLMRobertaTokenizer):
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
         self._additional_special_tokens = list(self.lang_code_to_id.keys())
         self.set_src_lang_special_tokens(kwargs.get("src_lang", "en_XX"))
+
+    @property
+    def vocab_size(self):
+        return len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset + 1  # Plus 1 for the mask token
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -132,7 +136,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
             if token_ids_1 is not None:
                 raise ValueError(
                     "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formated with special tokens for the model."
+                    "ids is already formatted with special tokens for the model."
                 )
             return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
         prefix_ones = [1] * len(self.prefix_tokens)
@@ -145,15 +149,14 @@ class MBartTokenizer(XLMRobertaTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens.
-        An MBART sequence has the following format, where ``X`` represents the sequence:
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. An MBART sequence has the following format, where ``X`` represents the sequence:
 
         - ``input_ids`` (for encoder) ``X [eos, src_lang_code]``
         - ``decoder_input_ids``: (for decoder) ``[tgt_lang_code] X [eos]``
 
-        BOS is never used.
-        Pairs of sequences are not the expected use case, but they will be handled without a separator.
+        BOS is never used. Pairs of sequences are not the expected use case, but they will be handled without a
+        separator.
 
         Args:
             token_ids_0 (:obj:`List[int]`):

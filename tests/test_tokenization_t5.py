@@ -14,27 +14,27 @@
 # limitations under the License.
 
 
-import os
 import unittest
 
-from transformers import BatchEncoding
+from transformers import SPIECE_UNDERLINE, BatchEncoding, T5Tokenizer, T5TokenizerFast
 from transformers.file_utils import cached_property
-from transformers.testing_utils import _torch_available
-from transformers.tokenization_t5 import T5Tokenizer
+from transformers.testing_utils import _torch_available, get_tests_dir, require_sentencepiece, require_tokenizers
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
-SPIECE_UNDERLINE = "▁"
-
-SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
+SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 FRAMEWORK = "pt" if _torch_available else "tf"
 
 
+@require_sentencepiece
+@require_tokenizers
 class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = T5Tokenizer
+    rust_tokenizer_class = T5TokenizerFast
+    test_rust_tokenizer = True
 
     def setUp(self):
         super().setUp()
@@ -112,6 +112,38 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @cached_property
     def t5_base_tokenizer(self):
         return T5Tokenizer.from_pretrained("t5-base")
+
+    @cached_property
+    def t5_base_tokenizer_fast(self):
+        return T5TokenizerFast.from_pretrained("t5-base")
+
+    def get_tokenizer(self, **kwargs) -> T5Tokenizer:
+        return self.tokenizer_class.from_pretrained(self.tmpdirname, pad_token=None, **kwargs)
+
+    def get_rust_tokenizer(self, **kwargs) -> T5TokenizerFast:
+        return self.rust_tokenizer_class.from_pretrained(self.tmpdirname, pad_token=None, **kwargs)
+
+    def test_rust_and_python_full_tokenizers(self):
+        if not self.test_rust_tokenizer:
+            return
+
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        sequence = "I was born in 92000, and this is falsé."
+
+        tokens = tokenizer.tokenize(sequence)
+        rust_tokens = rust_tokenizer.tokenize(sequence)
+        self.assertListEqual(tokens, rust_tokens)
+
+        ids = tokenizer.encode(sequence, add_special_tokens=False)
+        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
+        self.assertListEqual(ids, rust_ids)
+
+        rust_tokenizer = self.get_rust_tokenizer()
+        ids = tokenizer.encode(sequence)
+        rust_ids = rust_tokenizer.encode(sequence)
+        self.assertListEqual(ids, rust_ids)
 
     def test_eos_treatment(self):
         tokenizer = self.t5_base_tokenizer

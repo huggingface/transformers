@@ -27,13 +27,13 @@ from .configuration_roberta import RobertaConfig
 from .file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPooling,
-    CausalLMOutput,
+    BaseModelOutputWithCrossAttentions,
+    BaseModelOutputWithPoolingAndCrossAttentions,
+    CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
@@ -124,11 +124,13 @@ class RobertaEmbeddings(nn.Module):
         return embeddings
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
-        """We are provided embeddings directly. We cannot infer which are padded so just generate
-        sequential position ids.
+        """
+        We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
 
-        :param torch.Tensor inputs_embeds:
-        :return torch.Tensor:
+        Args:
+            inputs_embeds: torch.Tensor
+
+        Returns: torch.Tensor
         """
         input_shape = inputs_embeds.size()[:-1]
         sequence_length = input_shape[1]
@@ -391,7 +393,8 @@ class RobertaEncoder(nn.Module):
         return_dict=False,
     ):
         all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
+        all_self_attentions = () if output_attentions else None
+        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -425,15 +428,24 @@ class RobertaEncoder(nn.Module):
                 )
             hidden_states = layer_outputs[0]
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+                if self.config.add_cross_attention:
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+            return tuple(
+                v
+                for v in [hidden_states, all_hidden_states, all_self_attentions, all_cross_attentions]
+                if v is not None
+            )
+        return BaseModelOutputWithCrossAttentions(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+            cross_attentions=all_cross_attentions,
         )
 
 
@@ -454,8 +466,9 @@ class RobertaPooler(nn.Module):
 
 
 class RobertaPreTrainedModel(PreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = RobertaConfig
@@ -481,14 +494,15 @@ ROBERTA_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
 
     Parameters:
         config (:class:`~transformers.RobertaConfig`): Model configuration class with all the parameters of the
-            model. Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            model. Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 ROBERTA_INPUTS_DOCSTRING = r"""
@@ -496,35 +510,33 @@ ROBERTA_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.RobertaTokenizer`.
-            See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.RobertaTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **maked**.
+            - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
+            1]``:
 
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -551,19 +563,17 @@ ROBERTA_INPUTS_DOCSTRING = r"""
 class RobertaModel(RobertaPreTrainedModel):
     """
 
-    The model can behave as an encoder (with only self-attention) as well
-    as a decoder, in which case a layer of cross-attention is added between
-    the self-attention layers, following the architecture described in `Attention is all you need`_ by Ashish Vaswani,
-    Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
+    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
+    cross-attention is added between the self-attention layers, following the architecture described in `Attention is
+    all you need`_ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
+    Kaiser and Illia Polosukhin.
 
-    To behave as an decoder the model needs to be initialized with the
-    :obj:`is_decoder` argument of the configuration set to :obj:`True`.
-    To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
-    argument and :obj:`add_cross_attention` set to :obj:`True`; an
-    :obj:`encoder_hidden_states` is then expected as an input to the forward pass.
+    To behave as an decoder the model needs to be initialized with the :obj:`is_decoder` argument of the configuration
+    set to :obj:`True`. To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
+    argument and :obj:`add_cross_attention` set to :obj:`True`; an :obj:`encoder_hidden_states` is then expected as an
+    input to the forward pass.
 
-    .. _`Attention is all you need`:
-        https://arxiv.org/abs/1706.03762
+    .. _`Attention is all you need`: https://arxiv.org/abs/1706.03762
 
     """
 
@@ -588,18 +598,18 @@ class RobertaModel(RobertaPreTrainedModel):
         self.embeddings.word_embeddings = value
 
     def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        See base class PreTrainedModel
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="roberta-base",
-        output_type=BaseModelOutputWithPooling,
+        output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     # Copied from transformers.modeling_bert.BertModel.forward
@@ -619,13 +629,12 @@ class RobertaModel(RobertaPreTrainedModel):
     ):
         r"""
         encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-            if the model is configured as a decoder.
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
         encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
-            is used in the cross-attention if the model is configured as a decoder.
-            Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``: ``1`` for
+            tokens that are NOT MASKED, ``0`` for MASKED tokens.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -690,11 +699,12 @@ class RobertaModel(RobertaPreTrainedModel):
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+            cross_attentions=encoder_outputs.cross_attentions,
         )
 
 
@@ -719,8 +729,8 @@ class RobertaForCausalLM(RobertaPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
-    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=CausalLMOutput, config_class=_CONFIG_FOR_DOC)
+    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -738,33 +748,31 @@ class RobertaForCausalLM(RobertaPreTrainedModel):
     ):
         r"""
         encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-            if the model is configured as a decoder.
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
         encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
-            is used in the cross-attention if the model is configured as a decoder.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the left-to-right language modeling loss (next word prediction).
-            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with
-            labels in ``[0, ..., config.vocab_size]``
+            Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
+            ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are
+            ignored (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
 
         Returns:
 
         Example::
 
-            >>> from transformers import RobertaTokenizer, RobertaLMHeadModel, RobertaConfig
+            >>> from transformers import RobertaTokenizer, RobertaForCausalLM, RobertaConfig
             >>> import torch
 
             >>> tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-            >>> config = RobertaConfig.from_pretrained("roberta-base")
+            >>> config = RobertaConfig.from_pretrained("roberta-base", return_dict=True)
             >>> config.is_decoder = True
-            >>> model = RobertaLMHeadModel.from_pretrained('roberta-base', config=config, return_dict=True)
+            >>> model = RobertaForCausalLM.from_pretrained('roberta-base', config=config)
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -802,11 +810,12 @@ class RobertaForCausalLM(RobertaPreTrainedModel):
             output = (prediction_scores,) + outputs[2:]
             return ((lm_loss,) + output) if lm_loss is not None else output
 
-        return CausalLMOutput(
+        return CausalLMOutputWithCrossAttentions(
             loss=lm_loss,
             logits=prediction_scores,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            cross_attentions=outputs.attentions,
         )
 
     def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
@@ -841,7 +850,7 @@ class RobertaForMaskedLM(RobertaPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
-    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="roberta-base",
@@ -867,10 +876,9 @@ class RobertaForMaskedLM(RobertaPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss.
-            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``
+            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
+            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
         kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
         """
@@ -942,8 +950,10 @@ class RobertaLMHead(nn.Module):
 
 
 @add_start_docstrings(
-    """RoBERTa Model transformer with a sequence classification/regression head on top (a linear layer
-    on top of the pooled output) e.g. for GLUE tasks. """,
+    """
+    RoBERTa Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
+    """,
     ROBERTA_START_DOCSTRING,
 )
 class RobertaForSequenceClassification(RobertaPreTrainedModel):
@@ -958,7 +968,7 @@ class RobertaForSequenceClassification(RobertaPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="roberta-base",
@@ -980,9 +990,8 @@ class RobertaForSequenceClassification(RobertaPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
-            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1024,8 +1033,10 @@ class RobertaForSequenceClassification(RobertaPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Roberta Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    """
+    Roberta Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RocStories/SWAG tasks.
+    """,
     ROBERTA_START_DOCSTRING,
 )
 class RobertaForMultipleChoice(RobertaPreTrainedModel):
@@ -1040,7 +1051,7 @@ class RobertaForMultipleChoice(RobertaPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="roberta-base",
@@ -1062,9 +1073,9 @@ class RobertaForMultipleChoice(RobertaPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices-1]`` where :obj:`num_choices` is the size of the second dimension
-            of the input tensors. (See :obj:`input_ids` above)
+            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+            num_choices-1]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
+            :obj:`input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -1114,8 +1125,10 @@ class RobertaForMultipleChoice(RobertaPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Roberta Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    Roberta Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
     ROBERTA_START_DOCSTRING,
 )
 class RobertaForTokenClassification(RobertaPreTrainedModel):
@@ -1132,7 +1145,7 @@ class RobertaForTokenClassification(RobertaPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="roberta-base",
@@ -1154,8 +1167,8 @@ class RobertaForTokenClassification(RobertaPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1222,8 +1235,10 @@ class RobertaClassificationHead(nn.Module):
 
 
 @add_start_docstrings(
-    """Roberta Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
-    the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    Roberta Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     ROBERTA_START_DOCSTRING,
 )
 class RobertaForQuestionAnswering(RobertaPreTrainedModel):
@@ -1239,7 +1254,7 @@ class RobertaForQuestionAnswering(RobertaPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="roberta-base",
@@ -1263,12 +1278,12 @@ class RobertaForQuestionAnswering(RobertaPreTrainedModel):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1322,12 +1337,14 @@ class RobertaForQuestionAnswering(RobertaPreTrainedModel):
 
 
 def create_position_ids_from_input_ids(input_ids, padding_idx):
-    """Replace non-padding symbols with their position numbers. Position numbers begin at
-    padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
-    `utils.make_positions`.
+    """
+    Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
+    are ignored. This is modified from fairseq's `utils.make_positions`.
 
-    :param torch.Tensor x:
-    :return torch.Tensor:
+    Args:
+        x: torch.Tensor x:
+
+    Returns: torch.Tensor
     """
     # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
     mask = input_ids.ne(padding_idx).int()

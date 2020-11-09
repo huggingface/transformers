@@ -1,8 +1,24 @@
-import dataclasses
-import json
+# coding=utf-8
+# Copyright 2020-present the HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Utilities for the Trainer and TFTrainer class. Should be independent from PyTorch and TensorFlow.
+"""
+
+import copy
 import random
-from dataclasses import dataclass
-from typing import Any, Dict, List, NamedTuple, Optional, Tuple, Union
+from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
@@ -10,14 +26,10 @@ from .file_utils import is_tf_available, is_torch_available, is_torch_tpu_availa
 from .tokenization_utils_base import ExplicitEnum
 
 
-if is_torch_available():
-    import torch
-
-
 def set_seed(seed: int):
     """
-    Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch`` and/or ``tf``
-    (if installed).
+    Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch`` and/or ``tf`` (if
+    installed).
 
     Args:
         seed (:obj:`int`): The seed to set.
@@ -99,6 +111,7 @@ def default_compute_objective(metrics: Dict[str, float]) -> float:
     Return:
         :obj:`float`: The objective to minimize or maximize
     """
+    metrics = copy.deepcopy(metrics)
     loss = metrics.pop("eval_loss", None)
     _ = metrics.pop("epoch", None)
     return loss if len(metrics) == 0 else sum(metrics.values())
@@ -141,142 +154,28 @@ default_hp_space = {
 }
 
 
-def nested_concat(tensors, new_tensors, dim=0):
-    "Concat the `new_tensors` to `tensors` on `dim`. Works for tensors or nested list/tuples of tensors."
-    if is_torch_available():
-        assert type(tensors) == type(
-            new_tensors
-        ), f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
-        if isinstance(tensors, (list, tuple)):
-            return type(tensors)(nested_concat(t, n, dim) for t, n in zip(tensors, new_tensors))
-        return torch.cat((tensors, new_tensors), dim=dim)
-    else:
-        raise ImportError("Torch must be installed to use `nested_concat`")
-
-
-def nested_deatch(tensors):
-    "Detach `tensors` (even if it's a nested list/tuple of tensors)."
-    if isinstance(tensors, (list, tuple)):
-        return type(tensors)(nested_detach(t) for t in tensors)
-    return tensors.detach()
-
-
-def nested_numpify(tensors):
-    "Numpify `tensors` (even if it's a nested list/tuple of tensors)."
-    if isinstance(tensors, (list, tuple)):
-        return type(tensors)(nested_numpify(t) for t in tensors)
-    return tensors.cpu().numpy()
-
-
-def nested_detach(tensors):
-    "Detach `tensors` (even if it's a nested list/tuple of tensors)."
-    if isinstance(tensors, (list, tuple)):
-        return type(tensors)(nested_detach(t) for t in tensors)
-    return tensors.detach()
-
-
-def nested_xla_mesh_reduce(tensors, name):
+def is_main_process(local_rank):
+    """
+    Whether or not the current process is the local process, based on `xm.get_ordinal()` (for TPUs) first, then on
+    `local_rank`.
+    """
     if is_torch_tpu_available():
         import torch_xla.core.xla_model as xm
 
-        if isinstance(tensors, (list, tuple)):
-            return type(tensors)(nested_xla_mesh_reduce(t, f"{name}_{i}") for i, t in enumerate(tensors))
-        return xm.mesh_reduce(name, tensors, torch.cat)
-    else:
-        raise ImportError("Torch xla must be installed to use `nested_xla_mesh_reduce`")
+        return xm.get_ordinal() == 0
+    return local_rank in [-1, 0]
 
 
-def distributed_concat(tensor: "torch.Tensor", num_total_examples: Optional[int] = None) -> "torch.Tensor":
-    if is_torch_available():
-        try:
-            if isinstance(tensor, (tuple, list)):
-                return type(tensor)(distributed_concat(t, num_total_examples) for t in tensor)
-            output_tensors = [tensor.clone() for _ in range(torch.distributed.get_world_size())]
-            torch.distributed.all_gather(output_tensors, tensor)
-            concat = torch.cat(output_tensors, dim=0)
-
-            # truncate the dummy elements added by SequentialDistributedSampler
-            if num_total_examples is not None:
-                concat = concat[:num_total_examples]
-            return concat
-        except AssertionError:
-            raise AssertionError("Not currently using distributed training")
-    else:
-        raise ImportError("Torch must be installed to use `distributed_concat`")
-
-
-def distributed_broadcast_scalars(
-    scalars: List[Union[int, float]], num_total_examples: Optional[int] = None
-) -> "torch.Tensor":
-    if is_torch_available():
-        try:
-            tensorized_scalar = torch.tensor(scalars).cuda()
-            output_tensors = [tensorized_scalar.clone() for _ in range(torch.distributed.get_world_size())]
-            torch.distributed.all_gather(output_tensors, tensorized_scalar)
-            concat = torch.cat(output_tensors, dim=0)
-
-            # truncate the dummy elements added by SequentialDistributedSampler
-            if num_total_examples is not None:
-                concat = concat[:num_total_examples]
-            return concat
-        except AssertionError:
-            raise AssertionError("Not currently using distributed training")
-    else:
-        raise ImportError("Torch must be installed to use `distributed_broadcast_scalars`")
-
-
-@dataclass
-class TrainerState:
+def total_processes_number(local_rank):
     """
-    A class containing the `Trainer` inner state that will be saved along the model and optimizer.
-
-    .. note::
-
-        In all this class, one step is to be understood as one update step. When using gradient accumulation, one
-        update step may require several forward and backward passes: if you use :obj:`gradient_accumulation_steps=n`,
-        then one update step requires going throuch `n` batches.
-
-    Args:
-        epoch (:obj:`float`, `optional`):
-            Only set during training, will represent the epoch the training is at (the decimal part being the
-            percentage of the current epoch completed).
-        global_step (:obj:`int`, `optional`, defaults to 0):
-            During training, represents the number of update steps completed.
-        max_steps (:obj:`int`, `optional`, defaults to 0):
-            The number of update steps to do during the current training.
-        total_flos (:obj:`int`, `optional`, defaults to 0):
-            The total number of floating operations done by the model since the beginning of training.
-        log_history (:obj:`List[Dict[str, float]]`, `optional`):
-            The list of logs done since the beginning of training.
-        best_metric (:obj:`float`, `optional`):
-            When tracking the best model, the value of the best metric encountered so far.
-        best_model_checkpoint (:obj:`str`, `optional`):
-            When tracking the best model, the value of the name of the checkpoint for the best model encountered so
-            far.
+    Return the number of processes launched in parallel. Works with `torch.distributed` and TPUs.
     """
+    if is_torch_tpu_available():
+        import torch_xla.core.xla_model as xm
 
-    epoch: Optional[float] = None
-    global_step: int = 0
-    max_steps: int = 0
-    num_train_epochs: int = 0
-    total_flos: int = 0
-    log_history: List[Dict[str, float]] = None
-    best_metric: Optional[float] = None
-    best_model_checkpoint: Optional[str] = None
+        return xm.xrt_world_size()
+    elif local_rank != -1 and is_torch_available():
+        import torch
 
-    def __post_init__(self):
-        if self.log_history is None:
-            self.log_history = []
-
-    def save_to_json(self, json_path: str):
-        """ Save the content of this instance in JSON format inside :obj:`json_path`."""
-        json_string = json.dumps(dataclasses.asdict(self), indent=2, sort_keys=True) + "\n"
-        with open(json_path, "w", encoding="utf-8") as f:
-            f.write(json_string)
-
-    @classmethod
-    def load_from_json(cls, json_path: str):
-        """ Create an instance from the content of :obj:`json_path`."""
-        with open(json_path, "r", encoding="utf-8") as f:
-            text = f.read()
-        return cls(**json.loads(text))
+        return torch.distributed.get_world_size()
+    return 1

@@ -29,11 +29,12 @@ methods for using all the tokenizers:
 
 :class:`~transformers.BatchEncoding` holds the output of the tokenizer's encoding methods (``__call__``,
 ``encode_plus`` and ``batch_encode_plus``) and is derived from a Python dictionary. When the tokenizer is a pure python
-tokenizer, this class behaves just like a standard python dictionary and holds the various model inputs computed by these
-methods (``input_ids``, ``attention_mask``...). When the tokenizer is a "Fast" tokenizer (i.e., backed by HuggingFace
-`tokenizers library <https://github.com/huggingface/tokenizers>`__), this class provides in addition several advanced
-alignment methods which can be used to map between the original string (character and words) and the token space (e.g.,
-getting the index of the token comprising a given character or the span of characters corresponding to a given token).
+tokenizer, this class behaves just like a standard python dictionary and holds the various model inputs computed by
+these methods (``input_ids``, ``attention_mask``...). When the tokenizer is a "Fast" tokenizer (i.e., backed by
+HuggingFace `tokenizers library <https://github.com/huggingface/tokenizers>`__), this class provides in addition
+several advanced alignment methods which can be used to map between the original string (character and words) and the
+token space (e.g., getting the index of the token comprising a given character or the span of characters corresponding
+to a given token).
 
 
 PreTrainedTokenizer

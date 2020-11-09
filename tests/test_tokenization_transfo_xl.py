@@ -17,20 +17,15 @@
 import os
 import unittest
 
-from transformers import is_torch_available
-from transformers.testing_utils import require_torch
+from transformers.tokenization_transfo_xl import VOCAB_FILES_NAMES, TransfoXLTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
-if is_torch_available():
-    from transformers.tokenization_transfo_xl import VOCAB_FILES_NAMES, TransfoXLTokenizer
-
-
-@require_torch
 class TransfoXLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
-    tokenizer_class = TransfoXLTokenizer if is_torch_available() else None
+    tokenizer_class = TransfoXLTokenizer
+    test_rust_tokenizer = False
 
     def setUp(self):
         super().setUp()

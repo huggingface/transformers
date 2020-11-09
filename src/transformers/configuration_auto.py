@@ -21,6 +21,7 @@ from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertCo
 from .configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_bert_generation import BertGenerationConfig
+from .configuration_blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from .configuration_deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig
@@ -40,6 +41,7 @@ from .configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfi
 from .configuration_mobilebert import MobileBertConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .configuration_pegasus import PegasusConfig
+from .configuration_prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig
 from .configuration_rag import RagConfig
 from .configuration_reformer import ReformerConfig
 from .configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
@@ -49,6 +51,7 @@ from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from .configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
 from .configuration_utils import PretrainedConfig
 from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
+from .configuration_xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
 from .configuration_xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
 from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
 
@@ -58,6 +61,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     for pretrained_map in [
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BART_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MBART_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -82,6 +86,8 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -101,6 +107,7 @@ CONFIG_MAPPING = OrderedDict(
         ("marian", MarianConfig),
         ("mbart", MBartConfig),
         ("bart", BartConfig),
+        ("blenderbot", BlenderbotConfig),
         ("reformer", ReformerConfig),
         ("longformer", LongformerConfig),
         ("roberta", RobertaConfig),
@@ -113,6 +120,8 @@ CONFIG_MAPPING = OrderedDict(
         ("gpt2", GPT2Config),
         ("transfo-xl", TransfoXLConfig),
         ("xlnet", XLNetConfig),
+        ("xlm-prophetnet", XLMProphetNetConfig),
+        ("prophetnet", ProphetNetConfig),
         ("xlm", XLMConfig),
         ("ctrl", CTRLConfig),
         ("electra", ElectraConfig),
@@ -136,6 +145,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("camembert", "CamemBERT"),
         ("xlm-roberta", "XLM-RoBERTa"),
         ("pegasus", "Pegasus"),
+        ("blenderbot", "Blenderbot"),
         ("marian", "Marian"),
         ("mbart", "mBART"),
         ("bart", "BART"),
@@ -160,6 +170,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("layoutlm", "LayoutLM"),
         ("dpr", "DPR"),
         ("rag", "RAG"),
+        ("xlm-prophetnet", "XLMProphetNet"),
+        ("prophetnet", "ProphetNet"),
     ]
 )
 
@@ -246,8 +258,8 @@ class AutoConfig:
         r"""
         Instantiate one of the configuration classes of the library from a pretrained model configuration.
 
-        The configuration class to instantiate is selected based on the :obj:`model_type` property of the config
-        object that is loaded, or when it's missing, by falling back to using pattern matching on
+        The configuration class to instantiate is selected based on the :obj:`model_type` property of the config object
+        that is loaded, or when it's missing, by falling back to using pattern matching on
         :obj:`pretrained_model_name_or_path`:
 
         List options
@@ -262,7 +274,7 @@ class AutoConfig:
                       our S3, e.g., ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing a configuration file saved using the
                       :meth:`~transformers.PretrainedConfig.save_pretrained` method, or the
-                      :meth:`~transformers.PretrainedModel.save_pretrained` method, e.g., ``./my_model_directory/``.
+                      :meth:`~transformers.PreTrainedModel.save_pretrained` method, e.g., ``./my_model_directory/``.
                     - A path or url to a saved configuration JSON `file`, e.g.,
                       ``./my_model_directory/configuration.json``.
             cache_dir (:obj:`str`, `optional`):
@@ -275,9 +287,8 @@ class AutoConfig:
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
             proxies (:obj:`Dict[str, str]`, `optional`):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g.,
-                :obj:`{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each
-                request.
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             return_unused_kwargs (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 If :obj:`False`, then this function returns just the final configuration object.
 
@@ -286,8 +297,8 @@ class AutoConfig:
                 the part of ``kwargs`` which has not been used to update ``config`` and is otherwise ignored.
             kwargs(additional keyword arguments, `optional`):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
-                values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is
-                controlled by the ``return_unused_kwargs`` keyword parameter.
+                values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
+                by the ``return_unused_kwargs`` keyword parameter.
 
         Examples::
 

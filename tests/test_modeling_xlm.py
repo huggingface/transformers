@@ -20,6 +20,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
+from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
@@ -331,7 +332,7 @@ class XLMModelTester:
 
 
 @require_torch
-class XLMModelTest(ModelTesterMixin, unittest.TestCase):
+class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
@@ -349,6 +350,21 @@ class XLMModelTest(ModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (
         (XLMWithLMHeadModel,) if is_torch_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
+
+    # XLM has 2 QA models -> need to manually set the correct labels for one of them here
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class.__name__ == "XLMForQuestionAnswering":
+                inputs_dict["start_positions"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+                inputs_dict["end_positions"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+
+        return inputs_dict
 
     def setUp(self):
         self.model_tester = XLMModelTester(self)
