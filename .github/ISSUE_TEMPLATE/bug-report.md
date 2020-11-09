@@ -30,22 +30,22 @@ assignees: ''
  Trainer: @sgugger
  Speed and Memory Benchmarks: @patrickvonplaten
  Model Cards: @julien-c
- Translation: @sshleifer
- Summarization: @sshleifer
  TextGeneration: @TevenLeScao 
  examples/distillation: @VictorSanh
  nlp datasets: [different repo](https://github.com/huggingface/nlp)
  rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
  Text Generation: @patrickvonplaten @TevenLeScao
- blenderbot: @mariamabarham
- Bart: @sshleifer
- Marian: @sshleifer
+ Blenderbot: @patrickvonplaten
+ Bart: @patrickvonplaten
+ Marian: @patrickvonplaten
+ Pegasus: @patrickvonplaten
+ mBART: @patrickvonplaten
  T5: @patrickvonplaten
  Longformer/Reformer: @patrickvonplaten
  TransfoXL/XLNet: @TevenLeScao
  RAG: @patrickvonplaten, @lhoestq
- FSTM: @stas00
- examples/seq2seq: @sshleifer
+ FSMT: @stas00
+ examples/seq2seq: @patil-suraj
  examples/bert-loses-patience: @JetRunner
  tensorflow: @jplu
  examples/token-classification: @stefan-it
