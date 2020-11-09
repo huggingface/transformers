@@ -341,6 +341,7 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoModelForMaskedLM,
         AutoModelForMultipleChoice,
+        AutoModelForNextSentencePrediction,
         AutoModelForPreTraining,
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
