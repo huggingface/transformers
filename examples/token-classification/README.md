@@ -140,7 +140,7 @@ Instead of passing all parameters via commandline arguments, the `run_ner_old.py
 }
 ```
 
-It must be saved with a `.json` extension and can be used by running `python3 run_ner.py config.json`.
+It must be saved with a `.json` extension and can be used by running `python3 run_ner_old.py config.json`.
 
 #### Evaluation
 
@@ -284,7 +284,7 @@ cat data_wnut_17/train.txt data_wnut_17/dev.txt data_wnut_17/test.txt | cut -d "
 
 #### Run the Pytorch version
 
-Fine-tuning with the PyTorch version can be started using the `run_ner.py` script. In this example we use a JSON-based configuration file.
+Fine-tuning with the PyTorch version can be started using the `run_ner_old.py` script. In this example we use a JSON-based configuration file.
 
 This configuration file looks like:
 
@@ -308,7 +308,7 @@ This configuration file looks like:
 
 If your GPU supports half-precision training, please set `fp16` to `true`.
 
-Save this JSON-based configuration under `wnut_17.json`. The fine-tuning can be started with `python3 run_ner.py wnut_17.json`.
+Save this JSON-based configuration under `wnut_17.json`. The fine-tuning can be started with `python3 run_ner_old.py wnut_17.json`.
 
 #### Evaluation
 
