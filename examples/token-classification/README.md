@@ -18,6 +18,8 @@ python run_ner.py \
   --do_eval
 ```
 
+or just can just run the bash script `run.sh`.
+
 To run on your own training and validation files, use the following command:
 
 ```bash
@@ -119,7 +121,7 @@ If your GPU supports half-precision training, just add the `--fp16` flag. After 
 
 #### JSON-based configuration file
 
-Instead of passing all parameters via commandline arguments, the `run_ner.py` script also supports reading parameters from a json-based configuration file:
+Instead of passing all parameters via commandline arguments, the `run_ner_old.py` script also supports reading parameters from a json-based configuration file:
 
 ```json
 {

@@ -77,10 +77,16 @@ class DataTrainingArguments:
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
-    train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
+    train_file: Optional[str] = field(
+        default=None, metadata={"help": "The input training data file (a csv or JSON file)."}
+    )
     validation_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
+        metadata={"help": "An optional input evaluation data file to evaluate on (a csv or JSON file)."},
+    )
+    test_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "An optional input test data file to predict on (a csv or JSON file)."},
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
@@ -92,7 +98,7 @@ class DataTrainingArguments:
     pad_to_max_length: bool = field(
         default=False,
         metadata={
-            "help": "Whether to pad all samples to `max_seq_length`. "
+            "help": "Whether to pad all samples to model maximum sentence length. "
             "If False, will pad the samples dynamically when batching to the maximum length in the batch. More "
             "efficient on GPU but very bad for TPU."
         },
@@ -180,6 +186,8 @@ def main():
             data_files["train"] = data_args.train_file
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
+        if data_args.test_file is not None:
+            data_files["test"] = data_args.test_file
         extension = data_args.train_file.split(".")[-1]
         datasets = load_dataset(extension, data_files=data_files)
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
