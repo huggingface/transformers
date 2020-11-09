@@ -53,20 +53,25 @@ class BartSummarizationDistiller(SummarizationModule):
         if hparams.length_penalty != -1:
             student.config.length_penalty = hparams.length_penalty
         super().__init__(hparams, model=student, config=student.config)
-        model_type = student.config.model_type
-
+        student_model_type = student.config.model_type
+        teacher_model_type = teacher.config.model_type
+ 
         student_encoder_layers, student_decoder_layers = None, None
 
-        if model_type == "t5":
-            teacher_encoder_layers = len(teacher.get_encoder().block)
-            teacher_decoder_layers = len(teacher.get_decoder().block)
+        if student_model_type == "t5":
             student_encoder_layers = len(student.get_encoder().block)
             student_decoder_layers = len(student.get_decoder().block)
         else:
-            teacher_encoder_layers = teacher.config.encoder_layers
-            teacher_decoder_layers = teacher.config.decoder_layers
             student_encoder_layers = student.config.encoder_layers
             student_decoder_layers = student.config.decoder_layers
+
+        if teacher_model_type == "t5":
+            teacher_encoder_layers = len(teacher.get_encoder().block)
+            teacher_decoder_layers = len(teacher.get_decoder().block)
+        else:
+            teacher_encoder_layers = teacher.config.encoder_layers
+            teacher_decoder_layers = teacher.config.decoder_layers
+
 
         self.different_encoder = student_encoder_layers != teacher_encoder_layers
 
@@ -88,6 +93,7 @@ class BartSummarizationDistiller(SummarizationModule):
 
         self.e_matches = None
         self.d_matches = None
+        self.do_calc_hidden_loss = False
 
         if hparams.student is None or hparams.teacher == hparams.student:
             # Intermediate supervision: Decide which layers to supervise
@@ -97,6 +103,7 @@ class BartSummarizationDistiller(SummarizationModule):
             else:  # student layer should emulate hidden states of the teacher layer it was copied from
                 self.e_matches = self.e_layer_ids
                 self.d_matches = self.d_layer_ids
+            self.do_calc_hidden_loss = True
 
         self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")
         self.temperature = 2.0
@@ -149,21 +156,17 @@ class BartSummarizationDistiller(SummarizationModule):
         # assert is_frozen(self.teacher) copied_decoder_layers
         pad_token_id = self.tokenizer.pad_token_id
         input_ids, src_mask, labels = batch["input_ids"], batch["attention_mask"], batch["labels"]
-        if isinstance(self.teacher, T5ForConditionalGeneration):
-            teacher_decoder_input_ids = self.teacher._shift_right(labels)
-        else:
-            teacher_decoder_input_ids = shift_tokens_right(labels, pad_token_id)
 
         if isinstance(self.model, T5ForConditionalGeneration):
-            student_decoder_input_ids = self.model._shift_right(labels)
+            decoder_input_ids = self.model._shift_right(labels)
         else:
-            student_decoder_input_ids = shift_tokens_right(labels, pad_token_id)
+            decoder_input_ids = shift_tokens_right(labels, pad_token_id)
 
         # noinspection PyCallingNonCallable
         lm_logits, dec_hidden, enc_outputs, enc_hidden_state = self(
             input_ids,
             attention_mask=src_mask,
-            decoder_input_ids=student_decoder_input_ids,
+            decoder_input_ids=decoder_input_ids,
             output_hidden_states=True,
             output_attentions=False,
             use_cache=False,
@@ -191,13 +194,14 @@ class BartSummarizationDistiller(SummarizationModule):
                 teacher_enc_outputs, teacher_enc_hid = self.teacher.get_encoder()(
                     input_ids, attention_mask=src_mask, output_hidden_states=True
                 )
-            hid_loss_enc = self.maybe_calc_hidden_loss(
-                src_mask,
-                enc_hidden_state,
-                teacher_enc_hid,
-                self.e_matches,
-                normalize_hidden=self.hparams.normalize_hidden,
-            )
+            if  self.do_calc_hidden_loss:
+                hid_loss_enc = self.calc_hidden_loss(
+                    src_mask,
+                    enc_hidden_state,
+                    teacher_enc_hid,
+                    self.e_matches,
+                    normalize_hidden=self.hparams.normalize_hidden,
+                )
      
 
         teacher_mask = input_ids.ne(pad_token_id)
@@ -206,16 +210,16 @@ class BartSummarizationDistiller(SummarizationModule):
                 input_ids,
                 attention_mask=teacher_mask,
                 encoder_outputs=(teacher_enc_outputs, ),
-                decoder_input_ids=teacher_decoder_input_ids,
+                decoder_input_ids=decoder_input_ids,
                 lm_labels=labels,
                 output_hidden_states=True,
                 return_dict=True,
             )
             tlogits, tdec_hidden = outputs.logits, outputs.decoder_hidden_states 
-        dec_mask = teacher_decoder_input_ids.ne(pad_token_id)
+        dec_mask = decoder_input_ids.ne(pad_token_id)
         loss_ce = self.calc_ce_loss(dec_mask, lm_logits, tlogits)
-        if self.alpha_hid > 0:  # Intermediate supervision of decoder hidden states
-            hid_loss_dec = self.maybe_calc_hidden_loss(
+        if  self.do_calc_hidden_loss and self.alpha_hid > 0:  # Intermediate supervision of decoder hidden states
+            hid_loss_dec = self.calc_hidden_loss(
                 dec_mask, dec_hidden, tdec_hidden, self.d_matches, normalize_hidden=self.hparams.normalize_hidden
             )
 
@@ -245,13 +249,13 @@ class BartSummarizationDistiller(SummarizationModule):
         masked_mse = (mse * mask.unsqueeze(0).unsqueeze(-1)).sum() / valid_count
         return masked_mse
 
-    def maybe_calc_hidden_loss(self, attention_mask, hidden_states, hidden_states_T, matches, normalize_hidden):
-        if matches:
-            return self.calc_hidden_loss(attention_mask, hidden_states, hidden_states_T, matches, normalize_hidden)
-        else:
-            return torch.tensor(0.0)
 
 def add_distill_args(parser):
+    # NOTE: if --student argument was specified and the teacher and student base models
+    # are different, the models still have to have the same tokenizer, specified by
+    # --tokenizer_name. So for e.g., you can distill from t5_large to t5_small but not
+    # from bart to t5. This s because if the tokenizers are different, the output space
+    # for the two models is also different and their logits are not comparable.
     parser.add_argument("--teacher", type=str)
     parser.add_argument("--alpha_ce", default=0.8, type=float)
     parser.add_argument("--alpha_mlm", default=0.2, type=float)

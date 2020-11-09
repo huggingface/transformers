@@ -101,6 +101,7 @@ def _dump_articles(path: Path, articles: list):
 ARTICLES = [" Sam ate lunch today.", "Sams lunch ingredients."]
 SUMMARIES = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
 T5_TINY = "patrickvonplaten/t5-tiny-random"
+T5_TINIER = "sshleifer/t5-tinier-random"
 BART_TINY = "sshleifer/bart-tiny-random"
 MBART_TINY = "sshleifer/tiny-mbart"
 MARIAN_TINY = "sshleifer/tiny-marian-en-de"
@@ -224,6 +225,15 @@ class TestSummarizationDistiller(TestCasePlus):
             teacher=T5_TINY,
             model_name_or_path=T5_TINY,
             tokenizer_name=T5_TINY,
+        )
+        self._test_distiller_cli(updates)
+
+    def test_distill_different_student_teacher_base_models(self):
+        updates = dict(
+            teacher=T5_TINY,
+            student=T5_TINIER,
+            model_name_or_path=T5_TINIER,
+            tokenizer_name=T5_TINIER,
         )
         self._test_distiller_cli(updates)
 
