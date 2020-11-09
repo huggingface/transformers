@@ -421,7 +421,7 @@ Let's depict the GPU requirements in the following table:
 +----------+---------------------------------+
 | ``>= 2`` | ``@require_torch_multigpu``     |
 +----------+---------------------------------+
-| `` < 2``  | ``@require_torch_non_multigpu`` |
+| `` < 2`` | ``@require_torch_non_multigpu`` |
 +----------+---------------------------------+
 
 
