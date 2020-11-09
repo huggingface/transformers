@@ -19,7 +19,8 @@ logger = logging.get_logger(__name__)
 
 
 DEPRECATION_WARNING = (
-    "This dataset will be removed from the library soon, preprocessing should be handled with the 🤗 Datasets library."
+    "This dataset will be removed from the library soon, preprocessing should be handled with the 🤗 Datasets "
+    "library. You can have a look at this example script for pointers: {0}"
 )
 
 
@@ -36,7 +37,12 @@ class TextDataset(Dataset):
         overwrite_cache=False,
         cache_dir: Optional[str] = None,
     ):
-        warnings.warn(DEPRECATION_WARNING, FutureWarning)
+        warnings.warn(
+            DEPRECATION_WARNING.format(
+                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm.py"
+            ),
+            FutureWarning,
+        )
         assert os.path.isfile(file_path), f"Input file path {file_path} not found"
 
         block_size = block_size - tokenizer.num_special_tokens_to_add(pair=False)
@@ -101,7 +107,12 @@ class LineByLineTextDataset(Dataset):
     """
 
     def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int):
-        warnings.warn(DEPRECATION_WARNING, FutureWarning)
+        warnings.warn(
+            DEPRECATION_WARNING.format(
+                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm.py"
+            ),
+            FutureWarning,
+        )
         assert os.path.isfile(file_path), f"Input file path {file_path} not found"
         # Here, we do not cache the features, operating under the assumption
         # that we will soon use fast multithreaded tokenizers from the
@@ -128,7 +139,12 @@ class LineByLineWithRefDataset(Dataset):
     """
 
     def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int, ref_path: str):
-        warnings.warn(DEPRECATION_WARNING, FutureWarning)
+        warnings.warn(
+            DEPRECATION_WARNING.format(
+                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm_wwm.py"
+            ),
+            FutureWarning,
+        )
         assert os.path.isfile(file_path), f"Input file path {file_path} not found"
         assert os.path.isfile(ref_path), f"Ref file path {file_path} not found"
         # Here, we do not cache the features, operating under the assumption
@@ -165,7 +181,12 @@ class LineByLineWithSOPTextDataset(Dataset):
     """
 
     def __init__(self, tokenizer: PreTrainedTokenizer, file_dir: str, block_size: int):
-        warnings.warn(DEPRECATION_WARNING, FutureWarning)
+        warnings.warn(
+            DEPRECATION_WARNING.format(
+                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm.py"
+            ),
+            FutureWarning,
+        )
         assert os.path.isdir(file_dir)
         logger.info(f"Creating features from dataset file folder at {file_dir}")
         self.examples = []
@@ -315,7 +336,12 @@ class TextDatasetForNextSentencePrediction(Dataset):
         short_seq_probability=0.1,
         nsp_probability=0.5,
     ):
-        warnings.warn(DEPRECATION_WARNING, FutureWarning)
+        warnings.warn(
+            DEPRECATION_WARNING.format(
+                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm.py"
+            ),
+            FutureWarning,
+        )
         assert os.path.isfile(file_path), f"Input file path {file_path} not found"
 
         self.block_size = block_size - tokenizer.num_special_tokens_to_add(pair=True)

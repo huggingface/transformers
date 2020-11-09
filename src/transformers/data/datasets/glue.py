@@ -1,5 +1,6 @@
 import os
 import time
+import warnings
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Union
@@ -69,6 +70,12 @@ class GlueDataset(Dataset):
         mode: Union[str, Split] = Split.train,
         cache_dir: Optional[str] = None,
     ):
+        warnings.warn(
+            "This dataset will be removed from the library soon, preprocessing should be handled with the 🤗 Datasets "
+            "library. You can have a look at this example script for pointers: "
+            "https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_glue.py",
+            FutureWarning,
+        )
         self.args = args
         self.processor = glue_processors[args.task_name]()
         self.output_mode = glue_output_modes[args.task_name]
