@@ -224,10 +224,6 @@ class ModelTesterMixin:
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
-            if loss is None:
-                import ipdb
-
-                ipdb.set_trace()
             loss.backward()
 
     def test_training_gradient_checkpointing(self):
