@@ -168,6 +168,7 @@ from .modeling_rag import (  # noqa: F401 - need to import all RagModels to be i
 from .modeling_reformer import (
     ReformerForMaskedLM,
     ReformerForQuestionAnswering,
+    ReformerForSequenceClassification,
     ReformerModel,
     ReformerModelWithLMHead,
 )
@@ -398,6 +399,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (DebertaConfig, DebertaForSequenceClassification),
         (GPT2Config, GPT2ForSequenceClassification),
         (OpenAIGPTConfig, OpenAIGPTForSequenceClassification),
+        (ReformerConfig, ReformerForSequenceClassification),
     ]
 )
 

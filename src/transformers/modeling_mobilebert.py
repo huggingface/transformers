@@ -1232,7 +1232,7 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
                 "The `next_sentence_label` argument is deprecated and will be removed in a future version, use `labels` instead.",
                 FutureWarning,
             )
-            labels = kwargs.pop("masked_lm_labels")
+            labels = kwargs.pop("next_sentence_label")
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

@@ -940,12 +940,12 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         hidden_states = transformer_outputs[0]
 
         lm_logits = self.lm_head(hidden_states)
-        mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids).squeeze(-1)
+        mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids).view(-1, self.config.num_labels)
 
         mc_loss = None
         if mc_labels is not None:
             loss_fct = CrossEntropyLoss()
-            mc_loss = loss_fct(mc_logits.view(-1, mc_logits.size(-1)), mc_labels.view(-1))
+            mc_loss = loss_fct(mc_logits, mc_labels)
         lm_loss = None
         if labels is not None:
             shift_logits = lm_logits[..., :-1, :].contiguous()
@@ -1069,7 +1069,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
             if self.num_labels == 1:
                 #  We are doing regression
                 loss_fct = MSELoss()
-                loss = loss_fct(pooled_logits.view(-1), labels.view(-1))
+                loss = loss_fct(pooled_logits.view(-1), labels.to(self.dtype).view(-1))
             else:
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
