@@ -98,10 +98,12 @@ class ModelTesterMixin:
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
-            elif (
-                model_class in MODEL_FOR_PRETRAINING_MAPPING.values()
-                and model_class not in MODEL_FOR_MASKED_LM_MAPPING.values()
-            ):
+            elif model_class in MODEL_FOR_PRETRAINING_MAPPING.values() and model_class not in [
+                *MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.values(),
+                *MODEL_FOR_CAUSAL_LM_MAPPING.values(),
+                *MODEL_FOR_MASKED_LM_MAPPING.values(),
+                *MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.values(),
+            ]:
                 # special case for models like BERT that use multi-loss training for PreTraining
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
