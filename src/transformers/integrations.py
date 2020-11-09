@@ -14,7 +14,7 @@ try:
     # Comet needs to be imported before any ML frameworks
     import comet_ml  # noqa: F401
 
-    if comet_ml.config.get_config("comet.api_key"):
+    if hasattr(comet_ml, "config") and comet_ml.config.get_config("comet.api_key"):
         _has_comet = True
     else:
         if os.getenv("COMET_MODE", "").upper() != "DISABLED":
