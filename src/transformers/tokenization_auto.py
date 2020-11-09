@@ -15,6 +15,7 @@
 """ Auto Tokenizer class. """
 
 
+import os
 from collections import OrderedDict
 
 from .configuration_auto import (
@@ -55,6 +56,7 @@ from .configuration_auto import (
     XLMProphetNetConfig,
     XLMRobertaConfig,
     XLNetConfig,
+    config_class_by_path,
     replace_list_option_in_docstrings,
 )
 from .configuration_utils import PretrainedConfig
@@ -138,6 +140,7 @@ if is_tokenizers_available():
     from .tokenization_roberta_fast import RobertaTokenizerFast
     from .tokenization_squeezebert_fast import SqueezeBertTokenizerFast
     from .tokenization_t5_fast import T5TokenizerFast
+    from .tokenization_utils_fast import PreTrainedTokenizerFast
     from .tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
     from .tokenization_xlnet_fast import XLNetTokenizerFast
 else:
@@ -158,6 +161,7 @@ else:
     MobileBertTokenizerFast = None
     OpenAIGPTTokenizerFast = None
     PegasusTokenizerFast = None
+    PreTrainedTokenizerFast = None
     ReformerTokenizerFast = None
     RetriBertTokenizerFast = None
     RobertaTokenizerFast = None
@@ -257,6 +261,8 @@ class AutoTokenizer:
                     - A path to a `directory` containing vocabulary files required by the tokenizer, for instance saved
                       using the :func:`~transformers.PreTrainedTokenizer.save_pretrained` method, e.g.,
                       ``./my_model_directory/``.
+                    - A path or url to a JSON file with tokenizer saved by HuggingFace tokenizers library Available
+                      only with `use_fast`.
                     - A path or url to a single saved vocabulary file if and only if the tokenizer only requires a
                       single vocabulary file (like Bert or XLNet), e.g.: ``./my_model_directory/vocab.txt``. (Not
                       applicable to all derived classes)
@@ -293,18 +299,36 @@ class AutoTokenizer:
             >>> # Download vocabulary from S3 (user-uploaded) and cache.
             >>> tokenizer = AutoTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
 
-            >>> # If vocabulary files are in a directory (e.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`)
+            >>> # If vocabulary files are in a directory (e.g. tokenizer was saved using `save_pretrained('./test/bert_saved_model/')`)
             >>> tokenizer = AutoTokenizer.from_pretrained('./test/bert_saved_model/')
 
+            >>> # Load tokenizer created and saved with HuggingFace tokenizers library
+            >>> tokenizer = AutoTokenizer.from_pretrained('./roberta-tokenizer/sent-piece-bpe.tokenizer.json', use_fast=True)
         """
         config = kwargs.pop("config", None)
-        if not isinstance(config, PretrainedConfig):
+        if not isinstance(config, PretrainedConfig) and not os.path.isfile(pretrained_model_name_or_path):
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         if "bert-base-japanese" in str(pretrained_model_name_or_path):
             return BertJapaneseTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         use_fast = kwargs.pop("use_fast", False)
+
+        if os.path.isfile(pretrained_model_name_or_path) and pretrained_model_name_or_path.endswith(".json"):
+            if not use_fast:
+                raise ValueError("Only fast tokenizers can be loaded from JSON files.")
+
+            if not config:
+                logger.info("Using pattern matching on the input filepath in order to find tokenizer class.")
+                config_class = config_class_by_path(pretrained_model_name_or_path)
+                if config_class:
+                    config = config_class(**kwargs)
+            if not config:
+                tokenizer_class = PreTrainedTokenizerFast
+                logger.warn(f"Tokenizer class not found automatically. Instantiating a base class: {tokenizer_class}.")
+                if tokenizer_class is None:
+                    raise ValueError(f"Tokenizer class {tokenizer_class} is not currently imported!")
+                return tokenizer_class(*inputs, tokenizer_file=pretrained_model_name_or_path, **kwargs)
 
         if config.tokenizer_class is not None:
             if use_fast and not config.tokenizer_class.endswith("Fast"):

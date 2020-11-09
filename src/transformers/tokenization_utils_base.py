@@ -19,6 +19,7 @@ of output with special method for the Fast tokenizers)
 """
 
 import copy
+import inspect
 import json
 import os
 import warnings
@@ -1500,6 +1501,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 - A path to a `directory` containing vocabulary files required by the tokenizer, for instance saved
                   using the :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.save_pretrained`
                   method, e.g., ``./my_model_directory/``.
+                - A path or url to a JSON file with tokenizer saved by HuggingFace tokenizers library. Available only
+                  for Fast tokenizers.
                 - (**Deprecated**, not applicable to all derived classes) A path or url to a single saved vocabulary
                   file (if and only if the tokenizer only requires a single vocabulary file like Bert or XLNet), e.g.,
                   ``./my_model_directory/vocab.txt``.
@@ -1572,18 +1575,28 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             )
 
             if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
-                if len(cls.vocab_files_names) > 1:
-                    raise ValueError(
-                        "Calling {}.from_pretrained() with the path to a single file or url is not supported."
-                        "Use a model identifier or the path to a directory instead.".format(cls.__name__)
+
+                if pretrained_model_name_or_path.endswith(".json"):
+                    if cls.slow_tokenizer_class is None:
+                        raise ValueError(
+                            "Calling {}.from_pretrained() with the path to a JSON file or url is supported"
+                            " only in Fast tokenizers".format(cls.__name__)
+                        )
+                    vocab_files["tokenizer_file"] = pretrained_model_name_or_path
+
+                else:
+                    if len(cls.vocab_files_names) > 1:
+                        raise ValueError(
+                            "Calling {}.from_pretrained() with the path to a single file or url is not supported."
+                            "Use a model identifier or the path to a directory instead.".format(cls.__name__)
+                        )
+                    logger.warning(
+                        "Calling {}.from_pretrained() with the path to a single file or url is deprecated".format(
+                            cls.__name__
+                        )
                     )
-                logger.warning(
-                    "Calling {}.from_pretrained() with the path to a single file or url is deprecated".format(
-                        cls.__name__
-                    )
-                )
-                file_id = list(cls.vocab_files_names.keys())[0]
-                vocab_files[file_id] = pretrained_model_name_or_path
+                    file_id = list(cls.vocab_files_names.keys())[0]
+                    vocab_files[file_id] = pretrained_model_name_or_path
             else:
                 # At this point pretrained_model_name_or_path is either a directory or a model identifier name
                 additional_files_names = {
@@ -1726,6 +1739,19 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             init_kwargs["__slow_tokenizer"] = slow_tokenizer
 
         init_kwargs["name_or_path"] = pretrained_model_name_or_path
+
+        if init_kwargs.get("tokenizer_file") is not None:
+            # While using "tokenizer_file", the init_inputs are allowed to be Nones.
+            # So: assure that passing args will match the signature of __init__
+            assert not init_inputs
+            init_params = inspect.signature(cls.__init__).parameters
+            for param_name, parameter in init_params.items():
+                if param_name == "self" or parameter.kind == inspect.Parameter.VAR_POSITIONAL:
+                    continue
+                if parameter.default != inspect.Parameter.empty:
+                    break
+                if param_name not in init_kwargs:
+                    init_kwargs[param_name] = None
 
         # Instantiate tokenizer.
         try:

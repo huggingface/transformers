@@ -227,6 +227,16 @@ def replace_list_option_in_docstrings(config_to_class=None, use_model_types=True
     return docstring_decorator
 
 
+def config_class_by_path(searched_path: str):
+    """
+    Using pattern matching on the searched_path to determine config class.
+    """
+    for pattern, config_class in CONFIG_MAPPING.items():
+        if pattern in searched_path:
+            return config_class
+    return None
+
+
 class AutoConfig:
     r"""
     This is a generic configuration class that will be instantiated as one of the configuration classes of the library
@@ -333,9 +343,9 @@ class AutoConfig:
             return config_class.from_dict(config_dict, **kwargs)
         else:
             # Fallback: use pattern matching on the string.
-            for pattern, config_class in CONFIG_MAPPING.items():
-                if pattern in pretrained_model_name_or_path:
-                    return config_class.from_dict(config_dict, **kwargs)
+            config_class = config_class_by_path(pretrained_model_name_or_path)
+            if config_class:
+                return config_class.from_dict(config_dict, **kwargs)
 
         raise ValueError(
             "Unrecognized model in {}. "
