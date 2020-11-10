@@ -405,7 +405,7 @@ class BatchEncoding(UserDict):
 
         Args:
             batch_or_token_index (:obj:`int`):
-                Index of the sequence in the batch. If the batch only comprise one sequence, this can be the index of
+                Index of the sequence in the batch. If the batch only comprises one sequence, this can be the index of
                 the token in the sequence.
             token_index (:obj:`int`, `optional`):
                 If a batch index is provided in `batch_or_token_index`, this can be the index of the token in the
