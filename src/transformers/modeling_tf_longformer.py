@@ -381,12 +381,12 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
         """Applies embedding based on inputs tensor."""
         assert not (input_ids is None and inputs_embeds is None)
 
-        if position_ids is None:
-            if input_ids is not None:
-                # Create the position ids from the input token ids. Any padded tokens remain padded.
-                position_ids = self.create_position_ids_from_input_ids(input_ids)
-            else:
-                position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
+        # if position_ids is None:
+        #     if input_ids is not None:
+        #         # Create the position ids from the input token ids. Any padded tokens remain padded.
+        #         position_ids = self.create_position_ids_from_input_ids(input_ids)
+        #     else:
+        #         position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
         if input_ids is not None:
             input_shape = shape_list(input_ids)
@@ -2062,15 +2062,15 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
-            token_type_ids = inputs.get("token_type_ids", token_type_ids)
-            # position_ids = inputs.get("position_ids", position_ids)
             global_attention_mask = inputs.get("global_attention_mask", global_attention_mask)
-            # inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            # output_attentions = inputs.get("output_attentions", output_attentions)
-            # output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            # return_dict = inputs.get("return_dict", return_dict)
+            token_type_ids = inputs.get("token_type_ids", token_type_ids)
+            position_ids = inputs.get("position_ids", position_ids)
+            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             labels = inputs.get("labels", labels)
-            # assert len(inputs) <= 10, "Too many inputs."
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            return_dict = inputs.get("return_dict", return_dict)
+            assert len(inputs) <= 10, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -2179,14 +2179,14 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
+            global_attention_mask = inputs.get("global_attention_mask", global_attention_mask)
             token_type_ids = inputs.get("token_type_ids", token_type_ids)
             position_ids = inputs.get("position_ids", position_ids)
-            global_attention_mask = inputs.get("global_attention_mask", global_attention_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
+            labels = inputs.get("labels", labels)
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
             return_dict = inputs.get("return_dict", return_dict)
-            labels = inputs.get("labels", labels)
             assert len(inputs) <= 10, "Too many inputs."
         else:
             input_ids = inputs
