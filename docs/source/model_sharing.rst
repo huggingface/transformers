@@ -63,8 +63,8 @@ Once you are logged in with your model hub credentials, you can start building y
 
     transformers-cli repo create your-model-name
 
-This creates a repo on the model hub, which can be cloned. You can then add/remove from that repo as you would with
-any other git repo.
+This creates a repo on the model hub, which can be cloned. You can then add/remove from that repo as you would with any
+other git repo.
 
 .. code-block::
 
@@ -146,8 +146,8 @@ Other files can safely be deleted.
 Uploading your files
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Once the repo is cloned, you can add the model, configuration and tokenizer files. For instance, saving the model
-and tokenizer files:
+Once the repo is cloned, you can add the model, configuration and tokenizer files. For instance, saving the model and
+tokenizer files:
 
 .. code-block::
 
@@ -160,7 +160,8 @@ Or, if you're using the Trainer API
 
     >>> trainer.save_model("path/to/awesome-name-you-picked")
 
-You can then add these files to the staging environment and verify that they have been correctly staged with the ``git status`` command:
+You can then add these files to the staging environment and verify that they have been correctly staged with the ``git
+status`` command:
 
 .. code-block::
 
