@@ -31,10 +31,19 @@ All the `checkpoints <https://huggingface.co/models?search=pegasus>`__ are fine-
 - Each checkpoint is 2.2 GB on disk and 568M parameters.
 - FP16 is not supported (help/ideas on this appreciated!).
 - Summarizing xsum in fp32 takes about 400ms/sample, with default parameters on a v100 GPU.
-- For XSUM, The paper reports rouge1,rouge2, rougeL of paper: 47.21/24.56/39.25. As of Aug 9, this port scores
-  46.91/24.34/39.1.
+- Full replication results and correctly pre-processed data can be found in this `Issue
+  <https://github.com/huggingface/transformers/issues/6844#issue-689259666>`__.
+- `Distilled checkpoints <https://huggingface.co/models?search=distill-pegasus>`__ are described in this `paper
+  <https://arxiv.org/abs/2010.13002>`__.
 
-The gap is likely because of different alpha/length_penalty implementations in beam search.
+Examples
+_______________________________________________________________________________________________________________________
+
+- `Script <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/finetune_pegasus_xsum.sh>`__ to
+  fine-tune pegasus on the XSUM dataset. Data download instructions at `examples/seq2seq/
+  <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`__.
+- FP16 is not supported (help/ideas on this appreciated!).
+- The adafactor optimizer is recommended for pegasus fine-tuning.
 
 
 Implementation Notes
@@ -45,7 +54,7 @@ Implementation Notes
 - Some key configuration differences:
 
     - static, sinusoidal position embeddings
-    - no :obj:`layernorm_embedding` (:obj`PegasusConfig.normalize_embedding=False`)
+    - no :obj:`layernorm_embedding` (:obj:`PegasusConfig.normalize_embedding=False`)
     - the model starts generating with pad_token_id (which has 0 token_embedding) as the prefix.
     - more beams are used (:obj:`num_beams=8`)
 - All pretrained pegasus checkpoints are the same besides three attributes: :obj:`tokenizer.model_max_length` (maximum

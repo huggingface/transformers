@@ -34,6 +34,8 @@ ________________________________________________________________________________
 - An example of how to train :class:`~transformers.BartForConditionalGeneration` with a Hugging Face :obj:`datasets`
   object can be found in this `forum discussion
   <https://discuss.huggingface.co/t/train-bart-for-conditional-generation-e-g-summarization/1904>`__.
+- `Distilled checkpoints <https://huggingface.co/models?search=distilbart>`__ are described in this `paper
+  <https://arxiv.org/abs/2010.13002>`__.
 
 
 Implementation Notes
@@ -44,13 +46,30 @@ Implementation Notes
 - The forward pass of :class:`~transformers.BartModel` will create decoder inputs (using the helper function
   :func:`transformers.modeling_bart._prepare_bart_decoder_inputs`) if they are not passed. This is different than some
   other modeling APIs.
-- Model predictions are intended to be identical to the original implementation. This only works, however, if the
-  string you pass to :func:`fairseq.encode` starts with a space.
+- Model predictions are intended to be identical to the original implementation when
+  :obj:`force_bos_token_to_be_generated=True`. This only works, however, if the string you pass to
+  :func:`fairseq.encode` starts with a space.
 - :meth:`~transformers.BartForConditionalGeneration.generate` should be used for conditional generation tasks like
   summarization, see the example in that docstrings.
 - Models that load the `facebook/bart-large-cnn` weights will not have a :obj:`mask_token_id`, or be able to perform
   mask-filling tasks.
 - For training/forward passes that don't involve beam search, pass :obj:`use_cache=False`.
+
+Mask Filling
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The :obj:`facebook/bart-base` and :obj:`facebook/bart-large` checkpoints can be used to fill multi-token masks.
+
+.. code-block::
+
+    from transformers import BartForConditionalGeneration, BartTokenizer
+    model = BartForConditionalGeneration.from_pretrained("facebook/bart-large", force_bos_token_to_be_generated=True)
+    tok = BartTokenizer.from_pretrained("facebook/bart-large")
+    example_english_phrase = "UN Chief Says There Is No <mask> in Syria"
+    batch = tok(example_english_phrase, return_tensors='pt')
+    generated_ids = model.generate(batch['input_ids'])
+    assert tok.batch_decode(generated_ids, skip_special_tokens=True) == ['UN Chief Says There Is No Plan to Stop Chemical Weapons in Syria']
+
 
 
 BartConfig

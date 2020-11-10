@@ -5,7 +5,7 @@ MarianMT
 <https://github.com/huggingface/transformers/issues/new?assignees=sshleifer&labels=&template=bug-report.md&title>`__
 and assign @patrickvonplaten.
 
-Translations should be similar, but not identical to, output in the test set linked to in each model card.
+Translations should be similar, but not identical to output in the test set linked to in each model card.
 
 Implementation Notes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -35,32 +35,46 @@ Naming
   <https://developers.google.com/admin-sdk/directory/v1/languages>`__, three digit codes require googling "language
   code {code}".
 - Codes formatted like :obj:`es_AR` are usually :obj:`code_{region}`. That one is Spanish from Argentina.
+- The models were converted in two stages. The first 1000 models use ISO-639-2 codes to identify languages, the second
+  group use a combination of ISO-639-5 codes and ISO-639-2 codes.
 
+
+Examples
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Since Marian models are smaller than many other translation models available in the library, they can be useful for
+  fine-tuning experiments and integration tests.
+- `Fine-tune on TPU
+  <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/builtin_trainer/train_distil_marian_enro_tpu.sh>`__
+- `Fine-tune on GPU
+  <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/builtin_trainer/train_distil_marian_enro.sh>`__
+- `Fine-tune on GPU with pytorch-lightning
+  <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/distil_marian_no_teacher.sh>`__
 
 Multilingual Models
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-All model names use the following format: :obj:`Helsinki-NLP/opus-mt-{src}-{tgt}`:
+- All model names use the following format: :obj:`Helsinki-NLP/opus-mt-{src}-{tgt}`:
+- If a model can output multiple languages, and you should specify a language code by prepending the desired output
+  language to the :obj:`src_text`.
+- You can see a models's supported language codes in its model card, under target constituents, like in `opus-mt-en-roa
+  <https://huggingface.co/Helsinki-NLP/opus-mt-en-roa>`__.
+- Note that if a model is only multilingual on the source side, like :obj:`Helsinki-NLP/opus-mt-roa-en`, no language
+  codes are required.
 
-    - If :obj:`src` is in all caps, the model supports multiple input languages, you can figure out which ones by
-      looking at the model card, or the Group Members `mapping
-      <https://gist.github.com/sshleifer/6d20e7761931b08e73c3219027b97b8a>`_ .
-    - If :obj:`tgt` is in all caps, the model can output multiple languages, and you should specify a language code by
-      prepending the desired output language to the :obj:`src_text`.
-    - You can see a tokenizer's supported language codes in ``tokenizer.supported_language_codes``
-
-Example of translating english to many romance languages, using language codes:
+New multi-lingual models from the `Tatoeba-Challenge repo <https://github.com/Helsinki-NLP/Tatoeba-Challenge>`__
+require 3 character language codes:
 
 .. code-block:: python
 
     from transformers import MarianMTModel, MarianTokenizer
     src_text = [
-        '>>fr<< this is a sentence in english that we want to translate to french',
-        '>>pt<< This should go to portuguese',
-        '>>es<< And this to Spanish'
+        '>>fra<< this is a sentence in english that we want to translate to french',
+        '>>por<< This should go to portuguese',
+        '>>esp<< And this to Spanish'
     ]
 
-    model_name = 'Helsinki-NLP/opus-mt-en-ROMANCE'
+    model_name = 'Helsinki-NLP/opus-mt-en-roa'
     tokenizer = MarianTokenizer.from_pretrained(model_name)
     print(tokenizer.supported_language_codes)
     model = MarianMTModel.from_pretrained(model_name)
@@ -70,34 +84,8 @@ Example of translating english to many romance languages, using language codes:
     # 'Isto deve ir para o português.',
     # 'Y esto al español']
 
-Sometimes, models were trained on collections of languages that do not resolve to a group. In this case, _ is used as a
-separator for src or tgt, as in :obj:`Helsinki-NLP/opus-mt-en_el_es_fi-en_el_es_fi`. These still require language
-codes.
-
-There are many supported regional language codes, like :obj:`>>es_ES<<` (Spain) and :obj:`>>es_AR<<` (Argentina), that
-do not seem to change translations. I have not found these to provide different results than just using :obj:`>>es<<`.
-
-For example:
-
-    - `Helsinki-NLP/opus-mt-NORTH_EU-NORTH_EU`: translates from all NORTH_EU languages (see `mapping
-      <https://gist.github.com/sshleifer/6d20e7761931b08e73c3219027b97b8a>`_) to all NORTH_EU languages. Use a special
-      language code like :obj:`>>de<<` to specify output language.
-    - `Helsinki-NLP/opus-mt-ROMANCE-en`: translates from many romance languages to english, no codes needed since there
-      is only one target language.
 
 
-
-.. code-block:: python
-
-    GROUP_MEMBERS = {
-     'ZH': ['cmn', 'cn', 'yue', 'ze_zh', 'zh_cn', 'zh_CN', 'zh_HK', 'zh_tw', 'zh_TW', 'zh_yue', 'zhs', 'zht', 'zh'],
-     'ROMANCE': ['fr', 'fr_BE', 'fr_CA', 'fr_FR', 'wa', 'frp', 'oc', 'ca', 'rm', 'lld', 'fur', 'lij', 'lmo', 'es', 'es_AR', 'es_CL', 'es_CO', 'es_CR', 'es_DO', 'es_EC', 'es_ES', 'es_GT', 'es_HN', 'es_MX', 'es_NI', 'es_PA', 'es_PE', 'es_PR', 'es_SV', 'es_UY', 'es_VE', 'pt', 'pt_br', 'pt_BR', 'pt_PT', 'gl', 'lad', 'an', 'mwl', 'it', 'it_IT', 'co', 'nap', 'scn', 'vec', 'sc', 'ro', 'la'],
-     'NORTH_EU': ['de', 'nl', 'fy', 'af', 'da', 'fo', 'is', 'no', 'nb', 'nn', 'sv'],
-     'SCANDINAVIA': ['da', 'fo', 'is', 'no', 'nb', 'nn', 'sv'],
-     'SAMI': ['se', 'sma', 'smj', 'smn', 'sms'],
-     'NORWAY': ['nb_NO', 'nb', 'nn_NO', 'nn', 'nog', 'no_nb', 'no'],
-     'CELTIC': ['ga', 'cy', 'br', 'gd', 'kw', 'gv']
-    }
 
 Code to see available pretrained models:
 
@@ -108,7 +96,56 @@ Code to see available pretrained models:
     org = "Helsinki-NLP"
     model_ids = [x.modelId for x in model_list if x.modelId.startswith(org)]
     suffix = [x.split('/')[1] for x in model_ids]
-    multi_models = [f'{org}/{s}' for s in suffix if s != s.lower()]
+    old_style_multi_models = [f'{org}/{s}' for s in suffix if s != s.lower()]
+
+
+
+Old Style Multi-Lingual Models
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+These are the old style multi-lingual models ported from the OPUS-MT-Train repo: and the members of each language
+group:
+
+.. code-block:: python
+
+    ['Helsinki-NLP/opus-mt-NORTH_EU-NORTH_EU',
+     'Helsinki-NLP/opus-mt-ROMANCE-en',
+     'Helsinki-NLP/opus-mt-SCANDINAVIA-SCANDINAVIA',
+     'Helsinki-NLP/opus-mt-de-ZH',
+     'Helsinki-NLP/opus-mt-en-CELTIC',
+     'Helsinki-NLP/opus-mt-en-ROMANCE',
+     'Helsinki-NLP/opus-mt-es-NORWAY',
+     'Helsinki-NLP/opus-mt-fi-NORWAY',
+     'Helsinki-NLP/opus-mt-fi-ZH',
+     'Helsinki-NLP/opus-mt-fi_nb_no_nn_ru_sv_en-SAMI',
+     'Helsinki-NLP/opus-mt-sv-NORWAY',
+     'Helsinki-NLP/opus-mt-sv-ZH']
+    GROUP_MEMBERS = {
+     'ZH': ['cmn', 'cn', 'yue', 'ze_zh', 'zh_cn', 'zh_CN', 'zh_HK', 'zh_tw', 'zh_TW', 'zh_yue', 'zhs', 'zht', 'zh'],
+     'ROMANCE': ['fr', 'fr_BE', 'fr_CA', 'fr_FR', 'wa', 'frp', 'oc', 'ca', 'rm', 'lld', 'fur', 'lij', 'lmo', 'es', 'es_AR', 'es_CL', 'es_CO', 'es_CR', 'es_DO', 'es_EC', 'es_ES', 'es_GT', 'es_HN', 'es_MX', 'es_NI', 'es_PA', 'es_PE', 'es_PR', 'es_SV', 'es_UY', 'es_VE', 'pt', 'pt_br', 'pt_BR', 'pt_PT', 'gl', 'lad', 'an', 'mwl', 'it', 'it_IT', 'co', 'nap', 'scn', 'vec', 'sc', 'ro', 'la'],
+     'NORTH_EU': ['de', 'nl', 'fy', 'af', 'da', 'fo', 'is', 'no', 'nb', 'nn', 'sv'],
+     'SCANDINAVIA': ['da', 'fo', 'is', 'no', 'nb', 'nn', 'sv'],
+     'SAMI': ['se', 'sma', 'smj', 'smn', 'sms'],
+     'NORWAY': ['nb_NO', 'nb', 'nn_NO', 'nn', 'nog', 'no_nb', 'no'],
+     'CELTIC': ['ga', 'cy', 'br', 'gd', 'kw', 'gv']
+    }
+
+
+
+
+Example of translating english to many romance languages, using old-style 2 character language codes
+
+
+.. code-block::python
+
+    from transformers import MarianMTModel, MarianTokenizer
+     src_text = [ '>>fr<< this is a sentence in english that we want to translate to french', '>>pt<< This should go to portuguese', '>>es<< And this to Spanish']
+
+    model_name = 'Helsinki-NLP/opus-mt-en-ROMANCE' tokenizer = MarianTokenizer.from_pretrained(model_name)
+    print(tokenizer.supported_language_codes) model = MarianMTModel.from_pretrained(model_name) translated =
+    model.generate(**tokenizer.prepare_seq2seq_batch(src_text)) tgt_text = [tokenizer.decode(t, skip_special_tokens=True) for t in translated]
+    # ["c'est une phrase en anglais que nous voulons traduire en français", 'Isto deve ir para o português.',  'Y esto al español']
+
 
 
 MarianConfig
