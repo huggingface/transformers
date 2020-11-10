@@ -17,22 +17,24 @@
 import unittest
 
 from transformers import is_tf_available
-from transformers.file_utils import cached_property
-from transformers.testing_utils import is_pt_tf_cross_test, require_tf, slow
+from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 
 if is_tf_available():
-    import tensorflow as tf
-
     from transformers import (
-        DPRConfig, BertConfig,
-        DPRReaderTokenizer, TFDPRReader,
-        DPRQuestionEncoderTokenizer, TFDPRQuestionEncoder,
-        DPRContextEncoderTokenizer, TFDPRContextEncoder,
+        TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        BertConfig,
+        DPRConfig,
+        TFDPRContextEncoder,
+        TFDPRQuestionEncoder,
+        TFDPRReader,
     )
+
 
 class TFDPRModelTester:
     def __init__(
@@ -90,7 +92,9 @@ class TFDPRModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2) # follow test_modeling_tf_ctrl.py
+            input_mask = ids_tensor(
+                [self.batch_size, self.seq_length], vocab_size=2
+            )  # follow test_modeling_tf_ctrl.py
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -130,7 +134,7 @@ class TFDPRModelTester:
         model = TFDPRContextEncoder(config=config)
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids, return_dict=True) # MODIFY
+        result = model(input_ids, return_dict=True)  # MODIFY
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.projection_dim or self.hidden_size))
 
     def create_and_check_dpr_question_encoder(
@@ -139,18 +143,14 @@ class TFDPRModelTester:
         model = TFDPRQuestionEncoder(config=config)
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids, return_dict=True) # MODIFY
+        result = model(input_ids, return_dict=True)  # MODIFY
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.projection_dim or self.hidden_size))
 
     def create_and_check_dpr_reader(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFDPRReader(config=config)
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            return_dict=True # MODIFY
-        )
+        result = model(input_ids, attention_mask=input_mask, return_dict=True)  # MODIFY
 
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
@@ -185,7 +185,7 @@ class TFDPRModelTest(TFModelTesterMixin, unittest.TestCase):
     )
 
     test_resize_embeddings = False
-    test_missing_keys = False 
+    test_missing_keys = False
     test_pruning = False
     test_head_masking = False
 
@@ -210,18 +210,18 @@ class TFDPRModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFDPRContextEncoder.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-        for model_name in DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFDPRContextEncoder.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-        for model_name in DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFDPRQuestionEncoder.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-        for model_name in DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFDPRReader.from_pretrained(model_name)
             self.assertIsNotNone(model)

@@ -86,11 +86,7 @@ from .modeling_tf_distilbert import (
     TFDistilBertForTokenClassification,
     TFDistilBertModel,
 )
-from .modeling_tf_dpr import (
-    TFDPRQuestionEncoder,
-    TFDPRContextEncoder,
-    TFDPRReader,
-)
+from .modeling_tf_dpr import TFDPRQuestionEncoder
 from .modeling_tf_electra import (
     TFElectraForMaskedLM,
     TFElectraForMultipleChoice,

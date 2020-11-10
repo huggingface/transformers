@@ -20,41 +20,35 @@ from typing import Optional, Tuple, Union
 
 import tensorflow as tf
 from tensorflow import Tensor
-from tensorflow.keras.layers import Dense, LayerNormalization
-
-from .activations_tf import ACT2FN
-from .modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPast, TFBaseModelOutputWithPooling
-
-from .modeling_tf_utils import (
-    DUMMY_INPUTS,
-    TFPreTrainedModel,
-    TFSharedEmbeddings,
-    TFWrappedEmbeddings,
-    cast_bool_to_primitive,
-    keras_serializable,
-    shape_list,
-    get_initializer,
-)
-from .modeling_tf_bert import TFBertModel, TFBertMainLayer
+from tensorflow.keras.layers import Dense
 
 from .configuration_dpr import DPRConfig
-from .file_utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from .utils import logging
+from .file_utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
+from .modeling_tf_bert import TFBertMainLayer
+from .modeling_tf_outputs import TFBaseModelOutputWithPooling
+from .modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
 from .tokenization_utils import BatchEncoding
+from .utils import logging
+
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DPRConfig"
 
-DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
+TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/dpr-ctx_encoder-single-nq-base",
     "facebook/dpr-ctx_encoder-multiset-base",
 ]
-DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
+TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/dpr-question_encoder-single-nq-base",
     "facebook/dpr-question_encoder-multiset-base",
 ]
-DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST = [
+TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/dpr-reader-single-nq-base",
     "facebook/dpr-reader-multiset-base",
 ]
@@ -67,23 +61,22 @@ DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 @dataclass
 class TFDPRContextEncoderOutput(ModelOutput):
-    """
+    r"""
     Class for outputs of :class:`~transformers.TFDPRContextEncoder`.
 
     Args:
         pooler_output: (:obj:``tf.Tensor`` of shape ``(batch_size, embeddings_size)``):
-            The DPR encoder outputs the `pooler_output` that corresponds to the context representation.
-            Last layer hidden-state of the first token of the sequence (classification token)
-            further processed by a Linear layer. This output is to be used to embed contexts for
-            nearest neighbors queries with questions embeddings.
+            The DPR encoder outputs the `pooler_output` that corresponds to the context representation. Last layer
+            hidden-state of the first token of the sequence (classification token) further processed by a Linear layer.
+            This output is to be used to embed contexts for nearest neighbors queries with questions embeddings.
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -101,18 +94,17 @@ class TFDPRQuestionEncoderOutput(ModelOutput):
 
     Args:
         pooler_output: (:obj:``tf.Tensor`` of shape ``(batch_size, embeddings_size)``):
-            The DPR encoder outputs the `pooler_output` that corresponds to the question representation.
-            Last layer hidden-state of the first token of the sequence (classification token)
-            further processed by a Linear layer. This output is to be used to embed questions for
-            nearest neighbors queries with context embeddings.
+            The DPR encoder outputs the `pooler_output` that corresponds to the question representation. Last layer
+            hidden-state of the first token of the sequence (classification token) further processed by a Linear layer.
+            This output is to be used to embed questions for nearest neighbors queries with context embeddings.
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -134,16 +126,16 @@ class TFDPRReaderOutput(ModelOutput):
         end_logits: (:obj:``tf.Tensor`` of shape ``(n_passages, sequence_length)``):
             Logits of the end index of the span for each passage.
         relevance_logits: (:obj:`tf.Tensor`` of shape ``(n_passages, )``):
-            Outputs of the QA classifier of the DPRReader that corresponds to the scores of each passage
-            to answer the question, compared to all the other passages.
+            Outputs of the QA classifier of the DPRReader that corresponds to the scores of each passage to answer the
+            question, compared to all the other passages.
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
@@ -155,26 +147,25 @@ class TFDPRReaderOutput(ModelOutput):
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
 
+
 class TFDPREncoder(TFPreTrainedModel):
 
     base_model_prefix = "bert_model"
 
     def __init__(self, config: DPRConfig, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
-        
+
         # resolve name conflict with TFBertMainLayer instead of TFBertModel
-        # self.bert_model = TFBertModel(config, name = 'bert_model')
-        self.bert_model = TFBertMainLayer(config, name = 'bert_model')
+        self.bert_model = TFBertMainLayer(config, name="bert_model")
         self.bert_model.config = config
 
         assert self.bert_model.config.hidden_size > 0, "Encoder hidden_size can't be zero"
         self.projection_dim = config.projection_dim
         if self.projection_dim > 0:
-            self.encode_proj = Dense(config.projection_dim, 
-                                     kernel_initializer=get_initializer(config.initializer_range), 
-                                     name="encode_proj" 
-                                     )
-        
+            self.encode_proj = Dense(
+                config.projection_dim, kernel_initializer=get_initializer(config.initializer_range), name="encode_proj"
+            )
+
         self.init_weights()
 
     def call(
@@ -188,9 +179,9 @@ class TFDPREncoder(TFPreTrainedModel):
         return_dict: bool = None,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[Tensor, ...]]:
-        
+
         return_dict = return_dict if return_dict is not None else self.bert_model.return_dict
-        
+
         outputs = self.bert_model(
             inputs=input_ids,
             attention_mask=attention_mask,
@@ -199,7 +190,7 @@ class TFDPREncoder(TFPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            training=training
+            training=training,
         )
         sequence_output, pooled_output = outputs[:2]
         pooled_output = sequence_output[:, 0, :]
@@ -222,34 +213,19 @@ class TFDPREncoder(TFPreTrainedModel):
             return self.projection_dim
         return self.bert_model.config.hidden_size
 
-    def init_weights(self):
-        pass
-        # Not translate as there's no tf's init_weights counterpart
-        # Note that tf already performs init_weights when creating layers
-        
-        # Pytorch's code (for reference)
-        # self.bert_model.init_weights()
-        # if self.projection_dim > 0:
-        #     self.encode_proj.apply(self.bert_model._init_weights)
-
 
 class TFDPRSpanPredictor(TFPreTrainedModel):
 
-    base_model_prefix = "span_predictor"
+    base_model_prefix = "encoder"
 
     def __init__(self, config: DPRConfig, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
-        
-        self.encoder = TFDPREncoder(config, name = 'encoder')
+        self.encoder = TFDPREncoder(config, name="encoder")
 
-        self.qa_outputs = Dense(2, 
-                                kernel_initializer=get_initializer(config.initializer_range), 
-                                name="qa_outputs" 
-                                )
-        self.qa_classifier = Dense(1, 
-                                kernel_initializer=get_initializer(config.initializer_range), 
-                                name="qa_classifier" 
-                                )
+        self.qa_outputs = Dense(2, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs")
+        self.qa_classifier = Dense(
+            1, kernel_initializer=get_initializer(config.initializer_range), name="qa_classifier"
+        )
         self.init_weights()
 
     def call(
@@ -273,7 +249,7 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            training = training
+            training=training,
         )
         sequence_output = outputs[0]
 
@@ -310,8 +286,9 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
 
 
 class TFDPRPretrainedContextEncoder(TFPreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = DPRConfig
@@ -324,8 +301,9 @@ class TFDPRPretrainedContextEncoder(TFPreTrainedModel):
 
 
 class TFDPRPretrainedQuestionEncoder(TFPreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = DPRConfig
@@ -338,8 +316,9 @@ class TFDPRPretrainedQuestionEncoder(TFPreTrainedModel):
 
 
 class TFDPRPretrainedReader(TFPreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = DPRConfig
@@ -347,85 +326,75 @@ class TFDPRPretrainedReader(TFPreTrainedModel):
     base_model_prefix = "reader"
     authorized_missing_keys = [r"position_ids"]
 
-    def init_weights(self):
-        self.span_predictor.encoder.init_weights()
-
-        ## The following two lines are no needed in TF (init_weights of Dense is already done)
-        ## Below are torch code for reference
-        # self.span_predictor.qa_classifier.apply(self.span_predictor.encoder.bert_model._init_weights)
-        # self.span_predictor.qa_outputs.apply(self.span_predictor.encoder.bert_model._init_weights)
-
 
 ###############
 # Actual Models
 ###############
 
 
-DPR_START_DOCSTRING = r"""
+TF_DPR_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
-    pruning heads etc.)
+    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
+    generic methods the library implements for all its model (such as downloading or saving, resizing the input
+    embeddings, pruning heads etc.)
 
-    This model is also a Tensorflow `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass.
-    Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
-    usage and behavior.
-    
+    This model is also a Tensorflow `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__
+    subclass. Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to
+    general usage and behavior.
+
     .. note::
-        TF 2.0 models accepts two formats as inputs:
-        - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments.
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
-        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
-        the first positional argument :
-        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
-        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
-        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
-    
+        TF 2.0 models accepts two formats as inputs: - having all inputs as keyword arguments (like PyTorch models), or
+        - having all inputs as a list, tuple or dict in the first positional arguments. This second option is useful
+        when using :meth:`tf.keras.Model.fit` method which currently requires having all the tensors in the first
+        argument of the model call function: :obj:`model(inputs)`. If you choose this second option, there are three
+        possibilities you can use to gather all the input Tensors in the first positional argument : - a single Tensor
+        with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)` - a list of varying length with one or
+        several input Tensors IN THE ORDER given in the docstring: :obj:`model([input_ids, attention_mask])` or
+        :obj:`model([input_ids, attention_mask, token_type_ids])` - a dictionary with one or several input Tensors
+        associated to the input names given in the docstring: :obj:`model({"input_ids": input_ids, "token_type_ids":
+        token_type_ids})`
+
     Parameters:
         config (:class:`~transformers.DPRConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the
+            model weights.
 """
 
-DPR_ENCODERS_INPUTS_DOCSTRING = r"""
+TF_DPR_ENCODERS_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary.
-            To match pretraining, DPR input sequence should be formatted with [CLS] and [SEP] tokens as follows:
+            Indices of input sequence tokens in the vocabulary. To match pretraining, DPR input sequence should be
+            formatted with [CLS] and [SEP] tokens as follows:
 
             (a) For sequence pairs (for a pair title+text for example):
 
-                ``tokens:         [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]``
+                ``tokens: [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]``
 
-                ``token_type_ids:   0   0  0    0    0     0       0   0   1  1  1  1   1   1``
+                ``token_type_ids: 0 0 0 0 0 0 0 0 1 1 1 1 1 1``
 
             (b) For single sequences (for a question for example):
 
-                ``tokens:         [CLS] the dog is hairy . [SEP]``
+                ``tokens: [CLS] the dog is hairy . [SEP]``
 
-                ``token_type_ids:   0   0   0   0  0     0   0``
+                ``token_type_ids: 0 0 0 0 0 0 0``
 
-            DPR is a model with absolute position embeddings so it's usually advised to pad the inputs on
-            the right rather than the left.
+            DPR is a model with absolute position embeddings so it's usually advised to pad the inputs on the right
+            rather than the left.
 
-            Indices can be obtained using :class:`~transformers.DPRTokenizer`.
-            See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`~transformers.DPRTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
         attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs.
-            Indices are selected in ``[0, 1]``:
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
+            1]``:
 
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
@@ -445,24 +414,22 @@ DPR_ENCODERS_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
-DPR_READER_INPUTS_DOCSTRING = r"""
+TF_DPR_READER_INPUTS_DOCSTRING = r"""
     Args:
         input_ids: (:obj:`Numpy array` or :obj:`tf.Tensor` of shapes :obj:`(n_passages, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary.
-            It has to be a sequence triplet with 1) the question and 2) the passages titles and 3) the passages texts
-            To match pretraining, DPR :obj:`input_ids` sequence should be formatted with [CLS] and [SEP] with the
-            format:
+            Indices of input sequence tokens in the vocabulary. It has to be a sequence triplet with 1) the question
+            and 2) the passages titles and 3) the passages texts To match pretraining, DPR :obj:`input_ids` sequence
+            should be formatted with [CLS] and [SEP] with the format:
 
                 ``[CLS] <question token ids> [SEP] <titles ids> [SEP] <texts ids>``
 
-            DPR is a model with absolute position embeddings so it's usually advised to pad the inputs on
-            the right rather than the left.
+            DPR is a model with absolute position embeddings so it's usually advised to pad the inputs on the right
+            rather than the left.
 
             Indices can be obtained using :class:`~transformers.DPRReaderTokenizer`. See this class documentation for
             more details.
         attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(n_passages, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -485,19 +452,19 @@ DPR_READER_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare DPRContextEncoder transformer outputting pooler outputs as context representations.",
-    DPR_START_DOCSTRING,
+    TF_DPR_START_DOCSTRING,
 )
 class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
     def __init__(self, config: DPRConfig, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
         self.config = config
-        self.ctx_encoder = TFDPREncoder(config, name = 'ctx_encoder')
+        self.ctx_encoder = TFDPREncoder(config, name="ctx_encoder")
         self.init_weights()
-    
+
     def get_input_embeddings(self):
         return self.ctx_encoder.bert_model.get_input_embeddings()
-    
-    @add_start_docstrings_to_model_forward(DPR_ENCODERS_INPUTS_DOCSTRING)
+
+    @add_start_docstrings_to_model_forward(TF_DPR_ENCODERS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFDPRContextEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
@@ -508,7 +475,7 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        training: bool = False
+        training: bool = False,
     ) -> Union[TFDPRContextEncoderOutput, Tuple[Tensor, ...]]:
         r"""
         Return:
@@ -573,7 +540,7 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            training=training
+            training=training,
         )
 
         if not return_dict:
@@ -585,19 +552,19 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
 
 @add_start_docstrings(
     "The bare DPRQuestionEncoder transformer outputting pooler outputs as question representations.",
-    DPR_START_DOCSTRING,
+    TF_DPR_START_DOCSTRING,
 )
 class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
     def __init__(self, config: DPRConfig, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
         self.config = config
-        self.question_encoder = TFDPREncoder(config, name = 'question_encoder')
+        self.question_encoder = TFDPREncoder(config, name="question_encoder")
         self.init_weights()
-    
+
     def get_input_embeddings(self):
         return self.question_encoder.bert_model.get_input_embeddings()
-    
-    @add_start_docstrings_to_model_forward(DPR_ENCODERS_INPUTS_DOCSTRING)
+
+    @add_start_docstrings_to_model_forward(TF_DPR_ENCODERS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFDPRQuestionEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
@@ -608,7 +575,7 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        training: bool = False
+        training: bool = False,
     ) -> Union[TFDPRQuestionEncoderOutput, Tuple[Tensor, ...]]:
         r"""
         Return:
@@ -673,7 +640,7 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            training=training
+            training=training,
         )
 
         if not return_dict:
@@ -685,19 +652,19 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
 
 @add_start_docstrings(
     "The bare DPRReader transformer outputting span predictions.",
-    DPR_START_DOCSTRING,
+    TF_DPR_START_DOCSTRING,
 )
 class TFDPRReader(TFDPRPretrainedReader):
     def __init__(self, config: DPRConfig, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
         self.config = config
-        self.span_predictor = TFDPRSpanPredictor(config, name = 'span_predictor')
+        self.span_predictor = TFDPRSpanPredictor(config, name="span_predictor")
         self.init_weights()
-    
+
     def get_input_embeddings(self):
         return self.span_predictor.encoder.bert_model.get_input_embeddings()
-    
-    @add_start_docstrings_to_model_forward(DPR_READER_INPUTS_DOCSTRING)
+
+    @add_start_docstrings_to_model_forward(TF_DPR_READER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFDPRReaderOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
@@ -707,7 +674,7 @@ class TFDPRReader(TFDPRPretrainedReader):
         output_attentions: bool = None,
         output_hidden_states: bool = None,
         return_dict=None,
-        training: bool = False
+        training: bool = False,
     ) -> Union[TFDPRReaderOutput, Tuple[Tensor, ...]]:
         r"""
         Return:
@@ -773,5 +740,5 @@ class TFDPRReader(TFDPRPretrainedReader):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            training=training
+            training=training,
         )

@@ -391,15 +391,15 @@ if is_torch_available():
         DistilBertPreTrainedModel,
     )
     from .modeling_dpr import (
+        DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
         DPRContextEncoder,
         DPRPretrainedContextEncoder,
         DPRPretrainedQuestionEncoder,
         DPRPretrainedReader,
         DPRQuestionEncoder,
         DPRReader,
-        DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-        DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-        DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_electra import (
         ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -700,6 +700,17 @@ if is_tf_available():
         TFDistilBertModel,
         TFDistilBertPreTrainedModel,
     )
+    from .modeling_tf_dpr import (
+        TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFDPRContextEncoder,
+        TFDPRPretrainedContextEncoder,
+        TFDPRPretrainedQuestionEncoder,
+        TFDPRPretrainedReader,
+        TFDPRQuestionEncoder,
+        TFDPRReader,
+    )
     from .modeling_tf_electra import (
         TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFElectraForMaskedLM,
@@ -834,14 +845,6 @@ if is_tf_available():
         TFXLNetMainLayer,
         TFXLNetModel,
         TFXLNetPreTrainedModel,
-    )
-    from .modeling_tf_dpr import (
-        TFDPRContextEncoder,
-        TFDPRPretrainedContextEncoder,
-        TFDPRPretrainedQuestionEncoder,
-        TFDPRPretrainedReader,
-        TFDPRQuestionEncoder,
-        TFDPRReader,
     )
 
     # Optimization
