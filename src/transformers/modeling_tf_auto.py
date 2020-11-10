@@ -113,7 +113,14 @@ from .modeling_tf_funnel import (
     TFFunnelModel,
 )
 from .modeling_tf_gpt2 import TFGPT2LMHeadModel, TFGPT2Model
-from .modeling_tf_longformer import TFLongformerForMaskedLM, TFLongformerForQuestionAnswering, TFLongformerModel
+from .modeling_tf_longformer import (
+    TFLongformerForMaskedLM,
+    TFLongformerForMultipleChoice,
+    TFLongformerForQuestionAnswering,
+    TFLongformerForSequenceClassification,
+    TFLongformerForTokenClassification,
+    TFLongformerModel,
+)
 from .modeling_tf_lxmert import TFLxmertForPreTraining, TFLxmertModel
 from .modeling_tf_marian import TFMarianMTModel
 from .modeling_tf_mbart import TFMBartForConditionalGeneration

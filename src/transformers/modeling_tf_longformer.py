@@ -270,7 +270,6 @@ class TFLongformerLMHead(tf.keras.layers.Layer):
         return x
 
 
-# Copied from transformers.modeling_tf_roberta.TFRobertaEmbeddings
 class TFLongformerEmbeddings(tf.keras.layers.Layer):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
