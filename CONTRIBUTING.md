@@ -308,3 +308,12 @@ Check our [documentation writing guide](https://github.com/huggingface/transform
 for more information.
 
 #### This guide was heavily inspired by the awesome [scikit-learn guide to contributing](https://github.com/scikit-learn/scikit-learn/blob/master/CONTRIBUTING.md)
+
+
+### Develop on Windows
+
+One way one can run the make command on Window is to pass by MSYS2:
+
+1. [Download MSYS2](https://www.msys2.org/), we assume to have it installed in C:\msys64
+2. Open the command line C:\msys64\msys2.exe (it should be available from the start menu)
+3. Run in the shell: `pacman -Syu` and install make with `pacman -S make`
