@@ -3,7 +3,7 @@ MarianMT
 
 **Bugs:** If you see something strange, file a `Github Issue
 <https://github.com/huggingface/transformers/issues/new?assignees=sshleifer&labels=&template=bug-report.md&title>`__
-and assign @sshleifer.
+and assign @patrickvonplaten.
 
 Translations should be similar, but not identical to, output in the test set linked to in each model card.
 

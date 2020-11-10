@@ -388,6 +388,29 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_generative_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
     test_missing_keys = False
 
+    # special case for DoubleHeads model
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class.__name__ == "GPT2DoubleHeadsModel":
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.num_choices, self.model_tester.seq_length),
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                inputs_dict["input_ids"] = inputs_dict["labels"]
+                inputs_dict["token_type_ids"] = inputs_dict["labels"]
+                inputs_dict["mc_token_ids"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.num_choices),
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                inputs_dict["mc_labels"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+        return inputs_dict
+
     def setUp(self):
         self.model_tester = GPT2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GPT2Config, n_embd=37)

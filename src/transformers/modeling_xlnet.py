@@ -16,8 +16,6 @@
 """
  PyTorch XLNet model.
 """
-
-
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -1087,6 +1085,7 @@ class XLNetModel(XLNetPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

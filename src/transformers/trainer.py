@@ -328,7 +328,7 @@ class Trainer:
         self.hp_search_backend = None
         self.use_tune_checkpoints = False
         default_label_names = (
-            ["start_positions, end_positions"]
+            ["start_positions", "end_positions"]
             if type(self.model) in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values()
             else ["labels"]
         )
@@ -1297,7 +1297,8 @@ class Trainer:
                 :obj:`__len__` method.
 
         Returns:
-            A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
+            A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
+            dictionary also contains the epoch number which comes from the training state.
         """
         if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
             raise ValueError("eval_dataset must implement __len__")
