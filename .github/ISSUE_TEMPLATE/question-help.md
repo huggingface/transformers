@@ -15,6 +15,7 @@ assignees: ''
      -->
 
 ## Details
+
 <!-- Description of your issue -->
 
 <!-- You should first ask your question on the forum, and only if
@@ -22,4 +23,4 @@ assignees: ''
 
 **A link to original question on the forum**:
 
-<!-- Your issue will be closed if you don't fill that part. -->
+<!-- Your issue will be closed if you don't fill this part. -->
