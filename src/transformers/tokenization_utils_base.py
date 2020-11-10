@@ -367,8 +367,8 @@ class BatchEncoding(UserDict):
         if not self._encodings:
             raise ValueError("words() is not available when using Python-based tokenizers")
         warnings.warn(
-            "`BatchEncoding.words(batch_index: int = 0)` propperty is deprecated and should be replaced with the identical, "
-            "but more self-explanatory `BatchEncoding.words(batch_index: int = 0)` property.",
+            "`BatchEncoding.words()` property is deprecated and should be replaced with the identical, "
+            "but more self-explanatory `BatchEncoding.word_ids()` property.",
             FutureWarning,
         )
         return self.word_ids(batch_index)
