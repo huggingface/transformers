@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import BertConfig, is_tf_available
-from transformers.testing_utils import require_tf
+from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -328,3 +328,27 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
         self.assertEqual(sorted(output_loading_info["unexpected_keys"]), ["mlm___cls", "nsp___cls"])
         for layer in output_loading_info["missing_keys"]:
             self.assertTrue(layer.split("_")[0] in ["dropout", "classifier"])
+
+
+class TFBertModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference_masked_lm(self):
+        model = TFBertForPreTraining.from_pretrained("lysandre/tiny-bert-random")
+        input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
+        output = model(input_ids)[0]
+
+        expected_shape = [1, 6, 10]
+        self.assertEqual(output.shape, expected_shape)
+
+        print(output[:, :3, :3])
+
+        expected_slice = tf.constant(
+            [
+                [
+                    [0.03706957, 0.10124919, 0.03616843],
+                    [-0.06099961, 0.02266058, 0.00601412],
+                    [-0.06066202, 0.05684517, 0.02038802],
+                ]
+            ]
+        )
+        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-4)
