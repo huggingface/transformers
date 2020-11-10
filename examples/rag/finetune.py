@@ -203,19 +203,19 @@ class GenerativeQAModule(BaseTransformer):
 
         self.distributed_retriever = hparams.distributed_retriever
 
-    # def init_ddp_connection(self, global_rank: int, world_size: int, is_slurm_managing_tasks: bool = True):
-    #     # if global_rank == 0:
-    #     #     import ipdb; ipdb.set_trace()
-    #     logger.info("Custom init_ddp_connection.")
-    #     os.environ["MASTER_PORT"] = str(self.distributed_port)
-    #     super().init_ddp_connection(global_rank, world_size, is_slurm_managing_tasks)
-    #     # if self.is_rag_model:
-    #     #     self.model.retriever.init_retrieval(self.distributed_port)
-    #     if self.is_rag_model:
-    #         if self.distributed_retriever == "pytorch":
-    #             self.model.retriever.init_retrieval(self.distributed_port)
-    #         elif self.distributed_retriever == "ray" and global_rank == 0:
-    #             self.model.retriever.init_retrieval(num_actors=1)
+    def init_ddp_connection(self, global_rank: int, world_size: int, is_slurm_managing_tasks: bool = True):
+        # if global_rank == 0:
+        #     import ipdb; ipdb.set_trace()
+        logger.info("Custom init_ddp_connection.")
+        os.environ["MASTER_PORT"] = str(self.distributed_port)
+        super().init_ddp_connection(global_rank, world_size, is_slurm_managing_tasks)
+        # if self.is_rag_model:
+        #     self.model.retriever.init_retrieval(self.distributed_port)
+        if self.is_rag_model:
+            if self.distributed_retriever == "pytorch":
+                self.model.retriever.init_retrieval(self.distributed_port)
+            elif self.distributed_retriever == "ray" and global_rank == 0:
+                self.model.retriever.init_retrieval(num_actors=1)
 
     def forward(self, input_ids, **kwargs):
         return self.model(input_ids, **kwargs)
