@@ -618,20 +618,17 @@ class BatchEncoding(UserDict):
                 if prepend_batch_axis:
                     value = [value]
 
-                # don't reconvert if it's the right type already
-                if is_tensor(value):
-                    continue
+                if not is_tensor(value):
+                    tensor = as_tensor(value)
 
-                tensor = as_tensor(value)
+                    # Removing this for now in favor of controlling the shape with `prepend_batch_axis`
+                    # # at-least2d
+                    # if tensor.ndim > 2:
+                    #     tensor = tensor.squeeze(0)
+                    # elif tensor.ndim < 2:
+                    #     tensor = tensor[None, :]
 
-                # Removing this for now in favor of controlling the shape with `prepend_batch_axis`
-                # # at-least2d
-                # if tensor.ndim > 2:
-                #     tensor = tensor.squeeze(0)
-                # elif tensor.ndim < 2:
-                #     tensor = tensor[None, :]
-
-                self[key] = tensor
+                    self[key] = tensor
             except:  # noqa E722
                 if key == "overflowing_tokens":
                     raise ValueError(
