@@ -20,7 +20,7 @@ import unittest
 
 import requests
 from requests.exceptions import HTTPError
-from transformers.hf_api import HfApi, HfFolder, ModelInfo, PresignedUrl, S3Obj
+from transformers.hf_api import HfApi, HfFolder, ModelInfo, PresignedUrl, RepoObj, S3Obj
 
 
 USER = "__DUMMY_TRANSFORMERS_USER__"
@@ -35,6 +35,7 @@ FILES = [
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/empty.txt"),
     ),
 ]
+REPO_NAME = "my-model-{}".format(int(time.time()))
 ENDPOINT_STAGING = "https://moon-staging.huggingface.co"
 
 
@@ -78,15 +79,6 @@ class HfApiEndpointsTest(HfApiCommonTest):
         urls = self._api.presign(token=self._token, filename="nested/valid_org.txt", organization="valid_org")
         self.assertIsInstance(urls, PresignedUrl)
 
-    def test_presign_invalid(self):
-        try:
-            _ = self._api.presign(token=self._token, filename="non_nested.json")
-        except HTTPError as e:
-            self.assertIsNotNone(e.response.text)
-            self.assertTrue("Filename invalid" in e.response.text)
-        else:
-            self.fail("Expected an exception")
-
     def test_presign(self):
         for FILE_KEY, FILE_PATH in FILES:
             urls = self._api.presign(token=self._token, filename=FILE_KEY)
@@ -108,6 +100,17 @@ class HfApiEndpointsTest(HfApiCommonTest):
         if len(objs) > 0:
             o = objs[-1]
             self.assertIsInstance(o, S3Obj)
+
+    def test_list_repos_objs(self):
+        objs = self._api.list_repos_objs(token=self._token)
+        self.assertIsInstance(objs, list)
+        if len(objs) > 0:
+            o = objs[-1]
+            self.assertIsInstance(o, RepoObj)
+
+    def test_create_and_delete_repo(self):
+        self._api.create_repo(token=self._token, name=REPO_NAME)
+        self._api.delete_repo(token=self._token, name=REPO_NAME)
 
 
 class HfApiPublicTest(unittest.TestCase):
