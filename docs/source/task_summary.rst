@@ -513,7 +513,7 @@ Here, the model generates a random text with a total maximal length of *50* toke
 concerned, I will"*. The default arguments of ``PreTrainedModel.generate()`` can be directly overridden in the
 pipeline, as is shown above for the argument ``max_length``.
 
-Here is an example of text generation using ``XLNet`` and its tokenzier.
+Here is an example of text generation using ``XLNet`` and its tokenizer.
 
 .. code-block::
 
@@ -834,7 +834,7 @@ Here is an example of doing translation using a model and a tokenizer. The proce
 
 1. Instantiate a tokenizer and a model from the checkpoint name. Summarization is usually done using an encoder-decoder
    model, such as ``Bart`` or ``T5``.
-2. Define the article that should be summarizaed.
+2. Define the article that should be summarized.
 3. Add the T5 specific prefix "translate English to German: "
 4. Use the ``PreTrainedModel.generate()`` method to perform the translation.
 

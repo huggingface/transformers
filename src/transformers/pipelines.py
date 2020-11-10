@@ -1057,12 +1057,12 @@ class ZeroShotClassificationPipeline(Pipeline):
         return -1
 
     def _parse_and_tokenize(
-        self, sequences, candidal_labels, hypothesis_template, padding=True, add_special_tokens=True, **kwargs
+        self, sequences, candidate_labels, hypothesis_template, padding=True, add_special_tokens=True, **kwargs
     ):
         """
         Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
         """
-        sequence_pairs = self._args_parser(sequences, candidal_labels, hypothesis_template)
+        sequence_pairs = self._args_parser(sequences, candidate_labels, hypothesis_template)
         inputs = self.tokenizer(
             sequence_pairs,
             add_special_tokens=add_special_tokens,
@@ -2758,7 +2758,9 @@ def pipeline(
             - :obj:`"fill-mask"`: will return a :class:`~transformers.FillMaskPipeline`.
             - :obj:`"summarization"`: will return a :class:`~transformers.SummarizationPipeline`.
             - :obj:`"translation_xx_to_yy"`: will return a :class:`~transformers.TranslationPipeline`.
+            - :obj:`"text2text-generation"`: will return a :class:`~transformers.Text2TextGenerationPipeline`.
             - :obj:`"text-generation"`: will return a :class:`~transformers.TextGenerationPipeline`.
+            - :obj:`"zero-shot-classification:`: will return a :class:`~transformers.ZeroShotClassificationPipeline`.
             - :obj:`"conversation"`: will return a :class:`~transformers.ConversationalPipeline`.
         model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`):
             The model that will be used by the pipeline to make predictions. This can be a model identifier or an

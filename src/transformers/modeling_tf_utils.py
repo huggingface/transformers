@@ -396,7 +396,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             new_num_tokens (:obj:`int`, `optional`):
                 The number of new tokens in the embedding matrix. Increasing the size will add newly initialized
                 vectors at the end. Reducing the size will remove vectors from the end. If not provided or :obj:`None`,
-                just returns a pointer to the input tokens :obj:`tf.Variable` module of the model wihtout doing
+                just returns a pointer to the input tokens :obj:`tf.Variable` module of the model without doing
                 anything.
 
         Return:
@@ -442,7 +442,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
                 Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
                 vectors from the end. If not provided or :obj:`None`, just returns a pointer to the input tokens
-                :obj:`tf.Variable`` module of the model wihtout doing anything.
+                :obj:`tf.Variable`` module of the model without doing anything.
 
         Return:
             :obj:`tf.Variable`: Pointer to the resized Embedding Module or the old Embedding Module if

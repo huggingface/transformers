@@ -16,7 +16,7 @@ This model takes [facebook/bart-large-mnli](https://huggingface.co/facebook/bart
 
 You can play with an interactive demo of this zero-shot technique with this model, as well as the non-finetuned [facebook/bart-large-mnli](https://huggingface.co/facebook/bart-large-mnli), [here](https://huggingface.co/zero-shot/).
 
-## Inteded Usage
+## Intended Usage
 
 This model was fine-tuned on topic classification and will perform best at zero-shot topic classification. Use `hypothesis_template="This text is about {}."` as this is the template used during fine-tuning.
 

@@ -539,7 +539,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                         ) != len(decoder_modules):
                             # this can happen if the name corresponds to the position in a list module list of layers
                             # in this case the decoder has added a cross-attention that the encoder does not have
-                            # thus skip this step and substract one layer pos from encoder
+                            # thus skip this step and subtract one layer pos from encoder
                             encoder_layer_pos -= 1
                             continue
                     elif name not in encoder_modules:
@@ -598,7 +598,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             new_num_tokens (:obj:`int`, `optional`):
                 The number of new tokens in the embedding matrix. Increasing the size will add newly initialized
                 vectors at the end. Reducing the size will remove vectors from the end. If not provided or :obj:`None`,
-                just returns a pointer to the input tokens :obj:`torch.nn.Embedding` module of the model wihtout doing
+                just returns a pointer to the input tokens :obj:`torch.nn.Embedding` module of the model without doing
                 anything.
 
         Return:
@@ -639,7 +639,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
                 Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
                 vectors from the end. If not provided or :obj:`None`, just returns a pointer to the input tokens
-                :obj:`torch.nn.Embedding`` module of the model wihtout doing anything.
+                :obj:`torch.nn.Embedding`` module of the model without doing anything.
 
         Return:
             :obj:`torch.nn.Embedding`: Pointer to the resized Embedding Module or the old Embedding Module if
@@ -1366,7 +1366,7 @@ class SQuADHead(nn.Module):
                 Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS). 1.0 means token
                 should be masked.
             return_dict (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOuput` instead of a plain tuple.
+                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 
         Returns:
         """
@@ -1652,7 +1652,7 @@ def apply_chunking_to_forward(
             The input tensors of ``forward_fn`` which will be chunked
 
     Returns:
-        :obj:`torch.Tensor`: A tensor with the same shape as the :obj:`foward_fn` would have given if applied`.
+        :obj:`torch.Tensor`: A tensor with the same shape as the :obj:`forward_fn` would have given if applied`.
 
 
     Examples::
@@ -1673,7 +1673,7 @@ def apply_chunking_to_forward(
         input_tensor.shape == tensor_shape for input_tensor in input_tensors
     ), "All input tenors have to be of the same shape"
 
-    # inspect.signature exist since python 3.5 and is a python method -> no problem with backward compability
+    # inspect.signature exist since python 3.5 and is a python method -> no problem with backward compatibility
     num_args_in_forward_chunk_fn = len(inspect.signature(forward_fn).parameters)
     assert num_args_in_forward_chunk_fn == len(
         input_tensors
