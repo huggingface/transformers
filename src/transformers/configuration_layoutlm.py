@@ -22,8 +22,8 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "layoutlm-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/microsoft/layoutlm-base-uncased/config.json",
-    "layoutlm-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/microsoft/layoutlm-large-uncased/config.json",
+    "layoutlm-base-uncased": "https://huggingface.co/microsoft/layoutlm-base-uncased/resolve/main/config.json",
+    "layoutlm-large-uncased": "https://huggingface.co/microsoft/layoutlm-large-uncased/resolve/main/config.json",
 }
 
 

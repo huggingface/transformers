@@ -43,11 +43,11 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 ####################################################
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "t5-small": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        "t5-base": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        "t5-large": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        "t5-3b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        "t5-11b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
+        "t5-small": "https://huggingface.co/t5-small/resolve/main/spiece.model",
+        "t5-base": "https://huggingface.co/t5-base/resolve/main/spiece.model",
+        "t5-large": "https://huggingface.co/t5-large/resolve/main/spiece.model",
+        "t5-3b": "https://huggingface.co/t5-3b/resolve/main/spiece.model",
+        "t5-11b": "https://huggingface.co/t5-11b/resolve/main/spiece.model",
     }
 }
 

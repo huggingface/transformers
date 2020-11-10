@@ -20,7 +20,7 @@ from .utils import logging
 
 logger = logging.get_logger(__name__)
 
-CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP = {"ctrl": "https://s3.amazonaws.com/models.huggingface.co/bert/ctrl-config.json"}
+CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP = {"ctrl": "https://huggingface.co/ctrl/resolve/main/config.json"}
 
 
 class CTRLConfig(PretrainedConfig):

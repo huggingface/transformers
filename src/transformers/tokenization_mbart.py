@@ -25,7 +25,7 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 _all_mbart_models = ["facebook/mbart-large-en-ro", "facebook/mbart-large-cc25"]
-SPM_URL = "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/sentence.bpe.model"
+SPM_URL = "https://huggingface.co/facebook/mbart-large-en-ro/resolve/main/sentence.bpe.model"
 
 FAIRSEQ_LANGUAGE_CODES = [
     "ar_AR",

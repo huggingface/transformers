@@ -29,10 +29,10 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 ####################################################
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "unc-nlp/lxmert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
+        "unc-nlp/lxmert-base-uncased": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
     },
     "tokenizer_file": {
-        "unc-nlp/lxmert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
+        "unc-nlp/lxmert-base-uncased": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
     },
 }
 

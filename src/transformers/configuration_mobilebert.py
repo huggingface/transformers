@@ -19,7 +19,7 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "mobilebert-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/google/mobilebert-uncased/config.json"
+    "mobilebert-uncased": "https://huggingface.co/google/mobilebert-uncased/resolve/main/config.json"
 }
 
 

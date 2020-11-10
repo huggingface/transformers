@@ -22,8 +22,8 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "xlnet-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-config.json",
-    "xlnet-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-large-cased-config.json",
+    "xlnet-base-cased": "https://huggingface.co/xlnet-base-cased/resolve/main/config.json",
+    "xlnet-large-cased": "https://huggingface.co/xlnet-large-cased/resolve/main/config.json",
 }
 
 

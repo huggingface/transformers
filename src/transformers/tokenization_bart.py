@@ -24,8 +24,8 @@ logger = logging.get_logger(__name__)
 
 
 # vocab and merges same as roberta
-vocab_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-vocab.json"
-merges_url = "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-merges.txt"
+vocab_url = "https://huggingface.co/roberta-large/resolve/main/vocab.json"
+merges_url = "https://huggingface.co/roberta-large/resolve/main/merges.txt"
 _all_bart_models = [
     "facebook/bart-base",
     "facebook/bart-large",

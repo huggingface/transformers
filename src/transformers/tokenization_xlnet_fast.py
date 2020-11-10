@@ -36,12 +36,12 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "xlnet-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-spiece.model",
-        "xlnet-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-large-cased-spiece.model",
+        "xlnet-base-cased": "https://huggingface.co/xlnet-base-cased/resolve/main/spiece.model",
+        "xlnet-large-cased": "https://huggingface.co/xlnet-large-cased/resolve/main/spiece.model",
     },
     "tokenizer_file": {
-        "xlnet-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-tokenizer.json",
-        "xlnet-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-large-cased-tokenizer.json",
+        "xlnet-base-cased": "https://huggingface.co/xlnet-base-cased/resolve/main/tokenizer.json",
+        "xlnet-large-cased": "https://huggingface.co/xlnet-large-cased/resolve/main/tokenizer.json",
     },
 }
 

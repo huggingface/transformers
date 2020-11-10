@@ -30,32 +30,32 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-ctx_encoder-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
-        "facebook/dpr-ctx_encoder-multiset-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
+        "facebook/dpr-ctx_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
+        "facebook/dpr-ctx_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
     },
     "tokenizer_file": {
-        "facebook/dpr-ctx_encoder-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
-        "facebook/dpr-ctx_encoder-multiset-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
+        "facebook/dpr-ctx_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
+        "facebook/dpr-ctx_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
     },
 }
 QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-question_encoder-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
-        "facebook/dpr-question_encoder-multiset-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
+        "facebook/dpr-question_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
+        "facebook/dpr-question_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
     },
     "tokenizer_file": {
-        "facebook/dpr-question_encoder-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
-        "facebook/dpr-question_encoder-multiset-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
+        "facebook/dpr-question_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
+        "facebook/dpr-question_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
     },
 }
 READER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-reader-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
-        "facebook/dpr-reader-multiset-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
+        "facebook/dpr-reader-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
+        "facebook/dpr-reader-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
     },
     "tokenizer_file": {
-        "facebook/dpr-reader-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
-        "facebook/dpr-reader-multiset-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
+        "facebook/dpr-reader-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
+        "facebook/dpr-reader-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
     },
 }
 

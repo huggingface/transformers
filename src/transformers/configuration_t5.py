@@ -21,11 +21,11 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 T5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "t5-small": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-small-config.json",
-    "t5-base": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-base-config.json",
-    "t5-large": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-large-config.json",
-    "t5-3b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-3b-config.json",
-    "t5-11b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-11b-config.json",
+    "t5-small": "https://huggingface.co/t5-small/resolve/main/config.json",
+    "t5-base": "https://huggingface.co/t5-base/resolve/main/config.json",
+    "t5-large": "https://huggingface.co/t5-large/resolve/main/config.json",
+    "t5-3b": "https://huggingface.co/t5-3b/resolve/main/config.json",
+    "t5-11b": "https://huggingface.co/t5-11b/resolve/main/config.json",
 }
 
 
