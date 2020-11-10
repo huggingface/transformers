@@ -412,17 +412,17 @@ decorators are used to set the requirements of tests CPU/GPU/TPU-wise:
 Let's depict the GPU requirements in the following table:
 
 
-+----------+---------------------------------+
-| n gpus   |  decorator                      |
-+==========+=================================+
-| ``>= 0`` | ``@require_torch``              |
-+----------+---------------------------------+
-| ``>= 1`` | ``@require_torch_gpu``          |
-+----------+---------------------------------+
++----------+----------------------------------+
+| n gpus   |  decorator                       |
++==========+==================================+
+| ``>= 0`` | ``@require_torch``               |
++----------+----------------------------------+
+| ``>= 1`` | ``@require_torch_gpu``           |
++----------+----------------------------------+
 | ``>= 2`` | ``@require_torch_multi_gpu``     |
-+----------+---------------------------------+
++----------+----------------------------------+
 | ``< 2``  | ``@require_torch_non_multi_gpu`` |
-+----------+---------------------------------+
++----------+----------------------------------+
 
 
 For example, here is a test that must be run only when there are 2 or more GPUs available and pytorch is installed:
