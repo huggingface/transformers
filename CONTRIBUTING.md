@@ -316,6 +316,6 @@ The Windows developers will need some more tools to properly run and test transf
 
 1. Install [Miniconda for Windows](https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe)
 2. For those who wants to use the makefile we recommend to install MSYS2:
-   * [Download MSYS2](), we assume to have it installed in C:\msys64
+   * [Download MSYS2](https://www.msys2.org/), we assume to have it installed in C:\msys64
    * Open the command line C:\msys64\msys2.exe (it should be available from the start menu)
    * Run in the shell: `pacman -Syu` and install make with `pacman -S make`
