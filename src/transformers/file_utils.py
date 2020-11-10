@@ -186,7 +186,7 @@ except ImportError:
 
 
 try:
-    import protobuf  # noqa: F401
+    import google.protobuf  # noqa: F401
 
     _protobuf_available = True
 
