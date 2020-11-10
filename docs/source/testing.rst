@@ -409,6 +409,22 @@ decorators are used to set the requirements of tests CPU/GPU/TPU-wise:
 * ``require_torch_non_multigpu`` - as ``require_torch`` plus requires 0 or 1 GPUs
 * ``require_torch_tpu`` - as ``require_torch`` plus requires at least 1 TPU
 
+Let's depict the GPU requirements in the following table:
+
+
++----------+---------------------------------+
+| n gpus   |  decorator                      |
++==========+=================================+
+| ``>= 0`` | ``@require_torch``              |
++----------+---------------------------------+
+| ``>= 1`` | ``@require_torch_gpu``          |
++----------+---------------------------------+
+| ``>= 2`` | ``@require_torch_multigpu``     |
++----------+---------------------------------+
+| ``< 2``  | ``@require_torch_non_multigpu`` |
++----------+---------------------------------+
+
+
 For example, here is a test that must be run only when there are 2 or more GPUs available and pytorch is installed:
 
 .. code-block:: python
@@ -450,7 +466,8 @@ Inside tests:
 
 .. code-block:: bash
 
-   torch.cuda.device_count()
+   from transformers.testing_utils import get_gpu_count
+   n_gpu = get_gpu_count() # works with torch and tf
 
 
 
