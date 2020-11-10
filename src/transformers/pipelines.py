@@ -86,7 +86,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def get_framework(model):
+def get_framework(model, revision: Optional[str] = None):
     """
     Select framework (TensorFlow or PyTorch) to use.
 
@@ -103,14 +103,14 @@ def get_framework(model):
         )
     if isinstance(model, str):
         if is_torch_available() and not is_tf_available():
-            model = AutoModel.from_pretrained(model)
+            model = AutoModel.from_pretrained(model, revision=revision)
         elif is_tf_available() and not is_torch_available():
-            model = TFAutoModel.from_pretrained(model)
+            model = TFAutoModel.from_pretrained(model, revision=revision)
         else:
             try:
-                model = AutoModel.from_pretrained(model)
+                model = AutoModel.from_pretrained(model, revision=revision)
             except OSError:
-                model = TFAutoModel.from_pretrained(model)
+                model = TFAutoModel.from_pretrained(model, revision=revision)
 
     framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
     return framework
@@ -1333,18 +1333,17 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
     def __call__(self, *args, **kwargs):
 
         if args is not None and len(args) > 0:
-            if isinstance(args, str):
-                inputs = [args]
-            else:
-                inputs = args
+            inputs = list(args)
             batch_size = len(inputs)
+        else:
+            raise ValueError("At least one input is required.")
 
-        offset_mapping = kwargs.get("offset_mapping", None)
+        offset_mapping = kwargs.get("offset_mapping")
         if offset_mapping:
             if isinstance(offset_mapping, list) and isinstance(offset_mapping[0], tuple):
                 offset_mapping = [offset_mapping]
             if len(offset_mapping) != batch_size:
-                raise ("offset_mapping should have the same batch size as the input")
+                raise ValueError("offset_mapping should have the same batch size as the input")
         return inputs, offset_mapping
 
 
@@ -1379,20 +1378,19 @@ class TokenClassificationPipeline(Pipeline):
         tokenizer: PreTrainedTokenizer,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
-        args_parser: ArgumentHandler = None,
+        args_parser: ArgumentHandler = TokenClassificationArgumentHandler(),
         device: int = -1,
         binary_output: bool = False,
         ignore_labels=["O"],
         task: str = "",
         grouped_entities: bool = False,
-        ignore_subwords: bool = True,
+        ignore_subwords: bool = False,
     ):
         super().__init__(
             model=model,
             tokenizer=tokenizer,
             modelcard=modelcard,
             framework=framework,
-            args_parser=TokenClassificationArgumentHandler(),
             device=device,
             binary_output=binary_output,
             task=task,
@@ -1405,9 +1403,16 @@ class TokenClassificationPipeline(Pipeline):
         )
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
+        self._args_parser = args_parser
         self.ignore_labels = ignore_labels
         self.grouped_entities = grouped_entities
         self.ignore_subwords = ignore_subwords
+
+        if self.ignore_subwords and not self.tokenizer.is_fast:
+            raise ValueError(
+                "Slow tokenizers cannot ignore subwords. Please set the `ignore_subwords` option"
+                "to `False` or use a fast tokenizer."
+            )
 
     def __call__(self, inputs: Union[str, List[str]], **kwargs):
         """
@@ -1429,10 +1434,7 @@ class TokenClassificationPipeline(Pipeline):
               corresponding token in the sentence.
         """
 
-        if isinstance(inputs, str):
-            inputs = [inputs]
-
-        offset_mappings = kwargs.get("offset_mappings")
+        inputs, offset_mappings = self._args_parser(inputs, **kwargs)
 
         answers = []
 
@@ -1450,14 +1452,13 @@ class TokenClassificationPipeline(Pipeline):
                     return_offsets_mapping=self.tokenizer.is_fast,
                 )
                 if self.tokenizer.is_fast:
-                    offset_mapping = tokens["offset_mapping"].cpu().numpy()[0]
-                    del tokens["offset_mapping"]
+                    offset_mapping = tokens.pop("offset_mapping").cpu().numpy()[0]
                 elif offset_mappings:
                     offset_mapping = offset_mappings[i]
                 else:
-                    raise Exception("To decode [UNK] tokens use a fast tokenizer or provide offset_mapping parameter")
-                special_tokens_mask = tokens["special_tokens_mask"].cpu().numpy()[0]
-                del tokens["special_tokens_mask"]
+                    offset_mapping = None
+
+                special_tokens_mask = tokens.pop("special_tokens_mask").cpu().numpy()[0]
 
                 # Forward
                 if self.framework == "tf":
@@ -1482,14 +1483,17 @@ class TokenClassificationPipeline(Pipeline):
             ]
 
             for idx, label_idx in filtered_labels_idx:
-                start_ind, end_ind = offset_mapping[idx]
-                word_ref = sentence[start_ind:end_ind]
-                word = self.tokenizer.convert_ids_to_tokens([int(input_ids[idx])])[0]
-                is_subword = len(word_ref) != len(word)
+                if offset_mapping is not None:
+                    start_ind, end_ind = offset_mapping[idx]
+                    word_ref = sentence[start_ind:end_ind]
+                    word = self.tokenizer.convert_ids_to_tokens([int(input_ids[idx])])[0]
+                    is_subword = len(word_ref) != len(word)
 
-                if int(input_ids[idx]) == self.tokenizer.unk_token_id:
-                    word = word_ref
-                    is_subword = False
+                    if int(input_ids[idx]) == self.tokenizer.unk_token_id:
+                        word = word_ref
+                        is_subword = False
+                else:
+                    word = self.tokenizer.convert_ids_to_tokens(int(input_ids[idx]))
 
                 entity = {
                     "word": word,
@@ -2730,6 +2734,7 @@ def pipeline(
     config: Optional[Union[str, PretrainedConfig]] = None,
     tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
     framework: Optional[str] = None,
+    revision: Optional[str] = None,
     use_fast: bool = False,
     **kwargs
 ) -> Pipeline:
@@ -2784,6 +2789,10 @@ def pipeline(
             If no framework is specified, will default to the one currently installed. If no framework is specified and
             both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if no model
             is provided.
+        revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+            When passing a task name or a string model identifier: The specific model version to use. It can be a
+            branch name, a tag name, or a commit id, since we use a git-based system for storing models and other
+            artifacts on huggingface.co, so ``revision`` can be any identifier allowed by git.
         use_fast (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use a Fast tokenizer if possible (a :class:`~transformers.PreTrainedTokenizerFast`).
         kwargs:
@@ -2845,17 +2854,19 @@ def pipeline(
         if isinstance(tokenizer, tuple):
             # For tuple we have (tokenizer name, {kwargs})
             use_fast = tokenizer[1].pop("use_fast", use_fast)
-            tokenizer = AutoTokenizer.from_pretrained(tokenizer[0], use_fast=use_fast, **tokenizer[1])
+            tokenizer = AutoTokenizer.from_pretrained(
+                tokenizer[0], use_fast=use_fast, revision=revision, **tokenizer[1]
+            )
         else:
-            tokenizer = AutoTokenizer.from_pretrained(tokenizer, use_fast=use_fast)
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer, revision=revision, use_fast=use_fast)
 
     # Instantiate config if needed
     if isinstance(config, str):
-        config = AutoConfig.from_pretrained(config)
+        config = AutoConfig.from_pretrained(config, revision=revision)
 
     # Instantiate modelcard if needed
     if isinstance(modelcard, str):
-        modelcard = ModelCard.from_pretrained(modelcard)
+        modelcard = ModelCard.from_pretrained(modelcard, revision=revision)
 
     # Instantiate model if needed
     if isinstance(model, str):
@@ -2873,7 +2884,7 @@ def pipeline(
                 "Model might be a PyTorch model (ending with `.bin`) but PyTorch is not available. "
                 "Trying to load the model with Tensorflow."
             )
-        model = model_class.from_pretrained(model, config=config, **model_kwargs)
+        model = model_class.from_pretrained(model, config=config, revision=revision, **model_kwargs)
         if task == "translation" and model.config.task_specific_params:
             for key in model.config.task_specific_params:
                 if key.startswith("translation"):

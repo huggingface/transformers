@@ -61,6 +61,7 @@ from .modeling_tf_bart import TFBartForConditionalGeneration, TFBartModel
 from .modeling_tf_bert import (
     TFBertForMaskedLM,
     TFBertForMultipleChoice,
+    TFBertForNextSentencePrediction,
     TFBertForPreTraining,
     TFBertForQuestionAnswering,
     TFBertForSequenceClassification,
@@ -120,6 +121,7 @@ from .modeling_tf_mbart import TFMBartForConditionalGeneration
 from .modeling_tf_mobilebert import (
     TFMobileBertForMaskedLM,
     TFMobileBertForMultipleChoice,
+    TFMobileBertForNextSentencePrediction,
     TFMobileBertForPreTraining,
     TFMobileBertForQuestionAnswering,
     TFMobileBertForSequenceClassification,
@@ -355,6 +357,13 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     ]
 )
 
+TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = OrderedDict(
+    [
+        (BertConfig, TFBertForNextSentencePrediction),
+        (MobileBertConfig, TFMobileBertForNextSentencePrediction),
+    ]
+)
+
 
 TF_AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
 
@@ -420,9 +429,10 @@ TF_AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
                 Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (e.g., not try downloading the model).
-            use_cdn(:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether or not to use Cloudfront (a Content Delivery Network, or CDN) when searching for the model on
-                our S3 (faster). Should be set to :obj:`False` for checkpoints larger than 20GB.
+            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+                identifier allowed by git.
             kwargs (additional keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
@@ -1409,5 +1419,103 @@ class TFAutoModelForMultipleChoice:
                 config.__class__,
                 cls.__name__,
                 ", ".join(c.__name__ for c in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys()),
+            )
+        )
+
+
+class TFAutoModelForNextSentencePrediction:
+    r"""
+    This is a generic model class that will be instantiated as one of the model classes of the library---with a
+    multiple choice classification head---when created with the when created with the
+    :meth:`~transformers.TFAutoModelForNextSentencePrediction.from_pretrained` class method or the
+    :meth:`~transformers.TFAutoModelForNextSentencePrediction.from_config` class method.
+
+    This class cannot be instantiated directly using ``__init__()`` (throws an error).
+    """
+
+    def __init__(self):
+        raise EnvironmentError(
+            "TFAutoModelForNextSentencePrediction is designed to be instantiated "
+            "using the `TFAutoModelForNextSentencePrediction.from_pretrained(pretrained_model_name_or_path)` or "
+            "`TFAutoModelForNextSentencePrediction.from_config(config)` methods."
+        )
+
+    @classmethod
+    @replace_list_option_in_docstrings(TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING, use_model_types=False)
+    def from_config(cls, config):
+        r"""
+        Instantiates one of the model classes of the library---with a next sentence prediction head---from a
+        configuration.
+
+        Note:
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.TFAutoModelForNextSentencePrediction.from_pretrained` to
+            load the model weights.
+
+        Args:
+            config (:class:`~transformers.PretrainedConfig`):
+                The model class to instantiate is selected based on the configuration class:
+
+                List options
+
+        Examples::
+
+            >>> from transformers import AutoConfig, TFAutoModelForNextSentencePrediction
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = TFAutoModelForNextSentencePrediction.from_config(config)
+        """
+        if type(config) in TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys():
+            return TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING[type(config)](config)
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__,
+                cls.__name__,
+                ", ".join(c.__name__ for c in TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys()),
+            )
+        )
+
+    @classmethod
+    @replace_list_option_in_docstrings(TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING)
+    @add_start_docstrings(
+        "Instantiate one of the model classes of the library---with a next sentence prediction head---from a "
+        "pretrained model.",
+        TF_AUTO_MODEL_PRETRAINED_DOCSTRING,
+    )
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        r"""
+        Examples::
+
+            >>> from transformers import AutoConfig, TFAutoModelForNextSentencePrediction
+
+            >>> # Download model and configuration from S3 and cache.
+            >>> model = TFAutoModelForNextSentencePrediction.from_pretrained('bert-base-uncased')
+
+            >>> # Update configuration during loading
+            >>> model = TFAutoModelForNextSentencePrediction.from_pretrained('bert-base-uncased', output_attentions=True)
+            >>> model.config.output_attentions
+            True
+
+            >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
+            >>> config = AutoConfig.from_json_file('./pt_model/bert_pt_model_config.json')
+            >>> model = TFAutoModelForNextSentencePrediction.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
+        """
+        config = kwargs.pop("config", None)
+        if not isinstance(config, PretrainedConfig):
+            config, kwargs = AutoConfig.from_pretrained(
+                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+            )
+
+        if type(config) in TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys():
+            return TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__,
+                cls.__name__,
+                ", ".join(c.__name__ for c in TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys()),
             )
         )
