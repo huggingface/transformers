@@ -19,12 +19,13 @@ done something similar on your task, either using the model directly in your own
 `model hub <https://huggingface.co/models>`__.
 
 Model versioning
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Since version v3.5.0, the model hub has built-in model versioning based on git and git-lfs. It is based on the paradigm
-that one model == one repo.
+that one model *is* one repo.
 
 This allows:
+
 - built-in versioning
 - access control
 - scalability
@@ -44,8 +45,8 @@ For instance:
 Basic steps
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-In order to upload a model, you'll need to first create a git repo; which will then be pushed to our remote, allowing
-users to clone it and you to push to it.
+In order to upload a model, you'll need to first create a git repo. This repo will live on the model hub, allowing
+users to clone it and you (and your organization members) to push to it.
 
 To create a repo:
 
@@ -54,7 +55,7 @@ To create a repo:
     transformers-cli repo create your-model-name
 
 This creates a repo on the model hub, which can be cloned. You can then add/remove from that repo as you would with
-any other repo.
+any other git repo.
 
 .. code-block::
 
@@ -80,7 +81,27 @@ Or, if you're using the Trainer API
 .. code-block::
 
     >>> trainer.save_model("path/to/awesome-name-you-picked")
-    >>> tokenizer.save_pretrained("path/to/awesome-name-you-picked")
+
+You can then add these files to the staging environment and verify that they have been correctly staged with the ``git status`` command:
+
+.. code-block::
+
+    git add --all
+    git status
+
+Finally, the files should be comitted:
+
+.. code-block::
+
+    git commit -m "First version of the your-model-name model and tokenizer."
+
+And pushed to the remote:
+
+.. code-block::
+
+    git push
+
+
 
 Make your model work on all frameworks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
