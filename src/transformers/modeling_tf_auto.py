@@ -121,6 +121,7 @@ from .modeling_tf_mbart import TFMBartForConditionalGeneration
 from .modeling_tf_mobilebert import (
     TFMobileBertForMaskedLM,
     TFMobileBertForMultipleChoice,
+    TFMobileBertForNextSentencePrediction,
     TFMobileBertForPreTraining,
     TFMobileBertForQuestionAnswering,
     TFMobileBertForSequenceClassification,
@@ -359,6 +360,7 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
 TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = OrderedDict(
     [
         (BertConfig, TFBertForNextSentencePrediction),
+        (MobileBertConfig, TFMobileBertForNextSentencePrediction),
     ]
 )
 
