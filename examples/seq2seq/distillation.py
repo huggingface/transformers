@@ -45,6 +45,7 @@ class BartSummarizationDistiller(SummarizationModule):
         )
         if hparams.length_penalty != -1:
             student.config.length_penalty = hparams.length_penalty
+        hparams.tokenizer_name = hparams.teacher  # Use teacher's tokenizer
         super().__init__(hparams, model=student, config=student.config)
         model_type = student.config.model_type
         self.e_layer_ids, self.d_layer_ids = e_layer_ids, d_layer_ids  # type: List[int], List[int]

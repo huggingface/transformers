@@ -11,7 +11,7 @@ from save_len_file import save_len_file
 from test_seq2seq_examples import ARTICLES, BART_TINY, MARIAN_TINY, MBART_TINY, SUMMARIES, T5_TINY, make_test_data_dir
 from transformers import AutoTokenizer
 from transformers.modeling_bart import shift_tokens_right
-from transformers.testing_utils import TestCasePlus, slow
+from transformers.testing_utils import TestCasePlus, require_torch_non_multigpu_but_fix_me, slow
 from utils import FAIRSEQ_AVAILABLE, DistributedSortishSampler, LegacySeq2SeqDataset, Seq2SeqDataset
 
 
@@ -30,6 +30,7 @@ class TestAll(TestCasePlus):
         ],
     )
     @slow
+    @require_torch_non_multigpu_but_fix_me
     def test_seq2seq_dataset_truncation(self, tok_name):
         tokenizer = AutoTokenizer.from_pretrained(tok_name)
         tmp_dir = make_test_data_dir(tmp_dir=self.get_auto_remove_tmp_dir())
@@ -69,6 +70,7 @@ class TestAll(TestCasePlus):
             break  # No need to test every batch
 
     @parameterized.expand([BART_TINY, BERT_BASE_CASED])
+    @require_torch_non_multigpu_but_fix_me
     def test_legacy_dataset_truncation(self, tok):
         tokenizer = AutoTokenizer.from_pretrained(tok)
         tmp_dir = make_test_data_dir(tmp_dir=self.get_auto_remove_tmp_dir())
@@ -93,6 +95,7 @@ class TestAll(TestCasePlus):
             assert max_len_target > trunc_target  # Truncated
             break  # No need to test every batch
 
+    @require_torch_non_multigpu_but_fix_me
     def test_pack_dataset(self):
         tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
 
@@ -111,6 +114,7 @@ class TestAll(TestCasePlus):
         assert orig_paths == new_paths
 
     @pytest.mark.skipif(not FAIRSEQ_AVAILABLE, reason="This test requires fairseq")
+    @require_torch_non_multigpu_but_fix_me
     def test_dynamic_batch_size(self):
         if not FAIRSEQ_AVAILABLE:
             return
@@ -135,6 +139,7 @@ class TestAll(TestCasePlus):
         if failures:
             raise AssertionError(f"too many tokens in {len(failures)} batches")
 
+    @require_torch_non_multigpu_but_fix_me
     def test_sortish_sampler_reduces_padding(self):
         ds, _, tokenizer = self._get_dataset(max_len=512)
         bs = 2
@@ -174,6 +179,7 @@ class TestAll(TestCasePlus):
         )
         return ds, max_tokens, tokenizer
 
+    @require_torch_non_multigpu_but_fix_me
     def test_distributed_sortish_sampler_splits_indices_between_procs(self):
         ds, max_tokens, tokenizer = self._get_dataset()
         ids1 = set(DistributedSortishSampler(ds, 256, num_replicas=2, rank=0, add_extra_examples=False))
@@ -189,6 +195,7 @@ class TestAll(TestCasePlus):
             PEGASUS_XSUM,
         ],
     )
+    @require_torch_non_multigpu_but_fix_me
     def test_dataset_kwargs(self, tok_name):
         tokenizer = AutoTokenizer.from_pretrained(tok_name)
         if tok_name == MBART_TINY:
