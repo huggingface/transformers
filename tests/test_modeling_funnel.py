@@ -27,6 +27,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        MODEL_FOR_PRETRAINING_MAPPING,
         FunnelBaseModel,
         FunnelConfig,
         FunnelForMaskedLM,
@@ -360,6 +361,17 @@ class FunnelModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
 
+    # special case for ForPreTraining model
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class in MODEL_FOR_PRETRAINING_MAPPING.values():
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+        return inputs_dict
+
     def setUp(self):
         self.model_tester = FunnelModelTester(self)
         self.config_tester = ConfigTester(self, config_class=FunnelConfig)
@@ -414,6 +426,21 @@ class FunnelBaseModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
+
+    # overwrite from test_modeling_common
+    def test_training(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__ == "FunnelBaseModel":
+                continue
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
 
 
 @require_torch

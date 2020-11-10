@@ -31,6 +31,7 @@ from .configuration_auto import (
     FunnelConfig,
     GPT2Config,
     LongformerConfig,
+    LxmertConfig,
     MobileBertConfig,
     OpenAIGPTConfig,
     RobertaConfig,
@@ -113,6 +114,7 @@ from .modeling_tf_funnel import (
 )
 from .modeling_tf_gpt2 import TFGPT2LMHeadModel, TFGPT2Model
 from .modeling_tf_longformer import TFLongformerForMaskedLM, TFLongformerForQuestionAnswering, TFLongformerModel
+from .modeling_tf_lxmert import TFLxmertForPreTraining, TFLxmertModel
 from .modeling_tf_marian import TFMarianMTModel
 from .modeling_tf_mbart import TFMBartForConditionalGeneration
 from .modeling_tf_mobilebert import (
@@ -168,6 +170,7 @@ logger = logging.get_logger(__name__)
 
 TF_MODEL_MAPPING = OrderedDict(
     [
+        (LxmertConfig, TFLxmertModel),
         (T5Config, TFT5Model),
         (DistilBertConfig, TFDistilBertModel),
         (AlbertConfig, TFAlbertModel),
@@ -192,6 +195,7 @@ TF_MODEL_MAPPING = OrderedDict(
 
 TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
+        (LxmertConfig, TFLxmertForPreTraining),
         (T5Config, TFT5ForConditionalGeneration),
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForPreTraining),
@@ -416,9 +420,10 @@ TF_AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
                 Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (e.g., not try downloading the model).
-            use_cdn(:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether or not to use Cloudfront (a Content Delivery Network, or CDN) when searching for the model on
-                our S3 (faster). Should be set to :obj:`False` for checkpoints larger than 20GB.
+            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+                identifier allowed by git.
             kwargs (additional keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
