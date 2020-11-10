@@ -16,8 +16,6 @@
 """
  PyTorch XLNet model.
 """
-
-
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -1087,6 +1085,7 @@ class XLNetModel(XLNetPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1300,7 +1299,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_loss
 
-    def prepare_inputs_for_generation(self, input_ids, past, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past=None, use_cache=None, **kwargs):
         # Add dummy token at the end (no attention on this one)
 
         effective_batch_size = input_ids.shape[0]
@@ -1333,7 +1332,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             "input_ids": input_ids,
             "perm_mask": perm_mask,
             "target_mapping": target_mapping,
-            "use_cache": kwargs["use_cache"],
+            "use_cache": use_cache,
         }
 
         # if past is defined in model kwargs then use it for faster decoding

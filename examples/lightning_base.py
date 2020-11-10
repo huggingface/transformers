@@ -7,6 +7,7 @@ from typing import Any, Dict
 import pytorch_lightning as pl
 from pytorch_lightning.utilities import rank_zero_info
 
+import pkg_resources
 from transformers import (
     AdamW,
     AutoConfig,
@@ -31,6 +32,15 @@ from transformers.optimization import (
 
 
 logger = logging.getLogger(__name__)
+
+try:
+    pkg = "pytorch_lightning"
+    min_ver = "1.0.4"
+    pkg_resources.require(f"{pkg}>={min_ver}")
+except pkg_resources.VersionConflict:
+    logger.warning(
+        f"{pkg}>={min_ver} is required for a normal functioning of this module, but found {pkg}=={pkg_resources.get_distribution(pkg).version}. Try pip install -r examples/requirements.txt"
+    )
 
 
 MODEL_MODES = {

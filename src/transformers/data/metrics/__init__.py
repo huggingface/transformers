@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
+
 from ...file_utils import is_sklearn_available, requires_sklearn
 
 
@@ -23,12 +25,21 @@ if is_sklearn_available():
     from scipy.stats import pearsonr, spearmanr
 
 
+DEPRECATION_WARNING = (
+    "This metric will be removed from the library soon, metrics should be handled with the 🤗 Datasets "
+    "library. You can have a look at this example script for pointers: "
+    "https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_glue.py",
+)
+
+
 def simple_accuracy(preds, labels):
+    warnings.warn(DEPRECATION_WARNING, FutureWarning)
     requires_sklearn(simple_accuracy)
     return (preds == labels).mean()
 
 
 def acc_and_f1(preds, labels):
+    warnings.warn(DEPRECATION_WARNING, FutureWarning)
     requires_sklearn(acc_and_f1)
     acc = simple_accuracy(preds, labels)
     f1 = f1_score(y_true=labels, y_pred=preds)
@@ -40,6 +51,7 @@ def acc_and_f1(preds, labels):
 
 
 def pearson_and_spearman(preds, labels):
+    warnings.warn(DEPRECATION_WARNING, FutureWarning)
     requires_sklearn(pearson_and_spearman)
     pearson_corr = pearsonr(preds, labels)[0]
     spearman_corr = spearmanr(preds, labels)[0]
@@ -51,6 +63,7 @@ def pearson_and_spearman(preds, labels):
 
 
 def glue_compute_metrics(task_name, preds, labels):
+    warnings.warn(DEPRECATION_WARNING, FutureWarning)
     requires_sklearn(glue_compute_metrics)
     assert len(preds) == len(labels), f"Predictions and labels have mismatched lengths {len(preds)} and {len(labels)}"
     if task_name == "cola":
@@ -80,6 +93,7 @@ def glue_compute_metrics(task_name, preds, labels):
 
 
 def xnli_compute_metrics(task_name, preds, labels):
+    warnings.warn(DEPRECATION_WARNING, FutureWarning)
     requires_sklearn(xnli_compute_metrics)
     assert len(preds) == len(labels), f"Predictions and labels have mismatched lengths {len(preds)} and {len(labels)}"
     if task_name == "xnli":

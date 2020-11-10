@@ -26,11 +26,6 @@ class DataCollatorForLanguageModeling:
         requires_pytorch(self)
 
 
-class DataCollatorForNextSentencePrediction:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
 class DataCollatorForPermutationLanguageModeling:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -42,6 +37,15 @@ class DataCollatorForPermutationLanguageModeling:
 
 class DataCollatorForSOP:
     def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DataCollatorForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
         requires_pytorch(self)
 
 
@@ -100,6 +104,66 @@ class TextDataset:
 
 
 class TextDatasetForNextSentencePrediction:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BeamScorer:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BeamSearchScorer:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class LogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class LogitsProcessorList:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class LogitsWarper:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MinLengthLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class NoBadWordsLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class NoRepeatNGramLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class RepetitionPenaltyLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class TemperatureLogitsWarper:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class TopKLogitsWarper:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class TopPLogitsWarper:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
@@ -192,6 +256,9 @@ MODEL_FOR_MASKED_LM_MAPPING = None
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = None
 
 
+MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = None
+
+
 MODEL_FOR_PRETRAINING_MAPPING = None
 
 
@@ -241,6 +308,15 @@ class AutoModelForMaskedLM:
 
 
 class AutoModelForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class AutoModelForNextSentencePrediction:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 

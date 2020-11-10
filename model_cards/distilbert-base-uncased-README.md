@@ -10,7 +10,7 @@ datasets:
 
 # DistilBERT base model (uncased)
 
-This model is a distilled version of the [BERT base mode](https://huggingface.co/distilbert-base-uncased). It was
+This model is a distilled version of the [BERT base model](https://huggingface.co/bert-base-uncased). It was
 introduced in [this paper](https://arxiv.org/abs/1910.01108). The code for the distillation process can be found
 [here](https://github.com/huggingface/transformers/tree/master/examples/distillation). This model is uncased: it does
 not make a difference between english and English.
@@ -102,7 +102,7 @@ output = model(encoded_input)
 
 Even if the training data used for this model could be characterized as fairly neutral, this model can have biased
 predictions. It also inherits some of
-[the bias of its teacher model](https://huggingface.co/bert-base-uncased#limitations-and-bias). 
+[the bias of its teacher model](https://huggingface.co/bert-base-uncased#limitations-and-bias).
 
 ```python
 >>> from transformers import pipeline
@@ -196,9 +196,9 @@ When fine-tuned on downstream tasks, this model achieves the following results:
 
 Glue test results:
 
-| Task | MNLI | QQP  | QNLI | SST-2 | CoLA | STS-B | MRPC | RTE  | Average |
-|:----:|:----:|:----:|:----:|:-----:|:----:|:-----:|:----:|:----:|:-------:|
-|      | 82.2 | 88.5 | 89.2 | 91.3  | 51.3 | 85.8  | 87.5 | 59.9 | 77.0    |
+| Task | MNLI | QQP  | QNLI | SST-2 | CoLA | STS-B | MRPC | RTE  |
+|:----:|:----:|:----:|:----:|:-----:|:----:|:-----:|:----:|:----:|
+|      | 82.2 | 88.5 | 89.2 | 91.3  | 51.3 | 85.8  | 87.5 | 59.9 |
 
 
 ### BibTeX entry and citation info

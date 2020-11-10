@@ -550,8 +550,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                     - The model is a model provided by the library (loaded with the `shortcut name` string of a
                       pretrained model).
                     - The model was saved using :func:`~transformers.TFPreTrainedModel.save_pretrained` and is reloaded
-                      by suppling the save directory.
-                    - The model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a
+                      by supplying the save directory.
+                    - The model is loaded by supplying a local directory as ``pretrained_model_name_or_path`` and a
                       configuration JSON file named `config.json` is found in the directory.
             from_pt: (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Load the model weights from a PyTorch state_dict save file (see docstring of
@@ -730,7 +730,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 f"Some layers from the model checkpoint at {pretrained_model_name_or_path} were not used when "
                 f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
                 f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
-                f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPretraining model).\n"
+                f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).\n"
                 f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
                 f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
             )

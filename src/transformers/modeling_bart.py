@@ -35,7 +35,7 @@ from .file_utils import (
 )
 from .modeling_outputs import (
     BaseModelOutput,
-    BaseModelOutputWithPast,
+    BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
     Seq2SeqQuestionAnsweringModelOutput,
@@ -451,11 +451,12 @@ class DecoderLayer(nn.Module):
         assert self.encoder_attn.cache_key != self.self_attn.cache_key
         if self.normalize_before:
             x = self.encoder_attn_layer_norm(x)
-        x, _ = self.encoder_attn(
+        x, cross_attn_weights = self.encoder_attn(
             query=x,
             key=encoder_hidden_states,
             key_padding_mask=encoder_attn_mask,
             layer_state=layer_state,  # mutates layer state
+            output_attentions=output_attentions,
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -477,7 +478,8 @@ class DecoderLayer(nn.Module):
             x,
             self_attn_weights,
             layer_state,
-        )  # just self_attn weights for now, following t5, layer_state = cache for decoding
+            cross_attn_weights,
+        )  # layer_state = cache for decoding
 
 
 class BartDecoder(nn.Module):
@@ -583,13 +585,14 @@ class BartDecoder(nn.Module):
 
         x = F.dropout(x, p=self.dropout, training=self.training)
 
-        # Convert to Bart output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
+        # Convert to Bart output format: (BS, seq_len, model_dim) ->  (seq_len, BS, model_dim)
         x = x.transpose(0, 1)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
+        all_cross_attentions = () if output_attentions else None
         next_decoder_cache: List[Dict] = []
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -601,7 +604,7 @@ class BartDecoder(nn.Module):
 
             layer_state = past_key_values[idx] if past_key_values is not None else None
 
-            x, layer_self_attn, layer_past = decoder_layer(
+            x, layer_self_attn, layer_past, layer_cross_attn = decoder_layer(
                 x,
                 encoder_hidden_states,
                 encoder_attn_mask=encoder_padding_mask,
@@ -616,6 +619,7 @@ class BartDecoder(nn.Module):
 
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
+                all_cross_attentions += (layer_cross_attn,)
 
         if self.layer_norm:  # if config.add_final_layer_norm (mBART)
             x = self.layer_norm(x)
@@ -628,9 +632,15 @@ class BartDecoder(nn.Module):
 
         next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
-            return tuple(v for v in [x, next_cache, all_hidden_states, all_self_attns] if v is not None)
-        return BaseModelOutputWithPast(
-            last_hidden_state=x, past_key_values=next_cache, hidden_states=all_hidden_states, attentions=all_self_attns
+            return tuple(
+                v for v in [x, next_cache, all_hidden_states, all_self_attns, all_cross_attentions] if v is not None
+            )
+        return BaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=x,
+            past_key_values=next_cache,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+            cross_attentions=all_cross_attentions,
         )
 
 
@@ -934,6 +944,7 @@ class BartModel(PretrainedBartModel):
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
@@ -1078,13 +1089,14 @@ class BartForConditionalGeneration(PretrainedBartModel):
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
 
     def prepare_inputs_for_generation(
-        self, decoder_input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs
+        self, decoder_input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
     ):
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -1207,6 +1219,7 @@ class BartForSequenceClassification(PretrainedBartModel):
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
@@ -1317,6 +1330,7 @@ class BartForQuestionAnswering(PretrainedBartModel):
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
@@ -1328,8 +1342,6 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
 
     def __init__(self, num_positions, embedding_dim, padding_idx=None):
         super().__init__(num_positions, embedding_dim)
-        if embedding_dim % 2 != 0:
-            raise NotImplementedError(f"odd embedding_dim {embedding_dim} not supported")
         self.weight = self._init_weight(self.weight)
 
     @staticmethod
@@ -1342,10 +1354,11 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         position_enc = np.array(
             [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
         )
-        out[:, 0 : dim // 2] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))  # This line breaks for odd n_pos
-        out[:, dim // 2 :] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
+        out.requires_grad = False  # set early to avoid an error in pytorch-1.8+
+        sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
+        out[:, 0:sentinel] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
+        out[:, sentinel:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
         out.detach_()
-        out.requires_grad = False
         return out
 
     @torch.no_grad()
