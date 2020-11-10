@@ -36,9 +36,7 @@ FILES = [
     ),
 ]
 REPO_NAME = "my-model-{}".format(int(time.time()))
-# ENDPOINT_STAGING = "https://moon-staging.huggingface.co"
-ENDPOINT_STAGING = "https://moon-preprod.huggingface.co"
-# ENDPOINT_STAGING = "http://huggingface.test"
+ENDPOINT_STAGING = "https://moon-staging.huggingface.co"
 
 
 class HfApiCommonTest(unittest.TestCase):

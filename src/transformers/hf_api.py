@@ -24,9 +24,7 @@ from tqdm import tqdm
 import requests
 
 
-# ENDPOINT = "https://huggingface.co"
-# ENDPOINT = "http://huggingface.test"
-ENDPOINT = "https://moon-preprod.huggingface.co"
+ENDPOINT = "https://huggingface.co"
 
 
 class RepoObj:
