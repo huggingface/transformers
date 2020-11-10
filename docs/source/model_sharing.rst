@@ -46,9 +46,18 @@ Basic steps
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 In order to upload a model, you'll need to first create a git repo. This repo will live on the model hub, allowing
-users to clone it and you (and your organization members) to push to it.
+users to clone it and you (and your organization members) to push to it. First, you should ensure you are logged in the
+``transformers-cli``:
 
-To create a repo:
+Go in a terminal and run the following command. It should be in the virtual environment where you installed 🤗
+Transformers, since that command :obj:`transformers-cli` comes from the library.
+
+.. code-block::
+
+    transformers-cli login
+
+
+Once you are logged in with your model hub credentials, you can start building your repositories. To create a repo:
 
 .. code-block::
 
@@ -67,40 +76,6 @@ any other git repo.
     git add . && git commit -m "Update from $USER"
 
 We are intentionally not wrapping git too much, so as to stay intuitive and easy-to-use.
-
-Once that repo is cloned, you can add the model, configuration and tokenizer files. For instance, saving the model
-and tokenizer files:
-
-.. code-block::
-
-    >>> model.save_pretrained("path/to/repo/clone/your-model-name")
-    >>> tokenizer.save_pretrained("path/to/repo/clone/your-model-name")
-
-Or, if you're using the Trainer API
-
-.. code-block::
-
-    >>> trainer.save_model("path/to/awesome-name-you-picked")
-
-You can then add these files to the staging environment and verify that they have been correctly staged with the ``git status`` command:
-
-.. code-block::
-
-    git add --all
-    git status
-
-Finally, the files should be comitted:
-
-.. code-block::
-
-    git commit -m "First version of the your-model-name model and tokenizer."
-
-And pushed to the remote:
-
-.. code-block::
-
-    git push
-
 
 
 Make your model work on all frameworks
@@ -167,24 +142,45 @@ Make sure there are no garbage files in the directory you'll upload. It should o
 
 Other files can safely be deleted.
 
-Upload your model with the CLI
+
+Uploading your files
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Now go in a terminal and run the following command. It should be in the virtual environment where you installed 🤗
-Transformers, since that command :obj:`transformers-cli` comes from the library.
+Once the repo is cloned, you can add the model, configuration and tokenizer files. For instance, saving the model
+and tokenizer files:
 
 .. code-block::
 
-    transformers-cli login
+    >>> model.save_pretrained("path/to/repo/clone/your-model-name")
+    >>> tokenizer.save_pretrained("path/to/repo/clone/your-model-name")
 
-Then log in using the same credentials as on huggingface.co. To upload your model and any other files, ensure that
-the files have been committed with an explicit commit message. You can then push to the model hub with a ``git push``:
+Or, if you're using the Trainer API
+
+.. code-block::
+
+    >>> trainer.save_model("path/to/awesome-name-you-picked")
+
+You can then add these files to the staging environment and verify that they have been correctly staged with the ``git status`` command:
+
+.. code-block::
+
+    git add --all
+    git status
+
+Finally, the files should be comitted:
+
+.. code-block::
+
+    git commit -m "First version of the your-model-name model and tokenizer."
+
+And pushed to the remote:
 
 .. code-block::
 
     git push
 
-This will upload the folder containing the weights, tokenizer and configuration we prepared in the previous section.
+This will upload the folder containing the weights, tokenizer and configuration we have just prepared.
+
 
 Add a model card
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
