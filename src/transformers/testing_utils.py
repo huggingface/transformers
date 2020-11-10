@@ -668,7 +668,7 @@ class TestCasePlus(unittest.TestCase):
                    - sets ``after=True`` if ``after`` is :obj:`None`
                 else:
 
-                   - a unique temporary path will be chosen and created
+                   - :obj:`tmp_dir` will be created
                    - sets ``before=True`` if ``before`` is :obj:`None`
                    - sets ``after=False`` if ``after`` is :obj:`None`
             before (:obj:`bool`, `optional`):
@@ -679,7 +679,7 @@ class TestCasePlus(unittest.TestCase):
                 :obj:`tmp_dir` and its contents intact at the end of the test.
 
         Returns:
-            tmp_dir(:obj:`string`): either the same value as passed via `tmp_dir` or the path to the auto-created tmp
+            tmp_dir(:obj:`string`): either the same value as passed via `tmp_dir` or the path to the auto-selected tmp
             dir
         """
         if tmp_dir is not None:
