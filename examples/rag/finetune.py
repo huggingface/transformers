@@ -13,6 +13,10 @@ from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pytorch_lightning as pl
+#from pytorch_lightning.accelerators import Accelerator
+#from pytorch_lightning.accelerators.ddp_accelerator import DDPAccelerator
+#from pytorch_lightning.cluster_environments import TorchElasticEnvironment
+
 import torch
 import torch.distributed as dist
 from torch.utils.data import DataLoader
@@ -70,6 +74,29 @@ class AttrDict(dict):
     def __init__(self, *args, **kwargs):
         super(AttrDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
+
+# https://github.com/PyTorchLightning/pytorch-lightning/blob/master/tests/backends/test_accelerator_connector.py
+
+#class Accel(DDPAccelerator):
+#    def __init__(self, trainer=None, **kwargs):
+#        # trainer is set later.
+#        super().__init__(trainer, **kwargs)
+#
+#    def init_ddp_connection(self, global_rank: int, world_size: int, is_slurm_managing_tasks: bool = True):
+#        logger.info("Custom init_ddp_connection.")
+#        module = self.trainer.model
+#        if self.cluster_environment is None:
+#            self.cluster_environment = TorchElasticEnvironment()
+#        self.distributed_port = module.hparams.distributed_port
+#        os.environ["MASTER_PORT"] = str(self.distributed_port)
+#        super().init_ddp_connection(global_rank, world_size, is_slurm_managing_tasks)
+#        if module.is_rag_model:
+#            if module.distributed_retriever == "pytorch":
+#                module.model.rag.retriever.init_retrieval(self.distributed_port)
+#            elif module.distributed_retriever == "ray" and global_rank == 0:
+#                module.model.rag.retriever.init_retrieval(num_actors=1)
+#            #module.model.rag.retriever.init_retrieval(self.distributed_port)
+
 
 
 class GenerativeQAModule(BaseTransformer):
@@ -359,12 +386,12 @@ class GenerativeQAModule(BaseTransformer):
             // self.hparams.accumulate_grad_batches
             * float(self.hparams.max_epochs)
         )
-        scheduler = get_linear_schedule_with_warmup(
-            self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
-        )
-        if max(scheduler.get_last_lr()) > 0:
-            warnings.warn("All learning rates are 0")
-        self.lr_scheduler = scheduler
+        # scheduler = get_linear_schedule_with_warmup(
+        #     self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
+        # )
+        # if max(scheduler.get_last_lr()) > 0:
+        #     warnings.warn("All learning rates are 0")
+        # self.lr_scheduler = scheduler
         return dataloader
 
     def val_dataloader(self) -> DataLoader:
@@ -542,6 +569,7 @@ def main(args, model=None) -> GenerativeQAModule:
         logging_callback=Seq2SeqLoggingCallback(),
         checkpoint_callback=get_checkpoint_callback(args.output_dir, model.val_metric),
         early_stopping_callback=es_callback,
+        #accelerator=Accel(),
         logger=logger,
     )
     pickle_save(model.hparams, model.output_dir / "hparams.pkl")
