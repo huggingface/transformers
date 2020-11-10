@@ -2840,7 +2840,7 @@ def pipeline(
     tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
     framework: Optional[str] = None,
     revision: Optional[str] = None,
-    use_fast: bool = False,
+    use_fast: bool = True,
     **kwargs
 ) -> Pipeline:
     """
@@ -2898,7 +2898,7 @@ def pipeline(
             When passing a task name or a string model identifier: The specific model version to use. It can be a
             branch name, a tag name, or a commit id, since we use a git-based system for storing models and other
             artifacts on huggingface.co, so ``revision`` can be any identifier allowed by git.
-        use_fast (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to use a Fast tokenizer if possible (a :class:`~transformers.PreTrainedTokenizerFast`).
         kwargs:
             Additional keyword arguments passed along to the specific pipeline init (see the documentation for the
