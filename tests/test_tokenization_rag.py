@@ -4,7 +4,7 @@ import shutil
 import tempfile
 from unittest import TestCase
 
-from transformers import BartTokenizer, DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast
+from transformers import BartTokenizer, BartTokenizerFast, DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast
 from transformers.configuration_bart import BartConfig
 from transformers.configuration_dpr import DPRConfig
 from transformers.file_utils import is_datasets_available, is_faiss_available, is_torch_available
@@ -105,9 +105,9 @@ class RagTokenizerTest(TestCase):
         rag_tokenizer.save_pretrained(save_dir)
         new_rag_tokenizer = RagTokenizer.from_pretrained(save_dir, config=rag_config)
         self.assertIsInstance(new_rag_tokenizer.question_encoder, DPRQuestionEncoderTokenizerFast)
-        self.assertEqual(new_rag_tokenizer.question_encoder.vocab, rag_tokenizer.question_encoder.vocab)
-        self.assertIsInstance(new_rag_tokenizer.generator, BartTokenizer)
-        self.assertEqual(new_rag_tokenizer.generator.encoder, rag_tokenizer.generator.encoder)
+        self.assertEqual(new_rag_tokenizer.question_encoder.get_vocab(), rag_tokenizer.question_encoder.get_vocab())
+        self.assertIsInstance(new_rag_tokenizer.generator, BartTokenizerFast)
+        self.assertEqual(new_rag_tokenizer.generator.get_vocab(), rag_tokenizer.generator.get_vocab())
 
     @slow
     def test_pretrained_token_nq_tokenizer(self):
