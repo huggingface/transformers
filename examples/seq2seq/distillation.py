@@ -91,9 +91,10 @@ class BartSummarizationDistiller(SummarizationModule):
 
         self.e_matches = None
         self.d_matches = None
-        self.do_calc_hidden_loss = False
+        self.different_base_models = True
 
         if hparams.student is None or hparams.teacher == hparams.student:
+            self.different_base_models = False
             # Intermediate supervision: Decide which layers to supervise
             if hparams.supervise_forward:
                 self.e_matches = get_layers_to_supervise(n_student=len(self.e_layer_ids), n_teacher=teacher_encoder_layers)
@@ -101,7 +102,6 @@ class BartSummarizationDistiller(SummarizationModule):
             else:  # student layer should emulate hidden states of the teacher layer it was copied from
                 self.e_matches = self.e_layer_ids
                 self.d_matches = self.d_layer_ids
-            self.do_calc_hidden_loss = True
 
         self.ce_loss_fct = nn.KLDivLoss(reduction="batchmean")
         self.temperature = 2.0
@@ -189,10 +189,16 @@ class BartSummarizationDistiller(SummarizationModule):
         hid_loss_enc, hid_loss_dec = zero_tensor(), zero_tensor()
         if self.different_encoder:  # compute encoder hidden state loss
             with torch.no_grad():
-                teacher_enc_outputs, teacher_enc_hid = self.teacher.get_encoder()(
-                    input_ids, attention_mask=src_mask, output_hidden_states=True
+                teacher_encoder = self.teacher.get_encoder()(
+                    input_ids,
+                    attention_mask=src_mask,
+                    output_hidden_states=not self.different_base_models,
+                    return_dict=True
                 )
-            if self.do_calc_hidden_loss:
+            if self.different_base_models:
+                teacher_enc_outputs = teacher_encoder.last_hidden_state
+            else:
+                teacher_enc_hid = teacher_encoder.hidden_states
                 hid_loss_enc = self.calc_hidden_loss(
                     src_mask,
                     enc_hidden_state,
@@ -209,13 +215,13 @@ class BartSummarizationDistiller(SummarizationModule):
                 encoder_outputs=(teacher_enc_outputs, ),
                 decoder_input_ids=decoder_input_ids,
                 lm_labels=labels,
-                output_hidden_states=True,
+                output_hidden_states=not self.different_base_models,
                 return_dict=True,
             )
-            tlogits, tdec_hidden = outputs.logits, outputs.decoder_hidden_states
         dec_mask = decoder_input_ids.ne(pad_token_id)
-        loss_ce = self.calc_ce_loss(dec_mask, lm_logits, tlogits)
-        if self.do_calc_hidden_loss and self.alpha_hid > 0:  # Intermediate supervision of decoder hidden states
+        loss_ce = self.calc_ce_loss(dec_mask, lm_logits, outputs.logits)
+        if (not self.different_base_models) and self.alpha_hid > 0:  # Intermediate supervision of decoder hidden states
+            tdec_hidden = outputs.decoder_hidden_states
             hid_loss_dec = self.calc_hidden_loss(
                 dec_mask, dec_hidden, tdec_hidden, self.d_matches, normalize_hidden=self.hparams.normalize_hidden
             )
