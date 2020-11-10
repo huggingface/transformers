@@ -233,13 +233,13 @@ class RepoCreateCommand(BaseUserCommand):
             print("Not logged in")
             exit(1)
         try:
-            stdout = subprocess.run(["git", "--version"], capture_output=True).stdout.decode("utf-8")
+            stdout = subprocess.check_output(["git", "--version"]).decode("utf-8")
             print(ANSI.gray(stdout.strip()))
         except FileNotFoundError:
             print("Looks like you do not have git installed, please install.")
 
         try:
-            stdout = subprocess.run(["git-lfs", "--version"], capture_output=True).stdout.decode("utf-8")
+            stdout = subprocess.check_output(["git-lfs", "--version"]).decode("utf-8")
             print(ANSI.gray(stdout.strip()))
         except FileNotFoundError:
             print(
