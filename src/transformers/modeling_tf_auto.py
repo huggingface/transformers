@@ -1423,11 +1423,12 @@ class TFAutoModelForMultipleChoice:
 
 class TFAutoModelForNextSentencePrediction:
     r"""
-    This is a generic model class that will be instantiated as one of the model classes of the library---with a next
-    sentence prediction head---when created with the
+    This is a generic model class that will be instantiated as one of the model classes of the library---with a
+    multiple choice classification head---when created with the when created with the
     :meth:`~transformers.TFAutoModelForNextSentencePrediction.from_pretrained` class method or the
-    :meth:`~transformers.TFAutoModelForNextSentencePrediction.from_config` class method. This class cannot be
-    instantiated directly using ``__init__()`` (throws an error).
+    :meth:`~transformers.TFAutoModelForNextSentencePrediction.from_config` class method.
+
+    This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
 
     def __init__(self):
@@ -1443,15 +1444,20 @@ class TFAutoModelForNextSentencePrediction:
         r"""
         Instantiates one of the model classes of the library---with a next sentence prediction head---from a
         configuration.
+
         Note:
             Loading a model from its configuration file does **not** load the model weights. It only affects the
             model's configuration. Use :meth:`~transformers.TFAutoModelForNextSentencePrediction.from_pretrained` to
             load the model weights.
+
         Args:
             config (:class:`~transformers.PretrainedConfig`):
                 The model class to instantiate is selected based on the configuration class:
+
                 List options
+
         Examples::
+
             >>> from transformers import AutoConfig, TFAutoModelForNextSentencePrediction
             >>> # Download configuration from S3 and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
@@ -1478,13 +1484,17 @@ class TFAutoModelForNextSentencePrediction:
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         r"""
         Examples::
+
             >>> from transformers import AutoConfig, TFAutoModelForNextSentencePrediction
+
             >>> # Download model and configuration from S3 and cache.
             >>> model = TFAutoModelForNextSentencePrediction.from_pretrained('bert-base-uncased')
+
             >>> # Update configuration during loading
             >>> model = TFAutoModelForNextSentencePrediction.from_pretrained('bert-base-uncased', output_attentions=True)
             >>> model.config.output_attentions
             True
+
             >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
             >>> config = AutoConfig.from_json_file('./pt_model/bert_pt_model_config.json')
             >>> model = TFAutoModelForNextSentencePrediction.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
