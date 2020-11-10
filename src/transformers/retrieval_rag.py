@@ -125,8 +125,6 @@ class LegacyIndex(Index):
         try:
             # Load from URL or cache if already cached
             resolved_archive_file = cached_path(archive_file)
-            if resolved_archive_file is None:
-                raise EnvironmentError
         except EnvironmentError:
             msg = (
                 f"Can't load '{archive_file}'. Make sure that:\n\n"

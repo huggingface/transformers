@@ -44,7 +44,3 @@ cd -
 perl -le 'for $f (@ARGV) { print qq[transformers-cli upload -y $_/$f --filename $_/$f] for ("wmt19-de-en-6-6-base", "wmt19-de-en-6-6-big")}' vocab-src.json vocab-tgt.json tokenizer_config.json config.json
 # add/remove files as needed
 
-# Caching note: Unfortunately due to CDN caching the uploaded model may be unavailable for up to 24hs after upload
-# So the only way to start using the new model sooner is either:
-# 1. download it to a local path and use that path as model_name
-# 2. make sure you use: from_pretrained(..., use_cdn=False) everywhere

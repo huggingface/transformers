@@ -276,6 +276,10 @@ class AutoTokenizer:
             proxies (:obj:`Dict[str, str]`, `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+                identifier allowed by git.
             use_fast (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to try to load the fast version of the tokenizer.
             kwargs (additional keyword arguments, `optional`):

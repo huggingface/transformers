@@ -165,7 +165,7 @@ DUMMY_FUNCTION = {
 
 
 def read_init():
-    """ Read the init and exctracts PyTorch, TensorFlow, SentencePiece and Tokenizers objects. """
+    """ Read the init and extracts PyTorch, TensorFlow, SentencePiece and Tokenizers objects. """
     with open(os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"), "r", encoding="utf-8") as f:
         lines = f.readlines()
 
