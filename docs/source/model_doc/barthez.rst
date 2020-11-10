@@ -4,7 +4,7 @@ BARThez
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The Barthez model was proposed in `BARThez: a Skilled Pretrained French Sequence-to-Sequence Model`
+The BARThez model was proposed in `BARThez: a Skilled Pretrained French Sequence-to-Sequence Model`
 <https://arxiv.org/abs/2010.12321>`__ by Moussa Kamal Eddine, Antoine J.-P. Tixier, Michalis Vazirgiannis on 23 Oct,
 2020.
 
@@ -29,7 +29,7 @@ The Authors' code can be found `here <https://github.com/moussaKam/BARThez>`__.
 Examples
 _______________________________________________________________________________________________________________________
 
-- BARThez can be fine-tuned on sequence to sequence tasks in a similar way as BART, check: `examples/seq2seq/
+- BARThez can be fine-tuned on sequence-to-sequence tasks in a similar way as BART, check: `examples/seq2seq/
   <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`__.
 
 
@@ -67,4 +67,3 @@ BarthezForSequenceClassification
 
 .. autoclass:: transformers.BarthezForSequenceClassification
     :members: forward
-

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" BARTHEZ configuration """
+""" BARThez configuration """
 
 from .configuration_bart import BartConfig
 from .utils import logging
@@ -28,7 +28,7 @@ BARTHEZ_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class BarthezConfig(BartConfig):
     """
     This is the configuration class to store the configuration of a
-    :class:`~transformers.BarthezForConditionalGeneration`. It is used to instantiate a BART model according to the
+    :class:`~transformers.BarthezForConditionalGeneration`. It is used to instantiate a BARThez model according to the
     specified arguments, defining the model architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
@@ -73,7 +73,7 @@ class BarthezConfig(BartConfig):
         normalize_before (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Call layernorm before attention ops.
         normalize_embedding (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Call layernorm after embeddings. Only True for Bart.
+            Call layernorm after embeddings.
         static_position_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Don't learn positional embeddings, use sinusoidal.
         add_final_layer_norm (:obj:`bool`, `optional`, defaults to :obj:`True`):

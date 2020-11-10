@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License
-""" Tokenization classes for Barthez model."""
+""" Tokenization classes for the BARThez model."""
 
 
 import json
@@ -57,7 +57,7 @@ SPIECE_UNDERLINE = "▁"
 class BarthezTokenizer(PreTrainedTokenizer):
     """
     Adapted from :class:`~transformers.CamembertTokenizer` and :class:`~transformers.BartTokenizer`. Construct a
-    Barthez tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__.
+    BARThez tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
@@ -144,7 +144,7 @@ class BarthezTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. An Barthez sequence has the following format:
+        adding special tokens. A BARThez sequence has the following format:
 
         - single sequence: ``<s> X </s>``
         - pair of sequences: ``<s> A </s></s> B </s>``

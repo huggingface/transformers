@@ -157,7 +157,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("pegasus", "Pegasus"),
         ("blenderbot", "Blenderbot"),
         ("marian", "Marian"),
-        ("barthez", "BARTHEZ"),
+        ("barthez", "BARThez"),
         ("mbart", "mBART"),
         ("bart", "BART"),
         ("reformer", "Reformer"),
