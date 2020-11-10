@@ -166,8 +166,6 @@ class TFDPREncoder(TFPreTrainedModel):
                 config.projection_dim, kernel_initializer=get_initializer(config.initializer_range), name="encode_proj"
             )
 
-        self.init_weights()
-
     def call(
         self,
         input_ids: Tensor,
@@ -226,7 +224,6 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
         self.qa_classifier = Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="qa_classifier"
         )
-        self.init_weights()
 
     def call(
         self,
@@ -276,9 +273,6 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def init_weights(self):
-        self.encoder.init_weights()
-
 
 ##################
 # PreTrainedModel
@@ -296,9 +290,6 @@ class TFDPRPretrainedContextEncoder(TFPreTrainedModel):
     base_model_prefix = "ctx_encoder"
     authorized_missing_keys = [r"position_ids"]
 
-    def init_weights(self):
-        self.ctx_encoder.init_weights()
-
 
 class TFDPRPretrainedQuestionEncoder(TFPreTrainedModel):
     """
@@ -310,9 +301,6 @@ class TFDPRPretrainedQuestionEncoder(TFPreTrainedModel):
     load_tf_weights = None
     base_model_prefix = "question_encoder"
     authorized_missing_keys = [r"position_ids"]
-
-    def init_weights(self):
-        self.question_encoder.init_weights()
 
 
 class TFDPRPretrainedReader(TFPreTrainedModel):
@@ -459,7 +447,6 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         super().__init__(config, *args, **kwargs)
         self.config = config
         self.ctx_encoder = TFDPREncoder(config, name="ctx_encoder")
-        self.init_weights()
 
     def get_input_embeddings(self):
         return self.ctx_encoder.bert_model.get_input_embeddings()
@@ -559,7 +546,6 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         super().__init__(config, *args, **kwargs)
         self.config = config
         self.question_encoder = TFDPREncoder(config, name="question_encoder")
-        self.init_weights()
 
     def get_input_embeddings(self):
         return self.question_encoder.bert_model.get_input_embeddings()
@@ -659,7 +645,6 @@ class TFDPRReader(TFDPRPretrainedReader):
         super().__init__(config, *args, **kwargs)
         self.config = config
         self.span_predictor = TFDPRSpanPredictor(config, name="span_predictor")
-        self.init_weights()
 
     def get_input_embeddings(self):
         return self.span_predictor.encoder.bert_model.get_input_embeddings()
