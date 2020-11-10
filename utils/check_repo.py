@@ -33,6 +33,8 @@ IGNORE_NON_TESTED = [
     "DPRSpanPredictor",  # Building part of bigger (tested) model.
     "ReformerForMaskedLM",  # Needs to be setup as decoder.
     "T5Stack",  # Building part of bigger (tested) model.
+    "TFDPREncoder",  # Building part of bigger (tested) model.
+    "TFDPRSpanPredictor",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
     "TFRobertaForMultipleChoice",  # TODO: fix
 ]
@@ -57,6 +59,8 @@ IGNORE_NON_DOCUMENTED = [
     "DPREncoder",  # Building part of bigger (documented) model.
     "DPRSpanPredictor",  # Building part of bigger (documented) model.
     "T5Stack",  # Building part of bigger (tested) model.
+    "TFDPREncoder",  # Building part of bigger (documented) model.
+    "TFDPRSpanPredictor",  # Building part of bigger (documented) model.
     "TFElectraMainLayer",  # Building part of bigger (documented) model (should it be a TFPreTrainedModel ?)
 ]
 
@@ -88,6 +92,10 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "RagTokenForGeneration",
     "T5Stack",
     "TFBertForNextSentencePrediction",
+    "TFDPRContextEncoder",
+    "TFDPREncoder",
+    "TFDPRReader",
+    "TFDPRSpanPredictor",
     "TFFunnelBaseModel",
     "TFGPT2DoubleHeadsModel",
     "TFMobileBertForNextSentencePrediction",
