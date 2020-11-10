@@ -1817,9 +1817,12 @@ class QuestionAnsweringPipeline(Pipeline):
 
                 # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
                 # We put 0 on the tokens from the context and 1 everywhere else (question and special tokens)
-                p_mask = np.asarray([[tok != 1 if question_first else 0
-                                        for tok in encoded_inputs.sequence_ids(span_id)]
-                                    for span_id in range(num_spans)])
+                p_mask = np.asarray(
+                    [
+                        [tok != 1 if question_first else 0 for tok in encoded_inputs.sequence_ids(span_id)]
+                        for span_id in range(num_spans)
+                    ]
+                )
 
                 # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
                 if self.tokenizer.cls_token_id:
