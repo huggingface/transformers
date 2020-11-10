@@ -12,8 +12,8 @@ inference: false
 
 ## Disclaimer
 
-Due do it's immense size, `t5-11b` requires some special treatment. 
-First, `t5-11b` should be loaded with flag `use_cdn` set to `False` as follows:
+**Before `transformers` v3.5.0**, due do its immense size, `t5-11b` required some special treatment. 
+If you're using transformers `<= v3.4.0`, `t5-11b` should be loaded with flag `use_cdn` set to `False` as follows:
 
 ```python
 t5 = transformers.T5ForConditionalGeneration.from_pretrained('t5-11b', use_cdn = False)
