@@ -1668,9 +1668,9 @@ def apply_chunking_to_forward(
     """
 
     assert len(input_tensors) > 0, "{} has to be a tuple/list of tensors".format(input_tensors)
-    tensor_shape = input_tensors[0].shape
+    tensor_shape = input_tensors[0].shape[chunk_dim]
     assert all(
-        input_tensor.shape == tensor_shape for input_tensor in input_tensors
+        input_tensor.shape[chunk_dim] == tensor_shape for input_tensor in input_tensors
     ), "All input tenors have to be of the same shape"
 
     # inspect.signature exist since python 3.5 and is a python method -> no problem with backward compatibility
