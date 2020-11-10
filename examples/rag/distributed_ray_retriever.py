@@ -71,7 +71,7 @@ class RagRayDistributedRetriever(RagRetriever):
                  self.retrieval_workers])
 
     def retrieve(self, question_hidden_states, n_docs):
-        assert len(self.retrieval_workers) == 2
+        #assert len(self.retrieval_workers) == 2
         random_worker = self.retrieval_workers[random.randint(0,
                                                len(self.retrieval_workers)-1)]
         #assert ray.get(random_worker.test_f.remote())
