@@ -336,8 +336,8 @@ class BatchEncoding(UserDict):
         Return a list mapping the tokens to the id of their original sentences:
 
             - :obj:`None` for special tokens added around or between sequences,
-            - :obj:`0` for tokens coresponding to words in the first sequence,
-            - :obj:`1` for tokens coresponding to words in the second sequence when a pair of sequences was jointly
+            - :obj:`0` for tokens corresponding to words in the first sequence,
+            - :obj:`1` for tokens corresponding to words in the second sequence when a pair of sequences was jointly
               encoded.
 
         Args:
