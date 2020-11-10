@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
+# Copyright 2020 Ecole Polytechnique and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -136,8 +136,8 @@ class BarthezTokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(str(self.sentence_piece_model))
         with open(self.vocab_file, "r") as f:
-            self.fairseq_tokens_to_ids = json.load(f)
-        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+            self.tokens_to_ids = json.load(f)
+        self.ids_to_tokens = {v: k for k, v in self.tokens_to_ids.items()}
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -219,7 +219,7 @@ class BarthezTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return len(self.fairseq_tokens_to_ids)
+        return len(self.tokens_to_ids)
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
@@ -231,15 +231,15 @@ class BarthezTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str) in an id using the vocab. """
-        if token in self.fairseq_tokens_to_ids:
-            return self.fairseq_tokens_to_ids[token]
-        return self.fairseq_tokens_to_ids[self.unk_token]
+        if token in self.tokens_to_ids:
+            return self.tokens_to_ids[token]
+        return self.tokens_to_ids[self.unk_token]
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        if index in self.fairseq_ids_to_tokens:
-            return self.fairseq_ids_to_tokens[index]
-        return self.fairseq_ids_to_tokens[self.unk_token_id]
+        if index in self.ids_to_tokens:
+            return self.ids_to_tokens[index]
+        return self.ids_to_tokens[self.unk_token_id]
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -278,6 +278,7 @@ class BarthezTokenizer(PreTrainedTokenizer):
             out_vocab_file,
         )
 
+    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
     def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
@@ -289,66 +290,6 @@ class BarthezTokenizer(PreTrainedTokenizer):
         truncation=True,
         **kwargs,
     ) -> BatchEncoding:
-        r"""
-
-        Prepare a batch that can be passed directly to an instance of :class:`~transformers.BartModel`.
-
-        Args:
-            src_texts: (:obj:`List[str]`):
-                List of documents to summarize or source language texts.
-            tgt_texts: (:obj:`List[str]`, `optional`):
-                List of summaries or target language texts.
-            max_length (:obj:`int`, `optional`):
-                Controls the maximum length for encoder inputs (documents to summarize or source language texts). If
-                left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum length
-                is required by one of the truncation/padding parameters. If the model has no specific maximum input
-                length (like XLNet) truncation/padding to a maximum length will be deactivated.
-            max_target_length (:obj:`int`, `optional`):
-                Controls the maximum length of decoder inputs (target language texts or summaries). If left unset or
-                set to :obj:`None`, this will use the max_length value.
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
-                Activates and controls padding. Accepts the following values:
-
-                * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
-                  single sequence if provided).
-                * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
-                  maximum acceptable input length for the model if that argument is not provided.
-                * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
-                  different lengths).
-            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`, defaults to "pt"):
-                If set, will return tensors instead of list of python integers. Acceptable values are:
-
-                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
-                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
-                * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
-            truncation (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.TruncationStrategy`, `optional`, defaults to :obj:`True`):
-                Activates and controls truncation. Accepts the following values:
-
-                * :obj:`True` or :obj:`'longest_first'`: Truncate to a maximum length specified with the argument
-                  :obj:`max_length` or to the maximum acceptable input length for the model if that argument is not
-                  provided. This will truncate token by token, removing a token from the longest sequence in the pair
-                  if a pair of sequences (or a batch of pairs) is provided.
-                * :obj:`'only_first'`: Truncate to a maximum length specified with the argument :obj:`max_length` or to
-                  the maximum acceptable input length for the model if that argument is not provided. This will only
-                  truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                * :obj:`'only_second'`: Truncate to a maximum length specified with the argument :obj:`max_length` or
-                  to the maximum acceptable input length for the model if that argument is not provided. This will only
-                  truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                * :obj:`False` or :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with
-                  sequence lengths greater than the model maximum admissible input size).
-            **kwargs:
-                Additional keyword arguments passed along to :obj:`self.__call__`.
-
-        Returns:
-            :class:`~transformers.BatchEncoding`: A :class:`~transformers.BatchEncoding` with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to the encoder.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model.
-            - **labels** -- List of token ids for tgt_texts
-
-            The full set of keys ``[input_ids, attention_mask, decoder_input_ids, decoder_attention_mask]``, will only
-            be returned if tgt_texts is passed. Otherwise, input_ids, attention_mask will be the only keys.
-        """
         kwargs.pop("src_lang", None)
         kwargs.pop("tgt_lang", None)
         if max_length is None:
