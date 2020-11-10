@@ -16,7 +16,7 @@ from transformers.configuration_dpr import DPRConfig
 from transformers.configuration_rag import RagConfig
 from transformers.file_utils import is_datasets_available, is_faiss_available, is_psutil_available, is_torch_available
 from transformers.retrieval_rag import CustomHFIndex
-from transformers.testing_utils import require_torch_non_multigpu_but_fix_me
+from transformers.testing_utils import require_torch_non_multi_gpu_but_fix_me
 from transformers.tokenization_bart import BartTokenizer
 from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.tokenization_dpr import DPRQuestionEncoderTokenizer
@@ -179,7 +179,7 @@ class RagRetrieverTest(TestCase):
             retriever.init_retrieval(port)
         return retriever
 
-    @require_torch_non_multigpu_but_fix_me
+    @require_torch_non_multi_gpu_but_fix_me
     def test_pytorch_distributed_retriever_retrieve(self):
         n_docs = 1
         retriever = self.get_dummy_pytorch_distributed_retriever(init_retrieval=True)
@@ -195,7 +195,7 @@ class RagRetrieverTest(TestCase):
         self.assertEqual(doc_dicts[1]["id"][0], "0")  # max inner product is reached with first doc
         self.assertListEqual(doc_ids.tolist(), [[1], [0]])
 
-    @require_torch_non_multigpu_but_fix_me
+    @require_torch_non_multi_gpu_but_fix_me
     def test_custom_hf_index_retriever_retrieve(self):
         n_docs = 1
         retriever = self.get_dummy_custom_hf_index_retriever(init_retrieval=True, from_disk=False)
@@ -211,7 +211,7 @@ class RagRetrieverTest(TestCase):
         self.assertEqual(doc_dicts[1]["id"][0], "0")  # max inner product is reached with first doc
         self.assertListEqual(doc_ids.tolist(), [[1], [0]])
 
-    @require_torch_non_multigpu_but_fix_me
+    @require_torch_non_multi_gpu_but_fix_me
     def test_custom_pytorch_distributed_retriever_retrieve_from_disk(self):
         n_docs = 1
         retriever = self.get_dummy_custom_hf_index_retriever(init_retrieval=True, from_disk=True)
