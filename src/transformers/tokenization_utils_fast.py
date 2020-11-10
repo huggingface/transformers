@@ -527,6 +527,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         Fast tokenizers can also be saved in a unique JSON file containing {config + vocab + added-tokens} using the
         specific :meth:`~transformers.PreTrainedTokenizerFast._save_pretrained`
         """
+        save_directory = str(save_directory)
+
         if legacy_format:
             added_tokens_file = os.path.join(
                 save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE

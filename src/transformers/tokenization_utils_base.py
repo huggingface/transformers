@@ -1992,6 +1992,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 "Only fast tokenizers (instances of PretrainedTokenizerFast) can be saved in non legacy format."
             )
 
+        save_directory = str(save_directory)
+
         added_tokens_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
         )
