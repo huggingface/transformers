@@ -222,3 +222,18 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertEqual(expected_src_tokens, src_ids)
         self.assertEqual(expected_tgt_tokens, tgt_ids)
+
+    def test_fast_and_slow_same_result(self):
+        src_text = "<pad> Today is <unk> nice day </s>"
+        tgt_ids = [0, 1960, 19, 2, 1245, 239, 1]
+        tgt_text = "<pad> Today is<unk> nice day</s>"
+
+        fast_ids = self.t5_base_tokenizer_fast(src_text, add_special_tokens=False).input_ids
+        slow_ids = self.t5_base_tokenizer(src_text, add_special_tokens=False).input_ids
+        self.assertEqual(tgt_ids, fast_ids)
+        self.assertEqual(tgt_ids, slow_ids)
+
+        fast_text = self.t5_base_tokenizer_fast.decode(fast_ids)
+        slow_text = self.t5_base_tokenizer.decode(fast_ids)
+        self.assertEqual(tgt_text, fast_text)
+        self.assertEqual(tgt_text, slow_text)
