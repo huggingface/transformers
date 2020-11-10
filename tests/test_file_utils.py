@@ -10,8 +10,8 @@ MODEL_ID = DUMMY_UNKWOWN_IDENTIFIER
 
 REVISION_ID_DEFAULT = "main"
 # Default branch name
-REVISION_ID_ONE_SPECIFIC_COMMIT = "432fec7515a022825ab3b79096838778e30aac17"
-# One particular commit
+REVISION_ID_ONE_SPECIFIC_COMMIT = "f2c752cfc5c0ab6f4bdec59acea69eefbee381c2"
+# One particular commit (not the top of `main`)
 REVISION_ID_INVALID = "aaaaaaa"
 # This commit does not exist, so we should 404.
 
