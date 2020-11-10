@@ -34,19 +34,19 @@ _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
 ROBERTA_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. 
-    Check the superclass documentation for the generic methods the library implements 
-    for all its model (such as downloading, saving and converting weights from PyTorch models)
+    This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
+    generic methods the library implements for all its model (such as downloading, saving and converting weights from
+    PyTorch models)
 
-    This model is also a Flax Linen `flax.nn.Module <https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html>`__ 
-    subclass. Use it as a regular Flax Module and refer to the Flax documentation for all matter related to
-    general usage and behavior.
-    
-    Finally, this model supports inherent JAX features such as 
-    `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__,  
-    `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__, 
-    `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__, 
-    and `Parallelization <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__.
+    This model is also a Flax Linen `flax.nn.Module
+    <https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html>`__ subclass. Use it as a regular Flax
+    Module and refer to the Flax documentation for all matter related to general usage and behavior.
+
+    Finally, this model supports inherent JAX features such as `Just-In-Time (JIT) compilation
+    <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__, `Automatic Differentiation
+    <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__, `Vectorization
+    <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__, and `Parallelization
+    <https://jax.readthedocs.io/en/latest/jax.html#parallelization-pmap>`__.
 
     Parameters:
         config (:class:`~transformers.RobertaConfig`): Model configuration class with all the parameters of the
