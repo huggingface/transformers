@@ -6,6 +6,35 @@ import re
 from .utils import logging
 
 
+from pathlib import Path
+PREFIX_CHECKPOINT_DIR = "checkpoint"
+
+
+def _sorted_checkpoints(self, checkpoint_prefix=PREFIX_CHECKPOINT_DIR, use_mtime=False):
+    ordering_and_checkpoint_path = []
+
+    glob_checkpoints = [str(x) for x in Path(self.args.output_dir).glob(f"{checkpoint_prefix}-*")]
+
+    for path in glob_checkpoints:
+        if use_mtime:
+            ordering_and_checkpoint_path.append((os.path.getmtime(path), path))
+        else:
+            regex_match = re.match(f".*{checkpoint_prefix}-([0-9]+)", path)
+            if regex_match and regex_match.groups():
+                ordering_and_checkpoint_path.append((int(regex_match.groups()[0]), path))
+
+    checkpoints_sorted = sorted(ordering_and_checkpoint_path)
+    checkpoints_sorted = [checkpoint[1] for checkpoint in checkpoints_sorted]
+    # Make sure we don't delete the best model.
+    if self.state.best_model_checkpoint is not None:
+        best_model_index = checkpoints_sorted.index(str(Path(self.state.best_model_checkpoint)))
+        checkpoints_sorted[best_model_index], checkpoints_sorted[-1] = (
+            checkpoints_sorted[-1],
+            checkpoints_sorted[best_model_index],
+        )
+    return checkpoints_sorted
+
+
 logger = logging.get_logger(__name__)
 
 
@@ -329,7 +358,7 @@ class WandbCallback(TrainerCallback):
 
         Environment:
             WANDB_LOG_MODEL (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to log model as artifact
+                Whether or not to log model as artifact, requires use of `TrainingArguments.save_steps`
             WANDB_WATCH (:obj:`str`, `optional` defaults to :obj:`"gradients"`):
                 Can be :obj:`"gradients"`, :obj:`"all"` or :obj:`"false"`. Set to :obj:`"false"` to disable gradient
                 logging or :obj:`"all"` to log gradients and parameters.
@@ -378,18 +407,22 @@ class WandbCallback(TrainerCallback):
 
     def on_train_end(self, args, state, control, **kwargs):
         if self._log_model and self._initialized and state.is_world_process_zero:
-            if state.best_model_checkpoint is not None:
-                model_dir = state.best_model_checkpoint
+            # TODO: simplify
+            class FakeTrainer:
+                def __init__(self, state, args):
+                    self.state = state
+                    self.args = args
+            fake_trainer = FakeTrainer(state = state, args = args)
+            checkpoints_sorted = _sorted_checkpoints(fake_trainer, use_mtime=True)
+            if not len(checkpoints_sorted):
+                logger.warning('No model to save to W&B, make sure you use TrainingArguments.save_steps')
             else:
-                # we save current model
-                model_dir = os.path.join(args.output_dir, "wandb")
-                # TODO: Trainer.save_model - how to access Trainer?
-
-            # use run name and ensure it's a valid Artifact name
-            artifact_name = re.sub(r"[^a-zA-Z0-9_\.\-]", " ", wandb.run.name)
-            artifact = wandb.Artifact(name=f"run-{artifact_name}", type="model", metadata={"score": state.best_metric})
-            artifact.add_dir(model_dir)
-            wandb.run.log_artifact(artifact)
+                model_dir = checkpoints_sorted[-1]
+                # use run name and ensure it's a valid Artifact name
+                artifact_name = re.sub(r"[^a-zA-Z0-9_\.\-]", "", wandb.run.name)
+                artifact = wandb.Artifact(name=f"run-{artifact_name}", type="model", metadata={"score": 0})
+                artifact.add_dir(model_dir)
+                wandb.run.log_artifact(artifact)
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
         if not self._initialized:
