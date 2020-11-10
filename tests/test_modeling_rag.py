@@ -29,7 +29,7 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
-    require_torch_non_multigpu,
+    require_torch_non_multi_gpu,
     slow,
     torch_device,
 )
@@ -581,7 +581,7 @@ class RagDPRT5Test(RagTestMixin, unittest.TestCase):
 @require_retrieval
 @require_sentencepiece
 @require_tokenizers
-@require_torch_non_multigpu
+@require_torch_non_multi_gpu
 class RagModelIntegrationTests(unittest.TestCase):
     @cached_property
     def sequence_model(self):

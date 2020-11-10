@@ -193,13 +193,13 @@ def require_tokenizers(test_case):
         return test_case
 
 
-def require_torch_multigpu(test_case):
+def require_torch_multi_gpu(test_case):
     """
     Decorator marking a test that requires a multi-GPU setup (in PyTorch).
 
     These tests are skipped on a machine without multiple GPUs.
 
-    To run *only* the multigpu tests, assuming all test names contain multigpu: $ pytest -sv ./tests -k "multigpu"
+    To run *only* the multi_gpu tests, assuming all test names contain multi_gpu: $ pytest -sv ./tests -k "multi_gpu"
     """
     if not _torch_available:
         return unittest.skip("test requires PyTorch")(test_case)
@@ -212,7 +212,7 @@ def require_torch_multigpu(test_case):
         return test_case
 
 
-def require_torch_non_multigpu(test_case):
+def require_torch_non_multi_gpu(test_case):
     """
     Decorator marking a test that requires 0 or 1 GPU setup (in PyTorch).
     """
@@ -227,10 +227,10 @@ def require_torch_non_multigpu(test_case):
         return test_case
 
 
-# this is a decorator identical to require_torch_non_multigpu, but is used as a quick band-aid to
+# this is a decorator identical to require_torch_non_multi_gpu, but is used as a quick band-aid to
 # allow all of examples to be run multi-gpu CI and it reminds us that tests decorated with this one
 # need to be ported and aren't so by design.
-require_torch_non_multigpu_but_fix_me = require_torch_non_multigpu
+require_torch_non_multi_gpu_but_fix_me = require_torch_non_multi_gpu
 
 
 def require_torch_tpu(test_case):
