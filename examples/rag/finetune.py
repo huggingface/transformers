@@ -13,9 +13,9 @@ from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pytorch_lightning as pl
-#from pytorch_lightning.accelerators import Accelerator
-#from pytorch_lightning.accelerators.ddp_accelerator import DDPAccelerator
-#from pytorch_lightning.cluster_environments import TorchElasticEnvironment
+from pytorch_lightning.accelerators import Accelerator
+from pytorch_lightning.accelerators.ddp_accelerator import DDPAccelerator
+from pytorch_lightning.cluster_environments import TorchElasticEnvironment
 
 import torch
 import torch.distributed as dist
@@ -77,25 +77,25 @@ class AttrDict(dict):
 
 # https://github.com/PyTorchLightning/pytorch-lightning/blob/master/tests/backends/test_accelerator_connector.py
 
-#class Accel(DDPAccelerator):
-#    def __init__(self, trainer=None, **kwargs):
-#        # trainer is set later.
-#        super().__init__(trainer, **kwargs)
-#
-#    def init_ddp_connection(self, global_rank: int, world_size: int, is_slurm_managing_tasks: bool = True):
-#        logger.info("Custom init_ddp_connection.")
-#        module = self.trainer.model
-#        if self.cluster_environment is None:
-#            self.cluster_environment = TorchElasticEnvironment()
-#        self.distributed_port = module.hparams.distributed_port
-#        os.environ["MASTER_PORT"] = str(self.distributed_port)
-#        super().init_ddp_connection(global_rank, world_size, is_slurm_managing_tasks)
-#        if module.is_rag_model:
-#            if module.distributed_retriever == "pytorch":
-#                module.model.rag.retriever.init_retrieval(self.distributed_port)
-#            elif module.distributed_retriever == "ray" and global_rank == 0:
-#                module.model.rag.retriever.init_retrieval(num_actors=1)
-#            #module.model.rag.retriever.init_retrieval(self.distributed_port)
+class Accel(DDPAccelerator):
+   def __init__(self, trainer=None, **kwargs):
+       # trainer is set later.
+       super().__init__(trainer, **kwargs)
+
+   def init_ddp_connection(self, global_rank: int, world_size: int, is_slurm_managing_tasks: bool = True):
+       logger.info("Custom init_ddp_connection.")
+       module = self.trainer.model
+       if self.cluster_environment is None:
+           self.cluster_environment = TorchElasticEnvironment()
+       self.distributed_port = module.hparams.distributed_port
+       os.environ["MASTER_PORT"] = str(self.distributed_port)
+       super().init_ddp_connection(global_rank, world_size, is_slurm_managing_tasks)
+       if module.is_rag_model:
+           if module.distributed_retriever == "pytorch":
+               module.model.rag.retriever.init_retrieval(self.distributed_port)
+           elif module.distributed_retriever == "ray" and global_rank == 0:
+               module.model.rag.retriever.init_retrieval(num_actors=1)
+           #module.model.rag.retriever.init_retrieval(self.distributed_port)
 
 
 
@@ -203,19 +203,19 @@ class GenerativeQAModule(BaseTransformer):
 
         self.distributed_retriever = hparams.distributed_retriever
 
-    def init_ddp_connection(self, global_rank: int, world_size: int, is_slurm_managing_tasks: bool = True):
-        # if global_rank == 0:
-        #     import ipdb; ipdb.set_trace()
-        logger.info("Custom init_ddp_connection.")
-        os.environ["MASTER_PORT"] = str(self.distributed_port)
-        super().init_ddp_connection(global_rank, world_size, is_slurm_managing_tasks)
-        # if self.is_rag_model:
-        #     self.model.retriever.init_retrieval(self.distributed_port)
-        if self.is_rag_model:
-            if self.distributed_retriever == "pytorch":
-                self.model.retriever.init_retrieval(self.distributed_port)
-            elif self.distributed_retriever == "ray" and global_rank == 0:
-                self.model.retriever.init_retrieval(num_actors=1)
+    # def init_ddp_connection(self, global_rank: int, world_size: int, is_slurm_managing_tasks: bool = True):
+    #     # if global_rank == 0:
+    #     #     import ipdb; ipdb.set_trace()
+    #     logger.info("Custom init_ddp_connection.")
+    #     os.environ["MASTER_PORT"] = str(self.distributed_port)
+    #     super().init_ddp_connection(global_rank, world_size, is_slurm_managing_tasks)
+    #     # if self.is_rag_model:
+    #     #     self.model.retriever.init_retrieval(self.distributed_port)
+    #     if self.is_rag_model:
+    #         if self.distributed_retriever == "pytorch":
+    #             self.model.retriever.init_retrieval(self.distributed_port)
+    #         elif self.distributed_retriever == "ray" and global_rank == 0:
+    #             self.model.retriever.init_retrieval(num_actors=1)
 
     def forward(self, input_ids, **kwargs):
         return self.model(input_ids, **kwargs)
