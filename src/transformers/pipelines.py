@@ -1333,18 +1333,17 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
     def __call__(self, *args, **kwargs):
 
         if args is not None and len(args) > 0:
-            if isinstance(args, str):
-                inputs = [args]
-            else:
-                inputs = args
+            inputs = list(args)
             batch_size = len(inputs)
+        else:
+            raise ValueError("At least one input is required.")
 
-        offset_mapping = kwargs.get("offset_mapping", None)
+        offset_mapping = kwargs.get("offset_mapping")
         if offset_mapping:
             if isinstance(offset_mapping, list) and isinstance(offset_mapping[0], tuple):
                 offset_mapping = [offset_mapping]
             if len(offset_mapping) != batch_size:
-                raise ("offset_mapping should have the same batch size as the input")
+                raise ValueError("offset_mapping should have the same batch size as the input")
         return inputs, offset_mapping
 
 
@@ -1379,20 +1378,19 @@ class TokenClassificationPipeline(Pipeline):
         tokenizer: PreTrainedTokenizer,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
-        args_parser: ArgumentHandler = None,
+        args_parser: ArgumentHandler = TokenClassificationArgumentHandler(),
         device: int = -1,
         binary_output: bool = False,
         ignore_labels=["O"],
         task: str = "",
         grouped_entities: bool = False,
-        ignore_subwords: bool = True,
+        ignore_subwords: bool = False,
     ):
         super().__init__(
             model=model,
             tokenizer=tokenizer,
             modelcard=modelcard,
             framework=framework,
-            args_parser=TokenClassificationArgumentHandler(),
             device=device,
             binary_output=binary_output,
             task=task,
@@ -1405,9 +1403,16 @@ class TokenClassificationPipeline(Pipeline):
         )
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
+        self._args_parser = args_parser
         self.ignore_labels = ignore_labels
         self.grouped_entities = grouped_entities
         self.ignore_subwords = ignore_subwords
+
+        if self.ignore_subwords and not self.tokenizer.is_fast:
+            raise ValueError(
+                "Slow tokenizers cannot ignore subwords. Please set the `ignore_subwords` option"
+                "to `False` or use a fast tokenizer."
+            )
 
     def __call__(self, inputs: Union[str, List[str]], **kwargs):
         """
@@ -1429,10 +1434,7 @@ class TokenClassificationPipeline(Pipeline):
               corresponding token in the sentence.
         """
 
-        if isinstance(inputs, str):
-            inputs = [inputs]
-
-        offset_mappings = kwargs.get("offset_mappings")
+        inputs, offset_mappings = self._args_parser(inputs, **kwargs)
 
         answers = []
 
@@ -1450,14 +1452,13 @@ class TokenClassificationPipeline(Pipeline):
                     return_offsets_mapping=self.tokenizer.is_fast,
                 )
                 if self.tokenizer.is_fast:
-                    offset_mapping = tokens["offset_mapping"].cpu().numpy()[0]
-                    del tokens["offset_mapping"]
+                    offset_mapping = tokens.pop("offset_mapping").cpu().numpy()[0]
                 elif offset_mappings:
                     offset_mapping = offset_mappings[i]
                 else:
-                    raise Exception("To decode [UNK] tokens use a fast tokenizer or provide offset_mapping parameter")
-                special_tokens_mask = tokens["special_tokens_mask"].cpu().numpy()[0]
-                del tokens["special_tokens_mask"]
+                    offset_mapping = None
+
+                special_tokens_mask = tokens.pop("special_tokens_mask").cpu().numpy()[0]
 
                 # Forward
                 if self.framework == "tf":
@@ -1482,14 +1483,17 @@ class TokenClassificationPipeline(Pipeline):
             ]
 
             for idx, label_idx in filtered_labels_idx:
-                start_ind, end_ind = offset_mapping[idx]
-                word_ref = sentence[start_ind:end_ind]
-                word = self.tokenizer.convert_ids_to_tokens([int(input_ids[idx])])[0]
-                is_subword = len(word_ref) != len(word)
+                if offset_mapping is not None:
+                    start_ind, end_ind = offset_mapping[idx]
+                    word_ref = sentence[start_ind:end_ind]
+                    word = self.tokenizer.convert_ids_to_tokens([int(input_ids[idx])])[0]
+                    is_subword = len(word_ref) != len(word)
 
-                if int(input_ids[idx]) == self.tokenizer.unk_token_id:
-                    word = word_ref
-                    is_subword = False
+                    if int(input_ids[idx]) == self.tokenizer.unk_token_id:
+                        word = word_ref
+                        is_subword = False
+                else:
+                    word = self.tokenizer.convert_ids_to_tokens(int(input_ids[idx]))
 
                 entity = {
                     "word": word,
