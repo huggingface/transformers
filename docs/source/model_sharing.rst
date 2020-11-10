@@ -18,39 +18,65 @@ done something similar on your task, either using the model directly in your own
 :class:`~.transformers.Trainer`/:class:`~.transformers.TFTrainer` class. Let's see how you can share the result on the
 `model hub <https://huggingface.co/models>`__.
 
+Model versioning
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Since version v3.5.0, the model hub has built-in model versioning based on git and git-lfs. It is based on the paradigm
+that one model *is* one repo.
+
+This allows:
+
+- built-in versioning
+- access control
+- scalability
+
+This is built around *revisions*, which is a way to pin a specific version of a model, using a commit hash, tag or
+branch.
+
+For instance:
+
+.. code-block::
+
+    >>> tokenizer = AutoTokenizer.from_pretrained(
+    >>>   "julien-c/EsperBERTo-small",
+    >>>   revision="v2.0.1" # tag name, or branch name, or commit hash
+    >>> )
+
 Basic steps
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. 
-    When #5258 is merged, we can remove the need to create the directory.
+In order to upload a model, you'll need to first create a git repo. This repo will live on the model hub, allowing
+users to clone it and you (and your organization members) to push to it. First, you should ensure you are logged in the
+``transformers-cli``:
 
-First, pick a directory with the name you want your model to have on the model hub (its full name will then be
-`username/awesome-name-you-picked` or `organization/awesome-name-you-picked`) and create it with either
-
-.. code-block::
-
-    mkdir path/to/awesome-name-you-picked
-
-or in python
+Go in a terminal and run the following command. It should be in the virtual environment where you installed 🤗
+Transformers, since that command :obj:`transformers-cli` comes from the library.
 
 .. code-block::
 
-    import os
-    os.makedirs("path/to/awesome-name-you-picked")
+    transformers-cli login
 
-then you can save your model and tokenizer with:
 
-.. code-block::
-
-    model.save_pretrained("path/to/awesome-name-you-picked")
-    tokenizer.save_pretrained("path/to/awesome-name-you-picked")
-
-Or, if you're using the Trainer API
+Once you are logged in with your model hub credentials, you can start building your repositories. To create a repo:
 
 .. code-block::
 
-    trainer.save_model("path/to/awesome-name-you-picked")
-    tokenizer.save_pretrained("path/to/awesome-name-you-picked")
+    transformers-cli repo create your-model-name
+
+This creates a repo on the model hub, which can be cloned. You can then add/remove from that repo as you would with any
+other git repo.
+
+.. code-block::
+
+    git clone https://huggingface.co/username/your-model-name
+
+    # Then commit as usual
+    cd your-model-name
+    echo "hello" >> README.md
+    git add . && git commit -m "Update from $USER"
+
+We are intentionally not wrapping git too much, so as to stay intuitive and easy-to-use.
+
 
 Make your model work on all frameworks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -71,13 +97,13 @@ or removing TF. For instance, if you trained a :class:`~transformers.DistilBertF
 
 .. code-block::
 
-    from transformers import TFDistilBertForSequenceClassification
+    >>> from transformers import TFDistilBertForSequenceClassification
 
 and if you trained a :class:`~transformers.TFDistilBertForSequenceClassification`, try to type
 
 .. code-block::
 
-    from transformers import DistilBertForSequenceClassification
+    >>> from transformers import DistilBertForSequenceClassification
 
 This will give back an error if your model does not exist in the other framework (something that should be pretty rare
 since we're aiming for full parity between the two frameworks). In this case, skip this and go to the next step.
@@ -87,20 +113,20 @@ model class:
 
 .. code-block::
 
-    tf_model = TFDistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_pt=True)
-    tf_model.save_pretrained("path/to/awesome-name-you-picked")
+    >>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_pt=True)
+    >>> tf_model.save_pretrained("path/to/awesome-name-you-picked")
 
 and if you trained your model in TensorFlow and have to create a PyTorch version, adapt the following code to your
 model class:
 
 .. code-block::
 
-    pt_model = DistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_tf=True)
-    pt_model.save_pretrained("path/to/awesome-name-you-picked")
+    >>> pt_model = DistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_tf=True)
+    >>> pt_model.save_pretrained("path/to/awesome-name-you-picked")
 
 That's all there is to it!
 
-Check the directory before uploading
+Check the directory before pushing to the model hub.
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Make sure there are no garbage files in the directory you'll upload. It should only have:
@@ -116,62 +142,46 @@ Make sure there are no garbage files in the directory you'll upload. It should o
 
 Other files can safely be deleted.
 
-Upload your model with the CLI
+
+Uploading your files
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Now go in a terminal and run the following command. It should be in the virtual environment where you installed 🤗
-Transformers, since that command :obj:`transformers-cli` comes from the library.
+Once the repo is cloned, you can add the model, configuration and tokenizer files. For instance, saving the model and
+tokenizer files:
 
 .. code-block::
 
-    transformers-cli login
+    >>> model.save_pretrained("path/to/repo/clone/your-model-name")
+    >>> tokenizer.save_pretrained("path/to/repo/clone/your-model-name")
 
-Then log in using the same credentials as on huggingface.co. To upload your model, just type
-
-.. code-block::
-
-    transformers-cli upload path/to/awesome-name-you-picked/
-
-This will upload the folder containing the weights, tokenizer and configuration we prepared in the previous section.
-
-By default you will be prompted to confirm that you want these files to be uploaded. If you are uploading multiple
-models and need to script that process, you can add `-y` to bypass the prompt. For example:
+Or, if you're using the Trainer API
 
 .. code-block::
 
-    transformers-cli upload -y path/to/awesome-name-you-picked/
+    >>> trainer.save_model("path/to/awesome-name-you-picked")
 
-
-If you want to upload a single file (a new version of your model, or the other framework checkpoint you want to add),
-just type:
-
-.. code-block::
-
-    transformers-cli upload path/to/awesome-name-you-picked/that-file 
-
-or
+You can then add these files to the staging environment and verify that they have been correctly staged with the ``git
+status`` command:
 
 .. code-block::
 
-   transformers-cli upload path/to/awesome-name-you-picked/that-file --filename awesome-name-you-picked/new_name
+    git add --all
+    git status
 
-if you want to change its filename.
-
-This uploads the model to your personal account. If you want your model to be namespaced by your organization name
-rather than your username, add the following flag to any command:
+Finally, the files should be comitted:
 
 .. code-block::
 
-    --organization organization_name
+    git commit -m "First version of the your-model-name model and tokenizer."
 
-so for instance:
+And pushed to the remote:
 
 .. code-block::
 
-    transformers-cli upload path/to/awesome-name-you-picked/ --organization organization_name
+    git push
 
-Your model will then be accessible through its identifier, which is, as we saw above,
-`username/awesome-name-you-picked` or `organization/awesome-name-you-picked`.
+This will upload the folder containing the weights, tokenizer and configuration we have just prepared.
+
 
 Add a model card
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -203,20 +213,15 @@ Anyone can load it from code:
 
 .. code-block::
 
-    tokenizer = AutoTokenizer.from_pretrained("namespace/awesome-name-you-picked")
-    model = AutoModel.from_pretrained("namespace/awesome-name-you-picked")
+    >>> tokenizer = AutoTokenizer.from_pretrained("namespace/awesome-name-you-picked")
+    >>> model = AutoModel.from_pretrained("namespace/awesome-name-you-picked")
 
-Additional commands
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-You can list all the files you uploaded on the hub like this:
+You may specify a revision by using the ``revision`` flag in the ``from_pretrained`` method:
 
 .. code-block::
 
-    transformers-cli s3 ls
-
-You can also delete unneeded files with
-
-.. code-block::
-
-    transformers-cli s3 rm awesome-name-you-picked/filename
+    >>> tokenizer = AutoTokenizer.from_pretrained(
+    >>>   "julien-c/EsperBERTo-small",
+    >>>   revision="v2.0.1" # tag name, or branch name, or commit hash
+    >>> )

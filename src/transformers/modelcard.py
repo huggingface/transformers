@@ -144,9 +144,7 @@ class ModelCard:
         elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             model_card_file = pretrained_model_name_or_path
         else:
-            model_card_file = hf_bucket_url(
-                pretrained_model_name_or_path, filename=MODEL_CARD_NAME, use_cdn=False, mirror=None
-            )
+            model_card_file = hf_bucket_url(pretrained_model_name_or_path, filename=MODEL_CARD_NAME, mirror=None)
 
         if find_from_standard_name or pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
             model_card_file = model_card_file.replace(CONFIG_NAME, MODEL_CARD_NAME)
@@ -156,8 +154,6 @@ class ModelCard:
         try:
             # Load from URL or cache if already cached
             resolved_model_card_file = cached_path(model_card_file, cache_dir=cache_dir, proxies=proxies)
-            if resolved_model_card_file is None:
-                raise EnvironmentError
             if resolved_model_card_file == model_card_file:
                 logger.info("loading model card file {}".format(model_card_file))
             else:

@@ -25,10 +25,10 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "yjernite/retribert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
+        "yjernite/retribert-base-uncased": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
     },
     "tokenizer_file": {
-        "yjernite/retribert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
+        "yjernite/retribert-base-uncased": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
     },
 }
 

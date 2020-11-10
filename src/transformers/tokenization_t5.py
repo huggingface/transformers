@@ -43,11 +43,11 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 ####################################################
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "t5-small": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        "t5-base": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        "t5-large": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        "t5-3b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        "t5-11b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
+        "t5-small": "https://huggingface.co/t5-small/resolve/main/spiece.model",
+        "t5-base": "https://huggingface.co/t5-base/resolve/main/spiece.model",
+        "t5-large": "https://huggingface.co/t5-large/resolve/main/spiece.model",
+        "t5-3b": "https://huggingface.co/t5-3b/resolve/main/spiece.model",
+        "t5-11b": "https://huggingface.co/t5-11b/resolve/main/spiece.model",
     }
 }
 
@@ -187,6 +187,28 @@ class T5Tokenizer(PreTrainedTokenizer):
         else:
             return token_ids + [self.eos_token_id]
 
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. T5 does not make
+        use of token type ids, therefore a list of zeros is returned.
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: List of zeros.
+        """
+        eos = [self.eos_token_id]
+
+        if token_ids_1 is None:
+            return len(token_ids_0 + eos) * [0]
+        return len(token_ids_0 + eos + token_ids_1 + eos) * [0]
+
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -249,8 +271,17 @@ class T5Tokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """ Converts a sequence of tokens (string) in a single string. """
-        out_string = self.sp_model.decode_pieces(tokens)
-        return out_string
+        current_sub_tokens = []
+        out_string = ""
+        for token in tokens:
+            # make sure that special tokens are not decoded using sentencepiece model
+            if token in self.all_special_tokens:
+                out_string += self.sp_model.decode_pieces(current_sub_tokens) + token + " "
+                current_sub_tokens = []
+            else:
+                current_sub_tokens.append(token)
+        out_string += self.sp_model.decode_pieces(current_sub_tokens)
+        return out_string.strip()
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):

@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "3.4.0"
+__version__ = "3.5.0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -651,6 +651,7 @@ if is_tf_available():
         TF_MODEL_FOR_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_MASKED_LM_MAPPING,
         TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+        TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
         TF_MODEL_FOR_PRETRAINING_MAPPING,
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,

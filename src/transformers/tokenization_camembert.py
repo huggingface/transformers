@@ -31,7 +31,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "camembert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-sentencepiece.bpe.model",
+        "camembert-base": "https://huggingface.co/camembert-base/resolve/main/sentencepiece.bpe.model",
     }
 }
 

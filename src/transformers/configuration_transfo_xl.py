@@ -25,7 +25,7 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "transfo-xl-wt103": "https://s3.amazonaws.com/models.huggingface.co/bert/transfo-xl-wt103-config.json",
+    "transfo-xl-wt103": "https://huggingface.co/transfo-xl-wt103/resolve/main/config.json",
 }
 
 

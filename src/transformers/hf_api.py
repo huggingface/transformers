@@ -27,9 +27,21 @@ import requests
 ENDPOINT = "https://huggingface.co"
 
 
+class RepoObj:
+    """
+    HuggingFace git-based system, data structure that represents a file belonging to the current user.
+    """
+
+    def __init__(self, filename: str, lastModified: str, commit: str, size: int, **kwargs):
+        self.filename = filename
+        self.lastModified = lastModified
+        self.commit = commit
+        self.size = size
+
+
 class S3Obj:
     """
-    Data structure that represents a file belonging to the current user.
+    HuggingFace S3-based system, data structure that represents a file belonging to the current user.
     """
 
     def __init__(self, filename: str, LastModified: str, ETag: str, Size: int, **kwargs):
@@ -46,38 +58,25 @@ class PresignedUrl:
         self.type = type  # mime-type to send to S3.
 
 
-class S3Object:
+class ModelSibling:
     """
-    Data structure that represents a public file accessible on our S3.
+    Data structure that represents a public file inside a model, accessible from huggingface.co
     """
 
-    def __init__(
-        self,
-        key: str,  # S3 object key
-        etag: str,
-        lastModified: str,
-        size: int,
-        rfilename: str,  # filename relative to config.json
-        **kwargs
-    ):
-        self.key = key
-        self.etag = etag
-        self.lastModified = lastModified
-        self.size = size
-        self.rfilename = rfilename
+    def __init__(self, rfilename: str, **kwargs):
+        self.rfilename = rfilename  # filename relative to the model root
         for k, v in kwargs.items():
             setattr(self, k, v)
 
 
 class ModelInfo:
     """
-    Info about a public model accessible from our S3.
+    Info about a public model accessible from huggingface.co
     """
 
     def __init__(
         self,
-        modelId: str,  # id of model
-        key: str,  # S3 object key of config.json
+        modelId: Optional[str] = None,  # id of model
         author: Optional[str] = None,
         downloads: Optional[int] = None,
         tags: List[str] = [],
@@ -86,12 +85,11 @@ class ModelInfo:
         **kwargs
     ):
         self.modelId = modelId
-        self.key = key
         self.author = author
         self.downloads = downloads
         self.tags = tags
         self.pipeline_tag = pipeline_tag
-        self.siblings = [S3Object(**x) for x in siblings] if siblings is not None else None
+        self.siblings = [ModelSibling(**x) for x in siblings] if siblings is not None else None
         for k, v in kwargs.items():
             setattr(self, k, v)
 
@@ -134,9 +132,11 @@ class HfApi:
 
     def presign(self, token: str, filename: str, organization: Optional[str] = None) -> PresignedUrl:
         """
+        HuggingFace S3-based system, used for datasets and metrics.
+
         Call HF API to get a presigned url to upload `filename` to S3.
         """
-        path = "{}/api/presign".format(self.endpoint)
+        path = "{}/api/datasets/presign".format(self.endpoint)
         r = requests.post(
             path,
             headers={"authorization": "Bearer {}".format(token)},
@@ -148,6 +148,8 @@ class HfApi:
 
     def presign_and_upload(self, token: str, filename: str, filepath: str, organization: Optional[str] = None) -> str:
         """
+        HuggingFace S3-based system, used for datasets and metrics.
+
         Get a presigned url, then upload file to S3.
 
         Outputs: url: Read-only url for the stored file on S3.
@@ -169,9 +171,11 @@ class HfApi:
 
     def list_objs(self, token: str, organization: Optional[str] = None) -> List[S3Obj]:
         """
+        HuggingFace S3-based system, used for datasets and metrics.
+
         Call HF API to list all stored files for user (or one of their organizations).
         """
-        path = "{}/api/listObjs".format(self.endpoint)
+        path = "{}/api/datasets/listObjs".format(self.endpoint)
         params = {"organization": organization} if organization is not None else None
         r = requests.get(path, params=params, headers={"authorization": "Bearer {}".format(token)})
         r.raise_for_status()
@@ -180,9 +184,11 @@ class HfApi:
 
     def delete_obj(self, token: str, filename: str, organization: Optional[str] = None):
         """
+        HuggingFace S3-based system, used for datasets and metrics.
+
         Call HF API to delete a file stored by user
         """
-        path = "{}/api/deleteObj".format(self.endpoint)
+        path = "{}/api/datasets/deleteObj".format(self.endpoint)
         r = requests.delete(
             path,
             headers={"authorization": "Bearer {}".format(token)},
@@ -199,6 +205,51 @@ class HfApi:
         r.raise_for_status()
         d = r.json()
         return [ModelInfo(**x) for x in d]
+
+    def list_repos_objs(self, token: str, organization: Optional[str] = None) -> List[S3Obj]:
+        """
+        HuggingFace git-based system, used for models.
+
+        Call HF API to list all stored files for user (or one of their organizations).
+        """
+        path = "{}/api/repos/ls".format(self.endpoint)
+        params = {"organization": organization} if organization is not None else None
+        r = requests.get(path, params=params, headers={"authorization": "Bearer {}".format(token)})
+        r.raise_for_status()
+        d = r.json()
+        return [RepoObj(**x) for x in d]
+
+    def create_repo(self, token: str, name: str, organization: Optional[str] = None) -> str:
+        """
+        HuggingFace git-based system, used for models.
+
+        Call HF API to create a whole repo.
+        """
+        path = "{}/api/repos/create".format(self.endpoint)
+        r = requests.post(
+            path,
+            headers={"authorization": "Bearer {}".format(token)},
+            json={"name": name, "organization": organization},
+        )
+        r.raise_for_status()
+        d = r.json()
+        return d["url"]
+
+    def delete_repo(self, token: str, name: str, organization: Optional[str] = None):
+        """
+        HuggingFace git-based system, used for models.
+
+        Call HF API to delete a whole repo.
+
+        CAUTION(this is irreversible).
+        """
+        path = "{}/api/repos/delete".format(self.endpoint)
+        r = requests.delete(
+            path,
+            headers={"authorization": "Bearer {}".format(token)},
+            json={"name": name, "organization": organization},
+        )
+        r.raise_for_status()
 
 
 class TqdmProgressFileReader:
