@@ -20,7 +20,7 @@ import unittest
 from time import time
 from unittest.mock import patch
 
-from transformers.testing_utils import require_torch_non_multigpu_but_fix_me, require_torch_tpu
+from transformers.testing_utils import require_torch_non_multi_gpu_but_fix_me, require_torch_tpu
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -30,7 +30,7 @@ logger = logging.getLogger()
 
 @require_torch_tpu
 class TorchXLAExamplesTests(unittest.TestCase):
-    @require_torch_non_multigpu_but_fix_me
+    @require_torch_non_multi_gpu_but_fix_me
     def test_run_glue(self):
         import xla_spawn
 
@@ -82,7 +82,7 @@ class TorchXLAExamplesTests(unittest.TestCase):
             # Assert that the script takes less than 300 seconds to make sure it doesn't hang.
             self.assertLess(end - start, 500)
 
-    @require_torch_non_multigpu_but_fix_me
+    @require_torch_non_multi_gpu_but_fix_me
     def test_trainer_tpu(self):
         import xla_spawn
 

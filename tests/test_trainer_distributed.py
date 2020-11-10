@@ -2,7 +2,7 @@ import sys
 from typing import Dict
 
 from transformers import EvalPrediction, HfArgumentParser, TrainingArguments, is_torch_available
-from transformers.testing_utils import TestCasePlus, execute_subprocess_async, require_torch_multigpu
+from transformers.testing_utils import TestCasePlus, execute_subprocess_async, require_torch_multi_gpu
 from transformers.utils import logging
 
 
@@ -44,7 +44,7 @@ if is_torch_available():
 
 
 class TestTrainerDistributed(TestCasePlus):
-    @require_torch_multigpu
+    @require_torch_multi_gpu
     def test_trainer(self):
 
         distributed_args = f"""

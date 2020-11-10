@@ -405,32 +405,32 @@ decorators are used to set the requirements of tests CPU/GPU/TPU-wise:
 
 * ``require_torch`` - this test will run only under torch
 * ``require_torch_gpu`` - as ``require_torch`` plus requires at least 1 GPU
-* ``require_torch_multigpu`` - as ``require_torch`` plus requires at least 2 GPUs
-* ``require_torch_non_multigpu`` - as ``require_torch`` plus requires 0 or 1 GPUs
+* ``require_torch_multi_gpu`` - as ``require_torch`` plus requires at least 2 GPUs
+* ``require_torch_non_multi_gpu`` - as ``require_torch`` plus requires 0 or 1 GPUs
 * ``require_torch_tpu`` - as ``require_torch`` plus requires at least 1 TPU
 
 Let's depict the GPU requirements in the following table:
 
 
-+----------+---------------------------------+
-| n gpus   |  decorator                      |
-+==========+=================================+
-| ``>= 0`` | ``@require_torch``              |
-+----------+---------------------------------+
-| ``>= 1`` | ``@require_torch_gpu``          |
-+----------+---------------------------------+
-| ``>= 2`` | ``@require_torch_multigpu``     |
-+----------+---------------------------------+
-| ``< 2``  | ``@require_torch_non_multigpu`` |
-+----------+---------------------------------+
++----------+----------------------------------+
+| n gpus   |  decorator                       |
++==========+==================================+
+| ``>= 0`` | ``@require_torch``               |
++----------+----------------------------------+
+| ``>= 1`` | ``@require_torch_gpu``           |
++----------+----------------------------------+
+| ``>= 2`` | ``@require_torch_multi_gpu``     |
++----------+----------------------------------+
+| ``< 2``  | ``@require_torch_non_multi_gpu`` |
++----------+----------------------------------+
 
 
 For example, here is a test that must be run only when there are 2 or more GPUs available and pytorch is installed:
 
 .. code-block:: python
 
-    @require_torch_multigpu
-    def test_example_with_multigpu():
+    @require_torch_multi_gpu
+    def test_example_with_multi_gpu():
 
 If a test requires ``tensorflow`` use the ``require_tf`` decorator. For example:
 
@@ -454,7 +454,7 @@ last for them to work correctly. Here is an example of the correct usage:
 .. code-block:: python
 
     @parameterized.expand(...)
-    @require_torch_multigpu
+    @require_torch_multi_gpu
     def test_integration_foo():
 
 This order problem doesn't exist with ``@pytest.mark.parametrize``, you can put it first or last and it will still
