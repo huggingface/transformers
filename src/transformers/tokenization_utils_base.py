@@ -348,7 +348,7 @@ class BatchEncoding(UserDict):
         """
         if not self._encodings:
             raise ValueError("sequence_ids() is not available when using Python-based tokenizers")
-        return self._encodings[batch_index].sequences
+        return self._encodings[batch_index].sequence_ids
 
     def words(self, batch_index: int = 0) -> List[Optional[int]]:
         """
@@ -385,7 +385,7 @@ class BatchEncoding(UserDict):
         """
         if not self._encodings:
             raise ValueError("word_ids() is not available when using Python-based tokenizers")
-        return self._encodings[batch_index].words
+        return self._encodings[batch_index].word_ids
 
     def token_to_sequence(self, batch_or_token_index: int, token_index: Optional[int] = None) -> int:
         """
