@@ -24,7 +24,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "yjernite/retribert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
+        "yjernite/retribert-base-uncased": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
     }
 }
 

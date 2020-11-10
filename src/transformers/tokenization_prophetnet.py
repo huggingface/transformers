@@ -28,7 +28,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "prophetnet.tokenizer"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "microsoft/prophetnet-large-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/microsoft/prophetnet-large-uncased/prophetnet.tokenizer",
+        "microsoft/prophetnet-large-uncased": "https://huggingface.co/microsoft/prophetnet-large-uncased/resolve/main/prophetnet.tokenizer",
     }
 }
 

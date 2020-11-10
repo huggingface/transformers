@@ -34,12 +34,12 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "vinai/phobert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/vinai/phobert-base/vocab.txt",
-        "vinai/phobert-large": "https://s3.amazonaws.com/models.huggingface.co/bert/vinai/phobert-large/vocab.txt",
+        "vinai/phobert-base": "https://huggingface.co/vinai/phobert-base/resolve/main/vocab.txt",
+        "vinai/phobert-large": "https://huggingface.co/vinai/phobert-large/resolve/main/vocab.txt",
     },
     "merges_file": {
-        "vinai/phobert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/vinai/phobert-base/bpe.codes",
-        "vinai/phobert-large": "https://s3.amazonaws.com/models.huggingface.co/bert/vinai/phobert-large/bpe.codes",
+        "vinai/phobert-base": "https://huggingface.co/vinai/phobert-base/resolve/main/bpe.codes",
+        "vinai/phobert-large": "https://huggingface.co/vinai/phobert-large/resolve/main/bpe.codes",
     },
 }
 
