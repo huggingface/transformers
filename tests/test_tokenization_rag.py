@@ -4,13 +4,12 @@ import shutil
 import tempfile
 from unittest import TestCase
 
+from transformers import BartTokenizer, DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast
 from transformers.configuration_bart import BartConfig
 from transformers.configuration_dpr import DPRConfig
 from transformers.file_utils import is_datasets_available, is_faiss_available, is_torch_available
-from transformers.testing_utils import require_datasets, require_faiss, require_torch, slow
-from transformers.tokenization_bart import BartTokenizer
+from transformers.testing_utils import require_datasets, require_faiss, require_tokenizers, require_torch, slow
 from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
-from transformers.tokenization_dpr import DPRQuestionEncoderTokenizer
 from transformers.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 
 
@@ -96,6 +95,7 @@ class RagTokenizerTest(TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+    @require_tokenizers
     def test_save_load_pretrained_with_saved_config(self):
 
         save_dir = os.path.join(self.tmpdirname, "rag_tokenizer")
@@ -104,7 +104,7 @@ class RagTokenizerTest(TestCase):
         rag_config.save_pretrained(save_dir)
         rag_tokenizer.save_pretrained(save_dir)
         new_rag_tokenizer = RagTokenizer.from_pretrained(save_dir, config=rag_config)
-        self.assertIsInstance(new_rag_tokenizer.question_encoder, DPRQuestionEncoderTokenizer)
+        self.assertIsInstance(new_rag_tokenizer.question_encoder, DPRQuestionEncoderTokenizerFast)
         self.assertEqual(new_rag_tokenizer.question_encoder.vocab, rag_tokenizer.question_encoder.vocab)
         self.assertIsInstance(new_rag_tokenizer.generator, BartTokenizer)
         self.assertEqual(new_rag_tokenizer.generator.encoder, rag_tokenizer.generator.encoder)
