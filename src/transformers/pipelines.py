@@ -1808,13 +1808,21 @@ class QuestionAnsweringPipeline(Pipeline):
                     return_special_tokens_mask=True,
                 )
 
+                # When the input is too long, it's converted in a batch of inputs with overflowing tokens
+                # and a stride of overlap between the inputs. If a batch of inputs is given, a special output
+                # "overflow_to_sample_mapping" indicate which member of the encoded batch belong to which original batch sample.
+                # Here we tokenize examples one-by-one so we don't need to use "overflow_to_sample_mapping".
+                # "num_span" is the number of output samples generated from the overflowing tokens.
                 num_spans = len(encoded_inputs["input_ids"])
 
                 # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
-                p_mask = encoded_inputs["token_type_ids"] == (0 if question_first else 1)  # Mask the question
-                p_mask = p_mask | encoded_inputs["special_tokens_mask"]  # And mask the special tokens
+                # We put 0 on the tokens from the context and 1 everywhere else (question and special tokens)
+                p_mask = np.asarray([[tok != 1 if question_first else 0
+                                        for tok in encoded_inputs.sequence_ids(span_id)]
+                                    for span_id in range(num_spans)])
+
+                # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
                 if self.tokenizer.cls_token_id:
-                    # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
                     cls_index = np.nonzero(encoded_inputs["input_ids"] == self.tokenizer.cls_token_id)
                     p_mask[cls_index] = 0
 
