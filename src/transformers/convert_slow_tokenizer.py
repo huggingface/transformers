@@ -24,7 +24,7 @@ from typing import Dict, List, Tuple
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
-from .file_utils import requires_sentencepiece, requires_protobuf
+from .file_utils import requires_protobuf, requires_sentencepiece
 
 
 class SentencePieceExtractor:
@@ -288,6 +288,7 @@ class SpmConverter(Converter):
         super().__init__(*args)
 
         from .utils import sentencepiece_model_pb2 as model_pb2
+
         m = model_pb2.ModelProto()
         m.ParseFromString(open(self.original_tokenizer.vocab_file, "rb").read())
         self.proto = m
