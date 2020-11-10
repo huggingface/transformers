@@ -101,8 +101,7 @@ extras["onnxruntime"] = ["onnxruntime>=1.4.0", "onnxruntime-tools>=1.4.2"]
 
 extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
 
-extras["protobuf"] = ["protobuf"]
-extras["sentencepiece"] = ["sentencepiece==0.1.91"]
+extras["sentencepiece"] = ["sentencepiece==0.1.91", "protobuf"]
 extras["retrieval"] = ["faiss-cpu", "datasets"]
 extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil"] + extras["retrieval"]
 # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
