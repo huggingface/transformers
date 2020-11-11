@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "3.4.0"
+__version__ = "3.5.0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -281,9 +281,9 @@ if is_torch_available():
     from .data.data_collator import (
         DataCollator,
         DataCollatorForLanguageModeling,
-        DataCollatorForNextSentencePrediction,
         DataCollatorForPermutationLanguageModeling,
         DataCollatorForSOP,
+        DataCollatorForTokenClassification,
         DataCollatorForWholeWordMask,
         DataCollatorWithPadding,
         default_data_collator,
@@ -298,6 +298,19 @@ if is_torch_available():
         SquadDataTrainingArguments,
         TextDataset,
         TextDatasetForNextSentencePrediction,
+    )
+    from .generation_beam_search import BeamScorer, BeamSearchScorer
+    from .generation_logits_process import (
+        LogitsProcessor,
+        LogitsProcessorList,
+        LogitsWarper,
+        MinLengthLogitsProcessor,
+        NoBadWordsLogitsProcessor,
+        NoRepeatNGramLogitsProcessor,
+        RepetitionPenaltyLogitsProcessor,
+        TemperatureLogitsWarper,
+        TopKLogitsWarper,
+        TopPLogitsWarper,
     )
     from .generation_utils import top_k_top_p_filtering
     from .modeling_albert import (
@@ -316,6 +329,7 @@ if is_torch_available():
         MODEL_FOR_CAUSAL_LM_MAPPING,
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+        MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
         MODEL_FOR_PRETRAINING_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
@@ -327,6 +341,7 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoModelForMaskedLM,
         AutoModelForMultipleChoice,
+        AutoModelForNextSentencePrediction,
         AutoModelForPreTraining,
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
@@ -636,6 +651,7 @@ if is_tf_available():
         TF_MODEL_FOR_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_MASKED_LM_MAPPING,
         TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+        TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
         TF_MODEL_FOR_PRETRAINING_MAPPING,
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
@@ -670,6 +686,7 @@ if is_tf_available():
         TFBertModel,
         TFBertPreTrainedModel,
     )
+    from .modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration
     from .modeling_tf_camembert import (
         TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFCamembertForMaskedLM,
@@ -750,6 +767,8 @@ if is_tf_available():
         TFLxmertPreTrainedModel,
         TFLxmertVisualFeatureEncoder,
     )
+    from .modeling_tf_marian import TFMarianMTModel
+    from .modeling_tf_mbart import TFMBartForConditionalGeneration
     from .modeling_tf_mobilebert import (
         TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFMobileBertForMaskedLM,
@@ -771,6 +790,7 @@ if is_tf_available():
         TFOpenAIGPTModel,
         TFOpenAIGPTPreTrainedModel,
     )
+    from .modeling_tf_pegasus import TFPegasusForConditionalGeneration
     from .modeling_tf_roberta import (
         TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFRobertaForMaskedLM,

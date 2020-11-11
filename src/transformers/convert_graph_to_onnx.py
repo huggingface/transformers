@@ -83,7 +83,7 @@ def generate_identified_filename(filename: Path, identifier: str) -> Path:
         filename: pathlib.Path The actual path object we would like to add an identifier suffix
         identifier: The suffix to add
 
-    Returns: String with concatenated indentifier at the end of the filename
+    Returns: String with concatenated identifier at the end of the filename
     """
     return filename.parent.joinpath(filename.stem + identifier).with_suffix(filename.suffix)
 

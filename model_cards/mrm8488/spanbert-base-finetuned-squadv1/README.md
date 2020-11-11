@@ -48,7 +48,7 @@ python code/run_squad.py \
 | SpanBERT (large)        | [94.6](https://huggingface.co/mrm8488/spanbert-large-finetuned-squadv1)         | [88.7](https://huggingface.co/mrm8488/spanbert-large-finetuned-squadv2)     | 79.6    |  [70.8](https://huggingface.co/mrm8488/spanbert-large-finetuned-tacred)  |
 
 
-Note: The numbers marked as * are evaluated on the development sets becaus those models were not submitted to the official SQuAD leaderboard. All the other numbers are test numbers.
+Note: The numbers marked as * are evaluated on the development sets because those models were not submitted to the official SQuAD leaderboard. All the other numbers are test numbers.
 
 ## Model in action
 

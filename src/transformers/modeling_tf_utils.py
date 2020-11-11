@@ -145,7 +145,7 @@ class TFCausalLanguageModelingLoss:
 
 class TFQuestionAnsweringLoss:
     """
-    Loss function suitable for quetion answering.
+    Loss function suitable for question answering.
     """
 
     def compute_loss(self, labels, logits):
@@ -396,7 +396,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             new_num_tokens (:obj:`int`, `optional`):
                 The number of new tokens in the embedding matrix. Increasing the size will add newly initialized
                 vectors at the end. Reducing the size will remove vectors from the end. If not provided or :obj:`None`,
-                just returns a pointer to the input tokens :obj:`tf.Variable` module of the model wihtout doing
+                just returns a pointer to the input tokens :obj:`tf.Variable` module of the model without doing
                 anything.
 
         Return:
@@ -442,7 +442,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
                 Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
                 vectors from the end. If not provided or :obj:`None`, just returns a pointer to the input tokens
-                :obj:`tf.Variable`` module of the model wihtout doing anything.
+                :obj:`tf.Variable`` module of the model without doing anything.
 
         Return:
             :obj:`tf.Variable`: Pointer to the resized Embedding Module or the old Embedding Module if
@@ -550,8 +550,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                     - The model is a model provided by the library (loaded with the `shortcut name` string of a
                       pretrained model).
                     - The model was saved using :func:`~transformers.TFPreTrainedModel.save_pretrained` and is reloaded
-                      by suppling the save directory.
-                    - The model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a
+                      by supplying the save directory.
+                    - The model is loaded by supplying a local directory as ``pretrained_model_name_or_path`` and a
                       configuration JSON file named `config.json` is found in the directory.
             from_pt: (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Load the model weights from a PyTorch state_dict save file (see docstring of
@@ -572,9 +572,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (e.g., not try doanloading the model).
-            use_cdn(:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether or not to use Cloudfront (a Content Delivery Network, or CDN) when searching for the model on
-                our S3 (faster). Should be set to :obj:`False` for checkpoints larger than 20GB.
+            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+                identifier allowed by git.
             mirror(:obj:`str`, `optional`, defaults to :obj:`None`):
                 Mirror source to accelerate downloads in China. If you are from China and have an accessibility
                 problem, you can set this option to resolve it. Note that we do not guarantee the timeliness or safety.
@@ -616,7 +617,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
-        use_cdn = kwargs.pop("use_cdn", True)
+        revision = kwargs.pop("revision", None)
         mirror = kwargs.pop("mirror", None)
 
         # Load config if we don't provide a configuration
@@ -631,6 +632,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 resume_download=resume_download,
                 proxies=proxies,
                 local_files_only=local_files_only,
+                revision=revision,
                 **kwargs,
             )
         else:
@@ -659,7 +661,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 archive_file = hf_bucket_url(
                     pretrained_model_name_or_path,
                     filename=(WEIGHTS_NAME if from_pt else TF2_WEIGHTS_NAME),
-                    use_cdn=use_cdn,
+                    revision=revision,
                     mirror=mirror,
                 )
 
@@ -673,9 +675,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                     resume_download=resume_download,
                     local_files_only=local_files_only,
                 )
-                if resolved_archive_file is None:
-                    raise EnvironmentError
-            except EnvironmentError:
+            except EnvironmentError as err:
+                logger.error(err)
                 msg = (
                     f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
                     f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
@@ -730,7 +731,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 f"Some layers from the model checkpoint at {pretrained_model_name_or_path} were not used when "
                 f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
                 f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
-                f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPretraining model).\n"
+                f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).\n"
                 f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
                 f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
             )
@@ -807,7 +808,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
 
     Args:
         vocab_size (:obj:`int`):
-            The size of the vocabular, e.g., the number of unique tokens.
+            The size of the vocabulary, e.g., the number of unique tokens.
         hidden_size (:obj:`int`):
             The size of the embedding vectors.
         initializer_range (:obj:`float`, `optional`):
@@ -860,7 +861,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
             :obj:`tf.Tensor`: In embedding mode, the output is a float32 embedding tensor, with shape
             :obj:`[batch_size, length, embedding_size]`.
 
-            In linear mode, the ouput is a float32 with shape :obj:`[batch_size, length, vocab_size]`.
+            In linear mode, the output is a float32 with shape :obj:`[batch_size, length, vocab_size]`.
 
         Raises:
             ValueError: if :obj:`mode` is not valid.
@@ -1043,7 +1044,7 @@ def get_initializer(initializer_range: float = 0.02) -> tf.initializers.Truncate
 def cast_bool_to_primitive(bool_variable: Union[tf.Tensor, bool], default_tensor_to_true=False) -> bool:
     """
     Function arguments can be inserted as boolean tensor and bool variables to cope with Keras serialization we need to
-    cast the bool argumnets (like :obj:`output_attentions` for instance) to correct boolean if it is a tensor.
+    cast the bool arguments (like :obj:`output_attentions` for instance) to correct boolean if it is a tensor.
 
     Args:
         bool_variable (:obj:`Union[tf.Tensor, bool]`):

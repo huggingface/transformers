@@ -20,6 +20,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
+from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
@@ -170,7 +171,7 @@ class OpenAIGPTModelTester:
 
 
 @require_torch
-class OpenAIGPTModelTest(ModelTesterMixin, unittest.TestCase):
+class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (OpenAIGPTModel, OpenAIGPTLMHeadModel, OpenAIGPTDoubleHeadsModel, OpenAIGPTForSequenceClassification)
@@ -180,6 +181,29 @@ class OpenAIGPTModelTest(ModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (
         (OpenAIGPTLMHeadModel,) if is_torch_available() else ()
     )  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
+
+    # special case for DoubleHeads model
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class.__name__ == "OpenAIGPTDoubleHeadsModel":
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.num_choices, self.model_tester.seq_length),
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                inputs_dict["input_ids"] = inputs_dict["labels"]
+                inputs_dict["token_type_ids"] = inputs_dict["labels"]
+                inputs_dict["mc_token_ids"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.num_choices),
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                inputs_dict["mc_labels"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+        return inputs_dict
 
     def setUp(self):
         self.model_tester = OpenAIGPTModelTester(self)

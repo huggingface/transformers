@@ -125,8 +125,6 @@ class LegacyIndex(Index):
         try:
             # Load from URL or cache if already cached
             resolved_archive_file = cached_path(archive_file)
-            if resolved_archive_file is None:
-                raise EnvironmentError
         except EnvironmentError:
             msg = (
                 f"Can't load '{archive_file}'. Make sure that:\n\n"
@@ -465,8 +463,6 @@ class RagRetriever:
         Postprocessing retrieved ``docs`` and combining them with ``input_strings``.
 
         Args:
-            doc_scores (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs)`):
-                Retrieval scores of respective docs - passed for logging.
             docs  (:obj:`dict`):
                 Retrieved documents.
             input_strings (:obj:`str`):

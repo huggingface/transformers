@@ -152,7 +152,7 @@ class TransformerDecoder(nn.Module):
        dropout (float): dropout parameters
        embeddings (:obj:`onmt.modules.Embeddings`):
           embeddings to use, should have positional encodings
-       attn_type (str): if using a seperate copy attention
+       attn_type (str): if using a separate copy attention
     """
 
     def __init__(self, num_layers, d_model, heads, d_ff, dropout, embeddings, vocab_size):
@@ -817,11 +817,7 @@ class Translator(object):
 
         Args:
            batch (:obj:`Batch`): a batch from a dataset object
-           data (:obj:`Dataset`): the dataset object
            fast (bool): enables fast beam search (may not support all features)
-
-        Todo:
-           Shouldn't need the original dataset.
         """
         with torch.no_grad():
             return self._fast_translate_batch(batch, self.max_length, min_length=self.min_length)

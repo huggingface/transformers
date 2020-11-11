@@ -14,7 +14,7 @@ try:
     # Comet needs to be imported before any ML frameworks
     import comet_ml  # noqa: F401
 
-    if comet_ml.config.get_config("comet.api_key"):
+    if hasattr(comet_ml, "config") and comet_ml.config.get_config("comet.api_key"):
         _has_comet = True
     else:
         if os.getenv("COMET_MODE", "").upper() != "DISABLED":
@@ -29,7 +29,8 @@ try:
     wandb.ensure_configured()
     if wandb.api.api_key is None:
         _has_wandb = False
-        wandb.termwarn("W&B installed but not logged in.  Run `wandb login` or set the WANDB_API_KEY env variable.")
+        if os.getenv("WANDB_DISABLED"):
+            logger.warning("W&B installed but not logged in. Run `wandb login` or set the WANDB_API_KEY env variable.")
     else:
         _has_wandb = False if os.getenv("WANDB_DISABLED") else True
 except (ImportError, AttributeError):
@@ -281,7 +282,9 @@ class TensorBoardCallback(TrainerCallback):
                 if hasattr(model, "config") and model.config is not None:
                     model_config_json = model.config.to_json_string()
                     self.tb_writer.add_text("model_config", model_config_json)
-            self.tb_writer.add_hparams(args.to_sanitized_dict(), metric_dict={})
+            # Version of TensorBoard coming from tensorboardX does not have this method.
+            if hasattr(self.tb_writer, "add_hparams"):
+                self.tb_writer.add_hparams(args.to_sanitized_dict(), metric_dict={})
 
     def on_log(self, args, state, control, logs=None, **kwargs):
         if state.is_world_process_zero:

@@ -36,10 +36,10 @@ VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": 
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "camembert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-sentencepiece.bpe.model",
+        "camembert-base": "https://huggingface.co/camembert-base/resolve/main/sentencepiece.bpe.model",
     },
     "tokenizer_file": {
-        "camembert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/camembert-base-tokenizer.json",
+        "camembert-base": "https://huggingface.co/camembert-base/resolve/main/tokenizer.json",
     },
 }
 
@@ -191,7 +191,7 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
             if token_ids_1 is not None:
                 raise ValueError(
                     "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formated with special tokens for the model."
+                    "ids is already formatted with special tokens for the model."
                 )
             return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
 

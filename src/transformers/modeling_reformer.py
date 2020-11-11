@@ -36,7 +36,7 @@ from .file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
 )
 from .modeling_outputs import CausalLMOutput, MaskedLMOutput, QuestionAnsweringModelOutput, SequenceClassifierOutput
 from .modeling_utils import PreTrainedModel, apply_chunking_to_forward
@@ -638,7 +638,6 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         rotations_shape = (self.num_attention_heads, vectors.shape[-1], num_hashes, rotation_size // 2)
         # create a random self.attention_head_size x num_hashes x num_buckets/2
         random_rotations = torch.randn(rotations_shape, device=vectors.device, dtype=vectors.dtype)
-
         # Output dim: Batch_Size x Num_Attn_Heads x Num_Hashes x Seq_Len x Num_Buckets/2
         rotated_vectors = torch.einsum("bmtd,mdhr->bmhtr", vectors, random_rotations)
 
@@ -986,7 +985,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 class ReverseSort(Function):
     """
     After chunked attention is applied which sorted clusters, original ordering has to be restored. Since customized
-    backward function is used for Reformer, the gradients of the output vectors have to be explicitely sorted here.
+    backward function is used for Reformer, the gradients of the output vectors have to be explicitly sorted here.
     """
 
     @staticmethod
@@ -1471,7 +1470,9 @@ class ReformerLayer(nn.Module):
             # every forward pass we sample a different seed
             # for dropout and save for forward fn in backward pass
             # to have correct dropout
-            self._init_attention_seed()
+            if self.training:
+                self._init_attention_seed()
+
             attn_outputs = self.attention(
                 hidden_states=hidden_states,
                 head_mask=head_mask,
@@ -1494,7 +1495,8 @@ class ReformerLayer(nn.Module):
             # every forward pass we sample a different seed
             # for dropout and save seed for forward fn in backward
             # to have correct dropout
-            self._init_feed_forward_seed()
+            if self.training:
+                self._init_feed_forward_seed()
             # Y_2 = X_2 + g(Y_1)
             hidden_states = hidden_states + self.feed_forward(attn_output)
 
@@ -1991,7 +1993,7 @@ class ReformerModel(ReformerPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/reformer-crime-and-punishment",
@@ -2075,7 +2077,7 @@ class ReformerModel(ReformerPreTrainedModel):
                 device=device,
             )
 
-        # start index for postion encoding depends on incremental decoding
+        # start index for position encoding depends on incremental decoding
         if past_buckets_states is not None:
             start_idx_pos_encodings = past_buckets_states[0][1].shape[1]
         else:
@@ -2195,7 +2197,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
-    @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/reformer-crime-and-punishment",
@@ -2263,7 +2265,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
             attentions=reformer_outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past=None, use_cache=None, num_hashes=None, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
         if past is not None:
             input_ids = input_ids[:, -1:]
@@ -2271,11 +2273,9 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
         inputs_dict = {
             "input_ids": input_ids,
             "past_buckets_states": past,
-            "use_cache": kwargs["use_cache"],
+            "use_cache": use_cache,
+            "num_hashes": num_hashes,
         }
-
-        if "num_hashes" in kwargs:
-            inputs_dict["num_hashes"] = kwargs["num_hashes"]
 
         return inputs_dict
 
@@ -2309,7 +2309,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
-    @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/reformer-crime-and-punishment",
@@ -2389,7 +2389,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/reformer-crime-and-punishment",
@@ -2491,7 +2491,7 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(REFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/reformer-crime-and-punishment",

@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 BERTABS_FINETUNED_CONFIG_MAP = {
-    "bertabs-finetuned-cnndm": "https://s3.amazonaws.com/models.huggingface.co/bert/remi/bertabs-finetuned-cnndm-extractive-abstractive-summarization/config.json",
+    "bertabs-finetuned-cnndm": "https://huggingface.co/remi/bertabs-finetuned-cnndm-extractive-abstractive-summarization/resolve/main/config.json",
 }
 
 
@@ -44,7 +44,7 @@ class BertAbsConfig(PretrainedConfig):
         enc_ff_size: int
             The size of the encoder's feed-forward layers.
         enc_dropout: int
-            The dropout probabilitiy for all fully connected layers in the
+            The dropout probability for all fully connected layers in the
             embeddings, layers, pooler and also the attention probabilities in
             the encoder.
         dec_layer: int
@@ -56,7 +56,7 @@ class BertAbsConfig(PretrainedConfig):
         dec_ff_size: int
             The size of the decoder's feed-forward layers.
         dec_dropout: int
-            The dropout probabilitiy for all fully connected layers in the
+            The dropout probability for all fully connected layers in the
             embeddings, layers, pooler and also the attention probabilities in
             the decoder.
     """

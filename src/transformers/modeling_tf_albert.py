@@ -28,7 +28,7 @@ from .file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_tf_outputs import (
@@ -79,25 +79,31 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.config = config
         self.vocab_size = config.vocab_size
+        self.embedding_size = config.embedding_size
+        self.initializer_range = config.initializer_range
+        self.max_position_embeddings = config.max_position_embeddings
+        self.type_vocab_size = config.type_vocab_size
+        self.layer_norm_eps = config.layer_norm_eps
+        self.hidden_dropout_prob = config.hidden_dropout_prob
+
         self.position_embeddings = tf.keras.layers.Embedding(
-            config.max_position_embeddings,
-            config.embedding_size,
-            embeddings_initializer=get_initializer(self.config.initializer_range),
+            self.max_position_embeddings,
+            self.embedding_size,
+            embeddings_initializer=get_initializer(self.initializer_range),
             name="position_embeddings",
         )
         self.token_type_embeddings = tf.keras.layers.Embedding(
-            config.type_vocab_size,
-            config.embedding_size,
-            embeddings_initializer=get_initializer(self.config.initializer_range),
+            self.type_vocab_size,
+            self.embedding_size,
+            embeddings_initializer=get_initializer(self.initializer_range),
             name="token_type_embeddings",
         )
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=self.layer_norm_eps, name="LayerNorm")
+        self.dropout = tf.keras.layers.Dropout(self.hidden_dropout_prob)
 
     def build(self, input_shape):
         """Build shared word embedding layer """
@@ -106,8 +112,8 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
             # arbitrarily, and works well.
             self.word_embeddings = self.add_weight(
                 "weight",
-                shape=[self.config.vocab_size, self.config.embedding_size],
-                initializer=get_initializer(self.config.initializer_range),
+                shape=[self.vocab_size, self.embedding_size],
+                initializer=get_initializer(self.initializer_range),
             )
         super().build(input_shape)
 
@@ -182,9 +188,9 @@ class TFAlbertEmbeddings(tf.keras.layers.Layer):
         """
         batch_size = shape_list(inputs)[0]
         length = shape_list(inputs)[1]
-        x = tf.reshape(inputs, [-1, self.config.embedding_size])
+        x = tf.reshape(inputs, [-1, self.embedding_size])
         logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
-        return tf.reshape(logits, [batch_size, length, self.config.vocab_size])
+        return tf.reshape(logits, [batch_size, length, self.vocab_size])
 
 
 class TFAlbertSelfOutput(tf.keras.layers.Layer):
@@ -207,7 +213,7 @@ class TFAlbertAttention(tf.keras.layers.Layer):
     """ Contains the complete attention sublayer, including both dropouts and layer norm. """
 
     def __init__(self, config, **kwargs):
-        super().__init__(config, **kwargs)
+        super().__init__(**kwargs)
 
         self.hidden_size = config.hidden_size
         self.output_attentions = config.output_attentions
@@ -371,7 +377,8 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.config = config
+        self.num_hidden_layers = config.num_hidden_layers
+        self.num_hidden_groups = config.num_hidden_groups
         self.embedding_hidden_mapping_in = tf.keras.layers.Dense(
             config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -396,12 +403,12 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
         all_attentions = () if output_attentions else None
         all_hidden_states = (hidden_states,) if output_hidden_states else None
 
-        for i in range(self.config.num_hidden_layers):
+        for i in range(self.num_hidden_layers):
             # Number of layers in a hidden group
-            layers_per_group = int(self.config.num_hidden_layers / self.config.num_hidden_groups)
+            layers_per_group = int(self.num_hidden_layers / self.num_hidden_groups)
 
             # Index of the hidden group
-            group_idx = int(i / (self.config.num_hidden_layers / self.config.num_hidden_groups))
+            group_idx = int(i / (self.num_hidden_layers / self.num_hidden_groups))
 
             layer_group_output = self.albert_layer_groups[group_idx](
                 hidden_states,
@@ -621,7 +628,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
 @dataclass
 class TFAlbertForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.TFAlbertForPreTrainingModel`.
+    Output type of :class:`~transformers.TFAlbertForPreTraining`.
 
     Args:
         prediction_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
@@ -739,7 +746,7 @@ ALBERT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Albert Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare Albert Model transformer outputting raw hidden-states without any specific head on top.",
     ALBERT_START_DOCSTRING,
 )
 class TFAlbertModel(TFAlbertPreTrainedModel):
@@ -747,7 +754,7 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.albert = TFAlbertMainLayer(config, name="albert")
 
-    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="albert-base-v2",
@@ -778,7 +785,7 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
     def get_output_embeddings(self):
         return self.albert.embeddings
 
-    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFAlbertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(self, inputs, **kwargs):
         r"""
@@ -847,7 +854,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
     def get_output_embeddings(self):
         return self.albert.embeddings
 
-    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="albert-base-v2",
@@ -930,7 +937,7 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="albert-base-v2",
@@ -1018,7 +1025,7 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="albert-base-v2",
@@ -1104,7 +1111,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
-    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="albert-base-v2",
@@ -1212,7 +1219,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
-    @add_start_docstrings_to_callable(ALBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="albert-base-v2",

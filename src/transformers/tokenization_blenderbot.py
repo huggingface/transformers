@@ -134,7 +134,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         bos_token="__start__",
         eos_token="__end__",
         unk_token="__unk__",
-        pad_token="__null",
+        pad_token="__null__",
         **kwargs
     ):
         super().__init__(unk_token=unk_token, bos_token=bos_token, eos_token=eos_token, pad_token=pad_token, **kwargs)
@@ -160,7 +160,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
             return self.cache[token]
         token = re.sub("([.,!?()])", r" \1", token)
         token = re.sub("(')", r" \1 ", token)
-        token = re.sub("\s{2,}", " ", token)
+        token = re.sub(r"\s{2,}", " ", token)
         if "\n" in token:
             token = token.replace("\n", " __newln__")
 

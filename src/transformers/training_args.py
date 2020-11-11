@@ -48,12 +48,19 @@ class TrainingArguments:
             If :obj:`True`, overwrite the content of the output directory. Use this to continue training if
             :obj:`output_dir` points to a checkpoint directory.
         do_train (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to run training or not.
+            Whether to run training or not. This argument is not directly used by :class:`~transformers.Trainer`, it's
+            intended to be used by your training/evaluation scripts instead. See the `example scripts
+            <https://github.com/huggingface/transformers/tree/master/examples>`__ for more details.
         do_eval (:obj:`bool`, `optional`):
-            Whether to run evaluation on the dev set or not. Will default to :obj:`evaluation_strategy` different from
-            :obj:`"no"`.
+            Whether to run evaluation on the dev set or not. Will be set to :obj:`True` if :obj:`evaluation_strategy`
+            is different from :obj:`"no"`. This argument is not directly used by :class:`~transformers.Trainer`, it's
+            intended to be used by your training/evaluation scripts instead. See the `example scripts
+            <https://github.com/huggingface/transformers/tree/master/examples>`__ for more details.
         do_predict (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to run predictions on the test set or not.
+            Whether to run predictions on the test set or not. This argument is not directly used by
+            :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
+            the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
+            details.
         evaluation_strategy (:obj:`str` or :class:`~transformers.trainer_utils.EvaluationStrategy`, `optional`, defaults to :obj:`"no"`):
             The evaluation strategy to adopt during training. Possible values are:
 
@@ -250,7 +257,7 @@ class TrainingArguments:
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
     logging_dir: Optional[str] = field(default_factory=default_logdir, metadata={"help": "Tensorboard log dir."})
-    logging_first_step: bool = field(default=False, metadata={"help": "Log and eval the first global_step"})
+    logging_first_step: bool = field(default=False, metadata={"help": "Log the first global_step"})
     logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
     save_steps: int = field(default=500, metadata={"help": "Save checkpoint every X updates steps."})
     save_total_limit: Optional[int] = field(
@@ -402,7 +409,7 @@ class TrainingArguments:
             n_gpu = torch.cuda.device_count()
         else:
             # Here, we'll use torch.distributed.
-            # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
+            # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
             torch.distributed.init_process_group(backend="nccl")
             device = torch.device("cuda", self.local_rank)
             n_gpu = 1

@@ -101,6 +101,9 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = None
 TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = None
 
 
+TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = None
+
+
 TF_MODEL_FOR_PRETRAINING_MAPPING = None
 
 
@@ -317,6 +320,15 @@ class TFBertModel:
 
 
 class TFBertPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFBlenderbotForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_tf(self)
 
@@ -797,6 +809,24 @@ class TFLxmertVisualFeatureEncoder:
         requires_tf(self)
 
 
+class TFMarianMTModel:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFMBartForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
 TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -914,6 +944,15 @@ class TFOpenAIGPTModel:
 
 
 class TFOpenAIGPTPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFPegasusForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_tf(self)
 

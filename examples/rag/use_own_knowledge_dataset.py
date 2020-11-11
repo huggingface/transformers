@@ -26,7 +26,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def split_text(text: str, n=100, character=" ") -> List[str]:
-    """Split the text every ``n``-th occurence of ``character``"""
+    """Split the text every ``n``-th occurrence of ``character``"""
     text = text.split(character)
     return [character.join(text[i : i + n]).strip() for i in range(0, len(text), n)]
 

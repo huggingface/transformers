@@ -76,7 +76,7 @@ class TFModelTesterMixin:
     test_resize_embeddings = True
     is_encoder_decoder = False
 
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False) -> dict:
         inputs_dict = copy.deepcopy(inputs_dict)
 
         if model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
@@ -165,16 +165,16 @@ class TFModelTesterMixin:
         config.output_hidden_states = True
 
         for model_class in self.all_model_classes:
-            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config)
-            num_out = len(model(inputs_dict))
+            num_out = len(model(class_inputs_dict))
             model._saved_model_inputs_spec = None
-            model._set_save_spec(inputs_dict)
+            model._set_save_spec(class_inputs_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 tf.saved_model.save(model, tmpdirname)
                 model = tf.keras.models.load_model(tmpdirname)
-                outputs = model(inputs_dict)
+                outputs = model(class_inputs_dict)
 
                 if self.is_encoder_decoder:
                     output = outputs["encoder_hidden_states"] if isinstance(outputs, dict) else outputs[-1]
@@ -183,7 +183,10 @@ class TFModelTesterMixin:
 
                 hidden_states = [t.numpy() for t in output]
                 self.assertEqual(len(outputs), num_out)
-                self.assertEqual(len(hidden_states), self.model_tester.num_hidden_layers + 1)
+                expected_num_layers = getattr(
+                    self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                )
+                self.assertEqual(len(hidden_states), expected_num_layers)
                 self.assertListEqual(
                     list(hidden_states[0].shape[-2:]),
                     [self.model_tester.seq_length, self.model_tester.hidden_size],
@@ -193,26 +196,21 @@ class TFModelTesterMixin:
     def test_saved_model_with_attentions_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_attentions = True
-        encoder_seq_length = (
-            self.model_tester.encoder_seq_length
-            if hasattr(self.model_tester, "encoder_seq_length")
-            else self.model_tester.seq_length
-        )
-        encoder_key_length = (
-            self.model_tester.key_length if hasattr(self.model_tester, "key_length") else encoder_seq_length
-        )
+
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
         for model_class in self.all_model_classes:
-            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config)
-            num_out = len(model(inputs_dict))
+            num_out = len(model(class_inputs_dict))
             model._saved_model_inputs_spec = None
-            model._set_save_spec(inputs_dict)
+            model._set_save_spec(class_inputs_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 tf.saved_model.save(model, tmpdirname)
                 model = tf.keras.models.load_model(tmpdirname)
-                outputs = model(inputs_dict)
+                outputs = model(class_inputs_dict)
 
                 if self.is_encoder_decoder:
                     output = outputs["encoder_attentions"] if isinstance(outputs, dict) else outputs[-1]
@@ -506,6 +504,7 @@ class TFModelTesterMixin:
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
 
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", self.model_tester.seq_length)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
@@ -517,9 +516,10 @@ class TFModelTesterMixin:
             inputs_dict["use_cache"] = False
             config.output_hidden_states = False
             model = model_class(config)
-            model_inputs = self._prepare_for_class(inputs_dict, model_class)
-            outputs = model(model_inputs)
-            attentions = [t.numpy() for t in outputs[-1]]
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+            attentions = [
+                t.numpy() for t in (outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions)
+            ]
             self.assertEqual(model.config.output_hidden_states, False)
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
@@ -530,7 +530,7 @@ class TFModelTesterMixin:
 
             if self.is_encoder_decoder:
                 self.assertEqual(out_len % 2, 0)
-                decoder_attentions = outputs[(out_len // 2) - 1]
+                decoder_attentions = outputs.decoder_attentions
                 self.assertEqual(model.config.output_hidden_states, False)
                 self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
@@ -543,7 +543,9 @@ class TFModelTesterMixin:
             config.output_attentions = True
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
-            attentions = [t.numpy() for t in outputs[-1]]
+            attentions = [
+                t.numpy() for t in (outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions)
+            ]
             self.assertEqual(model.config.output_hidden_states, False)
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
@@ -559,7 +561,9 @@ class TFModelTesterMixin:
             self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
             self.assertEqual(model.config.output_hidden_states, True)
 
-            attentions = [t.numpy() for t in outputs[-1]]
+            attentions = [
+                t.numpy() for t in (outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions)
+            ]
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),

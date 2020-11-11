@@ -46,18 +46,18 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.
 ####################################################
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "t5-small": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        "t5-base": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        "t5-large": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        "t5-3b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
-        "t5-11b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-spiece.model",
+        "t5-small": "https://huggingface.co/t5-small/resolve/main/spiece.model",
+        "t5-base": "https://huggingface.co/t5-base/resolve/main/spiece.model",
+        "t5-large": "https://huggingface.co/t5-large/resolve/main/spiece.model",
+        "t5-3b": "https://huggingface.co/t5-3b/resolve/main/spiece.model",
+        "t5-11b": "https://huggingface.co/t5-11b/resolve/main/spiece.model",
     },
     "tokenizer_file": {
-        "t5-small": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-tokenizer.json",
-        "t5-base": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-tokenizer.json",
-        "t5-large": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-tokenizer.json",
-        "t5-3b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-tokenizer.json",
-        "t5-11b": "https://s3.amazonaws.com/models.huggingface.co/bert/t5-tokenizer.json",
+        "t5-small": "https://huggingface.co/t5-small/resolve/main/tokenizer.json",
+        "t5-base": "https://huggingface.co/t5-base/resolve/main/tokenizer.json",
+        "t5-large": "https://huggingface.co/t5-large/resolve/main/tokenizer.json",
+        "t5-3b": "https://huggingface.co/t5-3b/resolve/main/tokenizer.json",
+        "t5-11b": "https://huggingface.co/t5-11b/resolve/main/tokenizer.json",
     },
 }
 
@@ -100,7 +100,7 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         extra_ids (:obj:`int`, `optional`, defaults to 100):
             Add a number of extra ids added to the end of the vocabulary for use as sentinels. These tokens are
             accessible as "<extra_id_{%d}>" where "{%d}" is a number between 0 and extra_ids-1. Extra tokens are
-            indexed from the end of the vocabulary up to beginnning ("<extra_id_0>" is the last token in the vocabulary
+            indexed from the end of the vocabulary up to beginning ("<extra_id_0>" is the last token in the vocabulary
             like in T5 preprocessing see `here
             <https://github.com/google-research/text-to-text-transfer-transformer/blob/9fd7b14a769417be33bc6c850f9598764913c833/t5/data/preprocessors.py#L2117>`__).
         additional_special_tokens (:obj:`List[str]`, `optional`):
@@ -190,6 +190,28 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         else:
             token_ids_1 = token_ids_1 + [self.eos_token_id]
             return self.prefix_tokens + token_ids_0 + token_ids_1
+
+    def create_token_type_ids_from_sequences(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. T5 does not make
+        use of token type ids, therefore a list of zeros is returned.
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: List of zeros.
+        """
+        eos = [self.eos_token_id]
+
+        if token_ids_1 is None:
+            return len(token_ids_0 + eos) * [0]
+        return len(token_ids_0 + eos + token_ids_1 + eos) * [0]
 
     @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
     def prepare_seq2seq_batch(
