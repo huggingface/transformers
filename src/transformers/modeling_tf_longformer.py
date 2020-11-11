@@ -420,16 +420,13 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
         return tf.reshape(logits, [batch_size, length, self.vocab_size])
 
 
+# Copied from transformers.modeling_tf_bert.TFBertIntermediate
 class TFLongformerIntermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.experimental.EinsumDense(
-            equation="abc,cd->abd",
-            output_shape=(None, config.intermediate_size),
-            bias_axes="d",
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="dense",
+        self.dense = tf.keras.layers.Dense(
+            config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
         if isinstance(config.hidden_act, str):
@@ -444,16 +441,13 @@ class TFLongformerIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.modeling_tf_bert.TFBertOutput
 class TFLongformerOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.experimental.EinsumDense(
-            equation="abc,cd->abd",
-            bias_axes="d",
-            output_shape=(None, config.hidden_size),
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="dense",
+        self.dense = tf.keras.layers.Dense(
+            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
@@ -466,6 +460,7 @@ class TFLongformerOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.modeling_tf_bert.TFBertPooler
 class TFLongformerPooler(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -486,6 +481,7 @@ class TFLongformerPooler(tf.keras.layers.Layer):
         return pooled_output
 
 
+# Copied from transformers.modeling_tf_bert.TFBertSelfOutput
 class TFLongformerSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
