@@ -284,7 +284,8 @@ class TFDPRPretrainedContextEncoder(TFPreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
-
+    
+    config_class = DPRConfig
     base_model_prefix = "ctx_encoder"
     authorized_missing_keys = [r"position_ids"]
 
@@ -295,6 +296,7 @@ class TFDPRPretrainedQuestionEncoder(TFPreTrainedModel):
     models.
     """
 
+    config_class = DPRConfig
     base_model_prefix = "question_encoder"
     authorized_missing_keys = [r"position_ids"]
 
@@ -304,7 +306,8 @@ class TFDPRPretrainedReader(TFPreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
-
+    
+    config_class = DPRConfig
     base_model_prefix = "reader"
     authorized_missing_keys = [r"position_ids"]
 
