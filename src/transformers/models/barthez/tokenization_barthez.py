@@ -34,14 +34,14 @@ VOCAB_FILES_NAMES = {"sentence_piece_model": "sentencepiece.bpe.model", "vocab_f
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "sentence_piece_model": {
-        "moussaKam/barthez": "https://cdn.huggingface.co/moussaKam/barthez/sentencepiece.bpe.model",
-        "moussaKam/barthez-orangesum-title": "https://cdn.huggingface.co/moussaKam/barthez-orangesum-title/sentencepiece.bpe.model",
-        "moussaKam/mbarthez": "https://cdn.huggingface.co/moussaKam/mbarthez/sentencepiece.bpe.model",
+        "moussaKam/barthez": "https://huggingface.co/moussaKam/barthez/resolve/main/sentencepiece.bpe.model",
+        "moussaKam/barthez-orangesum-title": "https://huggingface.co/moussaKam/barthez-orangesum-title/resolve/main/sentencepiece.bpe.model",
+        "moussaKam/mbarthez": "https://huggingface.co/moussaKam/mbarthez/resolve/main/sentencepiece.bpe.model",
     },
     "vocab_file": {
-        "moussaKam/barthez": "https://cdn.huggingface.co/moussaKam/barthez/vocab.json",
-        "moussaKam/barthez-orangesum-title": "https://cdn.huggingface.co/moussaKam/barthez-orangesum-title/vocab.json",
-        "moussaKam/mbarthez": "https://cdn.huggingface.co/moussaKam/mbarthez/vocab.json",
+        "moussaKam/barthez": "https://huggingface.co/moussaKam/barthez/resolve/main/vocab.json",
+        "moussaKam/barthez-orangesum-title": "https://huggingface.co/moussaKam/barthez-orangesum-title/resolve/main/vocab.json",
+        "moussaKam/mbarthez": "https://huggingface.co/moussaKam/mbarthez/resolve/main/vocab.json",
     },
 }
 

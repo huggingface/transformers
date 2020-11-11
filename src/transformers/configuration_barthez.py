@@ -21,7 +21,7 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 BARTHEZ_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "moussaKam/barthez": "https://s3.amazonaws.com/models.huggingface.co/bert/moussaKam/barthez/config.json",
+    "moussaKam/barthez": "https://huggingface.co/moussaKam/barthez/resolve/main/config.json",
 }
 
 
