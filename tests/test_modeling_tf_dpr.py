@@ -26,6 +26,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import numpy
     import tensorflow as tf
+
     from transformers import (
         TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
         TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -227,19 +228,33 @@ class TFDPRModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_name in TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFDPRReader.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
-            
+
+
 @require_tf
 class TFDPRModelIntegrationTest(unittest.TestCase):
-  
     @slow
     def test_inference_no_head(self):
-        model = TFDPRQuestionEncoder.from_pretrained('facebook/dpr-question_encoder-single-nq-base', return_dict=False, from_pt=True)
+        model = TFDPRQuestionEncoder.from_pretrained("facebook/dpr-question_encoder-single-nq-base", return_dict=False)
 
-        input_ids = tf.constant([[  101,  7592,  1010,  2003,  2026,  3899, 10140,  1029,   102]]) # [CLS] hello, is my dog cute? [SEP]
-        output = model(input_ids)[0] # embedding shape = (1, 768)
+        input_ids = tf.constant(
+            [[101, 7592, 1010, 2003, 2026, 3899, 10140, 1029, 102]]
+        )  # [CLS] hello, is my dog cute? [SEP]
+        output = model(input_ids)[0]  # embedding shape = (1, 768)
         # compare the actual values for a slice.
         expected_slice = tf.constant(
-            [[ 0.03236253,  0.12753335,  0.16818509,  0.00279786,  0.3896933,   0.24264945, 0.2178971,  -0.02335227, -0.08481959, -0.14324117]]
+            [
+                [
+                    0.03236253,
+                    0.12753335,
+                    0.16818509,
+                    0.00279786,
+                    0.3896933,
+                    0.24264945,
+                    0.2178971,
+                    -0.02335227,
+                    -0.08481959,
+                    -0.14324117,
+                ]
+            ]
         )
         self.assertTrue(numpy.allclose(output[:, :10].numpy(), expected_slice.numpy(), atol=1e-4))
-
