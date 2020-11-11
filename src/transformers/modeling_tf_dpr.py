@@ -284,9 +284,8 @@ class TFDPRPretrainedContextEncoder(TFPreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
-
+    
     config_class = DPRConfig
-    load_tf_weights = None
     base_model_prefix = "ctx_encoder"
     authorized_missing_keys = [r"position_ids"]
 
@@ -298,7 +297,6 @@ class TFDPRPretrainedQuestionEncoder(TFPreTrainedModel):
     """
 
     config_class = DPRConfig
-    load_tf_weights = None
     base_model_prefix = "question_encoder"
     authorized_missing_keys = [r"position_ids"]
 
@@ -308,9 +306,8 @@ class TFDPRPretrainedReader(TFPreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
-
+    
     config_class = DPRConfig
-    load_tf_weights = None
     base_model_prefix = "reader"
     authorized_missing_keys = [r"position_ids"]
 
@@ -331,6 +328,7 @@ TF_DPR_START_DOCSTRING = r"""
     general usage and behavior.
 
     .. note::
+    
         TF 2.0 models accepts two formats as inputs: - having all inputs as keyword arguments (like PyTorch models), or
         - having all inputs as a list, tuple or dict in the first positional arguments. This second option is useful
         when using :meth:`tf.keras.Model.fit` method which currently requires having all the tensors in the first
