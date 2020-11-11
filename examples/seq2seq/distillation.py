@@ -198,7 +198,7 @@ class SummarizationDistiller(SummarizationModule):
             encoder_outputs=(teacher_enc_outputs,),
             decoder_input_ids=decoder_input_ids,
             output_hidden_states=self.do_calc_hidden_loss,
-            lm_labels=labels,
+            use_cache=False,  # since we are not passing labels, never let this default to True
             return_dict=True,
         )
         dec_mask = decoder_input_ids.ne(pad_token_id)
