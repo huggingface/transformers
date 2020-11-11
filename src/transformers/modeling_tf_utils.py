@@ -215,6 +215,27 @@ class TFMaskedLanguageModelingLoss(TFCausalLanguageModelingLoss):
     """
 
 
+class TFNextSentencePredictionLoss:
+    """
+    Loss function suitable for next sentence prediction (NSP), that is, the task of guessing the next sentence.
+
+    .. note::
+         Any label of -100 will be ignored (along with the corresponding logits) in the loss computation.
+    """
+
+    def compute_loss(self, labels, logits):
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
+        # make sure only labels that are not equal to -100
+        # are taken into account as loss
+        next_sentence_active_loss = tf.not_equal(tf.reshape(labels, (-1,)), -100)
+        next_sentence_reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, 2)), next_sentence_active_loss)
+        next_sentence_label = tf.boolean_mask(tf.reshape(labels, (-1,)), next_sentence_active_loss)
+
+        return loss_fn(next_sentence_label, next_sentence_reduced_logits)
+
+
 def detect_tf_missing_unexpected_layers(model, resolved_archive_file):
     """
     Detect missing and unexpected layers.
