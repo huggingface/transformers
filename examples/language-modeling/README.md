@@ -90,7 +90,7 @@ selected tokens (which may be part of words), they mask randomly selected words 
 to that word). This technique has been refined for Chinese in [this paper](https://arxiv.org/abs/1906.08101).
 
 To fine-tune a model using whole word masking, use the following script:
-
+```
 python run_mlm_wwm.py \
     --model_name_or_path roberta-base \
     --dataset_name wikitext \
@@ -139,7 +139,6 @@ python examples/contrib/run_chinese_ref.py \
     --ltp=path_to_ltp_tokenizer \
     --bert=path_to_bert_tokenizer \
     --save_path=path_to_reference_file
->>>>>>> upstream/master
 ```
 
 Then you can run the script like this: 
