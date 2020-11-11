@@ -1046,7 +1046,20 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
-    def call(self, inputs, next_sentence_label=None, **kwargs):
+    def call(
+        self,
+        inputs=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        next_sentence_label=None,
+        training=False,
+    ):
         r"""
         Return:
 
@@ -1065,9 +1078,27 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             >>> logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
             >>> assert logits[0][0] < logits[0][1] # the next sentence was random
         """
-        return_dict = kwargs.get("return_dict")
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
-        outputs = self.bert(inputs, **kwargs)
+
+        if isinstance(inputs, (tuple, list)):
+            next_sentence_label = inputs[9] if len(inputs) > 9 else next_sentence_label
+            if len(inputs) > 9:
+                inputs = inputs[:9]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            next_sentence_label = inputs.pop("next_sentence_label", next_sentence_label)
+
+        outputs = self.bert(
+            inputs,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
         pooled_output = outputs[1]
         seq_relationship_scores = self.nsp(pooled_output)
 
