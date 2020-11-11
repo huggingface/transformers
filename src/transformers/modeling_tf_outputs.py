@@ -325,7 +325,7 @@ class TFNextSentencePredictorOutput(ModelOutput):
             heads.
     """
 
-    loss: tf.Tensor = None
+    loss: Optional[tf.Tensor] = None
     logits: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
