@@ -879,12 +879,12 @@ class TFModelTesterMixin:
                     label_key_index = signature_names.index(label_key)
                     tuple_index_mapping[label_key_index] = label_key
                 sorted_tuple_index_mapping = sorted(tuple_index_mapping.items())
-
                 # Initialize a list with their default values, update the values and convert to a tuple
                 list_input = []
 
                 for name in signature_names:
-                    list_input.append(signature[name].default)
+                    if name != "kwargs":
+                        list_input.append(signature[name].default)
 
                 for index, value in sorted_tuple_index_mapping:
                     list_input[index] = prepared_for_class[value]
