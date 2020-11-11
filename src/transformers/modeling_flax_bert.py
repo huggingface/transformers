@@ -417,5 +417,3 @@ class FlaxBertModel(FlaxPreTrainedModel):
             jnp.array(token_type_ids, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
         )
-
-
