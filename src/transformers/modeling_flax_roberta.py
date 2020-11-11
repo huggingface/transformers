@@ -290,7 +290,7 @@ class FlaxRobertaModule(nn.Module):
     intermediate_size: int
 
     @nn.compact
-    def __call__(self, attention_mask, input_ids, token_type_ids, position_ids):
+    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids):
 
         # Embedding
         embeddings = FlaxRobertaEmbeddings(
