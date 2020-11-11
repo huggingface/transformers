@@ -1253,13 +1253,8 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-<<<<<<< HEAD
-        self.bert = TFBertMainLayer(config, name="bert")
-        self.nsp = TFBertNSPHead(config, name="nsp___cls")
-=======
         self.bert = TFBertMainLayer(config=config, name="bert")
         self.nsp = TFBertNSPHead(config=config, name="nsp___cls")
->>>>>>> 90d98725... Remove naming exceptions
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
@@ -1279,18 +1274,22 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
     ):
         r"""
         Return:
+
         Examples::
+
             >>> import tensorflow as tf
             >>> from transformers import BertTokenizer, TFBertForNextSentencePrediction
+
             >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
             >>> model = TFBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
+
             >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
             >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
             >>> encoding = tokenizer(prompt, next_sentence, return_tensors='tf')
+
             >>> logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
             >>> assert logits[0][0] < logits[0][1] # the next sentence was random
         """
-        return_dict = return_dict if return_dict is not None else self.bert.return_dict
 
         inputs = input_analysis(
             func=self.call,
@@ -1329,12 +1328,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             training=inputs["training"],
         )
         pooled_output = outputs[1]
-<<<<<<< HEAD
-        seq_relationship_scores = self.nsp(pooled_output)
-
-=======
         seq_relationship_scores = self.nsp(pooled_output=pooled_output, training=training)
->>>>>>> 90d98725... Remove naming exceptions
         next_sentence_loss = (
             None
             if inputs["next_sentence_label"] is None
