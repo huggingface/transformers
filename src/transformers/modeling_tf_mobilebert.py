@@ -1129,7 +1129,7 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, next_sentence_label=None, **kwargs):
         r"""
         Return:
 
@@ -1148,7 +1148,6 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
             >>> logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
         """
         return_dict = kwargs.get("return_dict")
-        next_sentence_label = kwargs.get("next_sentence_label", None)
         return_dict = return_dict if return_dict is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(inputs, **kwargs)
 

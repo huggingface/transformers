@@ -1046,7 +1046,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
-    def call(self, inputs, **kwargs):
+    def call(self, inputs, next_sentence_label=None, **kwargs):
         r"""
         Return:
 
@@ -1066,7 +1066,6 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             >>> assert logits[0][0] < logits[0][1] # the next sentence was random
         """
         return_dict = kwargs.get("return_dict")
-        next_sentence_label = kwargs.get("next_sentence_label", None)
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(inputs, **kwargs)
         pooled_output = outputs[1]
