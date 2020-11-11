@@ -102,7 +102,7 @@ class TFModelTesterMixin:
             elif model_class in TF_MODEL_FOR_PRETRAINING_MAPPING.values():
                 # Check if the pretraining model needs an extra label
                 extra_label = getattr(self.model_tester, "pretraining_extra_label", "")
-                
+
                 if extra_label:
                     inputs_dict[extra_label] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
 
