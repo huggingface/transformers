@@ -380,7 +380,7 @@ cp xsum/test* all_pl
 then use `all_pl` as DATA in the command above.
 
 #### Direct Knowledge Distillation (KD)
-+ In this method, we use try to enforce that the student and teacher produce similar encoder_outputs, logits, and hidden_states using `BartSummarizationDistiller`.
++ In this method, we use try to enforce that the student and teacher produce similar encoder_outputs, logits, and hidden_states using `SummarizationDistiller`.
 + This method was used for `sshleifer/distilbart-xsum-12-6`, `6-6`, and `9-6` checkpoints were produced.
 + You must use [`distillation.py`](./distillation.py). Note that this command initializes the student for you.
 
