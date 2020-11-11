@@ -344,7 +344,7 @@ def main():
     if training_args.do_predict:
         logger.info("*** Predict ***")
 
-        test_dataset = datasets["test"]
+        test_dataset = tokenized_datasets["test"]
         predictions, labels, metrics = trainer.predict(test_dataset)
         predictions = np.argmax(predictions, axis=2)
 
