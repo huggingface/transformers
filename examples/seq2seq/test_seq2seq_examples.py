@@ -241,7 +241,8 @@ class TestSummarizationDistiller(TestCasePlus):
         )
         self._test_distiller_cli(updates)
 
-    def test_distill_different_student_teacher_base_models(self):
+    @require_torch_non_multi_gpu_but_fix_me
+    def test_distill_different_base_models(self):
         updates = dict(
             teacher=T5_TINY,
             student=T5_TINIER,
