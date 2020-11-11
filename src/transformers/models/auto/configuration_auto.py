@@ -66,7 +66,6 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         # Add archive maps here
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BART_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        BARTHEZ_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MBART_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -113,7 +112,6 @@ CONFIG_MAPPING = OrderedDict(
         ("xlm-roberta", XLMRobertaConfig),
         ("pegasus", PegasusConfig),
         ("marian", MarianConfig),
-        ("barthez", BarthezConfig),
         ("mbart", MBartConfig),
         ("bart", BartConfig),
         ("blenderbot", BlenderbotConfig),
@@ -157,7 +155,6 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("pegasus", "Pegasus"),
         ("blenderbot", "Blenderbot"),
         ("marian", "Marian"),
-        ("barthez", "BARThez"),
         ("mbart", "mBART"),
         ("bart", "BART"),
         ("reformer", "Reformer"),

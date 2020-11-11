@@ -43,7 +43,6 @@ IGNORE_NON_TESTED = [
 # trigger the common tests.
 TEST_FILES_WITH_NO_COMMON_TESTS = [
     "test_modeling_camembert.py",
-    "test_modeling_barthez.py",
     "test_modeling_flax_bert.py",
     "test_modeling_flax_roberta.py",
     "test_modeling_mbart.py",

@@ -449,36 +449,6 @@ class PretrainedBartModel:
         requires_pytorch(self)
 
 
-BARTHEZ_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class BarthezForConditionalGeneration:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
-class BarthezForSequenceClassification:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
-class BarthezModel:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
 BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
