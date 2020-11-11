@@ -213,17 +213,17 @@ class TFDPRModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFDPRContextEncoder.from_pretrained(model_name)
+            model = TFDPRContextEncoder.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
         for model_name in TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFDPRContextEncoder.from_pretrained(model_name)
+            model = TFDPRContextEncoder.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
         for model_name in TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFDPRQuestionEncoder.from_pretrained(model_name)
+            model = TFDPRQuestionEncoder.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
         for model_name in TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFDPRReader.from_pretrained(model_name)
+            model = TFDPRReader.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
