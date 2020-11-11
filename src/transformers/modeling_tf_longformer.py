@@ -2222,11 +2222,11 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
             if global_attention_mask is not None
             else None
         )
-        flat_inputs_embeds = (
-            tf.reshape(inputs_embeds, (-1, seq_length, shape_list(inputs_embeds)[3]))
-            if inputs_embeds is not None
-            else None
-        )
+        # flat_inputs_embeds = (
+        #     tf.reshape(inputs_embeds, (-1, seq_length, shape_list(inputs_embeds)[3]))
+        #     if inputs_embeds is not None
+        #     else None
+        # )
 
         outputs = self.longformer(
             flat_input_ids,
