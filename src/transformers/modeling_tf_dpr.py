@@ -328,6 +328,7 @@ TF_DPR_START_DOCSTRING = r"""
     general usage and behavior.
 
     .. note::
+    
         TF 2.0 models accepts two formats as inputs: - having all inputs as keyword arguments (like PyTorch models), or
         - having all inputs as a list, tuple or dict in the first positional arguments. This second option is useful
         when using :meth:`tf.keras.Model.fit` method which currently requires having all the tensors in the first
