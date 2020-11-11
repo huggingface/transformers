@@ -43,7 +43,7 @@ ROBERTA_START_DOCSTRING = r"""
     Module and refer to the Flax documentation for all matter related to general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
-    
+
     - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
     - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
     - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__

@@ -44,7 +44,7 @@ BERT_START_DOCSTRING = r"""
     Module and refer to the Flax documentation for all matter related to general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
-    
+
     - `Just-In-Time (JIT) compilation <https://jax.readthedocs.io/en/latest/jax.html#just-in-time-compilation-jit>`__
     - `Automatic Differentiation <https://jax.readthedocs.io/en/latest/jax.html#automatic-differentiation>`__
     - `Vectorization <https://jax.readthedocs.io/en/latest/jax.html#vectorization-vmap>`__
@@ -423,6 +423,13 @@ class FlaxBertForLMHead(FlaxBertModel):
     def __init__(self, config: BertConfig, state: dict, seed: int = 0, **kwargs):
         super().__init__(config, state, seed, **kwargs)
 
-    def __call__(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, return_dict=None, labels=None,):
+    def __call__(
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        return_dict=None,
+        labels=None,
+    ):
         encoder, pooled = super().__call__(input_ids, attention_mask, token_type_ids, position_ids)
-
