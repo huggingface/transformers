@@ -229,7 +229,7 @@ class SummarizationDistiller(SummarizationModule):
         valid_count = mask.sum() * hidden_states[0].size(-1)
         student_states = torch.stack([hidden_states[i] for i in range(len(matches))])
         teacher_states = torch.stack([hidden_states_T[j] for j in matches])
-        assert student_states.shape == teacher_states.shape, f'{student_states.shape} != {teacher_states.shape}'
+        assert student_states.shape == teacher_states.shape, f"{student_states.shape} != {teacher_states.shape}"
         if normalize_hidden:
             student_states = F.layer_norm(student_states, student_states.shape[1:])
             teacher_states = F.layer_norm(teacher_states, teacher_states.shape[1:])
@@ -259,6 +259,7 @@ def add_distill_args(parser):
 
 class TranslationDistiller(SummarizationDistiller):
     """Supports T5, mBART, Marian, other models that inherit from Bart."""
+
     mode = "translation"
     metric_names = ["bleu"]
     default_val_metric = "bleu"
