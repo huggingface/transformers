@@ -735,6 +735,15 @@ class DistilBertPreTrainedModel:
         requires_pytorch(self)
 
 
+DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
 class DPRContextEncoder:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
