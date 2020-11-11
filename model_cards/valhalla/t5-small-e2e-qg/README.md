@@ -5,7 +5,7 @@ tags:
 - question-generation
 widget:
 - text: "Python is developed by Guido Van Rossum and released in 1991. </s>"
-license: "MIT"
+license: mit
 ---
 
 ## T5 for question-generation

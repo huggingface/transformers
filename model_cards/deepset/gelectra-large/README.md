@@ -5,7 +5,7 @@ datasets:
 - wikipedia
 - OPUS
 - OpenLegalData
-- OSCAR
+- oscar
 ---
 
 # German ELECTRA large

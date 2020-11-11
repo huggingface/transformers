@@ -7,7 +7,7 @@ widget:
 - text: "answer: 42  context: 42 is the answer to life, the universe and everything. </s>"
 - text: "answer: Guido Van Rossum context: Python is a programming language. It is developed by Guido Van Rossum. </s>"
 - text: "answer: Explicit context: Explicit is better than implicit </s>"
-license: "MIT"
+license: mit
 ---
 
 ## T5 for question-generation

@@ -6,7 +6,7 @@ tags:
 widget:
 - text: "generate question: <hl> 42 <hl> is the answer to life, the universe and everything. </s>"
 - text: "question: What is 42 context: 42 is the answer to life, the universe and everything. </s>"
-license: "MIT"
+license: mit
 ---
 
 ## T5 for multi-task QA and QG
