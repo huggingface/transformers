@@ -380,12 +380,12 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
         """Applies embedding based on inputs tensor."""
         assert not (input_ids is None and inputs_embeds is None)
 
-        # if position_ids is None:
-        #     if input_ids is not None:
-        #         # Create the position ids from the input token ids. Any padded tokens remain padded.
-        #         position_ids = self.create_position_ids_from_input_ids(input_ids)
-        #     else:
-        #         position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
+        if position_ids is None:
+            if input_ids is not None:
+                # Create the position ids from the input token ids. Any padded tokens remain padded.
+                position_ids = self.create_position_ids_from_input_ids(input_ids)
+            else:
+                position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
         if input_ids is not None:
             input_shape = shape_list(input_ids)
@@ -2021,7 +2021,7 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
 
         self.num_labels = config.num_labels
 
-        self.longformer = TFLongformerModel(config=config, name="longformer")
+        self.longformer = TFLongformerMainLayer(config, name="longformer")
         self.classifier = TFLongformerClassificationHead(config, name="classifier")
 
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -2122,7 +2122,7 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.longformer = TFLongformerModel(config, name="longformer")
+        self.longformer = TFLongformerMainLayer(config, name="longformer")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
@@ -2234,7 +2234,7 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
             token_type_ids=flat_token_type_ids,
             attention_mask=flat_attention_mask,
             global_attention_mask=flat_global_attention_mask,
-            inputs_embeds=flat_inputs_embeds,
+            inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -2274,7 +2274,7 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.longformer = TFLongformerModel(config=config, name="longformer")
+        self.longformer = TFLongformerMainLayer(config=config, name="longformer")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
