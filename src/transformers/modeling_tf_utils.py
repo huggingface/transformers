@@ -222,6 +222,7 @@ class TFNextSentencePredictionLoss:
     .. note::
          Any label of -100 will be ignored (along with the corresponding logits) in the loss computation.
     """
+
     def compute_loss(self, labels, logits):
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
