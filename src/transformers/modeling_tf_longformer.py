@@ -313,7 +313,7 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
-    def create_position_ids_from_input_ids(self, x):
+    def create_position_ids_from_input_ids(self, input_ids):
         """
         Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
         symbols are ignored. This is modified from fairseq's `utils.make_positions`.
@@ -323,7 +323,13 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
 
         Returns: tf.Tensor
         """
-        mask = tf.cast(tf.math.not_equal(x, self.padding_idx), dtype=tf.int32)
+        input_ids_shape = shape_list(input_ids)
+
+        # multiple choice has 3 dimensions
+        if len(input_ids_shape) == 3:
+            input_ids = tf.reshape(input_ids, (input_ids_shape[0] * input_ids_shape[1], input_ids_shape[2]))
+
+        mask = tf.cast(tf.math.not_equal(input_ids, self.padding_idx), dtype=tf.int32)
         incremental_indices = tf.math.cumsum(mask, axis=1) * mask
 
         return incremental_indices + self.padding_idx
@@ -2222,11 +2228,11 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
             if global_attention_mask is not None
             else None
         )
-        # flat_inputs_embeds = (
-        #     tf.reshape(inputs_embeds, (-1, seq_length, shape_list(inputs_embeds)[3]))
-        #     if inputs_embeds is not None
-        #     else None
-        # )
+        flat_inputs_embeds = (
+            tf.reshape(inputs_embeds, (-1, seq_length, shape_list(inputs_embeds)[3]))
+            if inputs_embeds is not None
+            else None
+        )
 
         outputs = self.longformer(
             flat_input_ids,
@@ -2234,7 +2240,7 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
             token_type_ids=flat_token_type_ids,
             attention_mask=flat_attention_mask,
             global_attention_mask=flat_global_attention_mask,
-            inputs_embeds=inputs_embeds,
+            inputs_embeds=flat_inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
