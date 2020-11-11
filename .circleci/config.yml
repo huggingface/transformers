@@ -281,7 +281,7 @@ jobs:
                       - v0.4-build_doc-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[tf,torch,sentencepiece,docs]
+            - run: pip install ."[all, docs]"
             - save_cache:
                   key: v0.4-build_doc-{{ checksum "setup.py" }}
                   paths:

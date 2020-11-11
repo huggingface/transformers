@@ -146,3 +146,10 @@ TFRobertaForQuestionAnswering
 
 .. autoclass:: transformers.TFRobertaForQuestionAnswering
     :members: call
+
+
+FlaxRobertaModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxRobertaModel
+    :members: __call__
