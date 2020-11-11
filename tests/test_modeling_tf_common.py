@@ -25,7 +25,6 @@ from typing import List, Tuple
 
 from transformers import is_tf_available
 from transformers.testing_utils import _tf_gpu_memory_limit, is_pt_tf_cross_test, require_tf, slow
-from transformers.utils.dummy_tf_objects import TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING
 
 
 if is_tf_available():
