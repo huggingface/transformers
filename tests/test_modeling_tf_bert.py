@@ -85,6 +85,7 @@ class TFBertModelTester:
         self.type_sequence_label_size = 2
         self.initializer_range = 0.02
         self.num_labels = 3
+        self.pretraining_extra_label = "next_sentence_label"
         self.num_choices = 4
         self.scope = None
 
