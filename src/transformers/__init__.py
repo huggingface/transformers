@@ -406,6 +406,9 @@ if is_torch_available():
         DistilBertPreTrainedModel,
     )
     from .modeling_dpr import (
+        DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
         DPRContextEncoder,
         DPRPretrainedContextEncoder,
         DPRPretrainedQuestionEncoder,
@@ -712,6 +715,17 @@ if is_tf_available():
         TFDistilBertMainLayer,
         TFDistilBertModel,
         TFDistilBertPreTrainedModel,
+    )
+    from .modeling_tf_dpr import (
+        TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFDPRContextEncoder,
+        TFDPRPretrainedContextEncoder,
+        TFDPRPretrainedQuestionEncoder,
+        TFDPRPretrainedReader,
+        TFDPRQuestionEncoder,
+        TFDPRReader,
     )
     from .modeling_tf_electra import (
         TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
