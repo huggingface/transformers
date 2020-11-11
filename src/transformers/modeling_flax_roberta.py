@@ -57,22 +57,22 @@ ROBERTA_START_DOCSTRING = r"""
 
 ROBERTA_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`Numpy array` of shape :obj:`({0})`):
+        input_ids (:obj:`numpy.ndarray` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using :class:`~transformers.BertTokenizer`. See
-            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
+            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`Numpy array` of shape :obj:`({0})`, `optional`):
+        attention_mask (:obj:`numpy.ndarray` of shape :obj:`({0})`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`Numpy array` of shape :obj:`({0})`, `optional`):
+        token_type_ids (:obj:`numpy.ndarray` of shape :obj:`({0})`, `optional`):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
             1]``:
 
@@ -80,7 +80,7 @@ ROBERTA_INPUTS_DOCSTRING = r"""
             - 1 corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`__
-        position_ids (:obj:`Numpy array` of shape :obj:`({0})`, `optional`):
+        position_ids (:obj:`numpy.ndarray` of shape :obj:`({0})`, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
             config.max_position_embeddings - 1]``.
         return_dict (:obj:`bool`, `optional`):
