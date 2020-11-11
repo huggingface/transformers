@@ -21,8 +21,8 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/deberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/microsoft/deberta-base/config.json",
-    "microsoft/deberta-large": "https://s3.amazonaws.com/models.huggingface.co/bert/microsoft/deberta-large/config.json",
+    "microsoft/deberta-base": "https://huggingface.co/microsoft/deberta-base/resolve/main/config.json",
+    "microsoft/deberta-large": "https://huggingface.co/microsoft/deberta-large/resolve/main/config.json",
 }
 
 

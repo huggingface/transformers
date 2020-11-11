@@ -396,7 +396,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             new_num_tokens (:obj:`int`, `optional`):
                 The number of new tokens in the embedding matrix. Increasing the size will add newly initialized
                 vectors at the end. Reducing the size will remove vectors from the end. If not provided or :obj:`None`,
-                just returns a pointer to the input tokens :obj:`tf.Variable` module of the model wihtout doing
+                just returns a pointer to the input tokens :obj:`tf.Variable` module of the model without doing
                 anything.
 
         Return:
@@ -442,7 +442,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
                 Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
                 vectors from the end. If not provided or :obj:`None`, just returns a pointer to the input tokens
-                :obj:`tf.Variable`` module of the model wihtout doing anything.
+                :obj:`tf.Variable`` module of the model without doing anything.
 
         Return:
             :obj:`tf.Variable`: Pointer to the resized Embedding Module or the old Embedding Module if
@@ -572,9 +572,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (e.g., not try doanloading the model).
-            use_cdn(:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether or not to use Cloudfront (a Content Delivery Network, or CDN) when searching for the model on
-                our S3 (faster). Should be set to :obj:`False` for checkpoints larger than 20GB.
+            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+                identifier allowed by git.
             mirror(:obj:`str`, `optional`, defaults to :obj:`None`):
                 Mirror source to accelerate downloads in China. If you are from China and have an accessibility
                 problem, you can set this option to resolve it. Note that we do not guarantee the timeliness or safety.
@@ -616,7 +617,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
-        use_cdn = kwargs.pop("use_cdn", True)
+        revision = kwargs.pop("revision", None)
         mirror = kwargs.pop("mirror", None)
 
         # Load config if we don't provide a configuration
@@ -631,6 +632,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 resume_download=resume_download,
                 proxies=proxies,
                 local_files_only=local_files_only,
+                revision=revision,
                 **kwargs,
             )
         else:
@@ -659,7 +661,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 archive_file = hf_bucket_url(
                     pretrained_model_name_or_path,
                     filename=(WEIGHTS_NAME if from_pt else TF2_WEIGHTS_NAME),
-                    use_cdn=use_cdn,
+                    revision=revision,
                     mirror=mirror,
                 )
 
@@ -673,9 +675,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                     resume_download=resume_download,
                     local_files_only=local_files_only,
                 )
-                if resolved_archive_file is None:
-                    raise EnvironmentError
-            except EnvironmentError:
+            except EnvironmentError as err:
+                logger.error(err)
                 msg = (
                     f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
                     f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"

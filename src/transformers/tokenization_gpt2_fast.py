@@ -33,25 +33,25 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "t
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-vocab.json",
-        "gpt2-medium": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-vocab.json",
-        "gpt2-large": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-large-vocab.json",
-        "gpt2-xl": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-xl-vocab.json",
-        "distilgpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/distilgpt2-vocab.json",
+        "gpt2": "https://huggingface.co/gpt2/resolve/main/vocab.json",
+        "gpt2-medium": "https://huggingface.co/gpt2-medium/resolve/main/vocab.json",
+        "gpt2-large": "https://huggingface.co/gpt2-large/resolve/main/vocab.json",
+        "gpt2-xl": "https://huggingface.co/gpt2-xl/resolve/main/vocab.json",
+        "distilgpt2": "https://huggingface.co/distilgpt2/resolve/main/vocab.json",
     },
     "merges_file": {
-        "gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-merges.txt",
-        "gpt2-medium": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-merges.txt",
-        "gpt2-large": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-large-merges.txt",
-        "gpt2-xl": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-xl-merges.txt",
-        "distilgpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/distilgpt2-merges.txt",
+        "gpt2": "https://huggingface.co/gpt2/resolve/main/merges.txt",
+        "gpt2-medium": "https://huggingface.co/gpt2-medium/resolve/main/merges.txt",
+        "gpt2-large": "https://huggingface.co/gpt2-large/resolve/main/merges.txt",
+        "gpt2-xl": "https://huggingface.co/gpt2-xl/resolve/main/merges.txt",
+        "distilgpt2": "https://huggingface.co/distilgpt2/resolve/main/merges.txt",
     },
     "tokenizer_file": {
-        "gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-tokenizer.json",
-        "gpt2-medium": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-tokenizer.json",
-        "gpt2-large": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-large-tokenizer.json",
-        "gpt2-xl": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-xl-tokenizer.json",
-        "distilgpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/distilgpt2-tokenizer.json",
+        "gpt2": "https://huggingface.co/gpt2/resolve/main/tokenizer.json",
+        "gpt2-medium": "https://huggingface.co/gpt2-medium/resolve/main/tokenizer.json",
+        "gpt2-large": "https://huggingface.co/gpt2-large/resolve/main/tokenizer.json",
+        "gpt2-xl": "https://huggingface.co/gpt2-xl/resolve/main/tokenizer.json",
+        "distilgpt2": "https://huggingface.co/distilgpt2/resolve/main/tokenizer.json",
     },
 }
 

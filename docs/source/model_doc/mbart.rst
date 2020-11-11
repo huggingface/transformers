@@ -19,6 +19,13 @@ on the encoder, decoder, or reconstructing parts of the text.
 
 The Authors' code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/mbart>`__
 
+Examples
+_______________________________________________________________________________________________________________________
+
+- Examples and scripts for fine-tuning mBART and other models for sequence to sequence tasks can be found in
+  `examples/seq2seq/ <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`__.
+- Given the large embeddings table, mBART consumes a large amount of GPU RAM, especially for fine-tuning.
+  :class:`MarianMTModel` is usually a better choice for bilingual machine translation.
 
 Training
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -38,11 +45,7 @@ the sequences for sequence-to-sequence fine-tuning.
     example_english_phrase = "UN Chief Says There Is No Military Solution in Syria"
     expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
     batch = tokenizer.prepare_seq2seq_batch(example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian)
-    input_ids = batch["input_ids"]
-    target_ids = batch["decoder_input_ids"]
-    decoder_input_ids = target_ids[:, :-1].contiguous()
-    labels = target_ids[:, 1:].clone()
-    model(input_ids=input_ids, decoder_input_ids=decoder_input_ids, labels=labels) #forward
+    model(input_ids=batch['input_ids'], labels=batch['labels']) # forward pass
 
 - Generation
 
