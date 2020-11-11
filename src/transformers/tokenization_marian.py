@@ -80,7 +80,7 @@ class MarianTokenizer(PreTrainedTokenizer):
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["attention_mask"]
-    language_code_re = re.compile("">>.{3}<<|>>.{3}\_.{4}<<"")  # type: re.Pattern
+    language_code_re = re.compile(">>.{3}<<|>>.{3}\_.{4}<<")  # type: re.Pattern
 
     def __init__(
         self,
