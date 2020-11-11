@@ -25,8 +25,8 @@ sys.path.insert(2, str(Path(__file__).resolve().parents[1]))
 from lightning_base import generic_train  # noqa
 
 
-class BartSummarizationDistiller(SummarizationModule):
-    """Supports Bart, Pegasus and other models that inherit from Bart."""
+class SummarizationDistiller(SummarizationModule):
+    """Supports T5, Bart, Pegasus and other models that inherit from Bart."""
 
     loss_names = ["loss", "ce_loss", "mlm_loss", "hid_loss_enc", "hid_loss_dec"]
 
@@ -111,22 +111,8 @@ class BartSummarizationDistiller(SummarizationModule):
         gc.collect()
         torch.cuda.empty_cache()
 
-    def calc_mse_loss(self, teacher_outputs: torch.Tensor, student_outputs: torch.Tensor, mask) -> torch.FloatTensor:
-        """Supervise MSE(teacher.encoder_outputs, student.encoder_outputs)."""
-        # raise NotImplementedError()
-        if mask is not None:
-            # mask has False at padding_idx
-            sel_mask = mask[:, :, None].expand_as(student_outputs).bool()
-            s_logits_slct = torch.masked_select(student_outputs, sel_mask)
-            t_logits_slct = torch.masked_select(teacher_outputs, sel_mask)
-        else:
-            t_logits_slct = teacher_outputs
-            s_logits_slct = student_outputs
-        return F.mse_loss(s_logits_slct, t_logits_slct)
-
     def calc_ce_loss(self, mask, s_logits, t_logits):
         """Copy pasted from distillbert (transformers/examples/distillation/)"""
-
         # mask has False at padding_idx
         sel_mask = mask[:, :, None].expand_as(s_logits)
         vocab_size = s_logits.size(-1)
@@ -212,6 +198,7 @@ class BartSummarizationDistiller(SummarizationModule):
             encoder_outputs=(teacher_enc_outputs,),
             decoder_input_ids=decoder_input_ids,
             output_hidden_states=self.do_calc_hidden_loss,
+            lm_labels=labels,
             return_dict=True,
         )
         dec_mask = decoder_input_ids.ne(pad_token_id)
@@ -242,6 +229,7 @@ class BartSummarizationDistiller(SummarizationModule):
         valid_count = mask.sum() * hidden_states[0].size(-1)
         student_states = torch.stack([hidden_states[i] for i in range(len(matches))])
         teacher_states = torch.stack([hidden_states_T[j] for j in matches])
+        assert student_states.shape == teacher_states.shape, f'{student_states.shape} != {teacher_states.shape}'
         if normalize_hidden:
             student_states = F.layer_norm(student_states, student_states.shape[1:])
             teacher_states = F.layer_norm(teacher_states, teacher_states.shape[1:])
@@ -253,7 +241,7 @@ class BartSummarizationDistiller(SummarizationModule):
 def add_distill_args(parser):
     # NOTE: if --student argument was specified and the teacher and student base models
     # are different, the models still have to have the same tokenizer, specified by
-    # --tokenizer_name. So for e.g., you can distill from t5_large to t5_small but not
+    # --tokenizer_name. So, for example, you can distill from t5_large to t5_small but not
     # from bart to t5. This s because if the tokenizers are different, the output space
     # for the two models is also different and their logits are not comparable.
     parser.add_argument("--teacher", type=str)
@@ -269,9 +257,8 @@ def add_distill_args(parser):
     parser.add_argument("--normalize_hidden", action="store_true", default=False)
 
 
-class BartTranslationDistiller(BartSummarizationDistiller):
-    """Supports Mbart, Marian, other models that inherit from Bart."""
-
+class TranslationDistiller(SummarizationDistiller):
+    """Supports T5, mBART, Marian, other models that inherit from Bart."""
     mode = "translation"
     metric_names = ["bleu"]
     default_val_metric = "bleu"
@@ -299,7 +286,7 @@ def create_module(args):
     if args.no_teacher:
         module_cls = TranslationModule if "translation" in args.task else SummarizationModule
     else:  # DISTILL WITH TEACHER
-        module_cls = BartTranslationDistiller if "translation" in args.task else BartSummarizationDistiller
+        module_cls = TranslationDistiller if "translation" in args.task else SummarizationDistiller
     args.setup_cls: str = module_cls.__name__
     print(f"using module {args.setup_cls}")
     model = module_cls(args)
@@ -317,7 +304,7 @@ def distill_main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser = pl.Trainer.add_argparse_args(parser)
-    parser = BartSummarizationDistiller.add_model_specific_args(parser, os.getcwd())
+    parser = SummarizationDistiller.add_model_specific_args(parser, os.getcwd())
     args = parser.parse_args()
 
     distill_main(args)
