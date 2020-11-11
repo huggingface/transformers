@@ -291,7 +291,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                             full_word += sub_text + tok
                         elif full_word:
                             full_word += sub_text
-                            result += [full_word]
+                            result.append(full_word)
                             full_word = ""
                             continue
                     # Strip white spaces on the right
@@ -310,16 +310,16 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                         sub_text = sub_text.lstrip()
 
                 if i == 0 and not sub_text:
-                    result += [tok]
+                    result.append(tok)
                 elif i == len(split_text) - 1:
                     if sub_text:
-                        result += [sub_text]
+                        result.append(sub_text)
                     else:
                         pass
                 else:
                     if sub_text:
-                        result += [sub_text]
-                    result += [tok]
+                        result.append(sub_text)
+                    result.append(tok)
             return result
 
         def split_on_tokens(tok_list, text):
@@ -334,9 +334,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 tokenized_text = []
                 for sub_text in text_list:
                     if sub_text not in self.unique_no_split_tokens:
-                        tokenized_text += split_on_token(tok, sub_text)
+                        tokenized_text.extend(split_on_token(tok, sub_text))
                     else:
-                        tokenized_text += [sub_text]
+                        tokenized_text.append(sub_text)
                 text_list = tokenized_text
 
             return list(
