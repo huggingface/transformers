@@ -44,6 +44,7 @@ from .modeling_tf_outputs import (
 from .modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
+    TFNextSentencePredictionLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
@@ -1119,7 +1120,7 @@ class TFMobileBertOnlyNSPHead(tf.keras.layers.Layer):
     """MobileBert Model with a `next sentence prediction (classification)` head on top. """,
     MOBILEBERT_START_DOCSTRING,
 )
-class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel):
+class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextSentencePredictionLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1147,17 +1148,26 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel):
             >>> logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
         """
         return_dict = kwargs.get("return_dict")
+        next_sentence_label = kwargs.get("next_sentence_label", None)
         return_dict = return_dict if return_dict is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(inputs, **kwargs)
 
         pooled_output = outputs[1]
-        seq_relationship_score = self.cls(pooled_output)
+        seq_relationship_scores = self.cls(pooled_output)
+
+        next_sentence_loss = (
+            None
+            if next_sentence_label is None
+            else self.compute_loss(labels=next_sentence_label, logits=seq_relationship_scores)
+        )
 
         if not return_dict:
-            return (seq_relationship_score,) + outputs[2:]
+            output = (seq_relationship_scores,) + outputs[2:]
+            return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
 
         return TFNextSentencePredictorOutput(
-            logits=seq_relationship_score,
+            loss=next_sentence_loss,
+            logits=seq_relationship_scores,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

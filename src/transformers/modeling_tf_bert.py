@@ -46,6 +46,7 @@ from .modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
+    TFNextSentencePredictionLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
@@ -1036,7 +1037,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
     """Bert Model with a `next sentence prediction (classification)` head on top. """,
     BERT_START_DOCSTRING,
 )
-class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
+class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredictionLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1065,16 +1066,25 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
             >>> assert logits[0][0] < logits[0][1] # the next sentence was random
         """
         return_dict = kwargs.get("return_dict")
+        next_sentence_label = kwargs.get("next_sentence_label", None)
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
         outputs = self.bert(inputs, **kwargs)
         pooled_output = outputs[1]
-        seq_relationship_score = self.nsp(pooled_output)
+        seq_relationship_scores = self.nsp(pooled_output)
+
+        next_sentence_loss = (
+            None
+            if next_sentence_label is None
+            else self.compute_loss(labels=next_sentence_label, logits=seq_relationship_scores)
+        )
 
         if not return_dict:
-            return (seq_relationship_score,) + outputs[2:]
+            output = (seq_relationship_scores,) + outputs[2:]
+            return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
 
         return TFNextSentencePredictorOutput(
-            logits=seq_relationship_score,
+            loss=next_sentence_loss,
+            logits=seq_relationship_scores,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
