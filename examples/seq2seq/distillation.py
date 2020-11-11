@@ -198,7 +198,7 @@ class BartSummarizationDistiller(SummarizationModule):
                     input_ids,
                     attention_mask=src_mask,
                     output_hidden_states=not self.different_base_models,
-                    return_dict=True
+                    return_dict=True,
                 )
             if self.different_base_models:
                 teacher_enc_outputs = teacher_encoder.last_hidden_state
@@ -225,7 +225,9 @@ class BartSummarizationDistiller(SummarizationModule):
             )
         dec_mask = decoder_input_ids.ne(pad_token_id)
         loss_ce = self.calc_ce_loss(dec_mask, lm_logits, outputs.logits)
-        if (not self.different_base_models) and self.alpha_hid > 0:  # Intermediate supervision of decoder hidden states
+        if (
+            not self.different_base_models
+        ) and self.alpha_hid > 0:  # Intermediate supervision of decoder hidden states
             tdec_hidden = outputs.decoder_hidden_states
             hid_loss_dec = self.calc_hidden_loss(
                 dec_mask, dec_hidden, tdec_hidden, self.d_matches, normalize_hidden=self.hparams.normalize_hidden
