@@ -287,7 +287,6 @@ class TFDPRPretrainedContextEncoder(TFPreTrainedModel):
 
     config_class = DPRConfig
     base_model_prefix = "ctx_encoder"
-    authorized_missing_keys = [r"position_ids"]
 
 
 class TFDPRPretrainedQuestionEncoder(TFPreTrainedModel):
@@ -298,7 +297,6 @@ class TFDPRPretrainedQuestionEncoder(TFPreTrainedModel):
 
     config_class = DPRConfig
     base_model_prefix = "question_encoder"
-    authorized_missing_keys = [r"position_ids"]
 
 
 class TFDPRPretrainedReader(TFPreTrainedModel):
@@ -309,7 +307,6 @@ class TFDPRPretrainedReader(TFPreTrainedModel):
 
     config_class = DPRConfig
     base_model_prefix = "reader"
-    authorized_missing_keys = [r"position_ids"]
 
 
 ###############
