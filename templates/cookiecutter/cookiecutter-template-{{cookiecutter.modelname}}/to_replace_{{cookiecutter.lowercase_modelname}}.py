@@ -67,7 +67,7 @@ from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.u
 from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP, {{cookiecutter.camelcase_modelname}}Config
 # End.
 
-# Below: "# Add cased model names here"
+# Below: "# Add full (and cased) model names here"
 # Replace with:
         ("{{cookiecutter.lowercase_modelname}}", "{{cookiecutter.camelcase_modelname}}"),
 # End.

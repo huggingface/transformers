@@ -1,4 +1,4 @@
-# Using the `cookiecutter` to generate models
+# Using `cookiecutter` to generate models
 
 This folder contains templates to generate new models that fit the current API and pass all tests. It generates
 models in both PyTorch and TensorFlow, completes the `__init__.py` and auto-modeling files, and creates the
@@ -25,10 +25,10 @@ This should launch the `cookiecutter` package which should prompt you to fill in
 
 The `modelname` should be cased according to the plain text casing, i.e., BERT, RoBERTa, DeBERTa.
 ```
-modelname [LysBERT]:
-uppercase_modelname [LYSBERT]: 
+modelname [<ModelNAME>]:
+uppercase_modelname [<MODEL_NAME>]: 
 lowercase_modelname [<model_name>]: 
-camelcase_modelname [Lysbert]: 
+camelcase_modelname [<ModelName>]: 
 ```
 
 Fill in the `authors` with your team members:
@@ -49,7 +49,7 @@ Select tokenizer_type:
 2 - Standalone
 Choose from 1, 2 [1]: 
 ```
-
+<!---
 Choose if your model is an encoder-decoder, or an encoder-only architecture.
 
 If your model is an encoder-only architecture, the generated architecture will be based on the BERT model. 
@@ -61,6 +61,7 @@ Select is_encoder_decoder_model:
 2 - False
 Choose from 1, 2 [1]: 
 ```
+-->
 
 Once the command has finished, you should have a total of 7 new files spread across the repository:
 ```

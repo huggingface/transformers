@@ -138,7 +138,7 @@ CONFIG_MAPPING = OrderedDict(
 
 MODEL_NAMES_MAPPING = OrderedDict(
     [
-        # Add cased model names here
+        # Add full (and cased) model names here
         ("retribert", "RetriBERT"),
         ("t5", "T5"),
         ("mobilebert", "MobileBERT"),

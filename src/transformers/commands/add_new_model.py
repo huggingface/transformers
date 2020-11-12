@@ -36,7 +36,7 @@ class AddNewModelCommand(BaseTransformersCLICommand):
 
     def run(self):
         # Ensure that there is no other `cookiecutter-template-xxx` directory in the current working directory
-        directories = [directory for directory in os.listdir() if "cookiecutter-template-" in directory[:22]]
+        directories = [directory for directory in os.listdir() if "cookiecutter-template-" == directory[:22]]
         if len(directories) > 0:
             raise ValueError(
                 "Several directories starting with `cookiecutter-template-` in current working directory. "
