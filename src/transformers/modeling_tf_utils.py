@@ -1028,18 +1028,18 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         return output
 
 
-def shape_list(x: tf.Tensor) -> List[int]:
+def shape_list(tensor: tf.Tensor) -> List[int]:
     """
     Deal with dynamic shape in tensorflow cleanly.
 
     Args:
-        x (:obj:`tf.Tensor`): The tensor we want the shape of.
+        tensor (:obj:`tf.Tensor`): The tensor we want the shape of.
 
     Returns:
         :obj:`List[int]`: The shape of the tensor as a list.
     """
-    static = x.shape.as_list()
-    dynamic = tf.shape(x)
+    static = tensor.shape.as_list()
+    dynamic = tf.shape(tensor)
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 
