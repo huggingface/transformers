@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2010, The T5v1_1_ Authors and HuggingFace Inc.
+# Copyright 2010, The T5v2 Authors and HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" T5v1_1_ model configuration """
+""" T5v2 model configuration """
 
 from .configuration_utils import PretrainedConfig
 from .utils import logging
@@ -20,7 +20,7 @@ from .utils import logging
 
 logger = logging.get_logger(__name__)
 
-T5v1_1__PRETRAINED_CONFIG_ARCHIVE_MAP = {
+T5v2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "t5-small": "https://huggingface.co/t5-small/resolve/main/config.json",
     "t5-base": "https://huggingface.co/t5-base/resolve/main/config.json",
     "t5-large": "https://huggingface.co/t5-large/resolve/main/config.json",
@@ -29,21 +29,21 @@ T5v1_1__PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class T5v1_1_Config(PretrainedConfig):
+class T5v2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.T5v1_1_Model` or a
-    :class:`~transformers.TFT5v1_1_Model`. It is used to instantiate a T5v1_1_ model according to the specified
-    arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
-    configuration to that of the T5v1_1_ `t5-small <https://huggingface.co/t5-small>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.T5v2Model` or a
+    :class:`~transformers.TFT5v2Model`. It is used to instantiate a T5v2 model according to the specified arguments,
+    defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration
+    to that of the T5v2 `t5-small <https://huggingface.co/t5-small>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Arguments:
         vocab_size (:obj:`int`, `optional`, defaults to 32128):
-            Vocabulary size of the T5v1_1_ model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.T5v1_1_Model` or
-            :class:`~transformers.TFT5v1_1_Model`.
+            Vocabulary size of the T5v2 model. Defines the number of different tokens that can be represented by the
+            :obj:`inputs_ids` passed when calling :class:`~transformers.T5v2Model` or
+            :class:`~transformers.TFT5v2Model`.
         n_positions (:obj:`int`, `optional`, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -53,7 +53,7 @@ class T5v1_1_Config(PretrainedConfig):
             Size of the key, query, value projections per attention head. :obj:`d_kv` has to be equal to :obj:`d_model
             // num_heads`.
         d_ff (:obj:`int`, `optional`, defaults to 2048):
-            Size of the intermediate feed forward layer in each :obj:`T5v1_1_Block`.
+            Size of the intermediate feed forward layer in each :obj:`T5v2Block`.
         num_layers (:obj:`int`, `optional`, defaults to 6):
             Number of hidden layers in the Transformer encoder.
         num_decoder_layers (:obj:`int`, `optional`):
@@ -90,12 +90,14 @@ class T5v1_1_Config(PretrainedConfig):
         is_encoder_decoder=True,
         pad_token_id=0,
         eos_token_id=1,
+        tie_word_embeddings=False,
         **kwargs
     ):
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
+            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
         self.vocab_size = vocab_size

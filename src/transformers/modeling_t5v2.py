@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Mesh TensorFlow authors, T5v1_1_ Authors and HuggingFace Inc. team.
+# Copyright 2018 Mesh TensorFlow authors, T5v2 Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch T5v1_1_v1_1 model. """
+""" PyTorch T5v2v1_1 model. """
 
 
 import copy
@@ -25,7 +25,8 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from .configuration_t5_v1_1 import T5v1_1_Config as T5Config
+from .activations import ACT2FN
+from .configuration_t5v2 import T5v2Config as T5Config
 from .file_utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -46,19 +47,19 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "T5Config"
-_TOKENIZER_FOR_DOC = "T5v1_1_Tokenizer"
+_TOKENIZER_FOR_DOC = "T5v2Tokenizer"
 
 ####################################################
 # This dict contains shortcut names and associated url
 # for the pretrained weights provided with the models
 ####################################################
-T5v1_1__PRETRAINED_MODEL_ARCHIVE_LIST = [
+T5v2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "t5-small",
     "t5-base",
     "t5-large",
     "t5-3b",
     "t5-11b",
-    # See all T5v1_1_ models at https://huggingface.co/models?filter=t5
+    # See all T5v2 models at https://huggingface.co/models?filter=t5
 ]
 
 
@@ -173,10 +174,10 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
 ####################################################
 
 
-class T5v1_1_LayerNorm(nn.Module):
+class T5v2LayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        Construct a layernorm module in the T5v1_1_ style No bias and no subtraction of mean.
+        Construct a layernorm module in the T5v2 style No bias and no subtraction of mean.
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -192,31 +193,34 @@ class T5v1_1_LayerNorm(nn.Module):
         return self.weight * x
 
 
-class T5v1_1_DenseReluDense(nn.Module):
+class T5v2DenseReluDense(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
         self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
         self.dropout = nn.Dropout(config.dropout_rate)
+        # TODO: Put in config
+        self.wi_0_activation = ACT2FN["gelu_new"]
+        self.wi_1_activation = ACT2FN["linear"]
 
     def forward(self, hidden_states):
         # here check numerically
-        hidden_1 = self.wi_0(hidden_states)
-        hidden_1 = F.gelu(hidden_1)
-        hidden_2 = self.wi_1(hidden_states)
-        h = hidden_1 * hidden_2
-        h = F.relu(h)
+        hidden_0 = self.wi_0(hidden_states)
+        hidden_0 = self.wi_0_activation(hidden_0)
+        hidden_1 = self.wi_1(hidden_states)
+        hidden_1 = self.wi_1_activation(hidden_1)
+        h = hidden_0 * hidden_1
         h = self.dropout(h)
         h = self.wo(h)
         return h
 
 
-class T5v1_1_LayerFF(nn.Module):
+class T5v2LayerFF(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.DenseReluDense = T5v1_1_DenseReluDense(config)
-        self.layer_norm = T5v1_1_LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.DenseReluDense = T5v2DenseReluDense(config)
+        self.layer_norm = T5v2LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
@@ -226,7 +230,7 @@ class T5v1_1_LayerFF(nn.Module):
         return layer_output
 
 
-class T5v1_1_Attention(nn.Module):
+class T5v2Attention(nn.Module):
     def __init__(self, config: T5Config, has_relative_attention_bias=False, is_bidirectional=False):
         super().__init__()
         self.is_bidirectional = is_bidirectional
@@ -387,9 +391,9 @@ class T5v1_1_Attention(nn.Module):
                 k, v = past_key_value
 
         if self.is_decoder and use_cache is True:
-            present_key_value_state = ((k, v),)
+            present_key_value_state = (k, v)
         else:
-            present_key_value_state = (None,)
+            present_key_value_state = None
 
         # (bs, n_heads, qlen, klen)
         scores = torch.matmul(
@@ -398,8 +402,11 @@ class T5v1_1_Attention(nn.Module):
 
         if position_bias is None:
             if not self.has_relative_attention_bias:
-                raise ValueError("No position_bias provided and no weights to compute position_bias")
-            position_bias = self.compute_bias(real_qlen, klen)
+                position_bias = torch.zeros(
+                    (1, self.n_heads, real_qlen, klen), device=scores.device, dtype=scores.dtype
+                )
+            else:
+                position_bias = self.compute_bias(real_qlen, klen)
 
             # if key and values are already calculated
             # we want only the last query position bias
@@ -422,22 +429,21 @@ class T5v1_1_Attention(nn.Module):
 
         context = self.o(context)
 
-        outputs = (context,) + present_key_value_state
+        outputs = (context,) + (present_key_value_state,) + (position_bias,)
 
         if output_attentions:
             outputs = outputs + (weights,)
-        if self.has_relative_attention_bias:
-            outputs = outputs + (position_bias,)
+
         return outputs
 
 
-class T5v1_1_LayerSelfAttention(nn.Module):
+class T5v2LayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
-        self.SelfAttention = T5v1_1_Attention(
+        self.SelfAttention = T5v2Attention(
             config, has_relative_attention_bias=has_relative_attention_bias, is_bidirectional=not config.is_decoder
         )
-        self.layer_norm = T5v1_1_LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.layer_norm = T5v2LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -466,13 +472,11 @@ class T5v1_1_LayerSelfAttention(nn.Module):
         return outputs
 
 
-class T5v1_1_LayerCrossAttention(nn.Module):
-    def __init__(self, config, has_relative_attention_bias=False):
+class T5v2LayerCrossAttention(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        self.EncDecAttention = T5v1_1_Attention(
-            config, has_relative_attention_bias=has_relative_attention_bias, is_bidirectional=True
-        )
-        self.layer_norm = T5v1_1_LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.EncDecAttention = T5v2Attention(config, has_relative_attention_bias=False, is_bidirectional=True)
+        self.layer_norm = T5v2LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
@@ -505,18 +509,16 @@ class T5v1_1_LayerCrossAttention(nn.Module):
         return outputs
 
 
-class T5v1_1_Block(nn.Module):
+class T5v2Block(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.layer = nn.ModuleList()
-        self.layer.append(T5v1_1_LayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
+        self.layer.append(T5v2LayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
         if self.is_decoder:
-            self.layer.append(
-                T5v1_1_LayerCrossAttention(config, has_relative_attention_bias=has_relative_attention_bias)
-            )
+            self.layer.append(T5v2LayerCrossAttention(config))
 
-        self.layer.append(T5v1_1_LayerFF(config))
+        self.layer.append(T5v2LayerFF(config))
 
     def forward(
         self,
@@ -597,7 +599,7 @@ class T5v1_1_Block(nn.Module):
         return outputs  # hidden-states, present_key_value_states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
 
-class T5v1_1_PreTrainedModel(PreTrainedModel):
+class T5v2PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -621,13 +623,13 @@ class T5v1_1_PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """ Initialize the weights """
         factor = self.config.initializer_factor  # Used for testing weights initialization
-        if isinstance(module, T5v1_1_LayerNorm):
+        if isinstance(module, T5v2LayerNorm):
             module.weight.data.fill_(factor * 1.0)
-        elif isinstance(module, (T5v1_1_Model, T5v1_1_ForConditionalGeneration)):
+        elif isinstance(module, (T5v2Model, T5v2ForConditionalGeneration)):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
-        elif isinstance(module, T5v1_1_DenseReluDense):
+        elif isinstance(module, T5v2DenseReluDense):
             # Mesh TensorFlow FF initialization
             # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
             # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
@@ -640,7 +642,7 @@ class T5v1_1_PreTrainedModel(PreTrainedModel):
             module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
-        elif isinstance(module, T5v1_1_Attention):
+        elif isinstance(module, T5v2Attention):
             # Mesh TensorFlow attention initialization to avoid scaling before softmax
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             d_model = self.config.d_model
@@ -659,7 +661,7 @@ class T5v1_1_PreTrainedModel(PreTrainedModel):
 
         assert (
             decoder_start_token_id is not None
-        ), "self.model.config.decoder_start_token_id has to be defined. In T5v1_1_ it is usually set to the pad_token_id. See T5v1_1_ docs for more information"
+        ), "self.model.config.decoder_start_token_id has to be defined. In T5v2 it is usually set to the pad_token_id. See T5v2 docs for more information"
 
         # shift inputs to the right
         shifted_input_ids = input_ids.new_zeros(input_ids.shape)
@@ -675,7 +677,7 @@ class T5v1_1_PreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-class T5v1_1_Stack(T5v1_1_PreTrainedModel):
+class T5v2Stack(T5v2PreTrainedModel):
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
 
@@ -683,9 +685,9 @@ class T5v1_1_Stack(T5v1_1_PreTrainedModel):
         self.is_decoder = config.is_decoder
 
         self.block = nn.ModuleList(
-            [T5v1_1_Block(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
+            [T5v2Block(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
         )
-        self.final_layer_norm = T5v1_1_LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
+        self.final_layer_norm = T5v2LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
         self.init_weights()
@@ -800,20 +802,20 @@ class T5v1_1_Stack(T5v1_1_PreTrainedModel):
             # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
             hidden_states, present_key_value_state = layer_outputs[:2]
 
-            if i == 0:
-                # We share the position biases between the layers - the first layer store them
-                # layer_outputs = hidden-states, key-value-states (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
-                position_bias = layer_outputs[3 if output_attentions else 2]
-                if self.is_decoder and encoder_hidden_states is not None:
-                    encoder_decoder_position_bias = layer_outputs[5 if output_attentions else 3]
+            # We share the position biases between the layers - the first layer store them
+            # layer_outputs = hidden-states, position_bias, key-value-states (self-attention weights), (self-attention), cross-attention position_bias, (cross-attention weights)
+
+            position_bias = layer_outputs[2]
+            if self.is_decoder and encoder_hidden_states is not None:
+                encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
             # append next layer key value states
             if use_cache:
                 present_key_value_states = present_key_value_states + (present_key_value_state,)
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[2],)
+                all_attentions = all_attentions + (layer_outputs[3],)
                 if self.is_decoder:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[4 if i == 0 else 3],)
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -843,12 +845,12 @@ class T5v1_1_Stack(T5v1_1_PreTrainedModel):
         )
 
 
-T5v1_1__START_DOCSTRING = r"""
+T5v2_START_DOCSTRING = r"""
 
-    The T5v1_1_ model was proposed in `Exploring the Limits of Transfer Learning with a Unified Text-to-Text
-    Transformer <https://arxiv.org/abs/1910.10683>`__ by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee,
-    Sharan Narang, Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in
-    a text-to-text denoising generative setting.
+    The T5v2 model was proposed in `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer
+    <https://arxiv.org/abs/1910.10683>`__ by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang,
+    Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a text-to-text
+    denoising generative setting.
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
@@ -865,17 +867,17 @@ T5v1_1__START_DOCSTRING = r"""
             weights.
 """
 
-T5v1_1__INPUTS_DOCSTRING = r"""
+T5v2_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. T5v1_1_ is a model with relative position embeddings so
+            Indices of input sequence tokens in the vocabulary. T5v2 is a model with relative position embeddings so
             you should be able to pad the inputs on both the right and the left.
 
-            Indices can be obtained using :class:`~transformers.T5v1_1_Tokenizer`. See
+            Indices can be obtained using :class:`~transformers.T5v2Tokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             detail.
 
-            To know more on how to prepare :obj:`input_ids` for pretraining take a look a `T5v1_1_ Training
+            To know more on how to prepare :obj:`input_ids` for pretraining take a look a `T5v2 Training
             <./t5.html#training>`__.
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
@@ -885,11 +887,11 @@ T5v1_1__INPUTS_DOCSTRING = r"""
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Provide for sequence to sequence training. T5v1_1_ uses the :obj:`pad_token_id` as the starting token for
+            Provide for sequence to sequence training. T5v2 uses the :obj:`pad_token_id` as the starting token for
             :obj:`decoder_input_ids` generation. If :obj:`past_key_values` is used, optionally only the last
             :obj:`decoder_input_ids` have to be input (see :obj:`past_key_values`).
 
-            To know more on how to prepare :obj:`decoder_input_ids` for pretraining take a look at `T5v1_1_ Training
+            To know more on how to prepare :obj:`decoder_input_ids` for pretraining take a look at `T5v2 Training
             <./t5.html#training>`__. If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both unset,
             :obj:`decoder_input_ids` takes the value of :obj:`input_ids`.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
@@ -941,10 +943,10 @@ T5v1_1__INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare T5v1_1_ Model transformer outputting raw hidden-states" "without any specific head on top.",
-    T5v1_1__START_DOCSTRING,
+    "The bare T5v2 Model transformer outputting raw hidden-states" "without any specific head on top.",
+    T5v2_START_DOCSTRING,
 )
-class T5v1_1_Model(T5v1_1_PreTrainedModel):
+class T5v2Model(T5v2PreTrainedModel):
     def __init__(self, config: T5Config):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
@@ -952,13 +954,13 @@ class T5v1_1_Model(T5v1_1_PreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = T5v1_1_Stack(encoder_config, self.shared)
+        self.encoder = T5v2Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = T5v1_1_Stack(decoder_config, self.shared)
+        self.decoder = T5v2Stack(decoder_config, self.shared)
 
         self.init_weights()
 
@@ -984,7 +986,7 @@ class T5v1_1_Model(T5v1_1_PreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(T5v1_1__INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(T5v2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1008,10 +1010,10 @@ class T5v1_1_Model(T5v1_1_PreTrainedModel):
 
         Example::
 
-            >>> from transformers import T5v1_1_Tokenizer, T5v1_1_Model
+            >>> from transformers import T5v2Tokenizer, T5v2Model
 
-            >>> tokenizer = T5v1_1_Tokenizer.from_pretrained('t5-small')
-            >>> model = T5v1_1_Model.from_pretrained('t5-small')
+            >>> tokenizer = T5v2Tokenizer.from_pretrained('t5-small')
+            >>> model = T5v2Model.from_pretrained('t5-small')
 
             >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
             >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
@@ -1086,8 +1088,8 @@ class T5v1_1_Model(T5v1_1_PreTrainedModel):
         )
 
 
-@add_start_docstrings("""T5v1_1_ Model with a `language modeling` head on top. """, T5v1_1__START_DOCSTRING)
-class T5v1_1_ForConditionalGeneration(T5v1_1_PreTrainedModel):
+@add_start_docstrings("""T5v2 Model with a `language modeling` head on top. """, T5v2_START_DOCSTRING)
+class T5v2ForConditionalGeneration(T5v2PreTrainedModel):
     authorized_missing_keys = [r"encoder\.embed_tokens\.weight", r"decoder\.embed_tokens\.weight", r"lm_head\.weight"]
 
     def __init__(self, config):
@@ -1099,13 +1101,13 @@ class T5v1_1_ForConditionalGeneration(T5v1_1_PreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = T5v1_1_Stack(encoder_config, self.shared)
+        self.encoder = T5v2Stack(encoder_config, self.shared)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = T5v1_1_Stack(decoder_config, self.shared)
+        self.decoder = T5v2Stack(decoder_config, self.shared)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
@@ -1113,11 +1115,6 @@ class T5v1_1_ForConditionalGeneration(T5v1_1_PreTrainedModel):
 
     def get_input_embeddings(self):
         return self.shared
-
-    def set_input_embeddings(self, new_embeddings):
-        self.shared = new_embeddings
-        self.encoder.set_input_embeddings(new_embeddings)
-        self.decoder.set_input_embeddings(new_embeddings)
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -1128,7 +1125,7 @@ class T5v1_1_ForConditionalGeneration(T5v1_1_PreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    @add_start_docstrings_to_model_forward(T5v1_1__INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(T5v2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1160,10 +1157,10 @@ class T5v1_1_ForConditionalGeneration(T5v1_1_PreTrainedModel):
 
         Examples::
 
-            >>> from transformers import T5v1_1_Tokenizer, T5v1_1_ForConditionalGeneration
+            >>> from transformers import T5v2Tokenizer, T5v2ForConditionalGeneration
 
-            >>> tokenizer = T5v1_1_Tokenizer.from_pretrained('t5-small')
-            >>> model = T5v1_1_ForConditionalGeneration.from_pretrained('t5-small', return_dict=True)
+            >>> tokenizer = T5v2Tokenizer.from_pretrained('t5-small')
+            >>> model = T5v2ForConditionalGeneration.from_pretrained('t5-small', return_dict=True)
 
             >>> input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids
             >>> labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2> </s>', return_tensors='pt').input_ids
@@ -1250,7 +1247,6 @@ class T5v1_1_ForConditionalGeneration(T5v1_1_PreTrainedModel):
         sequence_output = decoder_outputs[0]
         # Rescale output before projecting on vocab
         # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
-        sequence_output = sequence_output * (self.model_dim ** -0.5)
         lm_logits = self.lm_head(sequence_output)
 
         loss = None
