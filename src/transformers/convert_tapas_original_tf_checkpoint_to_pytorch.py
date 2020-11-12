@@ -19,7 +19,12 @@ import argparse
 
 import torch
 
-from transformers import TapasConfig, TapasForQuestionAnswering, TapasForSequenceClassification, load_tf_weights_in_tapas
+from transformers import (
+    TapasConfig,
+    TapasForQuestionAnswering,
+    TapasForSequenceClassification,
+    load_tf_weights_in_tapas,
+)
 from transformers.utils import logging
 
 
@@ -41,14 +46,14 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, tapas_config_file, pyto
     #         select_one_column = True,
     #         allow_empty_column_selection = False,
     #         temperature = 0.0352513)
-    
+
     # SQA config
     config = TapasConfig()
-            
+
     print("Building PyTorch model from configuration: {}".format(str(config)))
     # model = TapasForMaskedLM(config)
     model = TapasForQuestionAnswering(config)
-    #model = TapasForSequenceClassification(config)
+    # model = TapasForSequenceClassification(config)
 
     # Load weights from tf checkpoint
     load_tf_weights_in_tapas(model, config, tf_checkpoint_path)

@@ -191,10 +191,10 @@ try:
 
 except ImportError:
     _tokenizers_available = False
-  
-    
-try:    
-    import torch_scatter  
+
+
+try:
+    import torch_scatter
 
     # Check we're not importing a "torch_scatter" directory somewhere
     _scatter_available = hasattr(torch_scatter, "__version__") and hasattr(torch_scatter, "scatter")

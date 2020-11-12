@@ -17,20 +17,20 @@
 
 from .configuration_utils import PretrainedConfig
 
+
 TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP = {"tapas-base": "", "tapas-large": ""}  # to be added  # to be added
 
 
 class TapasConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.TapasModel`.
-    It is used to instantiate a TAPAS model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration
-    to that of the TAPAS `tapas-base-finetuned-sqa` architecture. Configuration objects
-    inherit from :class:`~transformers.PreTrainedConfig` and can be used to control the model outputs.
-    Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
+    This is the configuration class to store the configuration of a :class:`~transformers.TapasModel`. It is used to
+    instantiate a TAPAS model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the TAPAS `tapas-base-finetuned-sqa`
+    architecture. Configuration objects inherit from :class:`~transformers.PreTrainedConfig` and can be used to control
+    the model outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
-    Hyperparameters additional to BERT are taken from run_task_main.py and hparam_utils.py of the original implementation.
-    Original implementation available at https://github.com/google-research/tapas/tree/master.
+    Hyperparameters additional to BERT are taken from run_task_main.py and hparam_utils.py of the original
+    implementation. Original implementation available at https://github.com/google-research/tapas/tree/master.
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
@@ -87,9 +87,9 @@ class TapasConfig(PretrainedConfig):
         average_approximation_function: (:obj:`string`, `optional`, defaults to :obj:`"ratio"`):
             Method to calculate expected average of cells in the relaxed case.
         cell_selection_preference: (:obj:`float`, `optional`, defaults to None):
-            Preference for cell selection in ambiguous cases. Only applicable in case of weak supervision for aggregation (WTQ, WikiSQL).
-            If the total mass of the aggregation probabilities (excluding the "NONE" operator) is higher than this hyperparameter, 
-            then aggregation is predicted for an example.
+            Preference for cell selection in ambiguous cases. Only applicable in case of weak supervision for
+            aggregation (WTQ, WikiSQL). If the total mass of the aggregation probabilities (excluding the "NONE"
+            operator) is higher than this hyperparameter, then aggregation is predicted for an example.
         answer_loss_cutoff: (:obj:`float`, `optional`, defaults to None):
             Ignore examples with answer loss larger than cutoff.
         max_num_rows: (:obj:`int`, `optional`, defaults to 64):
@@ -109,7 +109,7 @@ class TapasConfig(PretrainedConfig):
         disable_per_token_loss: (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Disable any (strong or weak) supervision on cells.
         span_prediction: (:obj:`string`, `optional`, defaults to :obj:`"none"`):
-            Span selection mode to use. Currently only "none" is supported. 
+            Span selection mode to use. Currently only "none" is supported.
 
     Example::
 

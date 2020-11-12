@@ -15,16 +15,15 @@
 """ Tokenization class for TAPAS model."""
 
 
-
+import ast
 import collections
-import os
-import unicodedata
-import math
 import datetime
 import enum
 import itertools
+import math
+import os
 import re
-import ast
+import unicodedata
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Text, Tuple, Union
 
@@ -48,8 +47,8 @@ from .tokenization_utils_base import (
     TextInputPair,
     TruncationStrategy,
 )
-
 from .utils import logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -119,25 +118,38 @@ def whitespace_tokenize(text):
 
 class TapasTokenizer(PreTrainedTokenizer):
     r"""
-    Construct a TAPAS tokenizer. Based on WordPiece. Flattens a table and one or more related sentences to be used by 
-    TAPAS models. 
+    Construct a TAPAS tokenizer. Based on WordPiece. Flattens a table and one or more related sentences to be used by
+    TAPAS models.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods. :class:`~transformers.TapasTokenizer` 
-    creates several token type ids to encode tabular structure. To be more precise, it adds 7 token type ids, in the following 
-    order: "segment_ids", "column_ids", "row_ids", "prev_label_ids", "column_ranks", "inv_column_ranks" and "numeric_relations":
+    Users should refer to this superclass for more information regarding those methods.
+    :class:`~transformers.TapasTokenizer` creates several token type ids to encode tabular structure. To be more
+    precise, it adds 7 token type ids, in the following order: "segment_ids", "column_ids", "row_ids",
+    "prev_label_ids", "column_ranks", "inv_column_ranks" and "numeric_relations":
 
-    - segment_ids: indicate whether a token belongs to the question (0) or the table (1). 0 for special tokens and padding.
-    - column_ids: indicate to which column of the table a token belongs (starting from 1). Is 0 for all question tokens, special tokens and padding.
-    - row_ids: indicate to which row of the table a token belongs (starting from 1). Is 0 for all question tokens, special tokens and padding. Tokens of column headers are also 0.
-    - prev_label_ids: indicate whether a token was (part of) an answer to the previous question (1) or not (0). Useful in a conversational setup (such as SQA).
-    - column_ranks: indicate the rank of a table token relative to a column, if applicable. For example, if you have a column "number of movies" with values 87,
-      53 and 69, then the column ranks of these tokens are 3, 1 and 2 respectively. 0 for all question tokens, special tokens and padding.
-    - inv_column_ranks: indicate the inverse rank of a table token relative to a column, if applicable. For example, if you have a column "number of movies" with values 87,
-      53 and 69, then the inverse column ranks of these tokens are 1, 3 and 2 respectively. 0 for all question tokens, special tokens and padding.
-    - numeric_relations: indicate numeric relations between the question and the tokens of the table. 0 for all question tokens, special tokens and padding.
+    - segment_ids: indicate whether a token belongs to the question (0) or the table (1). 0 for special tokens and
+      padding.
+    - column_ids: indicate to which column of the table a token belongs (starting from 1). Is 0 for all question
+      tokens, special tokens and padding.
+    - row_ids: indicate to which row of the table a token belongs (starting from 1). Is 0 for all question tokens,
+      special tokens and padding. Tokens of column headers are also 0.
+    - prev_label_ids: indicate whether a token was (part of) an answer to the previous question (1) or not (0). Useful
+      in a conversational setup (such as SQA).
+    - column_ranks: indicate the rank of a table token relative to a column, if applicable. For example, if you have a
+      column "number of movies" with values 87,
 
-    :class:`~transformers.TapasTokenizer` runs end-to-end tokenization on a table and associated sentences: punctuation splitting and wordpiece.
+      53 and 69, then the column ranks of these tokens are 3, 1 and 2 respectively. 0 for all question tokens, special
+         tokens and padding.
+    - inv_column_ranks: indicate the inverse rank of a table token relative to a column, if applicable. For example, if
+      you have a column "number of movies" with values 87,
+
+      53 and 69, then the inverse column ranks of these tokens are 1, 3 and 2 respectively. 0 for all question tokens,
+         special tokens and padding.
+    - numeric_relations: indicate numeric relations between the question and the tokens of the table. 0 for all
+      question tokens, special tokens and padding.
+
+    :class:`~transformers.TapasTokenizer` runs end-to-end tokenization on a table and associated sentences: punctuation
+    splitting and wordpiece.
 
     Args:
         vocab_file (:obj:`str`):
@@ -165,14 +177,14 @@ class TapasTokenizer(PreTrainedTokenizer):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
         tokenize_chinese_chars (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to tokenize Chinese characters.
-            This should likely be deactivated for Japanese (see this `issue
-            <https://github.com/huggingface/transformers/issues/328>`__).
+            Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see this
+            `issue <https://github.com/huggingface/transformers/issues/328>`__).
         strip_accents: (:obj:`bool`, `optional`):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for :obj:`lowercase` (as in the original BERT).
         cell_trim_length (:obj:`int`, `optional`, defaults to -1):
-            If > 0: Trim cells so that the length is <= this value. Also disables further cell trimming, should thus be used with 'drop_rows_to_fit' below.
+            If > 0: Trim cells so that the length is <= this value. Also disables further cell trimming, should thus be
+            used with 'drop_rows_to_fit' below.
         max_column_id (:obj:`int`, `optional`, defaults to None):
             Max column id to extract.
         max_row_id (:obj:`int`, `optional`, defaults to None):
@@ -290,82 +302,6 @@ class TapasTokenizer(PreTrainedTokenizer):
         return out_string
 
     # the code below was also copied from tokenization_bert.py, but should be updated for TAPAS
-    
-    # def build_inputs_with_special_tokens(
-    #     self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    # ) -> List[int]:
-    #     """
-    #     Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-    #     adding special tokens. A BERT sequence has the following format:
-    #     - single sequence: ``[CLS] X [SEP]``
-    #     - pair of sequences: ``[CLS] A [SEP] B [SEP]``
-    #     Args:
-    #         token_ids_0 (:obj:`List[int]`):
-    #             List of IDs to which the special tokens will be added.
-    #         token_ids_1 (:obj:`List[int]`, `optional`):
-    #             Optional second list of IDs for sequence pairs.
-    #     Returns:
-    #         :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
-    #     """
-    #     if token_ids_1 is None:
-    #         return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
-    #     cls = [self.cls_token_id]
-    #     sep = [self.sep_token_id]
-    #     return cls + token_ids_0 + sep + token_ids_1 + sep
-
-    # def get_special_tokens_mask(
-    #     self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    # ) -> List[int]:
-    #     """
-    #     Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-    #     special tokens using the tokenizer ``prepare_for_model`` method.
-    #     Args:
-    #         token_ids_0 (:obj:`List[int]`):
-    #             List of IDs.
-    #         token_ids_1 (:obj:`List[int]`, `optional`):
-    #             Optional second list of IDs for sequence pairs.
-    #         already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-    #             Whether or not the token list is already formatted with special tokens for the model.
-    #     Returns:
-    #         :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-    #     """
-
-    #     if already_has_special_tokens:
-    #         if token_ids_1 is not None:
-    #             raise ValueError(
-    #                 "You should not supply a second sequence if the provided sequence of "
-    #                 "ids is already formatted with special tokens for the model."
-    #             )
-    #         return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
-
-    #     if token_ids_1 is not None:
-    #         return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
-    #     return [1] + ([0] * len(token_ids_0)) + [1]
-
-    # def create_token_type_ids_from_sequences(
-    #     self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    # ) -> List[int]:
-    #     """
-    #     Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
-    #     pair mask has the following format:
-    #     ::
-    #         0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-    #         | first sequence    | second sequence |
-    #     If :obj:`token_ids_1` is :obj:`None`, this method only returns the first portion of the mask (0s).
-    #     Args:
-    #         token_ids_0 (:obj:`List[int]`):
-    #             List of IDs.
-    #         token_ids_1 (:obj:`List[int]`, `optional`):
-    #             Optional second list of IDs for sequence pairs.
-    #     Returns:
-    #         :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
-    #         sequence(s).
-    #     """
-    #     sep = [self.sep_token_id]
-    #     cls = [self.cls_token_id]
-    #     if token_ids_1 is None:
-    #         return len(cls + token_ids_0 + sep) * [0]
-    #     return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         index = 0
@@ -386,17 +322,17 @@ class TapasTokenizer(PreTrainedTokenizer):
                 writer.write(token + "\n")
                 index += 1
         return (vocab_file,)
-    
+
     def _tokenize_table(
         self,
         table=None,
     ):
-        """Tokenizes column headers and cell texts of a table.
+        """
+        Tokenizes column headers and cell texts of a table.
 
         Args:
             table (:obj:`pd.Dataframe`):
-                Table.
-        Returns: :obj:`TokenizedTable`: TokenizedTable object.
+                Table. Returns: :obj:`TokenizedTable`: TokenizedTable object.
         """
         tokenized_rows = []
         tokenized_row = []
@@ -437,16 +373,17 @@ class TapasTokenizer(PreTrainedTokenizer):
         return len(question_tokens) + 2
 
     def _get_token_budget(self, question_tokens):
-        """Computes the number of tokens left for the table after tokenizing a question,
-        taking into account the max sequence length of the model. 
+        """
+        Computes the number of tokens left for the table after tokenizing a question, taking into account the max
+        sequence length of the model.
 
         Args:
-            question_tokens (:obj:`List[String]`): 
-                List of question tokens.
-        Returns: :obj:`int`: the number of tokens left for the table, given the model max length. 
+            question_tokens (:obj:`List[String]`):
+                List of question tokens. Returns: :obj:`int`: the number of tokens left for the table, given the model
+                max length.
         """
         return self.model_max_length - self._question_encoding_cost(question_tokens)
-    
+
     def _get_table_values(self, table, num_columns, num_rows, num_tokens):
         """Iterates over partial table and returns token, column and row indexes."""
         for tc in table.selected_tokens:
@@ -574,11 +511,11 @@ class TapasTokenizer(PreTrainedTokenizer):
         )
 
     def _get_column_values(self, table_numeric_values):
-        """This is an adaptation from _get_column_values in tf_example_utils.py of the original implementation.
-        Given table_numeric_values, a dictionary that maps row indices of a certain column
-        of a Pandas dataframe to either an empty list (no numeric value) or a list containing
-        a NumericValue object, it returns the same dictionary, but only for the row indices that
-        have a corresponding NumericValue object.
+        """
+        This is an adaptation from _get_column_values in tf_example_utils.py of the original implementation. Given
+        table_numeric_values, a dictionary that maps row indices of a certain column of a Pandas dataframe to either an
+        empty list (no numeric value) or a list containing a NumericValue object, it returns the same dictionary, but
+        only for the row indices that have a corresponding NumericValue object.
         """
         table_numeric_values_without_empty_lists = {}
         for row_index, value in table_numeric_values.items():
@@ -634,12 +571,14 @@ class TapasTokenizer(PreTrainedTokenizer):
         return features, columns_to_numeric_values
 
     def _get_numeric_sort_key_fn(self, table_numeric_values, value):
-        """Returns the sort key function for comparing value to table values.
-        The function returned will be a suitable input for the key param of the
-        sort(). See number_annotation_utils._get_numeric_sort_key_fn for details.
+        """
+        Returns the sort key function for comparing value to table values. The function returned will be a suitable
+        input for the key param of the sort(). See number_annotation_utils._get_numeric_sort_key_fn for details
+
         Args:
             table_numeric_values: Numeric values of a column
-            value: Numeric value in the question.
+            value: Numeric value in the question
+
         Returns:
             A function key function to compare column and question values.
         """
@@ -653,7 +592,9 @@ class TapasTokenizer(PreTrainedTokenizer):
             return None
 
     def _add_numeric_relations(self, question, column_ids, row_ids, table, features, columns_to_numeric_values):
-        """Adds numeric relation embeddings to 'features'.
+        """
+        Adds numeric relation embeddings to 'features'
+
         Args:
             question: The question, numeric values are used.
             column_ids: Maps word piece position to column id.
@@ -762,8 +703,9 @@ class TapasTokenizer(PreTrainedTokenizer):
             inputs.append(0)
 
     def _to_features(self, tokens, token_ids_dict, table, question):
-        """Produces a dict of features. This function creates input ids, attention mask, token type ids
-        (except the prev label ids), as well as numeric value and numeric value scale.
+        """
+        Produces a dict of features. This function creates input ids, attention mask, token type ids (except the prev
+        label ids), as well as numeric value and numeric value scale.
         """
         tokens = list(tokens)
         token_ids_dict = {key: list(values) for key, values in token_ids_dict.items()}
@@ -885,9 +827,9 @@ class TapasTokenizer(PreTrainedTokenizer):
         return answer_ids, missing_count
 
     def _get_all_answer_ids(self, column_ids, row_ids, question, answer_coordinates):
-        """Maps lists of questions with answer coordinates to token indexes.
-        Here, we swap column and row coordinates. In the TSV format, the coordinates
-        are given as (row, column) tuples. Here, we swap them to (column, row) format.
+        """
+        Maps lists of questions with answer coordinates to token indexes. Here, we swap column and row coordinates. In
+        the TSV format, the coordinates are given as (row, column) tuples. Here, we swap them to (column, row) format.
         """
 
         def _to_coordinates(question, answer_coordinates_question):
@@ -1016,13 +958,13 @@ class TapasTokenizer(PreTrainedTokenizer):
         **kwargs
     ) -> BatchEncoding:
         """
-        Tokenize and prepare for the model a list of one or more sequences related to a table.
-        .. warning::
-            This method is deprecated, ``__call__`` should be used instead.
+        Tokenize and prepare for the model a list of one or more sequences related to a table. .. warning:: This method
+        is deprecated, ``__call__`` should be used instead
+
         Args:
             queries (:obj:`List[str]`):
-                Batch of sequences (queries) related to a table to be encoded.
-                This is a list of string-sequences (see details in ``encode_plus``).
+                Batch of sequences (queries) related to a table to be encoded. This is a list of string-sequences (see
+                details in ``encode_plus``).
         """
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
@@ -1150,13 +1092,13 @@ class TapasTokenizer(PreTrainedTokenizer):
         **kwargs
     ) -> BatchEncoding:
         """
-        Prepares a sequence of strings (queries) related to a table so that it can be used by the model.
-        It creates input ids, adds special tokens, truncates the table if overflowing (if the drop_rows_to_fit
-        parameter is set to True) while taking into account the special tokens and manages a moving window
-        (with user defined stride) for overflowing tokens
+        Prepares a sequence of strings (queries) related to a table so that it can be used by the model. It creates
+        input ids, adds special tokens, truncates the table if overflowing (if the drop_rows_to_fit parameter is set to
+        True) while taking into account the special tokens and manages a moving window (with user defined stride) for
+        overflowing tokens
 
-        This function is based on prepare_for_model (but in Tapas, training examples depend on each other,
-        so we defined it at a batch level)
+        This function is based on prepare_for_model (but in Tapas, training examples depend on each other, so we
+        defined it at a batch level)
 
         Args:
             table: Pandas dataframe
@@ -1336,11 +1278,13 @@ class TapasTokenizer(PreTrainedTokenizer):
     def convert_logits_to_predictions(
         self, data, logits, logits_agg=None, logits_cls=None, cell_classification_threshold=0.5
     ):
-        """Converts logits to actual predictions.
+        """
+        Converts logits to actual predictions.
 
         Args:
             data (:obj:`dict`):
-                Dictionary mapping features to actual values. Should be created using :class:`~transformers.TapasTokenizer`.
+                Dictionary mapping features to actual values. Should be created using
+                :class:`~transformers.TapasTokenizer`.
             logits (:obj:`torch.FloatTensor` of shape ``(batch_size, sequence_length)``):
                 Tensor containing the logits at the token level.
             logits_agg (:obj:`torch.FloatTensor` of shape ``(batch_size, num_aggregation_labels)``, `optional`):
@@ -1348,16 +1292,17 @@ class TapasTokenizer(PreTrainedTokenizer):
             logits_cls (:obj:`torch.FloatTensor` of shape ``(batch_size, num_classification_labels)``, `optional`):
                 Tensor containing the classification logits.
             cell_classification_threshold (:obj:`float`, `optional`, defaults to 0.5):
-                Threshold to be used for cell selection. All table cells for which their probability is larger than this threshold will be selected.
+                Threshold to be used for cell selection. All table cells for which their probability is larger than
+                this threshold will be selected
+
         Returns:
-            :obj:`tuple` comprising various elements depending on the inputs:
-            answer_coordinates_batch (``List[List[[tuple]]``) of length ``batch_size``:
-                Answer coordinates as a list of lists of tuples. Each element in the list contains the predicted answer coordinates of a single example in the batch, as a list of tuples.
-                Each tuple is a cell (row, column pair).
-            aggregation_predictions (`optional`, returned when ``logits_aggregation`` is provided) ``List[int]`` of length ``batch_size``:
-                Prediction indices of the aggregation head.
-            classification_predictions (`optional`, returned when ``logits_cls`` is provided) ``List[int]`` of length ``batch_size``:
-                Prediction indices of the classification head.
+            :obj:`tuple` comprising various elements depending on the inputs: answer_coordinates_batch
+            (``List[List[[tuple]]``) of length ``batch_size``: Answer coordinates as a list of lists of tuples. Each
+            element in the list contains the predicted answer coordinates of a single example in the batch, as a list
+            of tuples. Each tuple is a cell (row, column pair). aggregation_predictions (`optional`, returned when
+            ``logits_aggregation`` is provided) ``List[int]`` of length ``batch_size``: Prediction indices of the
+            aggregation head. classification_predictions (`optional`, returned when ``logits_cls`` is provided)
+            ``List[int]`` of length ``batch_size``: Prediction indices of the classification head.
         """
         # compute probabilities from token logits
         dist_per_token = torch.distributions.Bernoulli(logits=logits)
@@ -1428,11 +1373,14 @@ class TapasTokenizer(PreTrainedTokenizer):
 
     #### End of everything related to converting logits to predictions ####
 
+
 """ BasicTokenizer and WordPieceTokenizer (taken from tokenization_bert.py)"""
+
 
 class BasicTokenizer(object):
     """
-    Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
+    Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.)
+
     Args:
         do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to lowercase the input when tokenizing.
@@ -1440,9 +1388,8 @@ class BasicTokenizer(object):
             Collection of tokens which will never be split during tokenization. Only has an effect when
             :obj:`do_basic_tokenize=True`
         tokenize_chinese_chars (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to tokenize Chinese characters.
-            This should likely be deactivated for Japanese (see this `issue
-            <https://github.com/huggingface/transformers/issues/328>`__).
+            Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see this
+            `issue <https://github.com/huggingface/transformers/issues/328>`__).
         strip_accents: (:obj:`bool`, `optional`):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for :obj:`lowercase` (as in the original BERT).
@@ -1459,7 +1406,8 @@ class BasicTokenizer(object):
     def tokenize(self, text, never_split=None):
         """
         Basic Tokenization of a piece of text. Split on "white spaces" only, for sub-word tokenization, see
-        WordPieceTokenizer.
+        WordPieceTokenizer
+
         Args:
             **never_split**: (`optional`) list of str
                 Kept for backward compatibility purposes. Now implemented directly at the base class level (see
@@ -1587,11 +1535,13 @@ class WordpieceTokenizer(object):
     def tokenize(self, text):
         """
         Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
-        tokenization using the given vocabulary.
-        For example, :obj:`input = "unaffable"` wil return as output :obj:`["un", "##aff", "##able"]`.
+        tokenization using the given vocabulary. For example, :obj:`input = "unaffable"` wil return as output
+        :obj:`["un", "##aff", "##able"]`
+
         Args:
           text: A single token or whitespace separated tokens. This should have
-            already been passed through `BasicTokenizer`.
+            already been passed through `BasicTokenizer`
+
         Returns:
           A list of wordpiece tokens.
         """
@@ -1630,17 +1580,18 @@ class WordpieceTokenizer(object):
         return output_tokens
 
 
-""" Below: utilities for TAPAS tokenizer (independent from PyTorch/Tensorflow). 
+"""
+    Below: utilities for TAPAS tokenizer (independent from PyTorch/Tensorflow).
 
-    This includes functions to parse numeric values (dates and numbers) from texts 
-    to create the column_ranks, inv_column_ranks, numeric_values, numeric values_scale 
-    and numeric_relations.
+    This includes functions to parse numeric values (dates and numbers) from texts to create the column_ranks,
+    inv_column_ranks, numeric_values, numeric values_scale and numeric_relations.
 
-    These are meant to be used in an academic setup, for production use cases
-    Gold mine or Aqua should be used.
+    These are meant to be used in an academic setup, for production use cases Gold mine or Aqua should be used.
 
-    Mainly copied from number_utils.py and constants.py (both found under the "utils" directory)
-    of the original implementation."""
+    Mainly copied from number_utils.py and constants.py (both found under the "utils" directory) of the original
+    implementation.
+    """
+
 
 class Relation(enum.Enum):
     HEADER_TO_CELL = 1  # Connects header to cell.
@@ -1861,8 +1812,8 @@ def normalize_for_match(text):
 
 
 def get_all_spans(text, max_ngram_length):
-    """Split a text into all possible ngrams up to 'max_ngram_length'.
-    Split points are white space and punctuation.
+    """
+    Split a text into all possible ngrams up to 'max_ngram_length'. Split points are white space and punctuation.
 
     Args:
       text: Text to split.
@@ -1882,10 +1833,12 @@ def get_all_spans(text, max_ngram_length):
 
 
 def parse_text(text):
-    """Extracts longest number and date spans.
+    """
+    Extracts longest number and date spans.
 
     Args:
-      text: text to annotate.
+      text: text to annotate
+
     Returns:
       List of longest numeric value spans.
     """
@@ -1976,21 +1929,19 @@ def _get_all_types(numeric_values):
 
 
 def get_numeric_sort_key_fn(numeric_values):
-    """Creates a function that can be used as a sort key or to compare the values.
-    Maps to primitive types and finds the biggest common subset.
-    Consider the values "05/05/2010" and "August 2007".
-    With the corresponding primitive values (2010.,5.,5.) and (2007.,8., None).
-    These values can be compared by year and date so we map to the sequence
-    (2010., 5.), (2007., 8.).
-    If we added a third value "2006" with primitive value (2006., None, None),
-    we could only compare by the year so we would map to (2010.,), (2007.,)
-    and (2006.,).
+    """
+    Creates a function that can be used as a sort key or to compare the values. Maps to primitive types and finds the
+    biggest common subset. Consider the values "05/05/2010" and "August 2007". With the corresponding primitive values
+    (2010.,5.,5.) and (2007.,8., None). These values can be compared by year and date so we map to the sequence (2010.,
+    5.), (2007., 8.). If we added a third value "2006" with primitive value (2006., None, None), we could only compare
+    by the year so we would map to (2010.,), (2007.,) and (2006.,).
 
     Args:
-     numeric_values: Values to compare.
+     numeric_values: Values to compare
+
     Returns:
-     A function that can be used as a sort key function (mapping numeric values
-     to a comparable tuple).
+     A function that can be used as a sort key function (mapping numeric values to a comparable tuple)
+
     Raises:
       ValueError if values don't have a common type or are not comparable.
     """
@@ -2031,7 +1982,8 @@ def _get_numeric_values(text):
 
 
 def _parse_column_values(table, col_index):
-    """Parses text in column and returns a dict mapping row_index to values.
+    """
+    Parses text in column and returns a dict mapping row_index to values.
 
     Args:
       table: Pandas dataframe
