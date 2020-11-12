@@ -62,7 +62,6 @@ jobs:
           source .env/bin/activate
           transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/encoder-bert-tokenizer.json --path=templates/cookiecutter
           transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/pt-encoder-bert-tokenizer.json --path=templates/cookiecutter
-          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/seq-to-seq-roberta-tokenizer.json --path=templates/cookiecutter
           transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/standalone.json --path=templates/cookiecutter
           transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/tf-encoder-bert-tokenizer.json --path=templates/cookiecutter
 
@@ -132,7 +131,6 @@ jobs:
           source .env/bin/activate
           transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/encoder-bert-tokenizer.json --path=templates/cookiecutter
           transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/pt-encoder-bert-tokenizer.json --path=templates/cookiecutter
-          transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/seq-to-seq-roberta-tokenizer.json --path=templates/cookiecutter
           transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/standalone.json --path=templates/cookiecutter
           transformers-cli add-new-model --testing --testing_file=templates/cookiecutter/tests/tf-encoder-bert-tokenizer.json --path=templates/cookiecutter
 
