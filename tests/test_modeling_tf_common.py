@@ -36,6 +36,7 @@ if is_tf_available():
         TF_MODEL_FOR_MASKED_LM_MAPPING,
         TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
+        TF_MODEL_FOR_PRETRAINING_MAPPING,
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -102,6 +103,7 @@ class TFModelTesterMixin:
                 *TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.values(),
                 *TF_MODEL_FOR_CAUSAL_LM_MAPPING.values(),
                 *TF_MODEL_FOR_MASKED_LM_MAPPING.values(),
+                *TF_MODEL_FOR_PRETRAINING_MAPPING.values(),
                 *TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.values(),
             ]:
                 inputs_dict["labels"] = tf.zeros(
@@ -834,7 +836,9 @@ class TFModelTesterMixin:
             if getattr(model, "compute_loss", None):
                 # The number of elements in the loss should be the same as the number of elements in the label
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
-                added_label = prepared_for_class[list(prepared_for_class.keys() - inputs_dict.keys())[0]]
+                added_label = prepared_for_class[
+                    sorted(list(prepared_for_class.keys() - inputs_dict.keys()), reverse=True)[0]
+                ]
                 loss_size = tf.size(added_label)
 
                 if model.__class__ in TF_MODEL_FOR_CAUSAL_LM_MAPPING.values():
@@ -859,23 +863,30 @@ class TFModelTesterMixin:
 
                 # Get keys that were added with the _prepare_for_class function
                 label_keys = prepared_for_class.keys() - inputs_dict.keys()
-                signature = inspect.getfullargspec(model.call)[0]
+                signature = inspect.signature(model.call).parameters
+                signature_names = list(signature.keys())
 
                 # Create a dictionary holding the location of the tensors in the tuple
-                tuple_index_mapping = {1: "input_ids"}
+                tuple_index_mapping = {0: "input_ids"}
                 for label_key in label_keys:
-                    label_key_index = signature.index(label_key)
+                    label_key_index = signature_names.index(label_key)
                     tuple_index_mapping[label_key_index] = label_key
                 sorted_tuple_index_mapping = sorted(tuple_index_mapping.items())
+                # Initialize a list with their default values, update the values and convert to a tuple
+                list_input = []
 
-                # Initialize a list with None, update the values and convert to a tuple
-                list_input = [None] * sorted_tuple_index_mapping[-1][0]
+                for name in signature_names:
+                    if name != "kwargs":
+                        list_input.append(signature[name].default)
+
                 for index, value in sorted_tuple_index_mapping:
-                    list_input[index - 1] = prepared_for_class[value]
+                    list_input[index] = prepared_for_class[value]
+
                 tuple_input = tuple(list_input)
 
                 # Send to model
-                loss = model(tuple_input)[0]
+                loss = model(tuple_input[:-1])[0]
+
                 self.assertEqual(loss.shape, [loss_size])
 
     def _generate_random_bad_tokens(self, num_bad_tokens, model):

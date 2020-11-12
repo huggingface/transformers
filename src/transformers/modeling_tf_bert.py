@@ -89,6 +89,38 @@ TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+class TFBertPreTrainingLoss:
+    """
+    Loss function suitable for BERT-like pre-training, that is, the task of pretraining a language model by combining
+    NSP + MLM. .. note:: Any label of -100 will be ignored (along with the corresponding logits) in the loss
+    computation.
+    """
+
+    def compute_loss(self, labels, logits):
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
+        # make sure only labels that are not equal to -100
+        # are taken into account as loss
+        masked_lm_active_loss = tf.not_equal(tf.reshape(labels["labels"], (-1,)), -100)
+        masked_lm_reduced_logits = tf.boolean_mask(
+            tf.reshape(logits[0], (-1, shape_list(logits[0])[2])),
+            masked_lm_active_loss,
+        )
+        masked_lm_labels = tf.boolean_mask(tf.reshape(labels["labels"], (-1,)), masked_lm_active_loss)
+        next_sentence_active_loss = tf.not_equal(tf.reshape(labels["next_sentence_label"], (-1,)), -100)
+        next_sentence_reduced_logits = tf.boolean_mask(tf.reshape(logits[1], (-1, 2)), next_sentence_active_loss)
+        next_sentence_label = tf.boolean_mask(
+            tf.reshape(labels["next_sentence_label"], (-1,)), mask=next_sentence_active_loss
+        )
+        masked_lm_loss = loss_fn(masked_lm_labels, masked_lm_reduced_logits)
+        next_sentence_loss = loss_fn(next_sentence_label, next_sentence_reduced_logits)
+        masked_lm_loss = tf.reshape(masked_lm_loss, (-1, shape_list(next_sentence_loss)[0]))
+        masked_lm_loss = tf.reduce_mean(masked_lm_loss, 0)
+
+        return masked_lm_loss + next_sentence_loss
+
+
 class TFBertEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -688,6 +720,7 @@ class TFBertForPreTrainingOutput(ModelOutput):
             heads.
     """
 
+    loss: Optional[tf.Tensor] = None
     prediction_logits: tf.Tensor = None
     seq_relationship_logits: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
@@ -814,7 +847,7 @@ Bert Model with two heads on top as done during the pre-training:
     """,
     BERT_START_DOCSTRING,
 )
-class TFBertForPreTraining(TFBertPreTrainedModel):
+class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -827,7 +860,21 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
-    def call(self, inputs, **kwargs):
+    def call(
+        self,
+        inputs=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        labels=None,
+        next_sentence_label=None,
+        training=False,
+    ):
         r"""
         Return:
 
@@ -843,17 +890,44 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
             >>> prediction_scores, seq_relationship_scores = outputs[:2]
 
         """
-        return_dict = kwargs.get("return_dict")
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
-        outputs = self.bert(inputs, **kwargs)
+
+        if isinstance(inputs, (tuple, list)):
+            labels = inputs[9] if len(inputs) > 9 else labels
+            next_sentence_label = inputs[10] if len(inputs) > 10 else next_sentence_label
+            if len(inputs) > 9:
+                inputs = inputs[:9]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            labels = inputs.pop("labels", labels)
+            next_sentence_label = inputs.pop("next_sentence_label", next_sentence_label)
+
+        outputs = self.bert(
+            inputs,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
         sequence_output, pooled_output = outputs[:2]
-        prediction_scores = self.mlm(sequence_output, training=kwargs.get("training", False))
+        prediction_scores = self.mlm(sequence_output, training=training)
         seq_relationship_score = self.nsp(pooled_output)
+        total_loss = None
+
+        if labels is not None and next_sentence_label is not None:
+            d_labels = {"labels": labels}
+            d_labels["next_sentence_label"] = next_sentence_label
+            total_loss = self.compute_loss(labels=d_labels, logits=(prediction_scores, seq_relationship_score))
 
         if not return_dict:
             return (prediction_scores, seq_relationship_score) + outputs[2:]
 
         return TFBertForPreTrainingOutput(
+            loss=total_loss,
             prediction_logits=prediction_scores,
             seq_relationship_logits=seq_relationship_score,
             hidden_states=outputs.hidden_states,
