@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 {{cookiecutter.uppercase_modelname}} model. """
+""" TF 2.0 {{cookiecutter.modelname}} model. """
 
 
 import tensorflow as tf
@@ -709,7 +709,7 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare {{cookiecutter.camelcase_modelname}} Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare {{cookiecutter.modelname}} Model transformer outputing raw hidden-states without any specific head on top.",
     {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
 class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel):
@@ -731,7 +731,7 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
         return outputs
 
 
-@add_start_docstrings("""{{cookiecutter.camelcase_modelname}} Model with a `language modeling` head on top. """, {{cookiecutter.uppercase_modelname}}_START_DOCSTRING)
+@add_start_docstrings("""{{cookiecutter.modelname}} Model with a `language modeling` head on top. """, {{cookiecutter.uppercase_modelname}}_START_DOCSTRING)
 class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFMaskedLanguageModelingLoss):
 
     def __init__(self, config, *inputs, **kwargs):
@@ -843,7 +843,7 @@ class TF{{cookiecutter.camelcase_modelname}}ClassificationHead(tf.keras.layers.L
 
 
 @add_start_docstrings(
-    """{{cookiecutter.uppercase_modelname}} Model transformer with a sequence classification/regression head on top 
+    """{{cookiecutter.modelname}} Model transformer with a sequence classification/regression head on top 
     e.g., for GLUE tasks. """,
     {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
@@ -921,7 +921,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification(TF{{cookie
 
 
 @add_start_docstrings(
-    """{{cookiecutter.uppercase_modelname}} Model with a multiple choice classification head on top (a linear layer on top of
+    """{{cookiecutter.modelname}} Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
     {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
@@ -939,7 +939,8 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
 
     @property
     def dummy_inputs(self):
-        """Dummy inputs to build the network.
+        """
+        Dummy inputs to build the network.
 
         Returns:
             tf.Tensor with dummy inputs
@@ -1048,7 +1049,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
         )
 
 @add_start_docstrings(
-    """{{cookiecutter.camelcase_modelname}} Model with a token classification head on top (a linear layer on top of
+    """{{cookiecutter.modelname}} Model with a token classification head on top (a linear layer on top of
     the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
     {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
