@@ -41,8 +41,6 @@ class RagPyTorchDistributedRetriever(RagRetriever):
             index=index,
         )
 
-        self.process_group = None
-
     def init_retrieval(self, distributed_port: int):
         """
         Retriever initialization function, needs to be called from the training process. The function sets some common parameters
@@ -55,17 +53,16 @@ class RagPyTorchDistributedRetriever(RagRetriever):
         """
 
         logger.info("initializing retrieval")
-
         # initializing a separate process group for retrieval as the default
         # nccl backend doesn't support gather/scatter operations while gloo
         # is too slow to replace nccl for the core gpu communication
-        if dist.is_initialized():
-            logger.info("dist initialized")
-            # needs to be set manually
-            os.environ["GLOO_SOCKET_IFNAME"] = self._infer_socket_ifname()
-            # avoid clash with the NCCL port
-            os.environ["MASTER_PORT"] = str(distributed_port + 1)
-            self.process_group = dist.new_group(ranks=None, backend="gloo")
+        # if dist.is_initialized():
+        #     logger.info("dist initialized")
+        #     # needs to be set manually
+        #     os.environ["GLOO_SOCKET_IFNAME"] = self._infer_socket_ifname()
+        #     # avoid clash with the NCCL port
+        #     os.environ["MASTER_PORT"] = str(distributed_port + 1)
+        #     self.process_group = dist.new_group(ranks=None, backend="gloo")
 
         # initialize retriever only on the main worker
         if not dist.is_initialized() or self._is_main():
@@ -74,14 +71,14 @@ class RagPyTorchDistributedRetriever(RagRetriever):
 
         # all processes wait untill the retriever is initialized by the main process
         if dist.is_initialized():
-            torch.distributed.barrier(group=self.process_group)
+            torch.distributed.barrier()
 
     def _is_main(self):
-        return dist.get_rank(group=self.process_group) == 0
+        return dist.get_rank() == 0
 
     def _scattered(self, scatter_list, target_shape, target_type=torch.float32):
         target_tensor = torch.empty(target_shape, dtype=target_type)
-        dist.scatter(target_tensor, src=0, scatter_list=scatter_list, group=self.process_group)
+        dist.scatter(target_tensor, src=0, scatter_list=scatter_list)
         return target_tensor
 
     def _infer_socket_ifname(self):
@@ -116,13 +113,13 @@ class RagPyTorchDistributedRetriever(RagRetriever):
             return retrieved_doc_embeds, doc_ids, self.index.get_doc_dicts(doc_ids)
 
         # distributed training
-        world_size = dist.get_world_size(group=self.process_group)
+        world_size = dist.get_world_size()
 
         # gather logic
         gather_list = None
         if self._is_main():
             gather_list = [torch.empty(question_hidden_states.shape, dtype=torch.float32) for _ in range(world_size)]
-        dist.gather(torch.tensor(question_hidden_states), dst=0, gather_list=gather_list, group=self.process_group)
+        dist.gather(torch.tensor(question_hidden_states), dst=0, gather_list=gather_list)
 
         # scatter logic
         n_queries = question_hidden_states.shape[0]

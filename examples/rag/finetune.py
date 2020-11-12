@@ -6,7 +6,6 @@ import logging
 import os
 import sys
 import time
-import warnings
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -26,9 +25,9 @@ from transformers import (
     RagTokenForGeneration,
     RagTokenizer,
     T5ForConditionalGeneration,
-    get_linear_schedule_with_warmup,
 )
 from transformers import logging as transformers_logging
+from pytorch_lightning.utilities import rank_zero_warn
 
 
 from callbacks import (  # noqa: E402 # isort:skipq
@@ -94,6 +93,7 @@ class GenerativeQAModule(BaseTransformer):
         config.index_name = args.index_name or config.index_name
         config.passages_path = args.passages_path or config.passages_path
         config.index_path = args.index_path or config.index_path
+        config.use_dummy_dataset = args.use_dummy_dataset
 
         # set extra_model_params for generator configs and load_model
         extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "attention_dropout", "dropout")
@@ -151,13 +151,15 @@ class GenerativeQAModule(BaseTransformer):
         self.hparams.git_sha = get_git_info()["repo_sha"]
         self.num_workers = hparams.num_workers
         self.distributed_port = self.hparams.distributed_port
+        rank_zero_warn("\n>>> INIT done\n")
 
-    def init_ddp_connection(self, global_rank: int, world_size: int, is_slurm_managing_tasks: bool = True):
-        logger.info("Custom init_ddp_connection.")
-        os.environ["MASTER_PORT"] = str(self.distributed_port)
-        super().init_ddp_connection(global_rank, world_size, is_slurm_managing_tasks)
-        if self.is_rag_model:
-            self.model.retriever.init_retrieval(self.distributed_port)
+    # def init_ddp_connection(self, global_rank: int, world_size: int, is_slurm_managing_tasks: bool = True):
+    #     logger.info("Custom init_ddp_connection.")
+    #     os.environ["MASTER_PORT"] = str(self.distributed_port)
+    #     super().init_ddp_connection(global_rank, world_size, is_slurm_managing_tasks)
+    #     rank_zero_warn(f"\n>>> iddpc 1: rag_model:{self.is_rag_model}\n")
+    #     if self.is_rag_model and (not dist.is_initialized() or dist.get_rank() == 0):
+    #         self.model.retriever.init_retrieval(self.distributed_port)
 
     def forward(self, input_ids, **kwargs):
         return self.model(input_ids, **kwargs)
@@ -322,17 +324,6 @@ class GenerativeQAModule(BaseTransformer):
 
     def train_dataloader(self) -> DataLoader:
         dataloader = self.get_dataloader("train", batch_size=self.hparams.train_batch_size, shuffle=True)
-        t_total = (
-            (len(dataloader.dataset) // (self.hparams.train_batch_size * max(1, self.hparams.gpus)))
-            // self.hparams.accumulate_grad_batches
-            * float(self.hparams.max_epochs)
-        )
-        scheduler = get_linear_schedule_with_warmup(
-            self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
-        )
-        if max(scheduler.get_last_lr()) > 0:
-            warnings.warn("All learning rates are 0")
-        self.lr_scheduler = scheduler
         return dataloader
 
     def val_dataloader(self) -> DataLoader:
@@ -347,6 +338,9 @@ class GenerativeQAModule(BaseTransformer):
         self.model.config.save_step = self.step_count
         self.model.save_pretrained(save_path)
         self.tokenizer.save_pretrained(save_path)
+
+    def on_pretrain_routine_start(self):
+        self.model.retriever.init_retrieval(self.distributed_port)
 
     @staticmethod
     def add_model_specific_args(parser, root_dir):
@@ -428,6 +422,12 @@ class GenerativeQAModule(BaseTransformer):
             type=str,
             default=None,
             help="Path to the faiss index for custom index. More info about custom indexes in the RagRetriever documentation as well as in `examples/rag/use_own_knowledge_dataset.py`",
+        )
+        parser.add_argument(
+            "--use_dummy_dataset",
+            type=bool,
+            default=False,
+            help="If True, use the dummy version of the dataset index. More info about custom indexes in the RagRetriever documentation as well as in `examples/rag/use_own_knowledge_dataset.py`",
         )
         return parser
 
