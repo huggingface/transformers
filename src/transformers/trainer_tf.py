@@ -305,81 +305,84 @@ class TFTrainer:
         Works both with or without labels.
         """
         if hasattr(self, "_prediction_loop"):
-            warnings.warn(
-                "The `_prediction_loop` method is deprecated and won't be called in a future version, define `prediction_loop` in your subclass.",
-                FutureWarning,
-            )
-            return self._prediction_loop(
-                dataset, steps, num_examples, description, prediction_loss_only=prediction_loss_only
-            )
+          LOGGER.warn(
+              "The `_prediction_loop` method is deprecated and won't be called in a future version, define `prediction_loop` in your subclass.",
+              FutureWarning,
+          )
+          return self._prediction_loop(
+              dataset, steps, num_examples, description, prediction_loss_only=prediction_loss_only
+          )
 
         prediction_loss_only = (
             prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
         )
 
-        logger.info("***** Running %s *****", description)
-        logger.info("  Num examples = %d", num_examples)
-        logger.info("  Batch size = %d", self.args.eval_batch_size)
+        LOGGER.info("***** Running %s *****", description)
+        LOGGER.info("  Num examples = %d", num_examples)
+        LOGGER.info("  Batch size = %d", self.args.eval_batch_size)
 
-        label_ids: np.ndarray = None
-        preds: np.ndarray = None
+        label_ids = None
+        preds = None
         self.eval_loss = tf.keras.metrics.Sum()
 
         # Reset the past mems state at the beginning of the evaluation if necessary.
         if self.args.past_index >= 0:
-            self._past = None
+          self._past = None
 
         for step, batch in enumerate(dataset):
-            logits = self.distributed_prediction_steps(batch)
-            _, labels = batch
+          logits = self.distributed_prediction_steps(batch)
+          _, labels = batch
 
-            if not prediction_loss_only:
-                if isinstance(logits, tuple):
-                    logits = logits[0]
+          if not prediction_loss_only:
+            if isinstance(logits, tuple):
+              logits = logits[0]
 
-                if isinstance(labels, tuple):
-                    labels = labels[0]
+            if isinstance(labels, tuple):
+              labels = labels[0]
 
-                if self.args.n_replicas > 1:
-                    for val in logits.values:
-                        if preds is None:
-                            preds = val.numpy()
-                        else:
-                            preds = np.append(preds, val.numpy(), axis=0)
-
-                    for val in labels.values:
-                        if label_ids is None:
-                            label_ids = val.numpy()
-                        else:
-                            label_ids = np.append(label_ids, val.numpy(), axis=0)
+            if self.args.n_replicas > 1:
+              for val in logits.values:
+                if preds is None:
+                  preds = tf.ragged.constant(val)
                 else:
-                    if preds is None:
-                        preds = logits.numpy()
-                    else:
-                        preds = np.append(preds, logits.numpy(), axis=0)
+                  preds = tf.concat([preds, tf.ragged.constant(val)], axis=0)
 
-                    if label_ids is None:
-                        label_ids = labels.numpy()
-                    else:
-                        label_ids = np.append(label_ids, labels.numpy(), axis=0)
+              for val in labels.values:
+                if label_ids is None:
+                  label_ids = tf.ragged.constant(val)
+                else:
+                  label_ids = tf.concat([label_ids, tf.ragged.constant(val)],
+                                        axis=0)
+            else:
+              if preds is None:
+                preds = tf.ragged.constant(logits)
+              else:
+                preds = tf.concat([preds, tf.ragged.constant(logits)], axis=0)
 
-                if step == steps:
-                    break
+              if label_ids is None:
+                label_ids = tf.ragged.constant(labels)
+              else:
+                label_ids = tf.concat([label_ids, tf.ragged.constant(labels)],
+                                      axis=0)
+
+            if step == steps:
+              break
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
-            metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
+          metrics = self.compute_metrics(transformers.trainer_utils.EvalPrediction(
+              predictions=preds, label_ids=label_ids))
         else:
-            metrics = {}
+          metrics = {}
 
         metrics["eval_loss"] = self.eval_loss.result().numpy() / steps
 
         for key in list(metrics.keys()):
-            if not key.startswith("eval_"):
-                metrics[f"eval_{key}"] = metrics.pop(key)
+          if not key.startswith("eval_"):
+            metrics[f"eval_{key}"] = metrics.pop(key)
 
         if self.args.past_index and hasattr(self, "_past"):
-            # Clean the state at the end of training
-            delattr(self, "_past")
+          # Clean the state at the end of training
+          delattr(self, "_past")
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
