@@ -765,6 +765,9 @@ class GPT2Model(GPT2PreTrainedModel):
                 if attention_mask is not None:
                     attention_mask = attention_mask.to(hidden_states.device)
 
+                if isinstance(head_mask, torch.Tensor):
+                    head_mask = head_mask.to(hidden_states.device)
+
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (
                     hidden_states.view(*output_shape),
