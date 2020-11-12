@@ -7,7 +7,7 @@ widget:
 - text: "<hl> 42 <hl> is the answer to life, the universe and everything. </s>"
 - text: "Python is a programming language. It is developed by <hl> Guido Van Rossum <hl>. </s>"
 - text: "Simple is better than <hl> complex <hl>. </s>"
-license: "MIT"
+license: mit
 ---
 
 ## T5 for question-generation

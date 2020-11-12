@@ -96,7 +96,7 @@ folder.
 
 ## Start contributing! (Pull Requests)
 
-Before writing code, we strongly advise you to search through the exising PRs or
+Before writing code, we strongly advise you to search through the existing PRs or
 issues to make sure that nobody is already working on the same thing. If you are
 unsure, it is always a good idea to open an issue to get some feedback.
 
@@ -235,7 +235,7 @@ Follow these steps to start contributing:
 ### Checklist
 
 1. The title of your pull request should be a summary of its contribution;
-2. If your pull request adresses an issue, please mention the issue number in
+2. If your pull request addresses an issue, please mention the issue number in
    the pull request description to make sure they are linked (and people
    consulting the issue know you are working on it);
 3. To indicate a work in progress please prefix the title with `[WIP]`. These
@@ -308,3 +308,12 @@ Check our [documentation writing guide](https://github.com/huggingface/transform
 for more information.
 
 #### This guide was heavily inspired by the awesome [scikit-learn guide to contributing](https://github.com/scikit-learn/scikit-learn/blob/master/CONTRIBUTING.md)
+
+
+### Develop on Windows
+
+One way one can run the make command on Window is to pass by MSYS2:
+
+1. [Download MSYS2](https://www.msys2.org/), we assume to have it installed in C:\msys64
+2. Open the command line C:\msys64\msys2.exe (it should be available from the start menu)
+3. Run in the shell: `pacman -Syu` and install make with `pacman -S make`

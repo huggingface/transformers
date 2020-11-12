@@ -27,7 +27,7 @@ from .file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_tf_outputs import (
@@ -178,7 +178,7 @@ class TFFunnelAttentionStructure:
         self.sin_dropout = tf.keras.layers.Dropout(config.hidden_dropout)
         self.cos_dropout = tf.keras.layers.Dropout(config.hidden_dropout)
         # Track where we are at in terms of pooling from the original input, e.g., by how much the sequence length was
-        # dividide.
+        # divided.
         self.pooling_mult = None
 
     def init_attention_inputs(self, inputs_embeds, attention_mask=None, token_type_ids=None, training=False):
@@ -219,7 +219,7 @@ class TFFunnelAttentionStructure:
         """
         if self.attention_type == "factorized":
             # Notations from the paper, appending A.2.2, final formula.
-            # We need to create and return the matrics phi, psi, pi and omega.
+            # We need to create and return the matrices phi, psi, pi and omega.
             pos_seq = tf.range(0, seq_len, 1.0, dtype=dtype)
             freq_seq = tf.range(0, self.d_model // 2, 1.0, dtype=dtype)
             inv_freq = 1 / (10000 ** (freq_seq / (self.d_model // 2)))
@@ -307,7 +307,7 @@ class TFFunnelAttentionStructure:
             pooled_pos = pos
 
         ref_point = pooled_pos[0] - pos[0]
-        num_remove = shift * len(pooled_pos)
+        num_remove = shift * pooled_pos.shape[0]
         max_dist = ref_point + num_remove * stride
         min_dist = pooled_pos[0] - pos[-1]
 
@@ -1031,7 +1031,7 @@ class TFFunnelPreTrainedModel(TFPreTrainedModel):
 @dataclass
 class TFFunnelForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.FunnelForPreTrainingModel`.
+    Output type of :class:`~transformers.FunnelForPreTraining`.
 
     Args:
         logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
@@ -1148,7 +1148,7 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.funnel = TFFunnelBaseLayer(config, name="funnel")
 
-    @add_start_docstrings_to_callable(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small-base",
@@ -1168,7 +1168,7 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.funnel = TFFunnelMainLayer(config, name="funnel")
 
-    @add_start_docstrings_to_callable(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small",
@@ -1192,7 +1192,7 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
         self.funnel = TFFunnelMainLayer(config, name="funnel")
         self.discriminator_predictions = TFFunnelDiscriminatorPredictions(config, name="discriminator_predictions")
 
-    @add_start_docstrings_to_callable(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFFunnelForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
@@ -1259,7 +1259,7 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
         self.funnel = TFFunnelMainLayer(config, name="funnel")
         self.lm_head = TFFunnelMaskedLMHead(config, self.funnel.embeddings, name="lm_head")
 
-    @add_start_docstrings_to_callable(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small",
@@ -1335,7 +1335,7 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
         self.funnel = TFFunnelBaseLayer(config, name="funnel")
         self.classifier = TFFunnelClassificationHead(config, config.num_labels, name="classifier")
 
-    @add_start_docstrings_to_callable(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small-base",
@@ -1421,7 +1421,7 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
-    @add_start_docstrings_to_callable(FUNNEL_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small-base",
@@ -1534,7 +1534,7 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small",
@@ -1613,7 +1613,7 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
-    @add_start_docstrings_to_callable(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small",

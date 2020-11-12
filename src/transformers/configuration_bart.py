@@ -21,13 +21,13 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/bart-base": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-base/config.json",
-    "facebook/bart-large": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large/config.json",
-    "facebook/bart-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-mnli/config.json",
-    "facebook/bart-large-cnn": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-cnn/config.json",
-    "facebook/bart-large-xsum": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/bart-large-xsum/config.json",
-    "facebook/mbart-large-en-ro": "https://s3.amazonaws.com/models.huggingface.co/bert/facebook/mbart-large-en-ro/config.json",
-    "yjernite/bart_eli5": "https://s3.amazonaws.com/models.huggingface.co/bert/yjernite/bart_eli5/config.json",
+    "facebook/bart-base": "https://huggingface.co/facebook/bart-base/resolve/main/config.json",
+    "facebook/bart-large": "https://huggingface.co/facebook/bart-large/resolve/main/config.json",
+    "facebook/bart-large-mnli": "https://huggingface.co/facebook/bart-large-mnli/resolve/main/config.json",
+    "facebook/bart-large-cnn": "https://huggingface.co/facebook/bart-large-cnn/resolve/main/config.json",
+    "facebook/bart-large-xsum": "https://huggingface.co/facebook/bart-large-xsum/resolve/main/config.json",
+    "facebook/mbart-large-en-ro": "https://huggingface.co/facebook/mbart-large-en-ro/resolve/main/config.json",
+    "yjernite/bart_eli5": "https://huggingface.co/yjernite/bart_eli5/resolve/main/config.json",
 }
 
 
@@ -59,9 +59,9 @@ class BartConfig(PretrainedConfig):
             Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
         activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
-            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
         dropout (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         activation_dropout (:obj:`float`, `optional`, defaults to 0.0):

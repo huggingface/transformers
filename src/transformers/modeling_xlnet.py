@@ -16,8 +16,6 @@
 """
  PyTorch XLNet model.
 """
-
-
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -32,7 +30,7 @@ from .file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_utils import (
@@ -1064,7 +1062,7 @@ class XLNetModel(XLNetPreTrainedModel):
         pos_emb = pos_emb.to(self.device)
         return pos_emb
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlnet-base-cased",
@@ -1087,6 +1085,7 @@ class XLNetModel(XLNetPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1132,7 +1131,7 @@ class XLNetModel(XLNetPreTrainedModel):
 
         # data mask: input mask & perm mask
         assert input_mask is None or attention_mask is None, "You can only use one of input_mask (uses 1 for padding) "
-        "or attention_mask (uses 0 for padding, added for compatbility with BERT). Please choose one."
+        "or attention_mask (uses 0 for padding, added for compatibility with BERT). Please choose one."
         if input_mask is None and attention_mask is not None:
             input_mask = 1.0 - attention_mask
         if input_mask is not None and perm_mask is not None:
@@ -1300,7 +1299,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_loss
 
-    def prepare_inputs_for_generation(self, input_ids, past, **kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past=None, use_cache=None, **kwargs):
         # Add dummy token at the end (no attention on this one)
 
         effective_batch_size = input_ids.shape[0]
@@ -1333,7 +1332,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             "input_ids": input_ids,
             "perm_mask": perm_mask,
             "target_mapping": target_mapping,
-            "use_cache": kwargs["use_cache"],
+            "use_cache": use_cache,
         }
 
         # if past is defined in model kwargs then use it for faster decoding
@@ -1342,7 +1341,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
 
         return inputs
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=XLNetLMHeadModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1465,7 +1464,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlnet-base-cased",
@@ -1558,7 +1557,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlnet-base-cased",
@@ -1655,7 +1654,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlnet-base-cased",
@@ -1756,7 +1755,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="xlnet-base-cased",
@@ -1868,7 +1867,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=XLNetForQuestionAnsweringOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,

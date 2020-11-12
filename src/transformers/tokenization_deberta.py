@@ -42,8 +42,8 @@ VOCAB_FILES_NAMES = {"vocab_file": "bpe_encoder.bin"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "microsoft/deberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/microsoft/deberta-base/bpe_encoder.bin",
-        "microsoft/deberta-large": "https://s3.amazonaws.com/models.huggingface.co/bert/microsoft/deberta-large/bpe_encoder.bin",
+        "microsoft/deberta-base": "https://huggingface.co/microsoft/deberta-base/resolve/main/bpe_encoder.bin",
+        "microsoft/deberta-large": "https://huggingface.co/microsoft/deberta-large/resolve/main/bpe_encoder.bin",
     }
 }
 
@@ -297,15 +297,15 @@ class GPT2Tokenizer(object):
     Args:
         vocab_file (:obj:`str`, optional):
             The local path of vocabulary package or the release name of vocabulary in `DeBERTa GitHub releases
-            <https://github.com/microsoft/DeBERTa/releases>`_, \ e.g. "bpe_encoder", default: `None`.
+            <https://github.com/microsoft/DeBERTa/releases>`_, e.g. "bpe_encoder", default: `None`.
 
             If it's `None`, then it will download the vocabulary in the latest release from GitHub. The vocabulary file
-            is a \ state dictionary with three items, "dict_map", "vocab", "encoder" which correspond to three files
-            used in `RoBERTa`, i.e. `dict.txt`, `vocab.txt` and `encoder.json`. \ The difference between our wrapped
-            GPT2 tokenizer and RoBERTa wrapped tokenizer are,
+            is a state dictionary with three items, "dict_map", "vocab", "encoder" which correspond to three files used
+            in `RoBERTa`, i.e. `dict.txt`, `vocab.txt` and `encoder.json`. The difference between our wrapped GPT2
+            tokenizer and RoBERTa wrapped tokenizer are,
 
             - Special tokens, unlike `RoBERTa` which use `<s>`, `</s>` as the `start` token and `end` token of a
-              sentence. We use `[CLS]` and `[SEP]` as the `start` and `end`\ token of input sentence which is the same
+              sentence. We use `[CLS]` and `[SEP]` as the `start` and `end` token of input sentence which is the same
               as `BERT`.
 
             - We remapped the token ids in our dictionary with regarding to the new special tokens, `[PAD]` => 0,
@@ -581,7 +581,7 @@ class DebertaTokenizer(PreTrainedTokenizer):
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A BERT sequence has the following format:
+        adding special tokens. A DeBERTa sequence has the following format:
 
         - single sequence: [CLS] X [SEP]
         - pair of sequences: [CLS] A [SEP] B [SEP]
@@ -608,21 +608,22 @@ class DebertaTokenizer(PreTrainedTokenizer):
         special tokens using the tokenizer ``prepare_for_model`` or ``encode_plus`` methods.
 
         Args:
-            token_ids_0: list of ids (must not contain special tokens)
-            token_ids_1: Optional list of ids (must not contain special tokens), necessary when fetching sequence ids
-                for sequence pairs
-            already_has_special_tokens: (default False) Set to True if the token list is already formated with
-                special tokens for the model
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
-            A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
+            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
 
         if already_has_special_tokens:
             if token_ids_1 is not None:
                 raise ValueError(
                     "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formated with special tokens for the model."
+                    "ids is already formatted with special tokens for the model."
                 )
             return list(
                 map(

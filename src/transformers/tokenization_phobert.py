@@ -34,12 +34,12 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "vinai/phobert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/vinai/phobert-base/vocab.txt",
-        "vinai/phobert-large": "https://s3.amazonaws.com/models.huggingface.co/bert/vinai/phobert-large/vocab.txt",
+        "vinai/phobert-base": "https://huggingface.co/vinai/phobert-base/resolve/main/vocab.txt",
+        "vinai/phobert-large": "https://huggingface.co/vinai/phobert-large/resolve/main/vocab.txt",
     },
     "merges_file": {
-        "vinai/phobert-base": "https://s3.amazonaws.com/models.huggingface.co/bert/vinai/phobert-base/bpe.codes",
-        "vinai/phobert-large": "https://s3.amazonaws.com/models.huggingface.co/bert/vinai/phobert-large/bpe.codes",
+        "vinai/phobert-base": "https://huggingface.co/vinai/phobert-base/resolve/main/bpe.codes",
+        "vinai/phobert-large": "https://huggingface.co/vinai/phobert-large/resolve/main/bpe.codes",
     },
 }
 
@@ -204,7 +204,7 @@ class PhobertTokenizer(PreTrainedTokenizer):
             if token_ids_1 is not None:
                 raise ValueError(
                     "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formated with special tokens for the model."
+                    "ids is already formatted with special tokens for the model."
                 )
             return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
 

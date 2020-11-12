@@ -17,6 +17,7 @@
 
 import math
 import os
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -30,7 +31,7 @@ from .file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_utils import PreTrainedModel
@@ -58,7 +59,7 @@ class GeLU(nn.Module):
 @dataclass
 class LxmertModelOutput(ModelOutput):
     """
-    Lxmert's outputs that contain the last hidden states, pooled outputs, and attention probabilites for the language,
+    Lxmert's outputs that contain the last hidden states, pooled outputs, and attention probabilities for the language,
     visual, and, cross-modality encoders. (note: the visual encoder in Lxmert is referred to as the "relation-ship"
     encoder")
 
@@ -144,7 +145,7 @@ class LxmertForQuestionAnsweringOutput(ModelOutput):
 @dataclass
 class LxmertForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.LxmertForPreTrainingModel`.
+    Output type of :class:`~transformers.LxmertForPreTraining`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
@@ -405,7 +406,7 @@ class LxmertSelfAttentionLayer(nn.Module):
         self.output = LxmertAttentionOutput(config)
 
     def forward(self, input_tensor, attention_mask, output_attentions=False):
-        # Self attention attends to itself, thus keys and querys are the same (input_tensor).
+        # Self attention attends to itself, thus keys and queries are the same (input_tensor).
         output = self.self(
             input_tensor,
             input_tensor,
@@ -799,7 +800,7 @@ LXMERT_START_DOCSTRING = r"""
     <https://arxiv.org/abs/1908.07490>`__ by Hao Tan and Mohit Bansal. It's a vision and language transformer model,
     pretrained on a variety of multi-modal datasets comprising of GQA, VQAv2.0, MCSCOCO captions, and Visual genome,
     using a combination of masked language modeling, region of interest feature regression, cross entropy loss for
-    question answering attribute prediction, and object tag predicition.
+    question answering attribute prediction, and object tag prediction.
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
@@ -893,7 +894,7 @@ class LxmertModel(LxmertPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings.word_embeddings = new_embeddings
 
-    @add_start_docstrings_to_callable(LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="unc-nlp/lxmert-base-uncased",
@@ -1076,12 +1077,10 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         will add newly initialized weights. Reducing the size will remove weights from the end
 
         Args:
-            cur_qa_logit_layer (:obj:`torch.nn.Linear`):
-                Old linear layer to be resized.
             num_labels (:obj:`int`, `optional`):
                 New number of labels in the linear layer weight matrix. Increasing the size will add newly initialized
                 weights at the end. Reducing the size will remove weights from the end. If not provided or :obj:`None`,
-                just returns a pointer to the qa labels :obj:`torch.nn.Linear`` module of the model wihtout doing
+                just returns a pointer to the qa labels :obj:`torch.nn.Linear`` module of the model without doing
                 anything.
 
         Return:
@@ -1145,7 +1144,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
 
         return new_qa_logit_layer
 
-    @add_start_docstrings_to_callable(LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=LxmertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1156,16 +1155,17 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         visual_attention_mask=None,
         token_type_ids=None,
         inputs_embeds=None,
-        masked_lm_labels=None,
+        labels=None,
         obj_labels=None,
         matched_label=None,
         ans=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
-        masked_lm_labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
+        labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
             Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
             config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
@@ -1184,6 +1184,15 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
 
         Returns:
         """
+
+        if "masked_lm_labels" in kwargs:
+            warnings.warn(
+                "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
+                FutureWarning,
+            )
+            labels = kwargs.pop("masked_lm_labels")
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
         lxmert_output = self.lxmert(
@@ -1212,13 +1221,13 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
 
         total_loss = (
             None
-            if (masked_lm_labels is None and matched_label is None and obj_labels is None and ans is None)
+            if (labels is None and matched_label is None and obj_labels is None and ans is None)
             else torch.tensor(0.0, device=device)
         )
-        if masked_lm_labels is not None and self.task_mask_lm:
+        if labels is not None and self.task_mask_lm:
             masked_lm_loss = self.loss_fcts["ce"](
                 lang_prediction_scores.view(-1, self.config.vocab_size),
-                masked_lm_labels.view(-1),
+                labels.view(-1),
             )
             total_loss += masked_lm_loss
         if matched_label is not None and self.task_matched:
@@ -1298,12 +1307,10 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
         will add newly initialized weights. Reducing the size will remove weights from the end
 
         Args:
-            cur_qa_logit_layer (:obj:`torch.nn.Linear`):
-                Old linear layer to be resized.
             num_labels (:obj:`int`, `optional`):
                 New number of labels in the linear layer weight matrix. Increasing the size will add newly initialized
                 weights at the end. Reducing the size will remove weights from the end. If not provided or :obj:`None`,
-                just returns a pointer to the qa labels :obj:`torch.nn.Linear`` module of the model wihtout doing
+                just returns a pointer to the qa labels :obj:`torch.nn.Linear`` module of the model without doing
                 anything.
 
         Return:
@@ -1368,7 +1375,7 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
 
         return new_qa_logit_layer
 
-    @add_start_docstrings_to_callable(LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="unc-nlp/lxmert-base-uncased",
@@ -1395,6 +1402,7 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
 
         Returns:
         """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         lxmert_output = self.lxmert(
             input_ids=input_ids,

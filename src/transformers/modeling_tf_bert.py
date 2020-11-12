@@ -28,7 +28,7 @@ from .file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_tf_outputs import (
@@ -46,6 +46,7 @@ from .modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
+    TFNextSentencePredictionLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
@@ -666,7 +667,7 @@ class TFBertPreTrainedModel(TFPreTrainedModel):
 @dataclass
 class TFBertForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.TFBertForPreTrainingModel`.
+    Output type of :class:`~transformers.TFBertForPreTraining`.
 
     Args:
         prediction_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
@@ -784,7 +785,7 @@ BERT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Bert Model transformer outputing raw hidden-states without any specific head on top.",
+    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
     BERT_START_DOCSTRING,
 )
 class TFBertModel(TFBertPreTrainedModel):
@@ -793,7 +794,7 @@ class TFBertModel(TFBertPreTrainedModel):
 
         self.bert = TFBertMainLayer(config, name="bert")
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="bert-base-cased",
@@ -824,7 +825,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel):
     def get_output_embeddings(self):
         return self.bert.embeddings
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(self, inputs, **kwargs):
         r"""
@@ -881,7 +882,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     def get_output_embeddings(self):
         return self.bert.embeddings
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="bert-base-cased",
@@ -1036,16 +1037,29 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
     """Bert Model with a `next sentence prediction (classification)` head on top. """,
     BERT_START_DOCSTRING,
 )
-class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
+class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredictionLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.bert = TFBertMainLayer(config, name="bert")
         self.nsp = TFBertNSPHead(config, name="nsp___cls")
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
-    def call(self, inputs, **kwargs):
+    def call(
+        self,
+        inputs=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        next_sentence_label=None,
+        training=False,
+    ):
         r"""
         Return:
 
@@ -1064,17 +1078,43 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel):
             >>> logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
             >>> assert logits[0][0] < logits[0][1] # the next sentence was random
         """
-        return_dict = kwargs.get("return_dict")
         return_dict = return_dict if return_dict is not None else self.bert.return_dict
-        outputs = self.bert(inputs, **kwargs)
+
+        if isinstance(inputs, (tuple, list)):
+            next_sentence_label = inputs[9] if len(inputs) > 9 else next_sentence_label
+            if len(inputs) > 9:
+                inputs = inputs[:9]
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            next_sentence_label = inputs.pop("next_sentence_label", next_sentence_label)
+
+        outputs = self.bert(
+            inputs,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
         pooled_output = outputs[1]
-        seq_relationship_score = self.nsp(pooled_output)
+        seq_relationship_scores = self.nsp(pooled_output)
+
+        next_sentence_loss = (
+            None
+            if next_sentence_label is None
+            else self.compute_loss(labels=next_sentence_label, logits=seq_relationship_scores)
+        )
 
         if not return_dict:
-            return (seq_relationship_score,) + outputs[2:]
+            output = (seq_relationship_scores,) + outputs[2:]
+            return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
 
         return TFNextSentencePredictorOutput(
-            logits=seq_relationship_score,
+            loss=next_sentence_loss,
+            logits=seq_relationship_scores,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
@@ -1098,7 +1138,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="bert-base-cased",
@@ -1191,7 +1231,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="bert-base-cased",
@@ -1315,7 +1355,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="bert-base-cased",
@@ -1400,7 +1440,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
-    @add_start_docstrings_to_callable(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="bert-base-cased",

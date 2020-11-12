@@ -37,7 +37,7 @@ from .file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_outputs import (
@@ -695,7 +695,7 @@ class MobileBertPreTrainedModel(PreTrainedModel):
 @dataclass
 class MobileBertForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.MobileBertForPreTrainingModel`.
+    Output type of :class:`~transformers.MobileBertForPreTraining`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
@@ -837,7 +837,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -887,7 +887,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
         )
 
         # If a 2D ou 3D attention mask is provided for the cross-attention
-        # we need to make broadcastabe to [batch_size, num_heads, seq_length, seq_length]
+        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.is_decoder and encoder_hidden_states is not None:
             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
@@ -970,7 +970,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
         if output_embeddings is not None and self.config.tie_word_embeddings:
             self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=MobileBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1088,7 +1088,7 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
         if output_embeddings is not None and self.config.tie_word_embeddings:
             self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -1184,7 +1184,7 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=NextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1194,13 +1194,14 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        next_sentence_label=None,
+        labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
-        next_sentence_label (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
             (see ``input_ids`` docstring) Indices should be in ``[0, 1]``.
 
@@ -1221,10 +1222,18 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
             >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
             >>> encoding = tokenizer(prompt, next_sentence, return_tensors='pt')
 
-            >>> outputs = model(**encoding, next_sentence_label=torch.LongTensor([1]))
+            >>> outputs = model(**encoding, labels=torch.LongTensor([1]))
             >>> loss = outputs.loss
             >>> logits = outputs.logits
         """
+
+        if "next_sentence_label" in kwargs:
+            warnings.warn(
+                "The `next_sentence_label` argument is deprecated and will be removed in a future version, use `labels` instead.",
+                FutureWarning,
+            )
+            labels = kwargs.pop("next_sentence_label")
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.mobilebert(
@@ -1243,9 +1252,9 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
         seq_relationship_score = self.cls(pooled_output)
 
         next_sentence_loss = None
-        if next_sentence_label is not None:
+        if labels is not None:
             loss_fct = CrossEntropyLoss()
-            next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
+            next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), labels.view(-1))
 
         if not return_dict:
             output = (seq_relationship_score,) + outputs[2:]
@@ -1276,7 +1285,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -1361,7 +1370,7 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -1460,7 +1469,9 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",
@@ -1555,7 +1566,7 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/mobilebert-uncased",

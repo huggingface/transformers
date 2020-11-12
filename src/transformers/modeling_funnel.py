@@ -30,7 +30,7 @@ from .file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from .modeling_outputs import (
@@ -226,7 +226,7 @@ class FunnelAttentionStructure(nn.Module):
         d_model = self.config.d_model
         if self.config.attention_type == "factorized":
             # Notations from the paper, appending A.2.2, final formula.
-            # We need to create and return the matrics phi, psi, pi and omega.
+            # We need to create and return the matrices phi, psi, pi and omega.
             pos_seq = torch.arange(0, seq_len, 1.0, dtype=dtype, device=device)
             freq_seq = torch.arange(0, d_model // 2, 1.0, dtype=dtype, device=device)
             inv_freq = 1 / (10000 ** (freq_seq / (d_model // 2)))
@@ -798,7 +798,7 @@ class FunnelClassificationHead(nn.Module):
 @dataclass
 class FunnelForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.FunnelForPreTrainingModel`.
+    Output type of :class:`~transformers.FunnelForPreTraining`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
@@ -906,7 +906,7 @@ class FunnelBaseModel(FunnelPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings.word_embeddings = new_embeddings
 
-    @add_start_docstrings_to_callable(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small-base",
@@ -983,7 +983,7 @@ class FunnelModel(FunnelPreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.embeddings.word_embeddings = new_embeddings
 
-    @add_start_docstrings_to_callable(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small",
@@ -1082,7 +1082,7 @@ class FunnelForPreTraining(FunnelPreTrainedModel):
         self.discriminator_predictions = FunnelDiscriminatorPredictions(config)
         self.init_weights()
 
-    @add_start_docstrings_to_callable(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=FunnelForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1167,7 +1167,7 @@ class FunnelForMaskedLM(FunnelPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
-    @add_start_docstrings_to_callable(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small",
@@ -1226,7 +1226,7 @@ class FunnelForMaskedLM(FunnelPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Funnel Transfprmer Model with a sequence classification/regression head on top (two linear layer on top of the
+    Funnel Transformer Model with a sequence classification/regression head on top (two linear layer on top of the
     first timestep of the last hidden state) e.g. for GLUE tasks.
     """,
     FUNNEL_START_DOCSTRING,
@@ -1240,7 +1240,7 @@ class FunnelForSequenceClassification(FunnelPreTrainedModel):
         self.classifier = FunnelClassificationHead(config, config.num_labels)
         self.init_weights()
 
-    @add_start_docstrings_to_callable(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small-base",
@@ -1317,7 +1317,7 @@ class FunnelForMultipleChoice(FunnelPreTrainedModel):
         self.classifier = FunnelClassificationHead(config, 1)
         self.init_weights()
 
-    @add_start_docstrings_to_callable(FUNNEL_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small-base",
@@ -1403,7 +1403,7 @@ class FunnelForTokenClassification(FunnelPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small",
@@ -1485,7 +1485,7 @@ class FunnelForQuestionAnswering(FunnelPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="funnel-transformer/small",

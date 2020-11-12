@@ -21,9 +21,7 @@ from .utils import logging
 
 logger = logging.get_logger(__name__)
 
-OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "openai-gpt": "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-config.json"
-}
+OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP = {"openai-gpt": "https://huggingface.co/openai-gpt/resolve/main/config.json"}
 
 
 class OpenAIGPTConfig(PretrainedConfig):
@@ -54,7 +52,7 @@ class OpenAIGPTConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         afn (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
-            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
         resid_pdrop (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         embd_pdrop (:obj:`int`, `optional`, defaults to 0.1):

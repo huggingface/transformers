@@ -63,5 +63,5 @@ The model achieved 14.0547/13.6534 BLEU scores on SemEval2020 Task4: Commonsense
 ```
 
 <a href="https://huggingface.co/exbert/?model=aliosm/ComVE-gpt2">
-	<img width="300px" src="https://hf-dinosaur.huggingface.co/exbert/button.png">
+	<img width="300px" src="https://cdn-media.huggingface.co/exbert/button.png">
 </a>
