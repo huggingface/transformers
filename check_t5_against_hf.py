@@ -13,16 +13,18 @@ from transformers.convert_t5_v1_1_original_tf_checkpoint_to_pytorch import (  # 
 from transformers.modeling_t5v2 import T5Config, T5v2ForConditionalGeneration  # noqa: E402
 
 
-path_to_tf_checkpoint = "/home/patrick/hugging_face/t5v1.1/t5_mesh_checkpoints"
+path_to_tf_checkpoint = "/home/patrick/hugging_face/mt5/mt5_mesh_tf"
 
 
-tok = T5Tokenizer.from_pretrained("t5-small")
+tok = T5Tokenizer.from_pretrained(path_to_tf_checkpoint + "/sentencepiece.model")
 tok.save_pretrained(path_to_tf_checkpoint)
 config = T5Config.from_pretrained("t5-small")
 config.d_ff = 1024
 config.num_decoder_layers = 8
 config.num_layers = 8
 config.num_heads = 6
+# comment this line out if only checkpoints for T5v1.1 should be checked
+config.vocab_size = 250112
 
 config.save_pretrained(path_to_tf_checkpoint)
 
@@ -32,14 +34,16 @@ t5_model = t5.models.MtfModel(
     model_dir=path_to_tf_checkpoint,
     batch_size=1,
     tpu=None,
-    sequence_length={"inputs": 4, "targets": 4},
+    sequence_length={"inputs": 64, "targets": 64},
 )
 
 vocab_model_path = path_to_tf_checkpoint + "/sentencepiece.model"
-vocab = SentencePieceVocabulary(vocab_model_path, extra_ids=100)
+
+# for T5v1.1 one should set `extra_ids=100`.
+vocab = SentencePieceVocabulary(vocab_model_path, extra_ids=0)
 
 score = t5_model.score(
-    inputs=["Hello there"],
+    inputs=["Hello there. Let's put more words in more languages than I originally thought."],
     targets=["Hi I am"],
     vocabulary=vocab,
 )
@@ -51,5 +55,9 @@ labels = tok("Hi I am", return_tensors="pt").input_ids
 
 # input_ids and labels are ok!
 loss = model(input_ids, labels=labels).loss
+mesh_tf_loss = -(labels.shape[-1] * loss.item())
 
-assert -(labels.shape[-1] * loss.item()) - score[0][0] < 1e-4
+if mesh_tf_loss - score[0][0] < 1e-4:
+    print("Success!")
+else:
+    print(f"Fail. Mesh TF {mesh_tf_loss} vs. {score[0][0]}")
