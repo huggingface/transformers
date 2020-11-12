@@ -236,16 +236,14 @@ class TFNextSentencePredictionLoss:
         return loss_fn(next_sentence_label, next_sentence_reduced_logits)
 
 
-def detect_tf_missing_unexpected_layers(model, resolved_archive_file):
+def load_tf_weights(model, resolved_archive_file):
     """
     Detect missing and unexpected layers.
-
     Args:
         model (:obj:`tf.keras.models.Model`):
             The model to load the weights into.
         resolved_archive_file (:obj:`str`):
             The location of the H5 file.
-
     Returns:
         Two lists, one for the missing layers, and another one for the unexpected layers.
     """
@@ -253,46 +251,32 @@ def detect_tf_missing_unexpected_layers(model, resolved_archive_file):
     unexpected_layers = []
 
     with h5py.File(resolved_archive_file, "r") as f:
-        saved_layer_names = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
-        model_layer_names = set(layer.name for layer in model.layers)
-        missing_layers = list(model_layer_names - saved_layer_names)
-        unexpected_layers = list(saved_layer_names - model_layer_names)
+        saved_h5_model_layers_name = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
+        model_layers_name_value = {}
 
         for layer in model.layers:
-            if layer.name in saved_layer_names:
-                g = f[layer.name]
-                saved_weight_names = hdf5_format.load_attributes_from_hdf5_group(g, "weight_names")
-                saved_weight_names_set = set(
-                    "/".join(weight_name.split("/")[2:]) for weight_name in saved_weight_names
-                )
-                symbolic_weights = layer.trainable_weights + layer.non_trainable_weights
-                symbolic_weights_names = set(
-                    "/".join(symbolic_weight.name.split("/")[2:]) for symbolic_weight in symbolic_weights
-                )
-                missing_layers.extend(list(symbolic_weights_names - saved_weight_names_set))
-                unexpected_layers.extend(list(saved_weight_names_set - symbolic_weights_names))
+            name = layer.name
+            model_layers_name_value[name] = layer
 
-    return missing_layers, unexpected_layers
+        model_layers_name = set(model_layers_name_value.keys())
+        renamed_saved_h5_model_layers_names = set()
 
+        for layer_name in saved_h5_model_layers_name:
+            name = layer_name
 
-def load_tf_weights(model, resolved_archive_file):
-    """
-    Load the TF weights from a H5 file.
+            renamed_saved_h5_model_layers_names.add(name)
 
-    Args:
-        model (:obj:`tf.keras.models.Model`):
-            The model to load the weights into.
-        resolved_archive_file (:obj:`str`):
-            The location of the H5 file.
-    """
-    with h5py.File(resolved_archive_file, "r") as f:
-        saved_layer_names = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
+        missing_layers = list(model_layers_name - renamed_saved_h5_model_layers_names)
+        unexpected_layers = list(renamed_saved_h5_model_layers_names - model_layers_name)
+        saved_weight_names_set = set()
+        symbolic_weights_names = set()
         weight_value_tuples = []
 
-        for layer in model.layers:
-            if layer.name in saved_layer_names:
-                g = f[layer.name]
+        for layer_name in saved_h5_model_layers_name:
+            if layer_name in model_layers_name:
+                g = f[layer_name]
                 saved_weight_names = hdf5_format.load_attributes_from_hdf5_group(g, "weight_names")
+                layer = model_layers_name_value[layer_name]
                 symbolic_weights = layer.trainable_weights + layer.non_trainable_weights
                 saved_weight_names_values = {}
 
@@ -300,13 +284,16 @@ def load_tf_weights(model, resolved_archive_file):
                     name = "/".join(weight_name.split("/")[1:])
                     saved_weight_names_values[name] = np.asarray(g[weight_name])
 
+                    saved_weight_names_set.add(name)
+
                 for symbolic_weight in symbolic_weights:
-                    splited_layers = symbolic_weight.name.split("/")[1:]
-                    symbolic_weight_name = "/".join(splited_layers)
+                    symbolic_weight_name = "/".join(symbolic_weight.name.split("/")[1:])
+                    saved_weight_value = None
 
                     if symbolic_weight_name in saved_weight_names_values:
                         saved_weight_value = saved_weight_names_values[symbolic_weight_name]
 
+                    if saved_weight_value is not None:
                         if K.int_shape(symbolic_weight) != saved_weight_value.shape:
                             try:
                                 array = np.reshape(saved_weight_value, K.int_shape(symbolic_weight))
@@ -318,7 +305,14 @@ def load_tf_weights(model, resolved_archive_file):
 
                         weight_value_tuples.append((symbolic_weight, array))
 
+                    symbolic_weights_names.add(symbolic_weight_name)
+
     K.batch_set_value(weight_value_tuples)
+
+    missing_layers.extend(list(symbolic_weights_names - saved_weight_names_set))
+    unexpected_layers.extend(list(saved_weight_names_set - symbolic_weights_names))
+
+    return missing_layers, unexpected_layers
 
 
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
@@ -728,7 +722,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         # 'by_name' allow us to do transfer learning by skipping/adding layers
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
         try:
-            load_tf_weights(model, resolved_archive_file)
+            missing_keys, unexpected_keys = load_tf_weights(model, resolved_archive_file)
         except OSError:
             raise OSError(
                 "Unable to load weights from h5 file. "
@@ -736,8 +730,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             )
 
         model(model.dummy_inputs, training=False)  # Make sure restore ops are run
-
-        missing_keys, unexpected_keys = detect_tf_missing_unexpected_layers(model, resolved_archive_file)
 
         if cls.authorized_missing_keys is not None:
             for pat in cls.authorized_missing_keys:
