@@ -188,3 +188,10 @@ TFBertForQuestionAnswering
 
 .. autoclass:: transformers.TFBertForQuestionAnswering
     :members: call
+
+
+FlaxBertModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxBertModel
+    :members: __call__
