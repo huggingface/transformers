@@ -40,6 +40,10 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "mpnet-base": 512,
 }
 
+PRETRAINED_INIT_CONFIGURATION = {
+    "mpnet-base": {"do_lower_case": True},
+}
+
 
 class MPNetTokenizer(BertTokenizer):
     """
@@ -104,10 +108,11 @@ class MPNetTokenizer(BertTokenizer):
         cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+        
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
         super().__init__(
             vocab_file=vocab_file,
-            max_len=512,
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
@@ -117,8 +122,6 @@ class MPNetTokenizer(BertTokenizer):
             mask_token=mask_token,
             **kwargs,
         )
-        self.max_len_single_sentence = self.max_len - 2  # take into account special tokens
-        self.max_len_sentences_pair = self.max_len - 4  # take into account special tokens
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
