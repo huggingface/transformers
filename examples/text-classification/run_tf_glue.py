@@ -27,6 +27,12 @@ from transformers import (
     glue_processors,
     glue_tasks_num_labels,
 )
+from transformers.utils import logging as hf_logging
+
+
+hf_logging.set_verbosity_info()
+hf_logging.enable_default_handler()
+hf_logging.enable_explicit_format()
 
 
 class Split(Enum):

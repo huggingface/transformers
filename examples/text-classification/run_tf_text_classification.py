@@ -21,6 +21,12 @@ from transformers import (
     TFTrainer,
     TFTrainingArguments,
 )
+from transformers.utils import logging as hf_logging
+
+
+hf_logging.set_verbosity_info()
+hf_logging.enable_default_handler()
+hf_logging.enable_explicit_format()
 
 
 def get_tfds(
