@@ -367,9 +367,9 @@ class T5Attention(nn.Module):
                 k, v = past_key_value
 
         if self.is_decoder and use_cache is True:
-            present_key_value_state = ((k, v),)
+            present_key_value_state = (k, v)
         else:
-            present_key_value_state = (None,)
+            present_key_value_state = None
 
         # (bs, n_heads, qlen, klen)
         scores = torch.matmul(
@@ -378,8 +378,11 @@ class T5Attention(nn.Module):
 
         if position_bias is None:
             if not self.has_relative_attention_bias:
-                raise ValueError("No position_bias provided and no weights to compute position_bias")
-            position_bias = self.compute_bias(real_qlen, klen)
+                position_bias = torch.zeros(
+                    (1, self.n_heads, real_qlen, klen), device=scores.device, dtype=scores.dtype
+                )
+            else:
+                position_bias = self.compute_bias(real_qlen, klen)
 
             # if key and values are already calculated
             # we want only the last query position bias
@@ -402,12 +405,10 @@ class T5Attention(nn.Module):
 
         context = self.o(context)
 
-        outputs = (context,) + present_key_value_state
+        outputs = (context,) + (present_key_value_state,) + (position_bias,)
 
         if output_attentions:
             outputs = outputs + (weights,)
-        if self.has_relative_attention_bias:
-            outputs = outputs + (position_bias,)
         return outputs
 
 
@@ -447,11 +448,9 @@ class T5LayerSelfAttention(nn.Module):
 
 
 class T5LayerCrossAttention(nn.Module):
-    def __init__(self, config, has_relative_attention_bias=False):
+    def __init__(self, config):
         super().__init__()
-        self.EncDecAttention = T5Attention(
-            config, has_relative_attention_bias=has_relative_attention_bias, is_bidirectional=True
-        )
+        self.EncDecAttention = T5Attention(config, has_relative_attention_bias=False, is_bidirectional=True)
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -492,7 +491,7 @@ class T5Block(nn.Module):
         self.layer = nn.ModuleList()
         self.layer.append(T5LayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
         if self.is_decoder:
-            self.layer.append(T5LayerCrossAttention(config, has_relative_attention_bias=has_relative_attention_bias))
+            self.layer.append(T5LayerCrossAttention(config))
 
         self.layer.append(T5LayerFF(config))
 
@@ -775,20 +774,19 @@ class T5Stack(T5PreTrainedModel):
             # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
             hidden_states, present_key_value_state = layer_outputs[:2]
 
-            if i == 0:
-                # We share the position biases between the layers - the first layer store them
-                # layer_outputs = hidden-states, key-value-states (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
-                position_bias = layer_outputs[3 if output_attentions else 2]
-                if self.is_decoder and encoder_hidden_states is not None:
-                    encoder_decoder_position_bias = layer_outputs[5 if output_attentions else 3]
+            # We share the position biases between the layers - the first layer store them
+            # layer_outputs = hidden-states, key-value-states (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
+            position_bias = layer_outputs[2]
+            if self.is_decoder and encoder_hidden_states is not None:
+                encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
             # append next layer key value states
             if use_cache:
                 present_key_value_states = present_key_value_states + (present_key_value_state,)
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[2],)
+                all_attentions = all_attentions + (layer_outputs[3],)
                 if self.is_decoder:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[4 if i == 0 else 3],)
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)

@@ -461,7 +461,7 @@ class ModelTesterMixin:
             inputs = self._prepare_for_class(inputs_dict, model_class).copy()
             inputs["head_mask"] = head_mask
 
-            outputs = model(**inputs)
+            outputs = model(**inputs, return_dict=True)
 
             # Test that we can get a gradient back for importance score computation
             output = sum(t.sum() for t in outputs[0])
