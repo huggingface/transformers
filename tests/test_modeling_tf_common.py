@@ -458,22 +458,17 @@ class TFModelTesterMixin:
         metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
 
         for model_class in self.all_model_classes:
-            max_input = 512
-
-            if model_class.base_model_prefix == "longformer":
-                max_input = 2000
-
             if self.is_encoder_decoder:
                 input_ids = {
                     "decoder_input_ids": tf.keras.Input(
-                        batch_shape=(2, max_input), name="decoder_input_ids", dtype="int32"
+                        batch_shape=(2, 512), name="decoder_input_ids", dtype="int32"
                     ),
-                    "input_ids": tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32"),
+                    "input_ids": tf.keras.Input(batch_shape=(2, 512), name="input_ids", dtype="int32"),
                 }
             elif model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
-                input_ids = tf.keras.Input(batch_shape=(4, 2, max_input), name="input_ids", dtype="int32")
+                input_ids = tf.keras.Input(batch_shape=(4, 2, 512), name="input_ids", dtype="int32")
             else:
-                input_ids = tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32")
+                input_ids = tf.keras.Input(batch_shape=(2, 512), name="input_ids", dtype="int32")
 
             # Prepare our model
             model = model_class(config)
