@@ -18,7 +18,7 @@ from .configuration_bart import BartConfig
 
 
 PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Helsinki-NLP/opus-mt-en-de": "https://s3.amazonaws.com/models.huggingface.co/bert/Helsinki-NLP/opus-mt-en-de/config.json",
+    "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/config.json",
 }
 
 

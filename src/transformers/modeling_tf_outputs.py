@@ -307,6 +307,8 @@ class TFNextSentencePredictorOutput(ModelOutput):
     Base class for outputs of models predicting if two sentences are consecutive or not.
 
     Args:
+        loss (:obj:`tf.Tensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`next_sentence_label` is provided):
+            Next sentence prediction loss.
         logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, 2)`):
             Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
             before SoftMax).
@@ -323,6 +325,7 @@ class TFNextSentencePredictorOutput(ModelOutput):
             heads.
     """
 
+    loss: Optional[tf.Tensor] = None
     logits: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None

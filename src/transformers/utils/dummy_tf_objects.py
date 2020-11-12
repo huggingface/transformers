@@ -101,6 +101,9 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = None
 TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = None
 
 
+TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = None
+
+
 TF_MODEL_FOR_PRETRAINING_MAPPING = None
 
 
@@ -489,6 +492,45 @@ class TFDistilBertPreTrainedModel:
 
     @classmethod
     def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFDPRContextEncoder:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFDPRPretrainedContextEncoder:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFDPRPretrainedQuestionEncoder:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFDPRPretrainedReader:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFDPRQuestionEncoder:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFDPRReader:
+    def __init__(self, *args, **kwargs):
         requires_tf(self)
 
 

@@ -16,31 +16,36 @@
 
 import unittest
 
-from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers import is_tf_available
+from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 
-if is_torch_available():
-    import torch
+if is_tf_available():
+    import numpy
+    import tensorflow as tf
 
-    from transformers import BertConfig, DPRConfig, DPRContextEncoder, DPRQuestionEncoder, DPRReader
-    from transformers.modeling_dpr import (
-        DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-        DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-        DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
+    from transformers import (
+        TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        BertConfig,
+        DPRConfig,
+        TFDPRContextEncoder,
+        TFDPRQuestionEncoder,
+        TFDPRReader,
     )
 
 
-class DPRModelTester:
+class TFDPRModelTester:
     def __init__(
         self,
         parent,
         batch_size=13,
         seq_length=7,
-        is_training=False,
+        is_training=True,
         use_input_mask=True,
         use_token_type_ids=True,
         use_labels=True,
@@ -90,7 +95,9 @@ class DPRModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+            input_mask = ids_tensor(
+                [self.batch_size, self.seq_length], vocab_size=2
+            )  # follow test_modeling_tf_ctrl.py
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -117,7 +124,8 @@ class DPRModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            return_dict=True,
+            # MODIFY
+            return_dict=False,
         )
         config = DPRConfig(projection_dim=self.projection_dim, **config.to_dict())
 
@@ -126,35 +134,26 @@ class DPRModelTester:
     def create_and_check_dpr_context_encoder(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = DPRContextEncoder(config=config)
-        model.to(torch_device)
-        model.eval()
+        model = TFDPRContextEncoder(config=config)
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids)
+        result = model(input_ids, return_dict=True)  # MODIFY
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.projection_dim or self.hidden_size))
 
     def create_and_check_dpr_question_encoder(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = DPRQuestionEncoder(config=config)
-        model.to(torch_device)
-        model.eval()
+        model = TFDPRQuestionEncoder(config=config)
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids)
+        result = model(input_ids, return_dict=True)  # MODIFY
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.projection_dim or self.hidden_size))
 
     def create_and_check_dpr_reader(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = DPRReader(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-        )
+        model = TFDPRReader(config=config)
+        result = model(input_ids, attention_mask=input_mask, return_dict=True)  # MODIFY
 
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
@@ -175,26 +174,26 @@ class DPRModelTester:
         return config, inputs_dict
 
 
-@require_torch
-class DPRModelTest(ModelTesterMixin, unittest.TestCase):
+@require_tf
+class TFDPRModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            DPRContextEncoder,
-            DPRQuestionEncoder,
-            DPRReader,
+            TFDPRContextEncoder,
+            TFDPRQuestionEncoder,
+            TFDPRReader,
         )
-        if is_torch_available()
+        if is_tf_available()
         else ()
     )
 
     test_resize_embeddings = False
-    test_missing_keys = False  # why?
+    test_missing_keys = False
     test_pruning = False
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = DPRModelTester(self)
+        self.model_tester = TFDPRModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DPRConfig, hidden_size=37)
 
     def test_config(self):
@@ -214,36 +213,35 @@ class DPRModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DPRContextEncoder.from_pretrained(model_name)
+        for model_name in TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFDPRContextEncoder.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
-        for model_name in DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DPRContextEncoder.from_pretrained(model_name)
+        for model_name in TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFDPRContextEncoder.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
-        for model_name in DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DPRQuestionEncoder.from_pretrained(model_name)
+        for model_name in TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFDPRQuestionEncoder.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
-        for model_name in DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = DPRReader.from_pretrained(model_name)
+        for model_name in TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFDPRReader.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
 
-@require_torch
-class DPRModelIntegrationTest(unittest.TestCase):
+@require_tf
+class TFDPRModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        model = DPRQuestionEncoder.from_pretrained("facebook/dpr-question_encoder-single-nq-base", return_dict=False)
-        model.to(torch_device)
+        model = TFDPRQuestionEncoder.from_pretrained("facebook/dpr-question_encoder-single-nq-base", return_dict=False)
 
-        input_ids = torch.tensor(
-            [[101, 7592, 1010, 2003, 2026, 3899, 10140, 1029, 102]], dtype=torch.long, device=torch_device
+        input_ids = tf.constant(
+            [[101, 7592, 1010, 2003, 2026, 3899, 10140, 1029, 102]]
         )  # [CLS] hello, is my dog cute? [SEP]
         output = model(input_ids)[0]  # embedding shape = (1, 768)
         # compare the actual values for a slice.
-        expected_slice = torch.tensor(
+        expected_slice = tf.constant(
             [
                 [
                     0.03236253,
@@ -257,8 +255,6 @@ class DPRModelIntegrationTest(unittest.TestCase):
                     -0.08481959,
                     -0.14324117,
                 ]
-            ],
-            dtype=torch.float,
-            device=torch_device,
+            ]
         )
-        self.assertTrue(torch.allclose(output[:, :10], expected_slice, atol=1e-4))
+        self.assertTrue(numpy.allclose(output[:, :10].numpy(), expected_slice.numpy(), atol=1e-4))

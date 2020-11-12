@@ -103,7 +103,7 @@ class TFLongformerBaseModelOutput(ModelOutput):
             in the sequence.
     """
 
-    last_hidden_state: tf.Tensor
+    last_hidden_state: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
     global_attentions: Optional[Tuple[tf.Tensor]] = None
@@ -150,7 +150,7 @@ class TFLongformerBaseModelOutputWithPooling(ModelOutput):
             in the sequence.
     """
 
-    last_hidden_state: tf.Tensor
+    last_hidden_state: tf.Tensor = None
     pooler_output: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None

@@ -90,9 +90,9 @@ tokenizer = Tokenizer.load(model_name)
 ### In haystack
 For doing QA at scale (i.e. many docs instead of single paragraph), you can load the model also in [haystack](https://github.com/deepset-ai/haystack/):
 ```python
-reader = FARMReader(model_name_or_path="deepset/roberta-base-squad2")
+reader = FARMReader(model_name_or_path="deepset/roberta-base-squad2-v2")
 # or 
-reader = TransformersReader(model="deepset/roberta-base-squad2",tokenizer="deepset/roberta-base-squad2")
+reader = TransformersReader(model_name_or_path="deepset/roberta-base-squad2-v2",tokenizer="deepset/roberta-base-squad2-v2")
 ```
 
 
