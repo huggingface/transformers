@@ -139,11 +139,19 @@ Example of translating english to many romance languages, using old-style 2 char
 .. code-block::python
 
     from transformers import MarianMTModel, MarianTokenizer
-     src_text = [ '>>fr<< this is a sentence in english that we want to translate to french', '>>pt<< This should go to portuguese', '>>es<< And this to Spanish']
+    src_text = [
+        '>>fr<< this is a sentence in english that we want to translate to french',
+        '>>pt<< This should go to portuguese',
+        '>>es<< And this to Spanish'
+    ]
 
-    model_name = 'Helsinki-NLP/opus-mt-en-ROMANCE' tokenizer = MarianTokenizer.from_pretrained(model_name)
-    print(tokenizer.supported_language_codes) model = MarianMTModel.from_pretrained(model_name) translated =
-    model.generate(**tokenizer.prepare_seq2seq_batch(src_text)) tgt_text = [tokenizer.decode(t, skip_special_tokens=True) for t in translated]
+    model_name = 'Helsinki-NLP/opus-mt-en-ROMANCE'
+    tokenizer = MarianTokenizer.from_pretrained(model_name)
+    print(tokenizer.supported_language_codes)
+
+    model = MarianMTModel.from_pretrained(model_name)
+    translated = model.generate(**tokenizer.prepare_seq2seq_batch(src_text))
+    tgt_text = [tokenizer.decode(t, skip_special_tokens=True) for t in translated]
     # ["c'est une phrase en anglais que nous voulons traduire en français", 'Isto deve ir para o português.',  'Y esto al español']
 
 
