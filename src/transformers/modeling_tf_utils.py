@@ -238,12 +238,14 @@ class TFNextSentencePredictionLoss:
 
 def load_tf_weights(model, resolved_archive_file):
     """
-    Detect missing and unexpected layers.
+    Detect missing and unexpected layers
+
     Args:
         model (:obj:`tf.keras.models.Model`):
             The model to load the weights into.
         resolved_archive_file (:obj:`str`):
-            The location of the H5 file.
+            The location of the H5 file
+
     Returns:
         Two lists, one for the missing layers, and another one for the unexpected layers.
     """
