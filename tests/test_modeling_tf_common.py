@@ -99,20 +99,11 @@ class TFModelTesterMixin:
                 inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
             elif model_class in TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.values():
                 inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-            elif model_class in TF_MODEL_FOR_PRETRAINING_MAPPING.values():
-                # Check if the pretraining model needs an extra label
-                extra_label = getattr(self.model_tester, "pretraining_extra_label", "")
-
-                if extra_label:
-                    inputs_dict[extra_label] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-
-                inputs_dict["labels"] = tf.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
-                )
             elif model_class in [
                 *TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.values(),
                 *TF_MODEL_FOR_CAUSAL_LM_MAPPING.values(),
                 *TF_MODEL_FOR_MASKED_LM_MAPPING.values(),
+                *TF_MODEL_FOR_PRETRAINING_MAPPING.values(),
                 *TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.values(),
             ]:
                 inputs_dict["labels"] = tf.zeros(
