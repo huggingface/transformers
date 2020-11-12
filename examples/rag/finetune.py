@@ -27,7 +27,6 @@ from transformers import (
     T5ForConditionalGeneration,
 )
 from transformers import logging as transformers_logging
-from pytorch_lightning.utilities import rank_zero_warn
 
 
 from callbacks import (  # noqa: E402 # isort:skipq
@@ -151,15 +150,6 @@ class GenerativeQAModule(BaseTransformer):
         self.hparams.git_sha = get_git_info()["repo_sha"]
         self.num_workers = hparams.num_workers
         self.distributed_port = self.hparams.distributed_port
-        rank_zero_warn("\n>>> INIT done\n")
-
-    # def init_ddp_connection(self, global_rank: int, world_size: int, is_slurm_managing_tasks: bool = True):
-    #     logger.info("Custom init_ddp_connection.")
-    #     os.environ["MASTER_PORT"] = str(self.distributed_port)
-    #     super().init_ddp_connection(global_rank, world_size, is_slurm_managing_tasks)
-    #     rank_zero_warn(f"\n>>> iddpc 1: rag_model:{self.is_rag_model}\n")
-    #     if self.is_rag_model and (not dist.is_initialized() or dist.get_rank() == 0):
-    #         self.model.retriever.init_retrieval(self.distributed_port)
 
     def forward(self, input_ids, **kwargs):
         return self.model(input_ids, **kwargs)
