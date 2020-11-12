@@ -304,7 +304,7 @@ class FlaxBertModule(nn.Module):
     "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
     BERT_START_DOCSTRING,
 )
-class FlaxBertModel(FlaxPreTrainedModel):
+class FlaxBert(FlaxPreTrainedModel):
     """
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in `Attention is
