@@ -20,6 +20,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
+from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
@@ -377,7 +378,7 @@ class GPT2ModelTester:
 
 
 @require_torch
-class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
+class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel, GPT2ForSequenceClassification)
@@ -386,6 +387,29 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
     )
     all_generative_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
     test_missing_keys = False
+
+    # special case for DoubleHeads model
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class.__name__ == "GPT2DoubleHeadsModel":
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.num_choices, self.model_tester.seq_length),
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                inputs_dict["input_ids"] = inputs_dict["labels"]
+                inputs_dict["token_type_ids"] = inputs_dict["labels"]
+                inputs_dict["mc_token_ids"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.num_choices),
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                inputs_dict["mc_labels"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+        return inputs_dict
 
     def setUp(self):
         self.model_tester = GPT2ModelTester(self)
@@ -510,32 +534,17 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 
     @slow
-    def test_lm_generate_distilgpt2(self):
-        model = GPT2LMHeadModel.from_pretrained("distilgpt2")
+    def test_gpt2_sample(self):
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("gpt2")
         model.to(torch_device)
-        input_ids = torch.tensor([[464, 1893]], dtype=torch.long, device=torch_device)  # The president
-        expected_output_ids = [
-            464,
-            1893,
-            286,
-            262,
-            1578,
-            1829,
-            11,
-            290,
-            262,
-            1893,
-            286,
-            262,
-            1578,
-            7526,
-            11,
-            423,
-            587,
-            287,
-            262,
-            2635,
-        ]  # The president of the United States, and the president of the United Kingdom, have been in the White
 
-        output_ids = model.generate(input_ids, do_sample=False)
-        self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
+        torch.manual_seed(0)
+        input_ids = tokenizer("Today is a nice day and", return_tensors="pt").input_ids.to(torch_device)
+        output_ids = model.generate(input_ids, do_sample=True)
+        output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+
+        EXPECTED_OUTPUT_STR = (
+            "Today is a nice day and if you don't know anything about the state of play during your holiday"
+        )
+        self.assertEqual(output_str, EXPECTED_OUTPUT_STR)

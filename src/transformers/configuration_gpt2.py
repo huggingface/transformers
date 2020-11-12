@@ -22,11 +22,11 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json",
-    "gpt2-medium": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-config.json",
-    "gpt2-large": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-large-config.json",
-    "gpt2-xl": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-xl-config.json",
-    "distilgpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/distilgpt2-config.json",
+    "gpt2": "https://huggingface.co/gpt2/resolve/main/config.json",
+    "gpt2-medium": "https://huggingface.co/gpt2-medium/resolve/main/config.json",
+    "gpt2-large": "https://huggingface.co/gpt2-large/resolve/main/config.json",
+    "gpt2-xl": "https://huggingface.co/gpt2-xl/resolve/main/config.json",
+    "distilgpt2": "https://huggingface.co/distilgpt2/resolve/main/config.json",
 }
 
 
@@ -60,7 +60,7 @@ class GPT2Config(PretrainedConfig):
         n_inner (:obj:`int`, `optional`, defaults to None):
             Dimensionality of the inner feed-forward layers. :obj:`None` will set it to 4 times n_embd
         activation_function (:obj:`str`, `optional`, defaults to :obj:`"gelu"`):
-            Activation function, to be selected in the list :obj:`["relu", "swish", "gelu", "tanh", "gelu_new"]`.
+            Activation function, to be selected in the list :obj:`["relu", "silu", "gelu", "tanh", "gelu_new"]`.
         resid_pdrop (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         embd_pdrop (:obj:`int`, `optional`, defaults to 0.1):

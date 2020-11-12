@@ -30,32 +30,32 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-ctx_encoder-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
-        "facebook/dpr-ctx_encoder-multiset-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
+        "facebook/dpr-ctx_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
+        "facebook/dpr-ctx_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
     },
     "tokenizer_file": {
-        "facebook/dpr-ctx_encoder-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
-        "facebook/dpr-ctx_encoder-multiset-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
+        "facebook/dpr-ctx_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
+        "facebook/dpr-ctx_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
     },
 }
 QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-question_encoder-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
-        "facebook/dpr-question_encoder-multiset-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
+        "facebook/dpr-question_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
+        "facebook/dpr-question_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
     },
     "tokenizer_file": {
-        "facebook/dpr-question_encoder-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
-        "facebook/dpr-question_encoder-multiset-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
+        "facebook/dpr-question_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
+        "facebook/dpr-question_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
     },
 }
 READER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-reader-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
-        "facebook/dpr-reader-multiset-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
+        "facebook/dpr-reader-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
+        "facebook/dpr-reader-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
     },
     "tokenizer_file": {
-        "facebook/dpr-reader-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
-        "facebook/dpr-reader-multiset-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-tokenizer.json",
+        "facebook/dpr-reader-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
+        "facebook/dpr-reader-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
     },
 }
 
@@ -129,10 +129,10 @@ DPRReaderOutput = collections.namedtuple("DPRReaderOutput", ["start_logits", "en
 
 
 CUSTOM_DPR_READER_DOCSTRING = r"""
-        Return a dictionary with the token ids of the input strings and other information to give to
-        :obj:`.decode_best_spans`. It converts the strings of a question and different passages (title and text) in a
-        sequence of IDs (integers), using the tokenizer and vocabulary. The resulting :obj:`input_ids` is a matrix of
-        size :obj:`(n_passages, sequence_length)` with the format:
+    Return a dictionary with the token ids of the input strings and other information to give to
+    :obj:`.decode_best_spans`. It converts the strings of a question and different passages (title and text) in a
+    sequence of IDs (integers), using the tokenizer and vocabulary. The resulting :obj:`input_ids` is a matrix of size
+    :obj:`(n_passages, sequence_length)` with the format:
 
     ::
 
@@ -189,12 +189,12 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
 
             `What are attention masks? <../glossary.html#attention-mask>`__
 
-    Return:
+    Returns:
         :obj:`Dict[str, List[List[int]]]`: A dictionary with the following keys:
 
         - ``input_ids``: List of token ids to be fed to a model.
         - ``attention_mask``: List of indices specifying which tokens should be attended to by the model.
-        """
+    """
 
 
 @add_start_docstrings(CUSTOM_DPR_READER_DOCSTRING)

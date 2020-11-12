@@ -37,10 +37,10 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "vinai/bertweet-base": "https://s3.amazonaws.com/models.huggingface.co/bert/vinai/bertweet-base/vocab.txt",
+        "vinai/bertweet-base": "https://huggingface.co/vinai/bertweet-base/resolve/main/vocab.txt",
     },
     "merges_file": {
-        "vinai/bertweet-base": "https://s3.amazonaws.com/models.huggingface.co/bert/vinai/bertweet-base/bpe.codes",
+        "vinai/bertweet-base": "https://huggingface.co/vinai/bertweet-base/resolve/main/bpe.codes",
     },
 }
 
@@ -223,7 +223,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
             if token_ids_1 is not None:
                 raise ValueError(
                     "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formated with special tokens for the model."
+                    "ids is already formatted with special tokens for the model."
                 )
             return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
 

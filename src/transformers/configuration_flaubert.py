@@ -21,10 +21,10 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "flaubert/flaubert_small_cased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_small_cased/config.json",
-    "flaubert/flaubert_base_uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_base_uncased/config.json",
-    "flaubert/flaubert_base_cased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_base_cased/config.json",
-    "flaubert/flaubert_large_cased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_large_cased/config.json",
+    "flaubert/flaubert_small_cased": "https://huggingface.co/flaubert/flaubert_small_cased/resolve/main/config.json",
+    "flaubert/flaubert_base_uncased": "https://huggingface.co/flaubert/flaubert_base_uncased/resolve/main/config.json",
+    "flaubert/flaubert_base_cased": "https://huggingface.co/flaubert/flaubert_base_cased/resolve/main/config.json",
+    "flaubert/flaubert_large_cased": "https://huggingface.co/flaubert/flaubert_large_cased/resolve/main/config.json",
 }
 
 
@@ -59,11 +59,11 @@ class FlaubertConfig(XLMConfig):
         attention_dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probability for the attention mechanism
         gelu_activation (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to use a `gelu` actibation instead of `relu`.
+            Whether or not to use a `gelu` activation instead of `relu`.
         sinusoidal_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use sinusoidal positional embeddings instead of absolute positional embeddings.
         causal (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not the model shoul behave in a causal manner. Causal models use a triangular attention mask in
+            Whether or not the model should behave in a causal manner. Causal models use a triangular attention mask in
             order to only attend to the left-side context instead if a bidirectional context.
         asm (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use an adaptive log softmax projection layer instead of a linear layer for the prediction

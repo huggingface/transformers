@@ -25,14 +25,14 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "squeezebert/squeezebert-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert-uncased/vocab.txt",
-        "squeezebert/squeezebert-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert-mnli/vocab.txt",
-        "squeezebert/squeezebert-mnli-headless": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert-mnli-headless/vocab.txt",
+        "squeezebert/squeezebert-uncased": "https://huggingface.co/squeezebert/squeezebert-uncased/resolve/main/vocab.txt",
+        "squeezebert/squeezebert-mnli": "https://huggingface.co/squeezebert/squeezebert-mnli/resolve/main/vocab.txt",
+        "squeezebert/squeezebert-mnli-headless": "https://huggingface.co/squeezebert/squeezebert-mnli-headless/resolve/main/vocab.txt",
     },
     "tokenizer_file": {
-        "squeezebert/squeezebert-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert-uncased/tokenizer.json",
-        "squeezebert/squeezebert-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert-mnli/tokenizer.json",
-        "squeezebert/squeezebert-mnli-headless": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert-mnli-headless/tokenizer.json",
+        "squeezebert/squeezebert-uncased": "https://huggingface.co/squeezebert/squeezebert-uncased/resolve/main/tokenizer.json",
+        "squeezebert/squeezebert-mnli": "https://huggingface.co/squeezebert/squeezebert-mnli/resolve/main/tokenizer.json",
+        "squeezebert/squeezebert-mnli-headless": "https://huggingface.co/squeezebert/squeezebert-mnli-headless/resolve/main/tokenizer.json",
     },
 }
 

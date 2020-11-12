@@ -21,7 +21,7 @@ import torch
 from torch.nn import functional as F
 
 from .configuration_flaubert import FlaubertConfig
-from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_callable
+from .file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from .modeling_outputs import BaseModelOutput
 from .modeling_xlm import (
     XLMForMultipleChoice,
@@ -99,7 +99,7 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
             `What are position IDs? <../glossary.html#position-ids>`_
         lengths (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Length of each sentence that can be used to avoid performing attention on padding token indices. You can
-            also use :obj:`attention_mask` for the same result (see above), kept here for compatbility. Indices
+            also use :obj:`attention_mask` for the same result (see above), kept here for compatibility. Indices
             selected in ``[0, ..., input_ids.size(-1)]``:
         cache (:obj:`Dict[str, torch.FloatTensor]`, `optional`):
             Dictionary strings to ``torch.FloatTensor`` that contains precomputed hidden-states (key and values in the
@@ -140,7 +140,7 @@ class FlaubertModel(XLMModel):
         self.layerdrop = getattr(config, "layerdrop", 0.0)
         self.pre_norm = getattr(config, "pre_norm", False)
 
-    @add_start_docstrings_to_callable(FLAUBERT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="flaubert/flaubert_base_cased",

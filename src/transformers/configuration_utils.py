@@ -134,6 +134,8 @@ class PretrainedConfig(object):
 
     Parameters linked to the tokenizer
 
+        - **tokenizer_class** (:obj:`str`, `optional`) -- The name of the associated tokenizer class to use (if none is
+          set, will use the tokenizer associated to the model by default).
         - **prefix** (:obj:`str`, `optional`) -- A specific prompt that should be added at the beginning of each text
           before calling the model.
         - **bos_token_id** (:obj:`int`, `optional`)) -- The id of the `beginning-of-stream` token.
@@ -309,6 +311,10 @@ class PretrainedConfig(object):
             proxies (:obj:`Dict[str, str]`, `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+                identifier allowed by git.
             return_unused_kwargs (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 If :obj:`False`, then this function returns just the final configuration object.
 
@@ -360,6 +366,7 @@ class PretrainedConfig(object):
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         local_files_only = kwargs.pop("local_files_only", False)
+        revision = kwargs.pop("revision", None)
 
         if os.path.isdir(pretrained_model_name_or_path):
             config_file = os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
@@ -367,7 +374,7 @@ class PretrainedConfig(object):
             config_file = pretrained_model_name_or_path
         else:
             config_file = hf_bucket_url(
-                pretrained_model_name_or_path, filename=CONFIG_NAME, use_cdn=False, mirror=None
+                pretrained_model_name_or_path, filename=CONFIG_NAME, revision=revision, mirror=None
             )
 
         try:
@@ -381,11 +388,10 @@ class PretrainedConfig(object):
                 local_files_only=local_files_only,
             )
             # Load config dict
-            if resolved_config_file is None:
-                raise EnvironmentError
             config_dict = cls._dict_from_json_file(resolved_config_file)
 
-        except EnvironmentError:
+        except EnvironmentError as err:
+            logger.error(err)
             msg = (
                 f"Can't load config for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
                 f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"

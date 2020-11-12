@@ -80,9 +80,9 @@ class ReformerConfig(PretrainedConfig):
             :obj:`None` to ensure fully random rotations in local sensitive hashing scheme.
         hidden_act (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`"relu"`):
             The non-linear activation function (function or string) in the feed forward layer in the residual attention
-            block. If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
+            block. If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.05):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         hidden_size (:obj:`int`, `optional`, defaults to 256):
             Dimensionality of the output hidden states of the residual attention blocks.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):

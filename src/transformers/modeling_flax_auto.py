@@ -124,18 +124,18 @@ class FlaxAutoModel(object):
                 All remaining positional arguments will be passed to the underlying model's ``__init__`` method
 
             config: (`optional`) instance of a class derived from :class:`~transformers.PretrainedConfig`:
-                Configuration for the model to use instead of an automatically loaded configuation. Configuration can
+                Configuration for the model to use instead of an automatically loaded configuration. Configuration can
                 be automatically loaded when:
 
                 - the model is a model provided by the library (loaded with the ``shortcut-name`` string of a
                   pretrained model), or
                 - the model was saved using :func:`~transformers.FlaxPreTrainedModel.save_pretrained` and is reloaded
-                  by suppling the save directory.
-                - the model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a
+                  by supplying the save directory.
+                - the model is loaded by supplying a local directory as ``pretrained_model_name_or_path`` and a
                   configuration JSON file named `config.json` is found in the directory.
 
             state_dict: (`optional`) dict:
-                an optional state dictionnary for the model to use instead of a state dictionary loaded from saved
+                an optional state dictionary for the model to use instead of a state dictionary loaded from saved
                 weights file. This option can be used if you want to create a model from a pretrained configuration but
                 load your own weights. In this case though, you should check if using
                 :func:`~transformers.FlaxPreTrainedModel.save_pretrained` and
@@ -150,14 +150,14 @@ class FlaxAutoModel(object):
                 they exists.
 
             resume_download: (`optional`) boolean, default False:
-                Do not delete incompletely recieved file. Attempt to resume the download if such a file exists.
+                Do not delete incompletely received file. Attempt to resume the download if such a file exists.
 
             proxies: (`optional`) dict, default None:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}. The proxies are used on each request.
 
             output_loading_info: (`optional`) boolean:
-                Set to ``True`` to also return a dictionnary containing missing keys, unexpected keys and error
+                Set to ``True`` to also return a dictionary containing missing keys, unexpected keys and error
                 messages.
 
             kwargs: (`optional`) Remaining dictionary of keyword arguments:

@@ -2,16 +2,24 @@
 import math
 import os
 
+from .utils import logging
 
-# Import 3rd-party integrations first:
+
+logger = logging.get_logger(__name__)
+
+
+# Import 3rd-party integrations before ML frameworks:
 
 try:
     # Comet needs to be imported before any ML frameworks
     import comet_ml  # noqa: F401
 
-    # XXX: there should be comet_ml.ensure_configured(), like `wandb`, for now emulate it
-    comet_ml.Experiment(project_name="ensure_configured")
-    _has_comet = True
+    if hasattr(comet_ml, "config") and comet_ml.config.get_config("comet.api_key"):
+        _has_comet = True
+    else:
+        if os.getenv("COMET_MODE", "").upper() != "DISABLED":
+            logger.warning("comet_ml is installed but `COMET_API_KEY` is not set.")
+        _has_comet = False
 except (ImportError, ValueError):
     _has_comet = False
 
@@ -21,7 +29,8 @@ try:
     wandb.ensure_configured()
     if wandb.api.api_key is None:
         _has_wandb = False
-        wandb.termwarn("W&B installed but not logged in.  Run `wandb login` or set the WANDB_API_KEY env variable.")
+        if os.getenv("WANDB_DISABLED"):
+            logger.warning("W&B installed but not logged in. Run `wandb login` or set the WANDB_API_KEY env variable.")
     else:
         _has_wandb = False if os.getenv("WANDB_DISABLED") else True
 except (ImportError, AttributeError):
@@ -54,22 +63,24 @@ except ImportError:
         _has_tensorboard = False
 
 try:
+    from azureml.core.run import Run  # noqa: F401
+
+    _has_azureml = True
+except ImportError:
+    _has_azureml = False
+
+try:
     import mlflow  # noqa: F401
 
     _has_mlflow = True
 except ImportError:
     _has_mlflow = False
 
-
 # No transformer imports above this point
 
-from .file_utils import is_torch_tpu_available
-from .trainer_callback import TrainerCallback
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun
-from .utils import logging
-
-
-logger = logging.get_logger(__name__)
+from .file_utils import is_torch_tpu_available  # noqa: E402
+from .trainer_callback import TrainerCallback  # noqa: E402
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun  # noqa: E402
 
 
 # Integration functions:
@@ -91,6 +102,10 @@ def is_optuna_available():
 
 def is_ray_available():
     return _has_ray
+
+
+def is_azureml_available():
+    return _has_azureml
 
 
 def is_mlflow_available():
@@ -267,7 +282,9 @@ class TensorBoardCallback(TrainerCallback):
                 if hasattr(model, "config") and model.config is not None:
                     model_config_json = model.config.to_json_string()
                     self.tb_writer.add_text("model_config", model_config_json)
-            self.tb_writer.add_hparams(args.to_sanitized_dict(), metric_dict={})
+            # Version of TensorBoard coming from tensorboardX does not have this method.
+            if hasattr(self.tb_writer, "add_hparams"):
+                self.tb_writer.add_hparams(args.to_sanitized_dict(), metric_dict={})
 
     def on_log(self, args, state, control, logs=None, **kwargs):
         if state.is_world_process_zero:
@@ -420,6 +437,27 @@ class CometCallback(TrainerCallback):
                 experiment._log_metrics(logs, step=state.global_step, epoch=state.epoch, framework="transformers")
 
 
+class AzureMLCallback(TrainerCallback):
+    """
+    A :class:`~transformers.TrainerCallback` that sends the logs to `AzureML
+    <https://pypi.org/project/azureml-sdk/>`__.
+    """
+
+    def __init__(self, azureml_run=None):
+        assert _has_azureml, "AzureMLCallback requires azureml to be installed. Run `pip install azureml-sdk`."
+        self.azureml_run = azureml_run
+
+    def on_init_end(self, args, state, control, **kwargs):
+        if self.azureml_run is None and state.is_world_process_zero:
+            self.azureml_run = Run.get_context()
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if self.azureml_run:
+            for k, v in logs.items():
+                if isinstance(v, (int, float)):
+                    self.azureml_run.log(k, v, description=k)
+
+
 class MLflowCallback(TrainerCallback):
     """
     A :class:`~transformers.TrainerCallback` that sends the logs to `MLflow <https://www.mlflow.org/>`__.
@@ -428,7 +466,7 @@ class MLflowCallback(TrainerCallback):
     MAX_LOG_SIZE = 100
 
     def __init__(self):
-        assert _has_mlflow, "MLflow requires mlflow to be installed. Run `pip install mlflow`."
+        assert _has_mlflow, "MLflowCallback requires mlflow to be installed. Run `pip install mlflow`."
         self._initialized = False
         self._log_artifacts = False
 

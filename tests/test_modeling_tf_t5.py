@@ -12,8 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
 import unittest
 
 from transformers import T5Config, is_tf_available
@@ -281,6 +279,14 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         model = TFT5Model.from_pretrained("t5-small")
         self.assertIsNotNone(model)
+
+    @slow
+    def test_saved_model_with_attentions_output(self):
+        pass
+
+    @slow
+    def test_saved_model_with_hidden_states_output(self):
+        pass
 
 
 @require_tf
