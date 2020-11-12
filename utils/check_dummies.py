@@ -166,7 +166,7 @@ DUMMY_FUNCTION = {
 
 def read_init():
     """ Read the init and extracts PyTorch, TensorFlow, SentencePiece and Tokenizers objects. """
-    with open(os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"), "r", encoding="utf-8") as f:
+    with open(os.path.join(PATH_TO_TRANSFORMERS, "__init__.py"), "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
 
     line_index = 0
@@ -321,21 +321,21 @@ def check_dummies(overwrite=False):
     tf_file = os.path.join(path, "dummy_tf_objects.py")
     flax_file = os.path.join(path, "dummy_flax_objects.py")
 
-    with open(sentencepiece_file, "r", encoding="utf-8") as f:
+    with open(sentencepiece_file, "r", encoding="utf-8", newline="\n") as f:
         actual_sentencepiece_dummies = f.read()
-    with open(tokenizers_file, "r", encoding="utf-8") as f:
+    with open(tokenizers_file, "r", encoding="utf-8", newline="\n") as f:
         actual_tokenizers_dummies = f.read()
-    with open(pt_file, "r", encoding="utf-8") as f:
+    with open(pt_file, "r", encoding="utf-8", newline="\n") as f:
         actual_pt_dummies = f.read()
-    with open(tf_file, "r", encoding="utf-8") as f:
+    with open(tf_file, "r", encoding="utf-8", newline="\n") as f:
         actual_tf_dummies = f.read()
-    with open(flax_file, "r", encoding="utf-8") as f:
+    with open(flax_file, "r", encoding="utf-8", newline="\n") as f:
         actual_flax_dummies = f.read()
 
     if sentencepiece_dummies != actual_sentencepiece_dummies:
         if overwrite:
             print("Updating transformers.utils.dummy_sentencepiece_objects.py as the main __init__ has new objects.")
-            with open(sentencepiece_file, "w", encoding="utf-8") as f:
+            with open(sentencepiece_file, "w", encoding="utf-8", newline="\n") as f:
                 f.write(sentencepiece_dummies)
         else:
             raise ValueError(
@@ -346,7 +346,7 @@ def check_dummies(overwrite=False):
     if tokenizers_dummies != actual_tokenizers_dummies:
         if overwrite:
             print("Updating transformers.utils.dummy_tokenizers_objects.py as the main __init__ has new objects.")
-            with open(tokenizers_file, "w", encoding="utf-8") as f:
+            with open(tokenizers_file, "w", encoding="utf-8", newline="\n") as f:
                 f.write(tokenizers_dummies)
         else:
             raise ValueError(
@@ -357,7 +357,7 @@ def check_dummies(overwrite=False):
     if pt_dummies != actual_pt_dummies:
         if overwrite:
             print("Updating transformers.utils.dummy_pt_objects.py as the main __init__ has new objects.")
-            with open(pt_file, "w", encoding="utf-8") as f:
+            with open(pt_file, "w", encoding="utf-8", newline="\n") as f:
                 f.write(pt_dummies)
         else:
             raise ValueError(
@@ -368,7 +368,7 @@ def check_dummies(overwrite=False):
     if tf_dummies != actual_tf_dummies:
         if overwrite:
             print("Updating transformers.utils.dummy_tf_objects.py as the main __init__ has new objects.")
-            with open(tf_file, "w", encoding="utf-8") as f:
+            with open(tf_file, "w", encoding="utf-8", newline="\n") as f:
                 f.write(tf_dummies)
         else:
             raise ValueError(
@@ -379,7 +379,7 @@ def check_dummies(overwrite=False):
     if flax_dummies != actual_flax_dummies:
         if overwrite:
             print("Updating transformers.utils.dummy_flax_objects.py as the main __init__ has new objects.")
-            with open(flax_file, "w", encoding="utf-8") as f:
+            with open(flax_file, "w", encoding="utf-8", newline="\n") as f:
                 f.write(flax_dummies)
         else:
             raise ValueError(
