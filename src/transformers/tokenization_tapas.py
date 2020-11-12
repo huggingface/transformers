@@ -327,8 +327,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         return (vocab_file,)
 
     def create_attention_mask_from_sequences(self, query_ids: List[int], table_values: List[TableValue]) -> List[int]:
-        table_ids = list(zip(*table_values))[0] if table_values else []
-        return [1] * (1 + len(query_ids) + 1) + [0] * len(table_ids)
+        return [1] * (1 + len(query_ids) + 1 + len(table_values))
 
     def create_segment_token_type_ids_from_sequences(
         self, query_ids: List[int], table_values: List[TableValue]
@@ -348,20 +347,12 @@ class TapasTokenizer(PreTrainedTokenizer):
         table_row_ids = list(zip(*table_values))[2] if table_values else []
         return [0] * (1 + len(query_ids) + 1) + list(table_row_ids)
 
-    def create_label_ids_from_sequences_and_answers(
-        self, query_ids: List[int], table_values: List[TableValue]
-    ) -> List[int]:
-        table_row_ids = list(zip(*table_values))[2] if table_values else []
-        return [0] * (1 + len(query_ids) + 1) + list(table_row_ids)
-
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens.
-
-        This implementation does not add special tokens and this method should be overridden in a subclass.
 
         Args:
             token_ids_0 (:obj:`List[int]`): The first tokenized sequence.
@@ -411,6 +402,9 @@ class TapasTokenizer(PreTrainedTokenizer):
         table: pd.DataFrame,
         queries: Optional[
             Union[
+                TextInput,
+                PreTokenizedInput,
+                EncodedInput,
                 List[TextInput],
                 List[PreTokenizedInput],
                 List[EncodedInput],
@@ -502,7 +496,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             return self.encode_plus(
                 table=table,
                 query=queries,
-                answer_coordinate=answer_coordinates,
+                answer_coordinates=answer_coordinates,
                 answer_text=answer_texts,
                 add_special_tokens=add_special_tokens,
                 padding=padding,
@@ -569,7 +563,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             )
 
         if (answer_coordinates and not answer_texts) or (not answer_coordinates and answer_texts):
-            raise ValueError("In case you provide answers, both answer_coordinate and answer_text should be provided")
+            raise ValueError("In case you provide answers, both answer_coordinates and answer_text should be provided")
         elif answer_coordinates is None and answer_texts is None:
             answer_coordinates = answer_texts = [None] * len(queries)
 
@@ -695,9 +689,9 @@ class TapasTokenizer(PreTrainedTokenizer):
         queries_ids: List[List[int]],
         raw_table: pd.DataFrame,
         raw_queries: Union[
-            TextInput,
-            PreTokenizedInput,
-            EncodedInput,
+            List[TextInput],
+            List[PreTokenizedInput],
+            List[EncodedInput],
         ],
         answer_coordinates: Optional[List[Tuple]] = None,
         answer_texts: Optional[List[TextInput]] = None,
@@ -741,7 +735,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             table_data = None
             queries_tokens = [None] * len(queries_ids)
 
-        for query_ids, raw_query, query_tokens, answer_coordinate, answer_text in zip(
+        for query_ids, raw_query, query_tokens, answer_coords, answer_text in zip(
             queries_ids, raw_queries, queries_tokens, answer_coordinates, answer_texts
         ):
             outputs = self.prepare_for_model(
@@ -751,7 +745,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 raw_query,
                 table_data=table_data,
                 query_tokens=query_tokens,
-                answer_coordinate=answer_coordinate,
+                answer_coordinates=answer_coords,
                 answer_text=answer_text,
                 add_special_tokens=add_special_tokens,
                 padding=PaddingStrategy.DO_NOT_PAD.value,  # we pad in batch afterward
@@ -828,7 +822,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 EncodedInput,
             ]
         ] = None,
-        answer_coordinate: Optional[List[Tuple]] = None,
+        answer_coordinates: Optional[List[Tuple]] = None,
         answer_text: Optional[List[TextInput]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
@@ -863,8 +857,8 @@ class TapasTokenizer(PreTrainedTokenizer):
                 "set return_token_type_ids to None."
             )
 
-        if (answer_coordinate and not answer_text) or (not answer_coordinate and answer_text):
-            raise ValueError("In case you provide answers, both answer_coordinate and answer_text should be provided")
+        if (answer_coordinates and not answer_text) or (not answer_coordinates and answer_text):
+            raise ValueError("In case you provide answers, both answer_coordinates and answer_text should be provided")
 
         if "is_split_into_words" in kwargs:
             raise NotImplementedError("Currently TapasTokenizer only supports questions as strings.")
@@ -914,7 +908,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             PreTokenizedInput,
             EncodedInput,
         ],
-        answer_coordinate: Optional[List[Tuple]] = None,
+        answer_coordinates: Optional[List[Tuple]] = None,
         answer_text: Optional[List[TextInput]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
@@ -961,7 +955,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             query,
             table_data=table_data,
             query_tokens=query_tokens,
-            answer_coordinate=answer_coordinate,
+            answer_coordinates=answer_coordinates,
             answer_text=answer_text,
             add_special_tokens=add_special_tokens,
             padding=padding_strategy.value,
@@ -989,7 +983,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             PreTokenizedInput,
             EncodedInput,
         ],
-        answer_coordinate: Optional[List[Tuple]] = None,
+        answer_coordinates: Optional[List[Tuple]] = None,
         answer_text: Optional[List[TextInput]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
@@ -1089,9 +1083,9 @@ class TapasTokenizer(PreTrainedTokenizer):
             attention_mask = self.create_attention_mask_from_sequences(query_ids, table_data)
             encoded_inputs["attention_mask"] = attention_mask
 
-        if answer_coordinate is not None and answer_text is not None:
+        if answer_coordinates is not None and answer_text is not None:
             label_ids = self.get_answer_ids(
-                column_ids, row_ids, table_data, query_tokens, answer_text, answer_coordinate
+                column_ids, row_ids, table_data, query_tokens, answer_text, answer_coordinates
             )
             numeric_values = self._get_numeric_values(raw_table, column_ids, row_ids, columns_to_numeric_values)
             numeric_values_scale = self._get_numeric_values_scale(raw_table, column_ids, row_ids)
@@ -1355,7 +1349,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 yield index
 
     def _get_numeric_column_ranks(self, column_ids, row_ids, table):
-        """Adds column ranks for all numeric columns."""
+        """Returns column ranks for all numeric columns."""
 
         ranks = [0] * len(column_ids)
         inv_ranks = [0] * len(column_ids)
@@ -1416,7 +1410,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
     def _get_numeric_relations(self, question, column_ids, row_ids, table, columns_to_numeric_values):
         """
-        Return numeric relations embeddings
+        Returns numeric relations embeddings
 
         Args:
             question: The question, numeric values are used.
