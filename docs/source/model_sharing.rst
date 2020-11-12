@@ -264,4 +264,3 @@ Once you've saved your model inside, you can add it and push it with usual git c
     git add .
     git commit -m "Initial commit"
     git push https://username:password@huggingface.co/username/your-model-name
-    
