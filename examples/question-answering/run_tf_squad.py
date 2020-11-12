@@ -33,6 +33,12 @@ from transformers import (
     squad_convert_examples_to_features,
 )
 from transformers.data.processors.squad import SquadV1Processor, SquadV2Processor
+from transformers.utils import logging as hf_logging
+
+
+hf_logging.set_verbosity_info()
+hf_logging.enable_default_handler()
+hf_logging.enable_explicit_format()
 
 
 logger = logging.getLogger(__name__)
