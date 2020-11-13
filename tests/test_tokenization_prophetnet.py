@@ -199,11 +199,7 @@ class ProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "Another summary.",
         ]
         expected_src_tokens = [1037, 2146, 20423, 2005, 7680, 7849, 3989, 1012, 102]
-        batch = tokenizer.prepare_seq2seq_batch(
-            src_text,
-            tgt_texts=tgt_text,
-            return_tensors='pt',
-        )
+        batch = tokenizer.prepare_seq2seq_batch(src_text, tgt_texts=tgt_text, return_tensors="pt",)
         self.assertIsInstance(batch, BatchEncoding)
         result = list(batch.input_ids.numpy()[0])
         self.assertListEqual(expected_src_tokens, result)
