@@ -569,7 +569,7 @@ def main(args, model=None) -> GenerativeQAModule:
         logging_callback=Seq2SeqLoggingCallback(),
         checkpoint_callback=get_checkpoint_callback(args.output_dir, model.val_metric),
         early_stopping_callback=es_callback,
-        #accelerator=Accel(),
+        accelerator=Accel(),
         logger=logger,
     )
     pickle_save(model.hparams, model.output_dir / "hparams.pkl")

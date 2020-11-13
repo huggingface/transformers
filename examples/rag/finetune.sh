@@ -9,7 +9,7 @@ python finetune.py \
     --output_dir outputs \
     --model_name_or_path ./rag-seq-base \
     --model_type rag_sequence \
-    --gpus 4 \
+    --gpus 3 \
     --do_train \
     --do_predict \
     --fp16 \
@@ -34,4 +34,4 @@ python finetune.py \
     --warmup_steps 500 \
     --gradient_accumulation_steps 1 \
     --distributed_retriever ray \
-    --num_retrieval_workers 2
+    --num_retrieval_workers 4
