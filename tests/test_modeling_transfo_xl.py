@@ -56,6 +56,8 @@ class TransfoXLModelTester:
         self.scope = None
         self.seed = 1
         self.eos_token_id = 0
+        # This attribute is only here to be able to run the loss_computation test
+        self.max_position_embeddings = 512
 
     def prepare_config_and_inputs(self):
         input_ids_1 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
