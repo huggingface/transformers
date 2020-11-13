@@ -1,0 +1,169 @@
+// Copyright 2019 The Google AI Language Team Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+syntax = "proto2";
+
+package language.tapas;
+
+// An interaction represents a sequences of question answerable from a single
+// table.
+
+message Interaction {
+  optional string id = 1;
+  optional Table table = 2;
+  repeated Question questions = 3;
+
+
+  extensions 10000 to max;
+}
+
+
+message Question {
+  optional string id = 1;
+  // The question string after normalization.
+  optional string text = 2;
+  // The original raw question string.
+  optional string original_text = 3;
+  // Numeric value spans in 'text'.
+  optional NumericValueSpans annotations = 4;
+  optional Answer answer = 5;
+  repeated Answer alternative_answers = 6;
+
+
+  extensions 10000 to max;
+}
+
+
+message AnswerCoordinate {
+  optional int32 row_index = 1;
+  optional int32 column_index = 2;
+}
+
+
+message Answer {
+  // Coordinates of cells that contain the answers.
+  repeated AnswerCoordinate answer_coordinates = 1;
+
+
+  // A function that is applied to the answer cells in order to obtain
+  // the final answer.
+  enum AggregationFunction {
+    NONE = 0;
+    // Sums all cell values. Numeric cells only.
+    SUM = 1;
+    // Averages all cell values. Numeric cells only.
+    AVERAGE = 2;
+    // Counts the number of answers.
+    COUNT = 3;
+  }
+  optional AggregationFunction aggregation_function = 2;
+
+
+  // Answers in text format.
+  repeated string answer_texts = 3;
+
+
+  // Present if the answer can be represented as a single float value, for
+  // example produced by an aggregation ('the average population of all
+  // countries').
+  optional float float_value = 4;
+
+
+  // If true, this answer can be used to construct training/test examples. If
+  // false some error were triggered during parsing of this answer.
+  optional bool is_valid = 5 [default = true];
+
+
+  // Present if the answer can be represented as a single integer value, for
+  // example when it's a classification or entailment task.
+  optional int32 class_index = 6;
+}
+
+
+// Represents a simple table with m rows and n columns.
+message Table {
+  // The names of the n columns.
+  repeated Cell columns = 1;
+
+
+  // m rows containing n cells each.
+  repeated Cells rows = 2;
+
+
+  // Some unique identifier of this table.
+  optional string table_id = 3;
+
+
+  // The title of the document the table appears in.
+  optional string document_title = 4;
+
+
+  // Title or caption of the table.
+  optional string caption = 5;
+
+
+  // The URL the table was found on.
+  optional string document_url = 6;
+
+
+  // Other versions of the same document that the table occurs on.
+  repeated string alternative_document_urls = 7;
+
+
+  // Other versions of the same table.
+  repeated string alternative_table_ids = 8;
+
+
+  extensions 10000 to max;
+}
+
+
+message Cell {
+  optional string text = 1;
+  optional NumericValue numeric_value = 2;
+
+
+  extensions 10000 to max;
+}
+
+
+message Cells {
+  repeated Cell cells = 1;
+}
+
+
+message Date {
+  optional int32 year = 1;
+  optional int32 month = 2;
+  optional int32 day = 3;
+}
+
+
+message NumericValue {
+  oneof value {
+    float float_value = 1;
+    Date date = 2;
+  }
+}
+
+
+message NumericValueSpan {
+  optional int32 begin_index = 1;
+  optional int32 end_index = 2;
+  repeated NumericValue values = 3;
+}
+
+
+message NumericValueSpans {
+  repeated NumericValueSpan spans = 1;
+}

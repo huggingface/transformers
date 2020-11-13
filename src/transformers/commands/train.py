@@ -1,11 +1,10 @@
 import os
 from argparse import ArgumentParser, Namespace
+from logging import getLogger
 
 from transformers import SingleSentenceClassificationProcessor as Processor
 from transformers import TextClassificationPipeline, is_tf_available, is_torch_available
 from transformers.commands import BaseTransformersCLICommand
-
-from ..utils import logging
 
 
 if not is_tf_available() and not is_torch_available():
@@ -19,8 +18,7 @@ USE_AMP = False
 def train_command_factory(args: Namespace):
     """
     Factory function used to instantiate training command from provided command line arguments.
-
-    Returns: TrainCommand
+    :return: TrainCommand
     """
     return TrainCommand(args)
 
@@ -30,9 +28,8 @@ class TrainCommand(BaseTransformersCLICommand):
     def register_subcommand(parser: ArgumentParser):
         """
         Register this command to argparse so it's available for the transformer-cli
-
-        Args:
-            parser: Root parser to register command-specific arguments
+        :param parser: Root parser to register command-specific arguments
+        :return:
         """
         train_parser = parser.add_parser("train", help="CLI tool to train a model on a task.")
 
@@ -79,7 +76,7 @@ class TrainCommand(BaseTransformersCLICommand):
         train_parser.set_defaults(func=train_command_factory)
 
     def __init__(self, args: Namespace):
-        self.logger = logging.get_logger("transformers-cli/training")
+        self.logger = getLogger("transformers-cli/training")
 
         self.framework = "tf" if is_tf_available() else "torch"
 

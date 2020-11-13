@@ -1,8 +1,7 @@
 import argparse
 import json
 import os
-import socket
-import time
+import shutil
 import warnings
 from pathlib import Path
 from typing import Dict, List, Union
@@ -14,12 +13,6 @@ from tqdm import tqdm
 
 from transformers import MarianConfig, MarianMTModel, MarianTokenizer
 from transformers.hf_api import HfApi
-
-
-def remove_suffix(text: str, suffix: str):
-    if text.endswith(suffix):
-        return text[: -len(suffix)]
-    return text  # or whatever
 
 
 def remove_prefix(text: str, prefix: str):
@@ -103,11 +96,7 @@ def find_model_file(dest_dir):  # this one better
 
 
 # Group Names Logic: change long opus model names to something shorter, like opus-mt-en-ROMANCE
-ROM_GROUP = (
-    "fr+fr_BE+fr_CA+fr_FR+wa+frp+oc+ca+rm+lld+fur+lij+lmo+es+es_AR+es_CL+es_CO+es_CR+es_DO+es_EC+es_ES+es_GT"
-    "+es_HN+es_MX+es_NI+es_PA+es_PE+es_PR+es_SV+es_UY+es_VE+pt+pt_br+pt_BR+pt_PT+gl+lad+an+mwl+it+it_IT+co"
-    "+nap+scn+vec+sc+ro+la"
-)
+ROM_GROUP = "fr+fr_BE+fr_CA+fr_FR+wa+frp+oc+ca+rm+lld+fur+lij+lmo+es+es_AR+es_CL+es_CO+es_CR+es_DO+es_EC+es_ES+es_GT+es_HN+es_MX+es_NI+es_PA+es_PE+es_PR+es_SV+es_UY+es_VE+pt+pt_br+pt_BR+pt_PT+gl+lad+an+mwl+it+it_IT+co+nap+scn+vec+sc+ro+la"
 GROUPS = [
     ("cmn+cn+yue+ze_zh+zh_cn+zh_CN+zh_HK+zh_tw+zh_TW+zh_yue+zhs+zht+zh", "ZH"),
     (ROM_GROUP, "ROMANCE"),
@@ -145,16 +134,13 @@ ORG_NAME = "Helsinki-NLP/"
 
 
 def convert_opus_name_to_hf_name(x):
-    """For OPUS-MT-Train/ DEPRECATED"""
     for substr, grp_name in GROUPS:
         x = x.replace(substr, grp_name)
     return x.replace("+", "_")
 
 
 def convert_hf_name_to_opus_name(hf_model_name):
-    """
-    Relies on the assumption that there are no language codes like pt_br in models that are not in GROUP_TO_OPUS_NAME.
-    """
+    """Relies on the assumption that there are no language codes like pt_br in models that are not in GROUP_TO_OPUS_NAME."""
     hf_model_name = remove_prefix(hf_model_name, ORG_NAME)
     if hf_model_name in GROUP_TO_OPUS_NAME:
         opus_w_prefix = GROUP_TO_OPUS_NAME[hf_model_name]
@@ -163,98 +149,41 @@ def convert_hf_name_to_opus_name(hf_model_name):
     return remove_prefix(opus_w_prefix, "opus-mt-")
 
 
-def get_system_metadata(repo_root):
-    import git
-
-    return dict(
-        helsinki_git_sha=git.Repo(path=repo_root, search_parent_directories=True).head.object.hexsha,
-        transformers_git_sha=git.Repo(path=".", search_parent_directories=True).head.object.hexsha,
-        port_machine=socket.gethostname(),
-        port_time=time.strftime("%Y-%m-%d-%H:%M"),
-    )
-
-
-# docstyle-ignore
-FRONT_MATTER_TEMPLATE = """---
-language:
-{}
-tags:
-- translation
-
-license: apache-2.0
----
-"""
-DEFAULT_REPO = "Tatoeba-Challenge"
-DEFAULT_MODEL_DIR = os.path.join(DEFAULT_REPO, "models")
-
-
 def write_model_card(
     hf_model_name: str,
-    repo_root=DEFAULT_REPO,
-    save_dir=Path("marian_converted"),
+    repo_path="OPUS-MT-train/models/",
     dry_run=False,
-    extra_metadata={},
+    model_card_dir=Path("marian_converted/model_cards/Helsinki-NLP/"),
 ) -> str:
+    """Copy the most recent model's readme section from opus, and add metadata.
+    upload command: s3cmd sync --recursive model_card_dir s3://models.huggingface.co/bert/Helsinki-NLP/
     """
-    Copy the most recent model's readme section from opus, and add metadata. upload command: aws s3 sync model_card_dir
-    s3://models.huggingface.co/bert/Helsinki-NLP/ --dryrun
-    """
-    import pandas as pd
-
     hf_model_name = remove_prefix(hf_model_name, ORG_NAME)
     opus_name: str = convert_hf_name_to_opus_name(hf_model_name)
-    assert repo_root in ("OPUS-MT-train", "Tatoeba-Challenge")
-    opus_readme_path = Path(repo_root).joinpath("models", opus_name, "README.md")
-    assert opus_readme_path.exists(), f"Readme file {opus_readme_path} not found"
-
     opus_src, opus_tgt = [x.split("+") for x in opus_name.split("-")]
-
-    readme_url = f"https://github.com/Helsinki-NLP/{repo_root}/tree/master/models/{opus_name}/README.md"
-
+    readme_url = OPUS_GITHUB_URL + f"{opus_name}/README.md"
     s, t = ",".join(opus_src), ",".join(opus_tgt)
-    metadata = {
-        "hf_name": hf_model_name,
-        "source_languages": s,
-        "target_languages": t,
-        "opus_readme_url": readme_url,
-        "original_repo": repo_root,
-        "tags": ["translation"],
-    }
-    metadata.update(extra_metadata)
-    metadata.update(get_system_metadata(repo_root))
-
+    extra_markdown = f"### {hf_model_name}\n\n* source languages: {s}\n* target languages: {t}\n*  OPUS readme: [{opus_name}]({readme_url})\n"
     # combine with opus markdown
-
-    extra_markdown = (
-        f"### {hf_model_name}\n\n* source group: {metadata['src_name']} \n* target group: "
-        f"{metadata['tgt_name']} \n*  OPUS readme: [{opus_name}]({readme_url})\n"
-    )
-
+    opus_readme_path = Path(f"{repo_path}{opus_name}/README.md")
+    assert opus_readme_path.exists(), f"Readme file {opus_readme_path} not found"
     content = opus_readme_path.open().read()
     content = content.split("\n# ")[-1]  # Get the lowest level 1 header in the README -- the most recent model.
-    splat = content.split("*")[2:]
-    print(splat[3])
-    content = "*".join(splat)
-    content = (
-        FRONT_MATTER_TEMPLATE.format(metadata["src_alpha2"])
-        + extra_markdown
-        + "\n* "
-        + content.replace("download", "download original weights")
-    )
-
-    items = "\n\n".join([f"- {k}: {v}" for k, v in metadata.items()])
-    sec3 = "\n### System Info: \n" + items
-    content += sec3
+    content = "*".join(content.split("*")[1:])
+    content = extra_markdown + "\n* " + content.replace("download", "download original weights")
     if dry_run:
-        return content, metadata
-    sub_dir = save_dir / f"opus-mt-{hf_model_name}"
+        return content
+    # Save string to model_cards/hf_model_name/readme.md
+    model_card_dir.mkdir(exist_ok=True)
+    sub_dir = model_card_dir / hf_model_name
     sub_dir.mkdir(exist_ok=True)
     dest = sub_dir / "README.md"
     dest.open("w").write(content)
-    pd.Series(metadata).to_json(sub_dir / "metadata.json")
+    return content
 
-    # if dry_run:
-    return content, metadata
+
+def get_clean_model_id_mapping(multiling_model_ids):
+    return {x: convert_opus_name_to_hf_name(x) for x in multiling_model_ids}
 
 
 def make_registry(repo_path="Opus-MT-train/models"):
@@ -264,7 +193,7 @@ def make_registry(repo_path="Opus-MT-train/models"):
             "You must run: git clone git@github.com:Helsinki-NLP/Opus-MT-train.git before calling."
         )
     results = {}
-    for p in Path(repo_path).iterdir():
+    for p in Path(repo_path).ls():
         n_dash = p.name.count("-")
         if n_dash == 0:
             continue
@@ -274,24 +203,20 @@ def make_registry(repo_path="Opus-MT-train/models"):
     return [(k, v["pre-processing"], v["download"], v["download"][:-4] + ".test.txt") for k, v in results.items()]
 
 
-def convert_all_sentencepiece_models(model_list=None, repo_path=None, dest_dir=Path("marian_converted")):
+def convert_all_sentencepiece_models(model_list=None, repo_path=None):
     """Requires 300GB"""
     save_dir = Path("marian_ckpt")
-    dest_dir = Path(dest_dir)
+    dest_dir = Path("marian_converted")
     dest_dir.mkdir(exist_ok=True)
-    save_paths = []
     if model_list is None:
         model_list: list = make_registry(repo_path=repo_path)
     for k, prepro, download, test_set_url in tqdm(model_list):
         if "SentencePiece" not in prepro:  # dont convert BPE models.
             continue
-        if not os.path.exists(save_dir / k):
+        if not os.path.exists(save_dir / k / "pytorch_model.bin"):
             download_and_unzip(download, save_dir / k)
         pair_name = convert_opus_name_to_hf_name(k)
         convert(save_dir / k, dest_dir / f"opus-mt-{pair_name}")
-
-        save_paths.append(dest_dir / f"opus-mt-{pair_name}")
-    return save_paths
 
 
 def lmap(f, x) -> List:
@@ -372,6 +297,15 @@ def add_special_tokens_to_vocab(model_dir: Path) -> None:
     print(f"added {num_added} tokens to vocab")
     save_json(vocab, model_dir / "vocab.json")
     save_tokenizer_config(model_dir)
+
+
+def save_tokenizer(self, save_directory):
+    dest = Path(save_directory)
+    src_path = Path(self.init_kwargs["source_spm"])
+
+    for dest_name in {"source.spm", "target.spm", "tokenizer_config.json"}:
+        shutil.copyfile(src_path.parent / dest_name, dest / dest_name)
+    save_json(self.encoder, dest / "vocab.json")
 
 
 def check_equal(marian_cfg, k1, k2):
@@ -522,9 +456,7 @@ class OpusState:
 
         assert "hidden_size" not in cfg.to_dict()
         load_layers_(
-            model.model.encoder.layers,
-            state_dict,
-            BART_CONVERTER,
+            model.model.encoder.layers, state_dict, BART_CONVERTER,
         )
         load_layers_(model.model.decoder.layers, state_dict, BART_CONVERTER, is_decoder=True)
 
@@ -570,19 +502,31 @@ def convert(source_dir: Path, dest_dir):
 
     add_special_tokens_to_vocab(source_dir)
     tokenizer = MarianTokenizer.from_pretrained(str(source_dir))
-    tokenizer.save_pretrained(dest_dir)
+    save_tokenizer(tokenizer, dest_dir)
 
     opus_state = OpusState(source_dir)
     assert opus_state.cfg["vocab_size"] == len(
         tokenizer.encoder
     ), f"Original vocab size {opus_state.cfg['vocab_size']} and new vocab size {len(tokenizer.encoder)} mismatched"
     # save_json(opus_state.cfg, dest_dir / "marian_original_config.json")
-    # ^^ Uncomment to save human readable marian config for debugging
+    # ^^ Save human readable marian config for debugging
 
     model = opus_state.load_marian_model()
-    model = model.half()
     model.save_pretrained(dest_dir)
     model.from_pretrained(dest_dir)  # sanity check
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    # Required parameters
+    parser.add_argument("--src", type=str, help="path to marian model dir", default="en-de")
+    parser.add_argument("--dest", type=str, default=None, help="Path to the output PyTorch model.")
+    args = parser.parse_args()
+
+    source_dir = Path(args.src)
+    assert source_dir.exists(), f"Source directory {source_dir} not found"
+    dest_dir = f"converted-{source_dir.name}" if args.dest is None else args.dest
+    convert(source_dir, dest_dir)
 
 
 def load_yaml(path):
@@ -600,19 +544,3 @@ def save_json(content: Union[Dict, List], path: str) -> None:
 def unzip(zip_path: str, dest_dir: str) -> None:
     with ZipFile(zip_path, "r") as zipObj:
         zipObj.extractall(dest_dir)
-
-
-if __name__ == "__main__":
-    """
-    Tatoeba conversion instructions in scripts/tatoeba/README.md
-    """
-    parser = argparse.ArgumentParser()
-    # Required parameters
-    parser.add_argument("--src", type=str, help="path to marian model sub dir", default="en-de")
-    parser.add_argument("--dest", type=str, default=None, help="Path to the output PyTorch model.")
-    args = parser.parse_args()
-
-    source_dir = Path(args.src)
-    assert source_dir.exists(), f"Source directory {source_dir} not found"
-    dest_dir = f"converted-{source_dir.name}" if args.dest is None else args.dest
-    convert(source_dir, dest_dir)

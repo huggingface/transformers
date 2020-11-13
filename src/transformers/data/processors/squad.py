@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from functools import partial
 from multiprocessing import Pool, cpu_count
@@ -8,8 +9,7 @@ from tqdm import tqdm
 
 from ...file_utils import is_tf_available, is_torch_available
 from ...tokenization_bert import whitespace_tokenize
-from ...tokenization_utils_base import PreTrainedTokenizerBase, TruncationStrategy
-from ...utils import logging
+from ...tokenization_utils_base import TruncationStrategy
 from .utils import DataProcessor
 
 
@@ -24,7 +24,7 @@ if is_torch_available():
 if is_tf_available():
     import tensorflow as tf
 
-logger = logging.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def _improve_answer_span(doc_tokens, input_start, input_end, tokenizer, orig_answer_text):
@@ -109,17 +109,7 @@ def squad_convert_example_to_features(
     all_doc_tokens = []
     for (i, token) in enumerate(example.doc_tokens):
         orig_to_tok_index.append(len(all_doc_tokens))
-        if tokenizer.__class__.__name__ in [
-            "RobertaTokenizer",
-            "LongformerTokenizer",
-            "BartTokenizer",
-            "RobertaTokenizerFast",
-            "LongformerTokenizerFast",
-            "BartTokenizerFast",
-        ]:
-            sub_tokens = tokenizer.tokenize(token, add_prefix_space=True)
-        else:
-            sub_tokens = tokenizer.tokenize(token)
+        sub_tokens = tokenizer.tokenize(token)
         for sub_token in sub_tokens:
             tok_to_orig_index.append(i)
             all_doc_tokens.append(sub_token)
@@ -296,7 +286,7 @@ def squad_convert_example_to_features(
     return features
 
 
-def squad_convert_example_to_features_init(tokenizer_for_convert: PreTrainedTokenizerBase):
+def squad_convert_example_to_features_init(tokenizer_for_convert):
     global tokenizer
     tokenizer = tokenizer_for_convert
 
@@ -314,8 +304,8 @@ def squad_convert_examples_to_features(
     tqdm_enabled=True,
 ):
     """
-    Converts a list of examples into a list of features that can be directly given as input to a model. It is
-    model-dependant and takes advantage of many of the tokenizer's features to create the model's inputs.
+    Converts a list of examples into a list of features that can be directly given as input to a model.
+    It is model-dependant and takes advantage of many of the tokenizer's features to create the model's inputs.
 
     Args:
         examples: list of :class:`~transformers.data.processors.squad.SquadExample`
@@ -326,8 +316,9 @@ def squad_convert_examples_to_features(
         is_training: whether to create features for model evaluation or model training.
         padding_strategy: Default to "max_length". Which padding strategy to use
         return_dataset: Default False. Either 'pt' or 'tf'.
-            if 'pt': returns a torch.data.TensorDataset, if 'tf': returns a tf.data.Dataset
-        threads: multiple processing threads.
+            if 'pt': returns a torch.data.TensorDataset,
+            if 'tf': returns a tf.data.Dataset
+        threads: multiple processing threadsa-smi
 
 
     Returns:
@@ -347,9 +338,9 @@ def squad_convert_examples_to_features(
             is_training=not evaluate,
         )
     """
+
     # Defining helper methods
     features = []
-
     threads = min(threads, cpu_count())
     with Pool(threads, initializer=squad_convert_example_to_features_init, initargs=(tokenizer,)) as p:
         annotate_ = partial(
@@ -368,7 +359,6 @@ def squad_convert_examples_to_features(
                 disable=not tqdm_enabled,
             )
         )
-
     new_features = []
     unique_id = 1000000000
     example_index = 0
@@ -527,8 +517,8 @@ def squad_convert_examples_to_features(
 
 class SquadProcessor(DataProcessor):
     """
-    Processor for the SQuAD data set. overridden by SquadV1Processor and SquadV2Processor, used by the version 1.1 and
-    version 2.0 of SQuAD, respectively.
+    Processor for the SQuAD data set.
+    Overriden by SquadV1Processor and SquadV2Processor, used by the version 1.1 and version 2.0 of SQuAD, respectively.
     """
 
     train_file = None
@@ -564,7 +554,7 @@ class SquadProcessor(DataProcessor):
 
         Args:
             dataset: The tfds dataset loaded from `tensorflow_datasets.load("squad")`
-            evaluate: Boolean specifying if in evaluation mode or in training mode
+            evaluate: boolean specifying if in evaluation mode or in training mode
 
         Returns:
             List of SquadExample
@@ -618,7 +608,7 @@ class SquadProcessor(DataProcessor):
         Args:
             data_dir: Directory containing the data files used for training and evaluating.
             filename: None by default, specify this if the evaluation file has a different name than the original one
-                which is `dev-v1.1.json` and `dev-v2.0.json` for squad versions 1.1 and 2.0 respectively.
+                which is `train-v1.1.json` and `train-v2.0.json` for squad versions 1.1 and 2.0 respectively.
         """
         if data_dir is None:
             data_dir = ""
@@ -744,9 +734,9 @@ class SquadExample:
 
 class SquadFeatures:
     """
-    Single squad example features to be fed to a model. Those features are model-specific and can be crafted from
-    :class:`~transformers.data.processors.squad.SquadExample` using the
-    :method:`~transformers.data.processors.squad.squad_convert_examples_to_features` method.
+    Single squad example features to be fed to a model.
+    Those features are model-specific and can be crafted from :class:`~transformers.data.processors.squad.SquadExample`
+    using the :method:`~transformers.data.processors.squad.squad_convert_examples_to_features` method.
 
     Args:
         input_ids: Indices of input sequence tokens in the vocabulary.

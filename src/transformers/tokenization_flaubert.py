@@ -15,15 +15,15 @@
 """Tokenization classes for Flaubert, based on XLM."""
 
 
+import logging
 import unicodedata
 
 import six
 
 from .tokenization_xlm import XLMTokenizer
-from .utils import logging
 
 
-logger = logging.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
@@ -32,16 +32,16 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "flaubert/flaubert_small_cased": "https://huggingface.co/flaubert/flaubert_small_cased/resolve/main/vocab.json",
-        "flaubert/flaubert_base_uncased": "https://huggingface.co/flaubert/flaubert_base_uncased/resolve/main/vocab.json",
-        "flaubert/flaubert_base_cased": "https://huggingface.co/flaubert/flaubert_base_cased/resolve/main/vocab.json",
-        "flaubert/flaubert_large_cased": "https://huggingface.co/flaubert/flaubert_large_cased/resolve/main/vocab.json",
+        "flaubert/flaubert_small_cased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_small_cased/vocab.json",
+        "flaubert/flaubert_base_uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_base_uncased/vocab.json",
+        "flaubert/flaubert_base_cased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_base_cased/vocab.json",
+        "flaubert/flaubert_large_cased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_large_cased/vocab.json",
     },
     "merges_file": {
-        "flaubert/flaubert_small_cased": "https://huggingface.co/flaubert/flaubert_small_cased/resolve/main/merges.txt",
-        "flaubert/flaubert_base_uncased": "https://huggingface.co/flaubert/flaubert_base_uncased/resolve/main/merges.txt",
-        "flaubert/flaubert_base_cased": "https://huggingface.co/flaubert/flaubert_base_cased/resolve/main/merges.txt",
-        "flaubert/flaubert_large_cased": "https://huggingface.co/flaubert/flaubert_large_cased/resolve/main/merges.txt",
+        "flaubert/flaubert_small_cased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_small_cased/merges.txt",
+        "flaubert/flaubert_base_uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_base_uncased/merges.txt",
+        "flaubert/flaubert_base_cased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_base_cased/merges.txt",
+        "flaubert/flaubert_large_cased": "https://s3.amazonaws.com/models.huggingface.co/bert/flaubert/flaubert_large_cased/merges.txt",
     },
 }
 
@@ -78,13 +78,13 @@ def convert_to_unicode(text):
 
 class FlaubertTokenizer(XLMTokenizer):
     """
-    Construct a Flaubert tokenizer. Based on Byte-Pair Encoding. The tokenization process is the following:
+    BPE tokenizer for Flaubert
 
-    - Moses preprocessing and tokenization.
-    - Normalizing all inputs text.
-    - The arguments ``special_tokens`` and the function ``set_special_tokens``, can be used to add additional symbols
-      (like "__classify__") to a vocabulary.
-    - The argument :obj:`do_lowercase` controls lower casing (automatically set for pretrained vocabularies).
+    - Moses preprocessing & tokenization
+    - Normalize all inputs text
+    - argument ``special_tokens`` and function ``set_special_tokens``, can be used to add additional symbols \
+      (ex: "__classify__") to a vocabulary
+    - `do_lowercase` controle lower casing (automatically set for pretrained vocabularies)
 
     This tokenizer inherits from :class:`~transformers.XLMTokenizer`. Please check the superclass for usage examples
     and documentation regarding arguments.
@@ -115,14 +115,11 @@ class FlaubertTokenizer(XLMTokenizer):
         Tokenize a string given language code using Moses.
 
         Details of tokenization:
-
-            - [sacremoses](https://github.com/alvations/sacremoses): port of Moses
+        - [sacremoses](https://github.com/alvations/sacremoses): port of Moses
             - Install with `pip install sacremoses`
 
         Args:
-
-            - bypass_tokenizer: Allow users to preprocess and tokenize the sentences externally (default = False)
-              (bool). If True, we only apply BPE.
+            - bypass_tokenizer: Allow users to preprocess and tokenize the sentences externally (default = False)  (bool). If True, we only apply BPE.
 
         Returns:
             List of tokens.

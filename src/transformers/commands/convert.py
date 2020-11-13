@@ -1,25 +1,17 @@
 from argparse import ArgumentParser, Namespace
+from logging import getLogger
 
 from transformers.commands import BaseTransformersCLICommand
-
-from ..utils import logging
 
 
 def convert_command_factory(args: Namespace):
     """
     Factory function used to convert a model TF 1.0 checkpoint in a PyTorch checkpoint.
-
-    Returns: ServeCommand
+    :return: ServeCommand
     """
     return ConvertCommand(
         args.model_type, args.tf_checkpoint, args.pytorch_dump_output, args.config, args.finetuning_task_name
     )
-
-
-IMPORT_ERROR_MESSAGE = """
-transformers can only be used from the commandline to convert TensorFlow models in PyTorch, In that case, it requires
-TensorFlow to be installed. Please see https://www.tensorflow.org/install/ for installation instructions.
-"""
 
 
 class ConvertCommand(BaseTransformersCLICommand):
@@ -27,9 +19,8 @@ class ConvertCommand(BaseTransformersCLICommand):
     def register_subcommand(parser: ArgumentParser):
         """
         Register this command to argparse so it's available for the transformer-cli
-
-        Args:
-            parser: Root parser to register command-specific arguments
+        :param parser: Root parser to register command-specific arguments
+        :return:
         """
         train_parser = parser.add_parser(
             "convert",
@@ -41,7 +32,7 @@ class ConvertCommand(BaseTransformersCLICommand):
             "--tf_checkpoint", type=str, required=True, help="TensorFlow checkpoint path or folder."
         )
         train_parser.add_argument(
-            "--pytorch_dump_output", type=str, required=True, help="Path to the PyTorch saved model output."
+            "--pytorch_dump_output", type=str, required=True, help="Path to the PyTorch savd model output."
         )
         train_parser.add_argument("--config", type=str, default="", help="Configuration file path or folder.")
         train_parser.add_argument(
@@ -61,7 +52,7 @@ class ConvertCommand(BaseTransformersCLICommand):
         finetuning_task_name: str,
         *args
     ):
-        self._logger = logging.get_logger("transformers-cli/converting")
+        self._logger = getLogger("transformers-cli/converting")
 
         self._logger.info("Loading model {}".format(model_type))
         self._model_type = model_type
@@ -77,7 +68,12 @@ class ConvertCommand(BaseTransformersCLICommand):
                     convert_tf_checkpoint_to_pytorch,
                 )
             except ImportError:
-                raise ImportError(IMPORT_ERROR_MESSAGE)
+                msg = (
+                    "transformers can only be used from the commandline to convert TensorFlow models in PyTorch, "
+                    "In that case, it requires TensorFlow to be installed. Please see "
+                    "https://www.tensorflow.org/install/ for installation instructions."
+                )
+                raise ImportError(msg)
 
             convert_tf_checkpoint_to_pytorch(self._tf_checkpoint, self._config, self._pytorch_dump_output)
         elif self._model_type == "bert":
@@ -86,16 +82,12 @@ class ConvertCommand(BaseTransformersCLICommand):
                     convert_tf_checkpoint_to_pytorch,
                 )
             except ImportError:
-                raise ImportError(IMPORT_ERROR_MESSAGE)
-
-            convert_tf_checkpoint_to_pytorch(self._tf_checkpoint, self._config, self._pytorch_dump_output)
-        elif self._model_type == "funnel":
-            try:
-                from transformers.convert_funnel_original_tf_checkpoint_to_pytorch import (
-                    convert_tf_checkpoint_to_pytorch,
+                msg = (
+                    "transformers can only be used from the commandline to convert TensorFlow models in PyTorch, "
+                    "In that case, it requires TensorFlow to be installed. Please see "
+                    "https://www.tensorflow.org/install/ for installation instructions."
                 )
-            except ImportError:
-                raise ImportError(IMPORT_ERROR_MESSAGE)
+                raise ImportError(msg)
 
             convert_tf_checkpoint_to_pytorch(self._tf_checkpoint, self._config, self._pytorch_dump_output)
         elif self._model_type == "gpt":
@@ -110,7 +102,12 @@ class ConvertCommand(BaseTransformersCLICommand):
                     convert_transfo_xl_checkpoint_to_pytorch,
                 )
             except ImportError:
-                raise ImportError(IMPORT_ERROR_MESSAGE)
+                msg = (
+                    "transformers can only be used from the commandline to convert TensorFlow models in PyTorch, "
+                    "In that case, it requires TensorFlow to be installed. Please see "
+                    "https://www.tensorflow.org/install/ for installation instructions."
+                )
+                raise ImportError(msg)
 
             if "ckpt" in self._tf_checkpoint.lower():
                 TF_CHECKPOINT = self._tf_checkpoint
@@ -127,7 +124,12 @@ class ConvertCommand(BaseTransformersCLICommand):
                     convert_gpt2_checkpoint_to_pytorch,
                 )
             except ImportError:
-                raise ImportError(IMPORT_ERROR_MESSAGE)
+                msg = (
+                    "transformers can only be used from the commandline to convert TensorFlow models in PyTorch, "
+                    "In that case, it requires TensorFlow to be installed. Please see "
+                    "https://www.tensorflow.org/install/ for installation instructions."
+                )
+                raise ImportError(msg)
 
             convert_gpt2_checkpoint_to_pytorch(self._tf_checkpoint, self._config, self._pytorch_dump_output)
         elif self._model_type == "xlnet":
@@ -136,7 +138,12 @@ class ConvertCommand(BaseTransformersCLICommand):
                     convert_xlnet_checkpoint_to_pytorch,
                 )
             except ImportError:
-                raise ImportError(IMPORT_ERROR_MESSAGE)
+                msg = (
+                    "transformers can only be used from the commandline to convert TensorFlow models in PyTorch, "
+                    "In that case, it requires TensorFlow to be installed. Please see "
+                    "https://www.tensorflow.org/install/ for installation instructions."
+                )
+                raise ImportError(msg)
 
             convert_xlnet_checkpoint_to_pytorch(
                 self._tf_checkpoint, self._config, self._pytorch_dump_output, self._finetuning_task_name
@@ -147,13 +154,5 @@ class ConvertCommand(BaseTransformersCLICommand):
             )
 
             convert_xlm_checkpoint_to_pytorch(self._tf_checkpoint, self._pytorch_dump_output)
-        elif self._model_type == "lxmert":
-            from transformers.convert_lxmert_original_pytorch_checkpoint_to_pytorch import (
-                convert_lxmert_checkpoint_to_pytorch,
-            )
-
-            convert_lxmert_checkpoint_to_pytorch(self._tf_checkpoint, self._pytorch_dump_output)
         else:
-            raise ValueError(
-                "--model_type should be selected in the list [bert, gpt, gpt2, transfo_xl, xlnet, xlm, lxmert]"
-            )
+            raise ValueError("--model_type should be selected in the list [bert, gpt, gpt2, transfo_xl, xlnet, xlm]")

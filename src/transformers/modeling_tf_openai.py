@@ -16,18 +16,19 @@
 """ TF 2.0 OpenAI GPT model."""
 
 
+import logging
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
+import numpy as np
 import tensorflow as tf
 
-from .activations_tf import get_tf_activation
 from .configuration_openai import OpenAIGPTConfig
 from .file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_model_forward,
+    add_start_docstrings_to_callable,
     replace_return_docstrings,
 )
 from .modeling_tf_outputs import TFBaseModelOutput, TFCausalLMOutput
@@ -42,10 +43,9 @@ from .modeling_tf_utils import (
     shape_list,
 )
 from .tokenization_utils import BatchEncoding
-from .utils import logging
 
 
-logger = logging.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 _CONFIG_FOR_DOC = "OpenAIGPTConfig"
 _TOKENIZER_FOR_DOC = "OpenAIGPTTokenizer"
@@ -54,6 +54,30 @@ TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "openai-gpt",
     # See all OpenAI GPT models at https://huggingface.co/models?filter=openai-gpt
 ]
+
+
+def gelu(x):
+    """Gaussian Error Linear Unit.
+    This is a smoother version of the RELU.
+    Original paper: https://arxiv.org/abs/1606.08415
+    Args:
+        x: float Tensor to perform activation.
+    Returns:
+        `x` with the GELU activation applied.
+    """
+    cdf = 0.5 * (1.0 + tf.tanh((np.sqrt(2 / np.pi) * (x + 0.044715 * tf.pow(x, 3)))))
+    return x * cdf
+
+
+def swish(x):
+    return x * tf.math.sigmoid(x)
+
+
+ACT_FNS = {
+    "gelu": tf.keras.layers.Activation(gelu),
+    "relu": tf.keras.activations.relu,
+    "swish": tf.keras.layers.Activation(swish),
+}
 
 
 class TFAttention(tf.keras.layers.Layer):
@@ -82,9 +106,8 @@ class TFAttention(tf.keras.layers.Layer):
 
     @staticmethod
     def causal_attention_mask(nd, ns, dtype):
-        """
-        1's in the lower triangle, counting from the lower right corner. Same as tf.matrix_band_part(tf.ones([nd, ns]),
-        -1, ns-nd), but doesn't produce garbage on TPUs.
+        """1's in the lower triangle, counting from the lower right corner.
+        Same as tf.matrix_band_part(tf.ones([nd, ns]), -1, ns-nd), but doesn't produce garbage on TPUs.
         """
         i = tf.range(nd)[:, None]
         j = tf.range(ns)
@@ -156,7 +179,7 @@ class TFMLP(tf.keras.layers.Layer):
         nx = config.n_embd
         self.c_fc = TFConv1D(n_state, nx, initializer_range=config.initializer_range, name="c_fc")
         self.c_proj = TFConv1D(nx, n_state, initializer_range=config.initializer_range, name="c_proj")
-        self.act = get_tf_activation("gelu")
+        self.act = gelu
         self.dropout = tf.keras.layers.Dropout(config.resid_pdrop)
 
     def call(self, x, training=False):
@@ -220,8 +243,8 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         self.tokens_embed.vocab_size = value.shape[0]
 
     def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        """ Prunes heads of the model.
+            heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
         """
         raise NotImplementedError
 
@@ -350,16 +373,13 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
 
         return TFBaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions,
         )
 
 
 class TFOpenAIGPTPreTrainedModel(TFPreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
+    """ An abstract class to handle weights initialization and
+        a simple interface for downloading and loading pretrained models.
     """
 
     config_class = OpenAIGPTConfig
@@ -372,24 +392,24 @@ class TFOpenAIGPTDoubleHeadsModelOutput(ModelOutput):
     Base class for outputs of models predicting if two sentences are consecutive or not.
 
     Args:
-        logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, num_choices, sequence_length, config.vocab_size)`):
+        lm_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, num_choices, sequence_length, config.vocab_size)`):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         mc_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, num_choices)`):
             Prediction scores of the multiple choice classification head (scores for each choice before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
-            sequence_length)`.
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
     """
 
-    logits: tf.Tensor = None
+    lm_logits: tf.Tensor = None
     mc_logits: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
@@ -397,39 +417,29 @@ class TFOpenAIGPTDoubleHeadsModelOutput(ModelOutput):
 
 OPENAI_GPT_START_DOCSTRING = r"""
 
-    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
-
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
-    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
-    and behavior.
-
     .. note::
-
         TF 2.0 models accepts two formats as inputs:
 
-        - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments.
+            - having all inputs as keyword arguments (like PyTorch models), or
+            - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
-        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+        This second option is useful when using :obj:`tf.keras.Model.fit()` method which currently requires having
+        all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
-        the first positional argument :
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors
+        in the first positional argument :
 
-        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
+        - a single Tensor with input_ids only and nothing else: :obj:`model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
           :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
         - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+          :obj:`model({'input_ids': input_ids, 'token_type_ids': token_type_ids})`
 
 
     Parameters:
         config (:class:`~transformers.OpenAIGPTConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
 OPENAI_GPT_INPUTS_DOCSTRING = r"""
@@ -437,57 +447,51 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.OpenAIGPTTokenizer`. See
-            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
-            details.
+            Indices can be obtained using :class:`transformers.GPT2Tokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.encode` and
+            :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
+        attention_mask (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Mask to avoid performing attention on padding token indices.
+            Mask values selected in ``[0, 1]``:
+            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
-            1]``:
+        token_type_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Segment token indices to indicate first and second portions of the inputs.
+            Indices are selected in ``[0, 1]``: ``0`` corresponds to a `sentence A` token, ``1``
+            corresponds to a `sentence B` token
 
-            - 0 corresponds to a `sentence A` token,
-            - 1 corresponds to a `sentence B` token.
+            `What are token type IDs? <../glossary.html#token-type-ids>`_
+        position_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Indices of positions of each input sequence tokens in the position embeddings.
+            Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
-            `What are token type IDs? <../glossary.html#token-type-ids>`__
-        position_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
-
-            `What are position IDs? <../glossary.html#position-ids>`__
-        head_mask (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        inputs_embeds (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            `What are position IDs? <../glossary.html#position-ids>`_
+        head_mask (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
+            Mask to nullify selected heads of the self-attention modules.
+            Mask values selected in ``[0, 1]``:
+            :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
+        inputs_embeds (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to use the model in training mode (some modules like dropout modules have different
-            behaviors between training and evaluation).
+            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+            than the model's internal embedding lookup matrix.
+        training (:obj:`boolean`, `optional`, defaults to :obj:`False`):
+            Whether to activate dropout modules (if set to :obj:`True`) during training or to de-activate them
+            (if set to :obj:`False`) for evaluation.
+        output_attentions (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the attentions tensors of all attention layers are returned. See ``attentions`` under returned tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the hidden states of all layers are returned. See ``hidden_states`` under returned tensors for more detail.
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`None`):
+            If set to ``True``, the model will return a :class:`~transformers.file_utils.ModelOutput` instead of a
+            plain tuple.
 """
 
 
 @add_start_docstrings(
-    "The bare OpenAI GPT transformer model outputting raw hidden-states without any specific head on top.",
+    "The bare OpenAI GPT transformer model outputing raw hidden-states without any specific head on top.",
     OPENAI_GPT_START_DOCSTRING,
 )
 class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
@@ -495,7 +499,7 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFOpenAIGPTMainLayer(config, name="transformer")
 
-    @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="openai-gpt",
@@ -508,10 +512,8 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
 
 
 @add_start_docstrings(
-    """
-    OpenAI GPT Model transformer with a language modeling head on top (linear layer with weights tied to the input
-    embeddings).
-    """,
+    """OpenAI GPT Model transformer with a language modeling head on top
+    (linear layer with weights tied to the input embeddings). """,
     OPENAI_GPT_START_DOCSTRING,
 )
 class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelingLoss):
@@ -522,7 +524,7 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
     def get_output_embeddings(self):
         return self.transformer.tokens_embed
 
-    @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="openai-gpt",
@@ -544,9 +546,9 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
         training=False,
     ):
         r"""
-        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the cross entropy classification loss. Indices should be in ``[0, ...,
-            config.vocab_size - 1]``.
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the cross entropy classification loss.
+            Indices should be in ``[0, ..., config.vocab_size - 1]``.
         """
         return_dict = return_dict if return_dict is not None else self.transformer.return_dict
         if isinstance(inputs, (tuple, list)):
@@ -592,12 +594,11 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
 
 
 @add_start_docstrings(
-    """
-    OpenAI GPT Model transformer with a language modeling and a multiple-choice classification head on top e.g. for
-    RocStories/SWAG tasks. The two heads are two linear layers. The language modeling head has its weights tied to the
-    input embeddings, the classification head takes as input the input of a specified classification token index in the
-    input sequence).
-    """,
+    """OpenAI GPT Model transformer with a language modeling and a multiple-choice classification
+    head on top e.g. for RocStories/SWAG tasks. The two heads are two linear layers.
+    The language modeling head has its weights tied to the input embeddings,
+    the classification head takes as input the input of a specified classification token index in the input sequence).
+""",
     OPENAI_GPT_START_DOCSTRING,
 )
 class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
@@ -612,7 +613,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
     def get_output_embeddings(self):
         return self.transformer.tokens_embed
 
-    @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_callable(OPENAI_GPT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFOpenAIGPTDoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
@@ -629,31 +630,31 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         training=False,
     ):
         r"""
-        mc_token_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input):
-            Index of the classification token in each input sequence. Selected in the range ``[0, input_ids.size(-1) -
-            1]``.
+        mc_token_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input)
+            Index of the classification token in each input sequence.
+            Selected in the range ``[0, input_ids.size(-1) - 1]``.
 
-        Return:
+    Return:
 
-        Examples::
+    Examples::
 
-            >>> import tensorflow as tf
-            >>> from transformers import OpenAIGPTTokenizer, TFOpenAIGPTDoubleHeadsModel
+        >>> import tensorflow as tf
+        >>> from transformers import OpenAIGPTTokenizer, TFOpenAIGPTDoubleHeadsModel
 
-            >>> tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
-            >>> model = TFOpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt')
+        >>> tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
+        >>> model = TFOpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt')
 
-            >>> # Add a [CLS] to the vocabulary (we should train it also!)
-            >>> tokenizer.add_special_tokens({'cls_token': '[CLS]'})
-            >>> model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
-            >>> print(tokenizer.cls_token_id, len(tokenizer))  # The newly token the last token of the vocabulary
+        >>> # Add a [CLS] to the vocabulary (we should train it also!)
+        >>> tokenizer.add_special_tokens({'cls_token': '[CLS]'})
+        >>> model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
+        >>> print(tokenizer.cls_token_id, len(tokenizer))  # The newly token the last token of the vocabulary
 
-            >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
-            >>> encoding = tokenizer(choices, return_tensors="tf")
-            >>> inputs = {k: tf.expand_dims(v, 0) for k, v in encoding.items()}
-            >>> inputs["mc_token_ids"]= tf.constant([inputs["input_ids"].shape[-1] - 1, inputs["input_ids"].shape[-1] - 1])[None, :]  # Batch size 1
-            >>> outputs = model(inputs)
-            >>> lm_prediction_scores, mc_prediction_scores = outputs[:2]
+        >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
+        >>> encoding = tokenizer(choices, return_tensors="tf")
+        >>> inputs = {k: tf.expand_dims(v, 0) for k, v in encoding.items()}
+        >>> inputs["mc_token_ids"]= tf.constant([inputs["input_ids"].shape[-1] - 1, inputs["input_ids"].shape[-1] - 1])[None, :]  # Batch size 1
+        >>> outputs = model(inputs)
+        >>> lm_prediction_scores, mc_prediction_scores = outputs[:2]
         """
 
         if isinstance(inputs, (tuple, list)):
@@ -716,7 +717,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             return (lm_logits, mc_logits) + transformer_outputs[1:]
 
         return TFOpenAIGPTDoubleHeadsModelOutput(
-            logits=lm_logits,
+            lm_logits=lm_logits,
             mc_logits=mc_logits,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,

@@ -16,6 +16,7 @@
 
 
 import argparse
+import logging
 import os
 
 import torch
@@ -29,7 +30,6 @@ from transformers import (
     XLNetLMHeadModel,
     load_tf_weights_in_xlnet,
 )
-from transformers.utils import logging
 
 
 GLUE_TASKS_NUM_LABELS = {
@@ -45,7 +45,7 @@ GLUE_TASKS_NUM_LABELS = {
 }
 
 
-logging.set_verbosity_info()
+logging.basicConfig(level=logging.INFO)
 
 
 def convert_xlnet_checkpoint_to_pytorch(
@@ -104,7 +104,7 @@ if __name__ == "__main__":
         "--finetuning_task",
         default=None,
         type=str,
-        help="Name of a task on which the XLNet TensorFlow model was fine-tuned",
+        help="Name of a task on which the XLNet TensorFloaw model was fine-tuned",
     )
     args = parser.parse_args()
     print(args)

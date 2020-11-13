@@ -16,22 +16,18 @@
 
 
 import argparse
+import logging
 import os
 
 from transformers import (
     ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    BART_PRETRAINED_MODEL_ARCHIVE_LIST,
     BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-    DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-    DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
     ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -41,21 +37,17 @@ from transformers import (
     XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
     AlbertConfig,
-    BartConfig,
     BertConfig,
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
-    DPRConfig,
     ElectraConfig,
     FlaubertConfig,
     GPT2Config,
-    LxmertConfig,
     OpenAIGPTConfig,
     RobertaConfig,
     T5Config,
     TFAlbertForPreTraining,
-    TFBartForConditionalGeneration,
     TFBertForPreTraining,
     TFBertForQuestionAnswering,
     TFBertForSequenceClassification,
@@ -63,14 +55,9 @@ from transformers import (
     TFCTRLLMHeadModel,
     TFDistilBertForMaskedLM,
     TFDistilBertForQuestionAnswering,
-    TFDPRContextEncoder,
-    TFDPRQuestionEncoder,
-    TFDPRReader,
     TFElectraForPreTraining,
     TFFlaubertWithLMHeadModel,
     TFGPT2LMHeadModel,
-    TFLxmertForPreTraining,
-    TFLxmertVisualFeatureEncoder,
     TFOpenAIGPTLMHeadModel,
     TFRobertaForMaskedLM,
     TFRobertaForSequenceClassification,
@@ -88,57 +75,38 @@ from transformers import (
     load_pytorch_checkpoint_in_tf2_model,
 )
 from transformers.file_utils import hf_bucket_url
-from transformers.utils import logging
 
 
 if is_torch_available():
-    import numpy as np
     import torch
-
+    import numpy as np
     from transformers import (
-        AlbertForPreTraining,
-        BartForConditionalGeneration,
         BertForPreTraining,
         BertForQuestionAnswering,
         BertForSequenceClassification,
-        CamembertForMaskedLM,
-        CTRLLMHeadModel,
-        DistilBertForMaskedLM,
-        DistilBertForQuestionAnswering,
-        DPRContextEncoder,
-        DPRQuestionEncoder,
-        DPRReader,
-        ElectraForPreTraining,
-        FlaubertWithLMHeadModel,
         GPT2LMHeadModel,
-        LxmertForPreTraining,
-        LxmertVisualFeatureEncoder,
+        XLNetLMHeadModel,
+        XLMWithLMHeadModel,
+        XLMRobertaForMaskedLM,
+        TransfoXLLMHeadModel,
         OpenAIGPTLMHeadModel,
         RobertaForMaskedLM,
         RobertaForSequenceClassification,
+        CamembertForMaskedLM,
+        FlaubertWithLMHeadModel,
+        DistilBertForMaskedLM,
+        DistilBertForQuestionAnswering,
+        CTRLLMHeadModel,
+        AlbertForPreTraining,
         T5ForConditionalGeneration,
-        TransfoXLLMHeadModel,
-        XLMRobertaForMaskedLM,
-        XLMWithLMHeadModel,
-        XLNetLMHeadModel,
+        ElectraForPreTraining,
     )
 
 
-logging.set_verbosity_info()
+logging.basicConfig(level=logging.INFO)
 
 MODEL_CLASSES = {
-    "bart": (
-        BartConfig,
-        TFBartForConditionalGeneration,
-        BartForConditionalGeneration,
-        BART_PRETRAINED_MODEL_ARCHIVE_LIST,
-    ),
-    "bert": (
-        BertConfig,
-        TFBertForPreTraining,
-        BertForPreTraining,
-        BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
+    "bert": (BertConfig, TFBertForPreTraining, BertForPreTraining, BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,),
     "bert-large-uncased-whole-word-masking-finetuned-squad": (
         BertConfig,
         TFBertForQuestionAnswering,
@@ -157,36 +125,9 @@ MODEL_CLASSES = {
         BertForSequenceClassification,
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "dpr": (
-        DPRConfig,
-        TFDPRQuestionEncoder,
-        TFDPRContextEncoder,
-        TFDPRReader,
-        DPRQuestionEncoder,
-        DPRContextEncoder,
-        DPRReader,
-        DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-        DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-        DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
-    ),
-    "gpt2": (
-        GPT2Config,
-        TFGPT2LMHeadModel,
-        GPT2LMHeadModel,
-        GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "xlnet": (
-        XLNetConfig,
-        TFXLNetLMHeadModel,
-        XLNetLMHeadModel,
-        XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "xlm": (
-        XLMConfig,
-        TFXLMWithLMHeadModel,
-        XLMWithLMHeadModel,
-        XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
+    "gpt2": (GPT2Config, TFGPT2LMHeadModel, GPT2LMHeadModel, GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "xlnet": (XLNetConfig, TFXLNetLMHeadModel, XLNetLMHeadModel, XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "xlm": (XLMConfig, TFXLMWithLMHeadModel, XLMWithLMHeadModel, XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,),
     "xlm-roberta": (
         XLMRobertaConfig,
         TFXLMRobertaForMaskedLM,
@@ -205,12 +146,7 @@ MODEL_CLASSES = {
         OpenAIGPTLMHeadModel,
         OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "roberta": (
-        RobertaConfig,
-        TFRobertaForMaskedLM,
-        RobertaForMaskedLM,
-        ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
+    "roberta": (RobertaConfig, TFRobertaForMaskedLM, RobertaForMaskedLM, ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,),
     "roberta-large-mnli": (
         RobertaConfig,
         TFRobertaForSequenceClassification,
@@ -241,42 +177,10 @@ MODEL_CLASSES = {
         DistilBertForQuestionAnswering,
         DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-    "lxmert": (
-        LxmertConfig,
-        TFLxmertForPreTraining,
-        LxmertForPreTraining,
-        LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "lxmert-visual-feature-encoder": (
-        LxmertConfig,
-        TFLxmertVisualFeatureEncoder,
-        LxmertVisualFeatureEncoder,
-        LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "ctrl": (
-        CTRLConfig,
-        TFCTRLLMHeadModel,
-        CTRLLMHeadModel,
-        CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "albert": (
-        AlbertConfig,
-        TFAlbertForPreTraining,
-        AlbertForPreTraining,
-        ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "t5": (
-        T5Config,
-        TFT5ForConditionalGeneration,
-        T5ForConditionalGeneration,
-        T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
-    "electra": (
-        ElectraConfig,
-        TFElectraForPreTraining,
-        ElectraForPreTraining,
-        ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    ),
+    "ctrl": (CTRLConfig, TFCTRLLMHeadModel, CTRLLMHeadModel, CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "albert": (AlbertConfig, TFAlbertForPreTraining, AlbertForPreTraining, ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "t5": (T5Config, TFT5ForConditionalGeneration, T5ForConditionalGeneration, T5_PRETRAINED_CONFIG_ARCHIVE_MAP,),
+    "electra": (ElectraConfig, TFElectraForPreTraining, ElectraForPreTraining, ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,),
 }
 
 

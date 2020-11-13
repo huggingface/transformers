@@ -16,16 +16,15 @@
 
 
 import json
+import logging
 import os
-from typing import Optional, Tuple
 
 import regex as re
 
 from .tokenization_utils import PreTrainedTokenizer
-from .utils import logging
 
 
-logger = logging.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
@@ -101,8 +100,7 @@ CONTROL_CODES = {
 
 
 def get_pairs(word):
-    """
-    Return set of symbol pairs in a word.
+    """Return set of symbol pairs in a word.
 
     Word is represented as tuple of symbols (symbols being variable-length strings).
     """
@@ -118,17 +116,19 @@ def get_pairs(word):
 
 class CTRLTokenizer(PreTrainedTokenizer):
     """
-    Construct a CTRL tokenizer. Based on Byte-Pair-Encoding.
+    Constructs a CTRL tokenizer. Peculiarities:
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    - Byte-Pair-Encoding
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
+    should refer to the superclass for more information regarding methods.
 
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
         merges_file (:obj:`str`):
             Path to the merges file.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+        unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
     """
@@ -202,7 +202,8 @@ class CTRLTokenizer(PreTrainedTokenizer):
         return word
 
     def _tokenize(self, text):
-        """Tokenize a string."""
+        """ Tokenize a string.
+        """
         split_tokens = []
 
         words = re.findall(r"\S+\n?", text)
@@ -224,16 +225,22 @@ class CTRLTokenizer(PreTrainedTokenizer):
         out_string = " ".join(tokens).replace("@@ ", "").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory):
+        """
+        Save the vocabulary and special tokens file to a directory.
+
+        Args:
+            save_directory (:obj:`str`):
+                The directory in which to save the vocabulary.
+
+        Returns:
+            :obj:`Tuple(str)`: Paths to the files saved.
+        """
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
-        vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-        merge_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
-        )
+        vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
+        merge_file = os.path.join(save_directory, VOCAB_FILES_NAMES["merges_file"])
 
         with open(vocab_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(self.encoder, ensure_ascii=False))

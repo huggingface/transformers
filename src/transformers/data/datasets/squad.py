@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 from dataclasses import dataclass, field
@@ -5,17 +6,15 @@ from enum import Enum
 from typing import Dict, List, Optional, Union
 
 import torch
-from torch.utils.data.dataset import Dataset
-
 from filelock import FileLock
+from torch.utils.data.dataset import Dataset
 
 from ...modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import logging
 from ..processors.squad import SquadFeatures, SquadV1Processor, SquadV2Processor, squad_convert_examples_to_features
 
 
-logger = logging.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
@@ -86,7 +85,8 @@ class Split(Enum):
 
 class SquadDataset(Dataset):
     """
-    This will be superseded by a framework-agnostic approach soon.
+    This will be superseded by a framework-agnostic approach
+    soon.
     """
 
     args: SquadDataTrainingArguments
@@ -102,7 +102,6 @@ class SquadDataset(Dataset):
         mode: Union[str, Split] = Split.train,
         is_language_sensitive: Optional[bool] = False,
         cache_dir: Optional[str] = None,
-        dataset_format: Optional[str] = "pt",
     ):
         self.args = args
         self.is_language_sensitive = is_language_sensitive
@@ -118,10 +117,7 @@ class SquadDataset(Dataset):
         cached_features_file = os.path.join(
             cache_dir if cache_dir is not None else args.data_dir,
             "cached_{}_{}_{}_{}".format(
-                mode.value,
-                tokenizer.__class__.__name__,
-                str(args.max_seq_length),
-                version_tag,
+                mode.value, tokenizer.__class__.__name__, str(args.max_seq_length), version_tag,
             ),
         )
 
@@ -131,43 +127,28 @@ class SquadDataset(Dataset):
         with FileLock(lock_path):
             if os.path.exists(cached_features_file) and not args.overwrite_cache:
                 start = time.time()
-                self.old_features = torch.load(cached_features_file)
-
-                # Legacy cache files have only features, while new cache files
-                # will have dataset and examples also.
-                self.features = self.old_features["features"]
-                self.dataset = self.old_features.get("dataset", None)
-                self.examples = self.old_features.get("examples", None)
+                self.features = torch.load(cached_features_file)
                 logger.info(
                     f"Loading features from cached file {cached_features_file} [took %.3f s]", time.time() - start
                 )
-
-                if self.dataset is None or self.examples is None:
-                    logger.warn(
-                        f"Deleting cached file {cached_features_file} will allow dataset and examples to be cached in future run"
-                    )
             else:
                 if mode == Split.dev:
-                    self.examples = self.processor.get_dev_examples(args.data_dir)
+                    examples = self.processor.get_dev_examples(args.data_dir)
                 else:
-                    self.examples = self.processor.get_train_examples(args.data_dir)
+                    examples = self.processor.get_train_examples(args.data_dir)
 
-                self.features, self.dataset = squad_convert_examples_to_features(
-                    examples=self.examples,
+                self.features = squad_convert_examples_to_features(
+                    examples=examples,
                     tokenizer=tokenizer,
                     max_seq_length=args.max_seq_length,
                     doc_stride=args.doc_stride,
                     max_query_length=args.max_query_length,
                     is_training=mode == Split.train,
                     threads=args.threads,
-                    return_dataset=dataset_format,
                 )
 
                 start = time.time()
-                torch.save(
-                    {"features": self.features, "dataset": self.dataset, "examples": self.examples},
-                    cached_features_file,
-                )
+                torch.save(self.features, cached_features_file)
                 # ^ This seems to take a lot of time so I want to investigate why and how we can improve.
                 logger.info(
                     "Saving features into cached file %s [took %.3f s]", cached_features_file, time.time() - start

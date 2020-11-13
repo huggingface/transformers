@@ -14,22 +14,24 @@
 # limitations under the License.
 """Tokenization classes for DistilBERT."""
 
-from .tokenization_bert import BertTokenizer
-from .utils import logging
+
+import logging
+
+from .tokenization_bert import BertTokenizer, BertTokenizerFast
 
 
-logger = logging.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "distilbert-base-uncased": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
-        "distilbert-base-uncased-distilled-squad": "https://huggingface.co/bert-large-uncased/resolve/main/vocab.txt",
-        "distilbert-base-cased": "https://huggingface.co/bert-base-cased/resolve/main/vocab.txt",
-        "distilbert-base-cased-distilled-squad": "https://huggingface.co/bert-large-cased/resolve/main/vocab.txt",
-        "distilbert-base-german-cased": "https://huggingface.co/distilbert-base-german-cased/resolve/main/vocab.txt",
-        "distilbert-base-multilingual-cased": "https://huggingface.co/bert-base-multilingual-cased/resolve/main/vocab.txt",
+        "distilbert-base-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
+        "distilbert-base-uncased-distilled-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-uncased-vocab.txt",
+        "distilbert-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-cased-vocab.txt",
+        "distilbert-base-cased-distilled-squad": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-large-cased-vocab.txt",
+        "distilbert-base-german-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/distilbert-base-german-cased-vocab.txt",
+        "distilbert-base-multilingual-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-multilingual-cased-vocab.txt",
     }
 }
 
@@ -55,12 +57,30 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class DistilBertTokenizer(BertTokenizer):
     r"""
-    Construct a DistilBERT tokenizer.
+    Constructs a  DistilBertTokenizer.
 
-    :class:`~transformers.DistilBertTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting and wordpiece.
+    :class:`~transformers.DistilBertTokenizer is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
+    tokenization: punctuation splitting + wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
+    parameters.
+    """
+
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    model_input_names = ["attention_mask"]
+
+
+class DistilBertTokenizerFast(BertTokenizerFast):
+    r"""
+    Constructs a  "Fast" DistilBertTokenizer (backed by HuggingFace's `tokenizers` library).
+
+    :class:`~transformers.DistilBertTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs end-to-end
+    tokenization: punctuation splitting + wordpiece.
+
+    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
     parameters.
     """
 

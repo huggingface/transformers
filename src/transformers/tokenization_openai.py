@@ -16,16 +16,18 @@
 
 
 import json
+import logging
 import os
 import re
-from typing import Optional, Tuple
+
+from tokenizers import CharBPETokenizer
 
 from .tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
-from .utils import logging
+from .tokenization_utils_fast import PreTrainedTokenizerFast
 
 
-logger = logging.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
@@ -33,8 +35,8 @@ VOCAB_FILES_NAMES = {
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"openai-gpt": "https://huggingface.co/openai-gpt/resolve/main/vocab.json"},
-    "merges_file": {"openai-gpt": "https://huggingface.co/openai-gpt/resolve/main/merges.txt"},
+    "vocab_file": {"openai-gpt": "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-vocab.json"},
+    "merges_file": {"openai-gpt": "https://s3.amazonaws.com/models.huggingface.co/bert/openai-gpt-merges.txt"},
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
@@ -44,8 +46,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 def get_pairs(word):
     """
-    Return set of symbol pairs in a word. word is represented as tuple of symbols (symbols being variable-length
-    strings)
+    Return set of symbol pairs in a word.
+    word is represented as tuple of symbols (symbols being variable-length strings)
     """
     pairs = set()
     prev_char = word[0]
@@ -57,7 +59,8 @@ def get_pairs(word):
 
 def text_standardize(text):
     """
-    fixes some issues the spacy tokenizer had on books corpus also does some whitespace standardization
+    fixes some issues the spacy tokenizer had on books corpus
+    also does some whitespace standardization
     """
     text = text.replace("—", "-")
     text = text.replace("–", "-")
@@ -72,21 +75,20 @@ def text_standardize(text):
 
 class OpenAIGPTTokenizer(PreTrainedTokenizer):
     """
-    Construct a GPT Tokenizer. Based on Byte-Pair-Encoding with the following peculiarities:
+    BPE tokenizer. Peculiarities:
 
-    - lowercases all inputs,
-    - uses :obj:`SpaCy` tokenizer and :obj:`ftfy` for pre-BPE tokenization if they are installed, fallback to BERT's
-      :obj:`BasicTokenizer` if not.
+    - lower case all inputs
+    - uses SpaCy tokenizer and ftfy for pre-BPE tokenization if they are installed, fallback to BERT's BasicTokenizer if not.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
+    should refer to the superclass for more information regarding methods.
 
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
         merges_file (:obj:`str`):
             Path to the merges file.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+        unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
     """
@@ -119,10 +121,6 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         merges = [tuple(merge.split()) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
-
-    @property
-    def do_lower_case(self):
-        return True
 
     @property
     def vocab_size(self):
@@ -203,16 +201,22 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).replace("</w>", " ").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory):
+        """
+        Save the vocabulary and special tokens file to a directory.
+
+        Args:
+            save_directory (:obj:`str`):
+                The directory in which to save the vocabulary.
+
+        Returns:
+            :obj:`Tuple(str)`: Paths to the files saved.
+        """
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
-        vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-        merge_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
-        )
+        vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
+        merge_file = os.path.join(save_directory, VOCAB_FILES_NAMES["merges_file"])
 
         with open(vocab_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(self.encoder, ensure_ascii=False))
@@ -231,3 +235,38 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
+
+
+class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
+    """
+    Construct a "Fast" BPE tokenizer for OpenAI GPT (backed by HuggingFace's `tokenizers` library).
+
+    Peculiarities:
+
+    - lower case all inputs
+    - uses SpaCy tokenizer and ftfy for pre-BPE tokenization if they are installed, fallback to BERT's BasicTokenizer if not.
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
+    should refer to the superclass for more information regarding methods.
+
+    Args:
+        vocab_file (:obj:`str`):
+            Path to the vocabulary file.
+        merges_file (:obj:`str`):
+            Path to the merges file.
+        unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+    """
+
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["attention_mask"]
+
+    def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):
+        kwargs.setdefault("unk_token", unk_token)
+        super().__init__(
+            CharBPETokenizer(vocab_file=vocab_file, merges_file=merges_file, unk_token=unk_token, lowercase=True),
+            **kwargs,
+        )

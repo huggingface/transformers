@@ -15,30 +15,27 @@
 """ Tokenization classes for XLM-RoBERTa model."""
 
 
+import logging
 import os
 from shutil import copyfile
-from typing import List, Optional, Tuple
-
-import sentencepiece as spm
+from typing import List, Optional
 
 from .tokenization_utils import PreTrainedTokenizer
-from .utils import logging
+from .tokenization_xlnet import SPIECE_UNDERLINE
 
 
-logger = logging.get_logger(__name__)
-
-SPIECE_UNDERLINE = "▁"
+logger = logging.getLogger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "xlm-roberta-base": "https://huggingface.co/xlm-roberta-base/resolve/main/sentencepiece.bpe.model",
-        "xlm-roberta-large": "https://huggingface.co/xlm-roberta-large/resolve/main/sentencepiece.bpe.model",
-        "xlm-roberta-large-finetuned-conll02-dutch": "https://huggingface.co/xlm-roberta-large-finetuned-conll02-dutch/resolve/main/sentencepiece.bpe.model",
-        "xlm-roberta-large-finetuned-conll02-spanish": "https://huggingface.co/xlm-roberta-large-finetuned-conll02-spanish/resolve/main/sentencepiece.bpe.model",
-        "xlm-roberta-large-finetuned-conll03-english": "https://huggingface.co/xlm-roberta-large-finetuned-conll03-english/resolve/main/sentencepiece.bpe.model",
-        "xlm-roberta-large-finetuned-conll03-german": "https://huggingface.co/xlm-roberta-large-finetuned-conll03-german/resolve/main/sentencepiece.bpe.model",
+        "xlm-roberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-base-sentencepiece.bpe.model",
+        "xlm-roberta-large": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-sentencepiece.bpe.model",
+        "xlm-roberta-large-finetuned-conll02-dutch": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-finetuned-conll02-dutch-sentencepiece.bpe.model",
+        "xlm-roberta-large-finetuned-conll02-spanish": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-finetuned-conll02-spanish-sentencepiece.bpe.model",
+        "xlm-roberta-large-finetuned-conll03-english": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-finetuned-conll03-english-sentencepiece.bpe.model",
+        "xlm-roberta-large-finetuned-conll03-german": "https://s3.amazonaws.com/models.huggingface.co/bert/xlm-roberta-large-finetuned-conll03-german-sentencepiece.bpe.model",
     }
 }
 
@@ -54,49 +51,53 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class XLMRobertaTokenizer(PreTrainedTokenizer):
     """
-    Adapted from :class:`~transfomers.RobertaTokenizer` and class:`~transfomers.XLNetTokenizer`. Based on
-    `SentencePiece <https://github.com/google/sentencepiece>`__.
+        Adapted from RobertaTokenizer and XLNetTokenizer
+        SentencePiece based tokenizer. Peculiarities:
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+        - requires `SentencePiece <https://github.com/google/sentencepiece>`_
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the methods. Users
+    should refer to the superclass for more information regarding methods.
 
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
-            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
+        bos_token (:obj:`string`, `optional`, defaults to "<s>"):
+            The beginning of sequence token that was used during pre-training. Can be used a sequence classifier token.
 
             .. note::
 
-                When building a sequence using special tokens, this is not the token that is used for the beginning of
-                sequence. The token used is the :obj:`cls_token`.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+                When building a sequence using special tokens, this is not the token that is used for the beginning
+                of sequence. The token used is the :obj:`cls_token`.
+        eos_token (:obj:`string`, `optional`, defaults to "</s>"):
             The end of sequence token.
 
             .. note::
 
-                When building a sequence using special tokens, this is not the token that is used for the end of
-                sequence. The token used is the :obj:`sep_token`.
-        sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
-            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
-            sequence classification or for a text and a question for question answering. It is also used as the last
-            token of a sequence built with special tokens.
-        cls_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
-            The classifier token which is used when doing sequence classification (classification of the whole sequence
-            instead of per-token classification). It is the first token of the sequence when built with special tokens.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+                When building a sequence using special tokens, this is not the token that is used for the end
+                of sequence. The token used is the :obj:`sep_token`.
+        sep_token (:obj:`string`, `optional`, defaults to "</s>"):
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences
+            for sequence classification or for a text and a question for question answering.
+            It is also used as the last token of a sequence built with special tokens.
+        cls_token (:obj:`string`, `optional`, defaults to "<s>"):
+            The classifier token which is used when doing sequence classification (classification of the whole
+            sequence instead of per-token classification). It is the first token of the sequence when built with
+            special tokens.
+        unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+        pad_token (:obj:`string`, `optional`, defaults to "<pad>"):
             The token used for padding, for example when batching sequences of different lengths.
-        mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask>"`):
+        mask_token (:obj:`string`, `optional`, defaults to "<mask>"):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
         additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
 
-    Attributes: sp_model (:obj:`SentencePieceProcessor`): The `SentencePiece` processor that is used for every
-    conversion (string, tokens and IDs).
+    Attributes:
+        sp_model (:obj:`SentencePieceProcessor`):
+            The `SentencePiece` processor that is used for every conversion (string, tokens and IDs).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -127,6 +128,15 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
+        try:
+            import sentencepiece as spm
+        except ImportError:
+            logger.warning(
+                "You need to install SentencePiece to use XLMRobertaTokenizer: https://github.com/google/sentencepiece"
+                "pip install sentencepiece"
+            )
+            raise
+
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(str(vocab_file))
         self.vocab_file = vocab_file
@@ -153,6 +163,14 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d):
         self.__dict__ = d
+        try:
+            import sentencepiece as spm
+        except ImportError:
+            logger.warning(
+                "You need to install SentencePiece to use XLMRobertaTokenizer: https://github.com/google/sentencepiece"
+                "pip install sentencepiece"
+            )
+            raise
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(self.vocab_file)
 
@@ -160,20 +178,21 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. An XLM-RoBERTa sequence has the following format:
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
+        by concatenating and adding special tokens.
+        A XLM-R sequence has the following format:
 
         - single sequence: ``<s> X </s>``
         - pair of sequences: ``<s> A </s></s> B </s>``
 
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+                List of IDs to which the special tokens will be added
+            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
 
         if token_ids_1 is None:
@@ -186,16 +205,16 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
-        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
+        Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
+        special tokens using the tokenizer ``prepare_for_model`` methods.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+                List of ids.
+            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the token list is already formatted with special tokens for the model.
+                Set to True if the token list is already formatted with special tokens for the model
 
         Returns:
             :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
@@ -205,7 +224,7 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
             if token_ids_1 is not None:
                 raise ValueError(
                     "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formatted with special tokens for the model."
+                    "ids is already formated with special tokens for the model."
                 )
             return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
 
@@ -217,13 +236,13 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. XLM-RoBERTa does
-        not make use of token type ids, therefore a list of zeros is returned.
+        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
+        XLM-R does not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
+                List of ids.
+            token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
@@ -270,13 +289,21 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory):
+        """
+        Save the sentencepiece vocabulary (copy original file) and special tokens file to a directory.
+
+        Args:
+            save_directory (:obj:`str`):
+                The directory in which to save the vocabulary.
+
+        Returns:
+            :obj:`Tuple(str)`: Paths to the files saved.
+        """
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
-        out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
+        out_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)

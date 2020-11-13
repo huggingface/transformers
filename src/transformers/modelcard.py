@@ -17,6 +17,7 @@
 
 import copy
 import json
+import logging
 import os
 
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
@@ -29,27 +30,30 @@ from .file_utils import (
     hf_bucket_url,
     is_remote_url,
 )
-from .utils import logging
 
 
-logger = logging.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class ModelCard:
-    r"""
-    Structured Model Card class. Store model card as well as methods for loading/downloading/saving model cards.
+    r""" Structured Model Card class.
+        Store model card as well as methods for loading/downloading/saving model cards.
 
-    Please read the following paper for details and explanation on the sections: "Model Cards for Model Reporting" by
-    Margaret Mitchell, Simone Wu, Andrew Zaldivar, Parker Barnes, Lucy Vasserman, Ben Hutchinson, Elena Spitzer,
-    Inioluwa Deborah Raji and Timnit Gebru for the proposal behind model cards. Link: https://arxiv.org/abs/1810.03993
+        Please read the following paper for details and explanation on the sections:
+            "Model Cards for Model Reporting"
+                by Margaret Mitchell, Simone Wu,
+                Andrew Zaldivar, Parker Barnes, Lucy Vasserman, Ben Hutchinson, Elena Spitzer,
+                Inioluwa Deborah Raji and Timnit Gebru for the proposal behind model cards.
+            Link: https://arxiv.org/abs/1810.03993
 
-    Note: A model card can be loaded and saved to disk.
+        Note:
+            A model card can be loaded and saved to disk.
 
-    Parameters:
+        Parameters:
     """
 
     def __init__(self, **kwargs):
-        # Recommended attributes from https://arxiv.org/abs/1810.03993 (see papers)
+        # Recomended attributes from https://arxiv.org/abs/1810.03993 (see papers)
         self.model_details = kwargs.pop("model_details", {})
         self.intended_use = kwargs.pop("intended_use", {})
         self.factors = kwargs.pop("factors", {})
@@ -69,7 +73,8 @@ class ModelCard:
                 raise err
 
     def save_pretrained(self, save_directory_or_file):
-        """Save a model card object to the directory or file `save_directory_or_file`."""
+        """ Save a model card object to the directory or file `save_directory_or_file`.
+        """
         if os.path.isdir(save_directory_or_file):
             # If we save using the predefined names, we can load using `from_pretrained`
             output_model_card_file = os.path.join(save_directory_or_file, MODEL_CARD_NAME)
@@ -81,53 +86,44 @@ class ModelCard:
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        r"""
-        Instantiate a :class:`~transformers.ModelCard` from a pre-trained model model card.
+        r""" Instantiate a :class:`~transformers.ModelCard` from a pre-trained model model card.
 
         Parameters:
             pretrained_model_name_or_path: either:
 
-                - a string with the `shortcut name` of a pre-trained model card to load from cache or download, e.g.:
-                  ``bert-base-uncased``.
-                - a string with the `identifier name` of a pre-trained model card that was user-uploaded to our S3,
-                  e.g.: ``dbmdz/bert-base-german-cased``.
-                - a path to a `directory` containing a model card file saved using the
-                  :func:`~transformers.ModelCard.save_pretrained` method, e.g.: ``./my_model_directory/``.
+                - a string with the `shortcut name` of a pre-trained model card to load from cache or download, e.g.: ``bert-base-uncased``.
+                - a string with the `identifier name` of a pre-trained model card that was user-uploaded to our S3, e.g.: ``dbmdz/bert-base-german-cased``.
+                - a path to a `directory` containing a model card file saved using the :func:`~transformers.ModelCard.save_pretrained` method, e.g.: ``./my_model_directory/``.
                 - a path or url to a saved model card JSON `file`, e.g.: ``./my_model_directory/modelcard.json``.
 
             cache_dir: (`optional`) string:
-                Path to a directory in which a downloaded pre-trained model card should be cached if the standard cache
-                should not be used.
+                Path to a directory in which a downloaded pre-trained model
+                card should be cached if the standard cache should not be used.
 
             kwargs: (`optional`) dict: key/value pairs with which to update the ModelCard object after loading.
 
-                - The values in kwargs of any keys which are model card attributes will be used to override the loaded
-                  values.
-                - Behavior concerning key/value pairs whose keys are *not* model card attributes is controlled by the
-                  `return_unused_kwargs` keyword parameter.
+                - The values in kwargs of any keys which are model card attributes will be used to override the loaded values.
+                - Behavior concerning key/value pairs whose keys are *not* model card attributes is controlled by the `return_unused_kwargs` keyword parameter.
 
             proxies: (`optional`) dict, default None:
-                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128',
-                'http://hostname': 'foo.bar:4012'}. The proxies are used on each request.
+                A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}.
+                The proxies are used on each request.
 
             find_from_standard_name: (`optional`) boolean, default True:
-                If the pretrained_model_name_or_path ends with our standard model or config filenames, replace them
-                with our standard modelcard filename. Can be used to directly feed a model/config url and access the
-                colocated modelcard.
+                If the pretrained_model_name_or_path ends with our standard model or config filenames, replace them with our standard modelcard filename.
+                Can be used to directly feed a model/config url and access the colocated modelcard.
 
             return_unused_kwargs: (`optional`) bool:
 
                 - If False, then this function returns just the final model card object.
-                - If True, then this functions returns a tuple `(model card, unused_kwargs)` where `unused_kwargs` is a
-                  dictionary consisting of the key/value pairs whose keys are not model card attributes: ie the part of
-                  kwargs which has not been used to update `ModelCard` and is otherwise ignored.
+                - If True, then this functions returns a tuple `(model card, unused_kwargs)` where `unused_kwargs` is a dictionary consisting of the key/value pairs whose keys are not model card attributes: ie the part of kwargs which has not been used to update `ModelCard` and is otherwise ignored.
 
         Examples::
 
             modelcard = ModelCard.from_pretrained('bert-base-uncased')    # Download model card from S3 and cache.
             modelcard = ModelCard.from_pretrained('./test/saved_model/')  # E.g. model card was saved using `save_pretrained('./test/saved_model/')`
             modelcard = ModelCard.from_pretrained('./test/saved_model/modelcard.json')
-            modelcard = ModelCard.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
+            modelcard = ModelCard.from_pretrained('bert-base-uncased', output_attention=True, foo=False)
 
         """
         cache_dir = kwargs.pop("cache_dir", None)
@@ -144,7 +140,7 @@ class ModelCard:
         elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             model_card_file = pretrained_model_name_or_path
         else:
-            model_card_file = hf_bucket_url(pretrained_model_name_or_path, filename=MODEL_CARD_NAME, mirror=None)
+            model_card_file = hf_bucket_url(pretrained_model_name_or_path, filename=MODEL_CARD_NAME, use_cdn=False)
 
         if find_from_standard_name or pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
             model_card_file = model_card_file.replace(CONFIG_NAME, MODEL_CARD_NAME)
@@ -154,6 +150,8 @@ class ModelCard:
         try:
             # Load from URL or cache if already cached
             resolved_model_card_file = cached_path(model_card_file, cache_dir=cache_dir, proxies=proxies)
+            if resolved_model_card_file is None:
+                raise EnvironmentError
             if resolved_model_card_file == model_card_file:
                 logger.info("loading model card file {}".format(model_card_file))
             else:

@@ -88,7 +88,6 @@ def create_optimizer(
     adam_beta2: float = 0.999,
     adam_epsilon: float = 1e-8,
     weight_decay_rate: float = 0.0,
-    power: float = 1.0,
     include_in_weight_decay: Optional[List[str]] = None,
 ):
     """
@@ -97,7 +96,7 @@ def create_optimizer(
     Args:
         init_lr (:obj:`float`):
             The desired learning rate at the end of the warmup phase.
-        num_train_steps (:obj:`int`):
+        num_train_step (:obj:`int`):
             The total number of training steps.
         num_warmup_steps (:obj:`int`):
             The number of warmup steps.
@@ -111,8 +110,6 @@ def create_optimizer(
             The epsilon to use in Adam.
         weight_decay_rate (:obj:`float`, `optional`, defaults to 0):
             The weight decay to use.
-        power (:obj:`float`, `optional`, defaults to 1.0):
-            The power to use for PolynomialDecay.
         include_in_weight_decay (:obj:`List[str]`, `optional`):
             List of the parameter names (or re patterns) to apply weight decay to. If none is passed, weight decay is
             applied to all parameters except bias and layer norm parameters.
@@ -122,13 +119,10 @@ def create_optimizer(
         initial_learning_rate=init_lr,
         decay_steps=num_train_steps - num_warmup_steps,
         end_learning_rate=init_lr * min_lr_ratio,
-        power=power,
     )
     if num_warmup_steps:
         lr_schedule = WarmUp(
-            initial_learning_rate=init_lr,
-            decay_schedule_fn=lr_schedule,
-            warmup_steps=num_warmup_steps,
+            initial_learning_rate=init_lr, decay_schedule_fn=lr_schedule, warmup_steps=num_warmup_steps,
         )
     if weight_decay_rate > 0.0:
         optimizer = AdamWeightDecay(
@@ -153,8 +147,8 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
     """
     Adam enables L2 weight decay and clip_by_global_norm on gradients. Just adding the square of the weights to the
     loss function is *not* the correct way of using L2 regularization/weight decay with Adam, since that will interact
-    with the m and v parameters in strange ways as shown in `Decoupled Weight Decay Regularization
-    <https://arxiv.org/abs/1711.05101>`__.
+    with the m and v parameters in strange ways as shown in
+    `Decoupled Weight Decay Regularization <https://arxiv.org/abs/1711.05101>`__.
 
     Instead we want ot decay the weights in a manner that doesn't interact with the m/v parameters. This is equivalent
     to adding the square of the weights to the loss with plain (non-momentum) SGD.
@@ -169,8 +163,8 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
         epsilon (:obj:`float`, `optional`, defaults to 1e-7):
             The epsilon paramenter in Adam, which is a small constant for numerical stability.
         amsgrad (:obj:`bool`, `optional`, default to `False`):
-            Whether to apply AMSGrad varient of this algorithm or not, see `On the Convergence of Adam and Beyond
-            <https://arxiv.org/abs/1904.09237>`__.
+            Wheter to apply AMSGrad varient of this algorithm or not, see
+            `On the Convergence of Adam and Beyond <https://arxiv.org/abs/1904.09237>`__.
         weight_decay_rate (:obj:`float`, `optional`, defaults to 0):
             The weight decay to apply.
         include_in_weight_decay (:obj:`List[str]`, `optional`):
@@ -227,9 +221,9 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
             )
         return tf.no_op()
 
-    def apply_gradients(self, grads_and_vars, name=None, **kwargs):
+    def apply_gradients(self, grads_and_vars, name=None):
         grads, tvars = list(zip(*grads_and_vars))
-        return super(AdamWeightDecay, self).apply_gradients(zip(grads, tvars), name=name, **kwargs)
+        return super(AdamWeightDecay, self).apply_gradients(zip(grads, tvars), name=name,)
 
     def _get_lr(self, var_device, var_dtype, apply_state):
         """Retrieves the learning rate with the given state."""
@@ -280,10 +274,11 @@ class AdamWeightDecay(tf.keras.optimizers.Adam):
 
 # Extracted from https://github.com/OpenNMT/OpenNMT-tf/blob/master/opennmt/optimizers/utils.py
 class GradientAccumulator(object):
-    """
-    Gradient accumulation utility. When used with a distribution strategy, the accumulator should be called in a
-    replica context. Gradients will be accumulated locally on each replica and without synchronization. Users should
-    then call ``.gradients``, scale the gradients if required, and pass the result to ``apply_gradients``.
+    """Gradient accumulation utility.
+    When used with a distribution strategy, the accumulator should be called in a
+    replica context. Gradients will be accumulated locally on each replica and
+    without synchronization. Users should then call ``.gradients``, scale the
+    gradients if required, and pass the result to ``apply_gradients``.
     """
 
     # We use the ON_READ synchronization policy so that no synchronization is

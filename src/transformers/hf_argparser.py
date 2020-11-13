@@ -13,11 +13,12 @@ DataClassType = NewType("DataClassType", Any)
 
 class HfArgumentParser(ArgumentParser):
     """
-    This subclass of `argparse.ArgumentParser` uses type hints on dataclasses to generate arguments.
+    This subclass of `argparse.ArgumentParser` uses type hints on dataclasses
+    to generate arguments.
 
-    The class is designed to play well with the native argparse. In particular, you can add more (non-dataclass backed)
-    arguments to the parser after initialization and you'll get the output back after parsing as an additional
-    namespace.
+    The class is designed to play well with the native argparse. In particular,
+    you can add more (non-dataclass backed) arguments to the parser after initialization
+    and you'll get the output back after parsing as an additional namespace.
     """
 
     dataclass_types: Iterable[DataClassType]
@@ -26,7 +27,8 @@ class HfArgumentParser(ArgumentParser):
         """
         Args:
             dataclass_types:
-                Dataclass type, or list of dataclass types for which we will "fill" instances with the parsed args.
+                Dataclass type, or list of dataclass types for which we will "fill" instances
+                with the parsed args.
             kwargs:
                 (Optional) Passed to `argparse.ArgumentParser()` in the regular way.
         """
@@ -63,10 +65,9 @@ class HfArgumentParser(ArgumentParser):
                 if field.default is not dataclasses.MISSING:
                     kwargs["default"] = field.default
             elif field.type is bool or field.type is Optional[bool]:
-                if field.type is bool or (field.default is not None and field.default is not dataclasses.MISSING):
-                    kwargs["action"] = "store_false" if field.default is True else "store_true"
+                kwargs["action"] = "store_false" if field.default is True else "store_true"
                 if field.default is True:
-                    field_name = f"--no_{field.name}"
+                    field_name = f"--no-{field.name}"
                     kwargs["dest"] = field.name
             elif hasattr(field.type, "__origin__") and issubclass(field.type.__origin__, List):
                 kwargs["nargs"] = "+"
@@ -87,39 +88,38 @@ class HfArgumentParser(ArgumentParser):
             self.add_argument(field_name, **kwargs)
 
     def parse_args_into_dataclasses(
-        self, args=None, return_remaining_strings=False, look_for_args_file=True, args_filename=None
+        self, args=None, return_remaining_strings=False, look_for_args_file=True
     ) -> Tuple[DataClass, ...]:
         """
         Parse command-line args into instances of the specified dataclass types.
 
-        This relies on argparse's `ArgumentParser.parse_known_args`. See the doc at:
+        This relies on argparse's `ArgumentParser.parse_known_args`.
+        See the doc at:
         docs.python.org/3.7/library/argparse.html#argparse.ArgumentParser.parse_args
 
         Args:
             args:
-                List of strings to parse. The default is taken from sys.argv. (same as argparse.ArgumentParser)
+                List of strings to parse. The default is taken from sys.argv.
+                (same as argparse.ArgumentParser)
             return_remaining_strings:
                 If true, also return a list of remaining argument strings.
             look_for_args_file:
-                If true, will look for a ".args" file with the same base name as the entry point script for this
-                process, and will append its potential content to the command line args.
-            args_filename:
-                If not None, will uses this file instead of the ".args" file specified in the previous argument.
+                If true, will look for a ".args" file with the same base name
+                as the entry point script for this process, and will append its
+                potential content to the command line args.
 
         Returns:
             Tuple consisting of:
-
-                - the dataclass instances in the same order as they were passed to the initializer.abspath
-                - if applicable, an additional namespace for more (non-dataclass backed) arguments added to the parser
+                - the dataclass instances in the same order as they
+                  were passed to the initializer.abspath
+                - if applicable, an additional namespace for more
+                  (non-dataclass backed) arguments added to the parser
                   after initialization.
-                - The potential list of remaining argument strings. (same as argparse.ArgumentParser.parse_known_args)
+                - The potential list of remaining argument strings.
+                  (same as argparse.ArgumentParser.parse_known_args)
         """
-        if args_filename or (look_for_args_file and len(sys.argv)):
-            if args_filename:
-                args_file = Path(args_filename)
-            else:
-                args_file = Path(sys.argv[0]).with_suffix(".args")
-
+        if look_for_args_file and len(sys.argv):
+            args_file = Path(sys.argv[0]).with_suffix(".args")
             if args_file.exists():
                 fargs = args_file.read_text().split()
                 args = fargs + args if args is not None else fargs + sys.argv[1:]
@@ -147,8 +147,8 @@ class HfArgumentParser(ArgumentParser):
 
     def parse_json_file(self, json_file: str) -> Tuple[DataClass, ...]:
         """
-        Alternative helper method that does not use `argparse` at all, instead loading a json file and populating the
-        dataclass types.
+        Alternative helper method that does not use `argparse` at all,
+        instead loading a json file and populating the dataclass types.
         """
         data = json.loads(Path(json_file).read_text())
         outputs = []
@@ -161,8 +161,8 @@ class HfArgumentParser(ArgumentParser):
 
     def parse_dict(self, args: dict) -> Tuple[DataClass, ...]:
         """
-        Alternative helper method that does not use `argparse` at all, instead uses a dict and populating the dataclass
-        types.
+        Alternative helper method that does not use `argparse` at all,
+        instead uses a dict and populating the dataclass types.
         """
         outputs = []
         for dtype in self.dataclass_types:

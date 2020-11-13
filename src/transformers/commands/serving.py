@@ -1,3 +1,4 @@
+import logging
 from argparse import ArgumentParser, Namespace
 from typing import Any, List, Optional
 
@@ -5,15 +6,13 @@ from transformers import Pipeline
 from transformers.commands import BaseTransformersCLICommand
 from transformers.pipelines import SUPPORTED_TASKS, pipeline
 
-from ..utils import logging
-
 
 try:
-    from fastapi import Body, FastAPI, HTTPException
+    from uvicorn import run
+    from fastapi import FastAPI, HTTPException, Body
     from fastapi.routing import APIRoute
     from pydantic import BaseModel
     from starlette.responses import JSONResponse
-    from uvicorn import run
 
     _serve_dependencies_installed = True
 except (ImportError, AttributeError):
@@ -25,14 +24,13 @@ except (ImportError, AttributeError):
     _serve_dependencies_installed = False
 
 
-logger = logging.get_logger("transformers-cli/serving")
+logger = logging.getLogger("transformers-cli/serving")
 
 
 def serve_command_factory(args: Namespace):
     """
     Factory function used to instantiate serving server from provided command line arguments.
-
-    Returns: ServeCommand
+    :return: ServeCommand
     """
     nlp = pipeline(
         task=args.task,
@@ -82,9 +80,8 @@ class ServeCommand(BaseTransformersCLICommand):
     def register_subcommand(parser: ArgumentParser):
         """
         Register this command to argparse so it's available for the transformer-cli
-
-        Args:
-            parser: Root parser to register command-specific arguments
+        :param parser: Root parser to register command-specific arguments
+        :return:
         """
         serve_parser = parser.add_parser(
             "serve", help="CLI tool to run inference requests through REST and GraphQL endpoints."
@@ -164,9 +161,9 @@ class ServeCommand(BaseTransformersCLICommand):
 
     def tokenize(self, text_input: str = Body(None, embed=True), return_ids: bool = Body(False, embed=True)):
         """
-        Tokenize the provided input and eventually returns corresponding tokens id: - **text_input**: String to
-        tokenize - **return_ids**: Boolean flags indicating if the tokens have to be converted to their integer
-        mapping.
+        Tokenize the provided input and eventually returns corresponding tokens id:
+        - **text_input**: String to tokenize
+        - **return_ids**: Boolean flags indicating if the tokens have to be converted to their integer mapping.
         """
         try:
             tokens_txt = self._pipeline.tokenizer.tokenize(text_input)
@@ -187,9 +184,10 @@ class ServeCommand(BaseTransformersCLICommand):
         cleanup_tokenization_spaces: bool = Body(True, embed=True),
     ):
         """
-        Detokenize the provided tokens ids to readable text: - **tokens_ids**: List of tokens ids -
-        **skip_special_tokens**: Flag indicating to not try to decode special tokens - **cleanup_tokenization_spaces**:
-        Flag indicating to remove all leading/trailing spaces and intermediate ones.
+        Detokenize the provided tokens ids to readable text:
+        - **tokens_ids**: List of tokens ids
+        - **skip_special_tokens**: Flag indicating to not try to decode special tokens
+        - **cleanup_tokenization_spaces**: Flag indicating to remove all leading/trailing spaces and intermediate ones.
         """
         try:
             decoded_str = self._pipeline.tokenizer.decode(tokens_ids, skip_special_tokens, cleanup_tokenization_spaces)
