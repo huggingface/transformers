@@ -227,7 +227,7 @@ class TFT5Attention(tf.keras.layers.Layer):
         """
         Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
         """
-        # Input is (batch_size, qlen, dim)
+        # Input is (batch_size, query_length, dim)
         # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
         # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
         batch_size, seq_length = shape_list(hidden_states)[:2]
@@ -276,7 +276,7 @@ class TFT5Attention(tf.keras.layers.Layer):
             return hidden_states
 
         # get query
-        query_states = shape(self.q(hidden_states))  # (batch_size, n_heads, qlen, dim_per_head)
+        query_states = shape(self.q(hidden_states))  # (batch_size, n_heads, query_length, dim_per_head)
 
         # get key/value
         key_states = project(
@@ -292,7 +292,9 @@ class TFT5Attention(tf.keras.layers.Layer):
         else:
             present_key_value_state = None
 
-        scores = tf.einsum("bnqd,bnkd->bnqk", query_states, key_states)  # (batch_size, n_heads, qlen, key_length)
+        scores = tf.einsum(
+            "bnqd,bnkd->bnqk", query_states, key_states
+        )  # (batch_size, n_heads, query_length, key_length)
 
         if position_bias is None:
             if not self.has_relative_attention_bias:
@@ -306,17 +308,17 @@ class TFT5Attention(tf.keras.layers.Layer):
                 position_bias = position_bias[:, :, -seq_length:, :]
 
             if mask is not None:
-                position_bias = position_bias + mask  # (batch_size, n_heads, qlen, key_length)
+                position_bias = position_bias + mask  # (batch_size, n_heads, query_length, key_length)
 
         scores += position_bias
-        weights = tf.nn.softmax(scores, axis=-1)  # (batch_size, n_heads, qlen, key_length)
-        weights = self.dropout(weights, training=training)  # (batch_size, n_heads, qlen, key_length)
+        weights = tf.nn.softmax(scores, axis=-1)  # (batch_size, n_heads, query_length, key_length)
+        weights = self.dropout(weights, training=training)  # (batch_size, n_heads, query_length, key_length)
 
         # Mask heads if we want to
         if head_mask is not None:
             weights = weights * head_mask
 
-        attn_output = tf.matmul(weights, value_states)  # (batch_size, n_heads, qlen, dim_per_head)
+        attn_output = tf.matmul(weights, value_states)  # (batch_size, n_heads, query_length, dim_per_head)
 
         attn_output = self.o(unshape(attn_output))
 
@@ -740,7 +742,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             hidden_states, present_key_value_state = layer_outputs[:2]
 
             # We share the position biases between the layers - the first layer store them
-            # layer_outputs = hidden-states, past_key_values, (self-attention weights), (self-attention position bias), (cross-attention position bias), (cross-attention weights),
+            # layer_outputs = hidden-states, past_key_values, (self-attention weights),
+            # (self-attention position bias), (cross-attention position bias), (cross-attention weights),
             position_bias = layer_outputs[2]
             if self.is_decoder and encoder_hidden_states is not None:
                 encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
