@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2018 {{cookiecutter.authors}} and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,44 +12,36 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 BERT model. """
+""" TF 2.0 {{cookiecutter.modelname}} model. """
 
-
-from dataclasses import dataclass
-from typing import Optional, Tuple
 
 import tensorflow as tf
 
 from .activations_tf import get_tf_activation
-from .configuration_bert import BertConfig
+from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Config
 from .file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
-    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
 )
 from .modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPooling,
-    TFCausalLMOutput,
     TFMaskedLMOutput,
     TFMultipleChoiceModelOutput,
-    TFNextSentencePredictorOutput,
     TFQuestionAnsweringModelOutput,
     TFSequenceClassifierOutput,
     TFTokenClassifierOutput,
 )
 from .modeling_tf_utils import (
-    TFCausalLanguageModelingLoss,
     TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
-    TFNextSentencePredictionLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
+    TFSequenceSummary,
     get_initializer,
     keras_serializable,
     shape_list,
@@ -61,67 +52,17 @@ from .utils import logging
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "BertConfig"
-_TOKENIZER_FOR_DOC = "BertTokenizer"
+_CONFIG_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Config"
+_TOKENIZER_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Tokenizer"
 
-TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "bert-base-uncased",
-    "bert-large-uncased",
-    "bert-base-cased",
-    "bert-large-cased",
-    "bert-base-multilingual-uncased",
-    "bert-base-multilingual-cased",
-    "bert-base-chinese",
-    "bert-base-german-cased",
-    "bert-large-uncased-whole-word-masking",
-    "bert-large-cased-whole-word-masking",
-    "bert-large-uncased-whole-word-masking-finetuned-squad",
-    "bert-large-cased-whole-word-masking-finetuned-squad",
-    "bert-base-cased-finetuned-mrpc",
-    "cl-tohoku/bert-base-japanese",
-    "cl-tohoku/bert-base-japanese-whole-word-masking",
-    "cl-tohoku/bert-base-japanese-char",
-    "cl-tohoku/bert-base-japanese-char-whole-word-masking",
-    "TurkuNLP/bert-base-finnish-cased-v1",
-    "TurkuNLP/bert-base-finnish-uncased-v1",
-    "wietsedv/bert-base-dutch-cased",
-    # See all BERT models at https://huggingface.co/models?filter=bert
+TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "{{cookiecutter.checkpoint_identifier}}",
+    # See all {{cookiecutter.modelname}} models at https://huggingface.co/models?filter={{cookiecutter.lowercase_modelname}}
 ]
 
 
-class TFBertPreTrainingLoss:
-    """
-    Loss function suitable for BERT-like pre-training, that is, the task of pretraining a language model by combining
-    NSP + MLM. .. note:: Any label of -100 will be ignored (along with the corresponding logits) in the loss
-    computation.
-    """
-
-    def compute_loss(self, labels, logits):
-        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
-        )
-        # make sure only labels that are not equal to -100
-        # are taken into account as loss
-        masked_lm_active_loss = tf.not_equal(tf.reshape(labels["labels"], (-1,)), -100)
-        masked_lm_reduced_logits = tf.boolean_mask(
-            tf.reshape(logits[0], (-1, shape_list(logits[0])[2])),
-            masked_lm_active_loss,
-        )
-        masked_lm_labels = tf.boolean_mask(tf.reshape(labels["labels"], (-1,)), masked_lm_active_loss)
-        next_sentence_active_loss = tf.not_equal(tf.reshape(labels["next_sentence_label"], (-1,)), -100)
-        next_sentence_reduced_logits = tf.boolean_mask(tf.reshape(logits[1], (-1, 2)), next_sentence_active_loss)
-        next_sentence_label = tf.boolean_mask(
-            tf.reshape(labels["next_sentence_label"], (-1,)), mask=next_sentence_active_loss
-        )
-        masked_lm_loss = loss_fn(masked_lm_labels, masked_lm_reduced_logits)
-        next_sentence_loss = loss_fn(next_sentence_label, next_sentence_reduced_logits)
-        masked_lm_loss = tf.reshape(masked_lm_loss, (-1, shape_list(next_sentence_loss)[0]))
-        masked_lm_loss = tf.reduce_mean(masked_lm_loss, 0)
-
-        return masked_lm_loss + next_sentence_loss
-
-
-class TFBertEmbeddings(tf.keras.layers.Layer):
+# Copied from transformers.modeling_tf_bert.TFBertEmbeddings with Bert->{{cookiecutter.camelcase_modelname}}
+class TF{{cookiecutter.camelcase_modelname}}Embeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config, **kwargs):
@@ -170,23 +111,19 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         mode="embedding",
         training=False,
     ):
-        """
-        Get token embeddings of inputs.
-
+        """Get token embeddings of inputs.
         Args:
             inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
             mode: string, a valid value is one of "embedding" and "linear".
-
         Returns:
-            outputs: If mode == "embedding", output embedding tensor, float32 with shape [batch_size, length,
-            embedding_size]; if mode == "linear", output linear tensor, float32 with shape [batch_size, length,
-            vocab_size].
-
+            outputs: (1) If mode == "embedding", output embedding tensor, float32 with
+                shape [batch_size, length, embedding_size]; (2) mode == "linear", output
+                linear tensor, float32 with shape [batch_size, length, vocab_size].
         Raises:
             ValueError: if mode is not valid.
 
         Shared weights logic adapted from
-        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
+            https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
         if mode == "embedding":
             return self._embedding(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
@@ -224,12 +161,9 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         return embeddings
 
     def _linear(self, inputs):
-        """
-        Computes logits by running inputs through a linear layer.
-
+        """Computes logits by running inputs through a linear layer.
         Args:
-            inputs: A float32 tensor with shape [batch_size, length, hidden_size].
-
+            inputs: A float32 tensor with shape [batch_size, length, hidden_size]
         Returns:
             float32 tensor with shape [batch_size, length, vocab_size].
         """
@@ -241,7 +175,8 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         return tf.reshape(logits, [batch_size, length, self.vocab_size])
 
 
-class TFBertSelfAttention(tf.keras.layers.Layer):
+# Copied from transformers.modeling_tf_bert.TFBertSelfAttention with Bert->{{cookiecutter.camelcase_modelname}}
+class TF{{cookiecutter.camelcase_modelname}}SelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -288,7 +223,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         attention_scores = attention_scores / tf.math.sqrt(dk)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
+            # Apply the attention mask is (precomputed for all layers in TF{{cookiecutter.camelcase_modelname}}Model call() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -312,7 +247,8 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
-class TFBertSelfOutput(tf.keras.layers.Layer):
+# Copied from transformers.modeling_tf_bert.TFBertSelfOutput with Bert->{{cookiecutter.camelcase_modelname}}
+class TF{{cookiecutter.camelcase_modelname}}SelfOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -330,12 +266,13 @@ class TFBertSelfOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFBertAttention(tf.keras.layers.Layer):
+# Copied from transformers.modeling_tf_bert.TFBertAttention with Bert->{{cookiecutter.camelcase_modelname}}
+class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.self_attention = TFBertSelfAttention(config, name="self")
-        self.dense_output = TFBertSelfOutput(config, name="output")
+        self.self_attention = TF{{cookiecutter.camelcase_modelname}}SelfAttention(config, name="self")
+        self.dense_output = TF{{cookiecutter.camelcase_modelname}}SelfOutput(config, name="output")
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -350,7 +287,8 @@ class TFBertAttention(tf.keras.layers.Layer):
         return outputs
 
 
-class TFBertIntermediate(tf.keras.layers.Layer):
+# Copied from transformers.modeling_tf_bert.TFBertIntermediate with Bert->{{cookiecutter.camelcase_modelname}}
+class TF{{cookiecutter.camelcase_modelname}}Intermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -370,7 +308,8 @@ class TFBertIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFBertOutput(tf.keras.layers.Layer):
+# Copied from transformers.modeling_tf_bert.TFBertOutput with Bert->{{cookiecutter.camelcase_modelname}}
+class TF{{cookiecutter.camelcase_modelname}}Output(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -388,13 +327,14 @@ class TFBertOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFBertLayer(tf.keras.layers.Layer):
+# Copied from transformers.modeling_tf_bert.TFBertLayer with Bert->{{cookiecutter.camelcase_modelname}}
+class TF{{cookiecutter.camelcase_modelname}}Layer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.attention = TFBertAttention(config, name="attention")
-        self.intermediate = TFBertIntermediate(config, name="intermediate")
-        self.bert_output = TFBertOutput(config, name="output")
+        self.attention = TF{{cookiecutter.camelcase_modelname}}Attention(config, name="attention")
+        self.intermediate = TF{{cookiecutter.camelcase_modelname}}Intermediate(config, name="intermediate")
+        self.{{cookiecutter.lowercase_modelname}}_output = TF{{cookiecutter.camelcase_modelname}}Output(config, name="output")
 
     def call(self, hidden_states, attention_mask, head_mask, output_attentions, training=False):
         attention_outputs = self.attention(
@@ -402,17 +342,17 @@ class TFBertLayer(tf.keras.layers.Layer):
         )
         attention_output = attention_outputs[0]
         intermediate_output = self.intermediate(attention_output)
-        layer_output = self.bert_output(intermediate_output, attention_output, training=training)
+        layer_output = self.{{cookiecutter.lowercase_modelname}}_output(intermediate_output, attention_output, training=training)
         outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
 
         return outputs
 
 
-class TFBertEncoder(tf.keras.layers.Layer):
+class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.layer = [TFBertLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
+        self.layer = [TF{{cookiecutter.camelcase_modelname}}Layer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
 
     def call(
         self,
@@ -451,27 +391,8 @@ class TFBertEncoder(tf.keras.layers.Layer):
         )
 
 
-class TFBertPooler(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
-        super().__init__(**kwargs)
-
-        self.dense = tf.keras.layers.Dense(
-            config.hidden_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            activation="tanh",
-            name="dense",
-        )
-
-    def call(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-
-        return pooled_output
-
-
-class TFBertPredictionHeadTransform(tf.keras.layers.Layer):
+# Copied from transformers.modeling_tf_bert.TFBertPredictionHead with Bert->{{cookiecutter.camelcase_modelname}}
+class TF{{cookiecutter.camelcase_modelname}}PredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -494,12 +415,13 @@ class TFBertPredictionHeadTransform(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFBertLMPredictionHead(tf.keras.layers.Layer):
+# Copied from transformers.modeling_tf_bert.TFBertLMPredictionHead with Bert->{{cookiecutter.camelcase_modelname}}
+class TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
 
         self.vocab_size = config.vocab_size
-        self.transform = TFBertPredictionHeadTransform(config, name="transform")
+        self.transform = TF{{cookiecutter.camelcase_modelname}}PredictionHeadTransform(config, name="transform")
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
@@ -518,11 +440,12 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFBertMLMHead(tf.keras.layers.Layer):
+# Copied from transformers.modeling_tf_bert.TFBertMLMHead with Bert->{{cookiecutter.camelcase_modelname}}
+class TF{{cookiecutter.camelcase_modelname}}MLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
 
-        self.predictions = TFBertLMPredictionHead(config, input_embeddings, name="predictions")
+        self.predictions = TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(config, input_embeddings, name="predictions")
 
     def call(self, sequence_output):
         prediction_scores = self.predictions(sequence_output)
@@ -530,7 +453,7 @@ class TFBertMLMHead(tf.keras.layers.Layer):
         return prediction_scores
 
 
-class TFBertNSPHead(tf.keras.layers.Layer):
+class TF{{cookiecutter.camelcase_modelname}}NSPHead(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -545,8 +468,8 @@ class TFBertNSPHead(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFBertMainLayer(tf.keras.layers.Layer):
-    config_class = BertConfig
+class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
+    config_class = {{cookiecutter.camelcase_modelname}}Config
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -556,9 +479,9 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.return_dict = config.use_return_dict
-        self.embeddings = TFBertEmbeddings(config, name="embeddings")
-        self.encoder = TFBertEncoder(config, name="encoder")
-        self.pooler = TFBertPooler(config, name="pooler")
+        self.embeddings = TF{{cookiecutter.camelcase_modelname}}Embeddings(config, name="embeddings")
+        self.encoder = TF{{cookiecutter.camelcase_modelname}}Encoder(config, name="encoder")
+        self.config = config
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -568,9 +491,9 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         self.embeddings.vocab_size = value.shape[0]
 
     def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
+        """Prunes heads of the model.
+        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        See base class PreTrainedModel
         """
         raise NotImplementedError
 
@@ -670,72 +593,39 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         )
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
 
         if not return_dict:
             return (
                 sequence_output,
-                pooled_output,
             ) + encoder_outputs[1:]
 
-        return TFBaseModelOutputWithPooling(
+        return TFBaseModelOutput(
             last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
 
 
-class TFBertPreTrainedModel(TFPreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = BertConfig
-    base_model_prefix = "bert"
-
-
-@dataclass
-class TFBertForPreTrainingOutput(ModelOutput):
-    """
-    Output type of :class:`~transformers.TFBertForPreTraining`.
-
-    Args:
-        prediction_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        seq_relationship_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, 2)`):
-            Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
-            before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
+# Copied from transformers.modeling_tf_bert.TFBertPreTrainedModel with Bert->{{cookiecutter.camelcase_modelname}}
+class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
+    """An abstract class to handle weights initialization and
+    a simple interface for downloading and loading pretrained models.
     """
 
-    loss: Optional[tf.Tensor] = None
-    prediction_logits: tf.Tensor = None
-    seq_relationship_logits: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
+    config_class = {{cookiecutter.camelcase_modelname}}Config
+    base_model_prefix = "{{cookiecutter.lowercase_modelname}}"
 
 
-BERT_START_DOCSTRING = r"""
+
+{{cookiecutter.uppercase_modelname}}_START_DOCSTRING = r"""
 
     This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
-    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
-    and behavior.
+    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass.
+    Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
+    usage and behavior.
 
     .. note::
 
@@ -744,11 +634,11 @@ BERT_START_DOCSTRING = r"""
         - having all inputs as keyword arguments (like PyTorch models), or
         - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
-        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having
+        all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
-        the first positional argument :
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors
+        in the first positional argument :
 
         - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
@@ -757,44 +647,45 @@ BERT_START_DOCSTRING = r"""
           :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
 
     Args:
-        config (:class:`~transformers.BertConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the
-            model weights.
+        config (:class:`~transformers.{{cookiecutter.camelcase_modelname}}Config`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the configuration.
+            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
-BERT_INPUTS_DOCSTRING = r"""
+{{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
-            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
-            details.
+            Indices can be obtained using :class:`~transformers.{{cookiecutter.camelcase_modelname}}Tokenizer`.
+            See :func:`transformers.PreTrainedTokenizer.__call__` and
+            :func:`transformers.PreTrainedTokenizer.encode` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices.
+            Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
+            - 0 for tokens that are **maked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
-            1]``:
+            Segment token indices to indicate first and second portions of the inputs.
+            Indices are selected in ``[0, 1]``:
 
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
 
             `What are token type IDs? <../glossary.html#token-type-ids>`__
         position_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
-            config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings.
+            Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`__
         head_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+            Mask to nullify selected heads of the self-attention modules.
+            Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -818,148 +709,50 @@ BERT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
-    BERT_START_DOCSTRING,
+    "The bare {{cookiecutter.modelname}} Model transformer outputing raw hidden-states without any specific head on top.",
+    {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
-class TFBertModel(TFBertPreTrainedModel):
+class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.bert = TFBertMainLayer(config, name="bert")
+        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
 
-    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="bert-base-cased",
+        checkpoint="{{cookiecutter.checkpoint_identifier}}",
         output_type=TFBaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(self, inputs, **kwargs):
-        outputs = self.bert(inputs, **kwargs)
+        outputs = self.{{cookiecutter.lowercase_modelname}}(inputs, **kwargs)
 
         return outputs
 
 
-@add_start_docstrings(
-    """
-Bert Model with two heads on top as done during the pre-training:
-    a `masked language modeling` head and a `next sentence prediction (classification)` head.
-    """,
-    BERT_START_DOCSTRING,
-)
-class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
-    def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-
-        self.bert = TFBertMainLayer(config, name="bert")
-        self.nsp = TFBertNSPHead(config, name="nsp___cls")
-        self.mlm = TFBertMLMHead(config, self.bert.embeddings, name="mlm___cls")
-
-    def get_output_embeddings(self):
-        return self.bert.embeddings
-
-    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=TFBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
-    def call(
-        self,
-        inputs=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        next_sentence_label=None,
-        training=False,
-    ):
-        r"""
-        Return:
-
-        Examples::
-
-            >>> import tensorflow as tf
-            >>> from transformers import BertTokenizer, TFBertForPreTraining
-
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> model = TFBertForPreTraining.from_pretrained('bert-base-uncased')
-            >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]  # Batch size 1
-            >>> outputs = model(input_ids)
-            >>> prediction_scores, seq_relationship_scores = outputs[:2]
-
-        """
-        return_dict = return_dict if return_dict is not None else self.bert.return_dict
-
-        if isinstance(inputs, (tuple, list)):
-            labels = inputs[9] if len(inputs) > 9 else labels
-            next_sentence_label = inputs[10] if len(inputs) > 10 else next_sentence_label
-            if len(inputs) > 9:
-                inputs = inputs[:9]
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            labels = inputs.pop("labels", labels)
-            next_sentence_label = inputs.pop("next_sentence_label", next_sentence_label)
-
-        outputs = self.bert(
-            inputs,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-        )
-        sequence_output, pooled_output = outputs[:2]
-        prediction_scores = self.mlm(sequence_output, training=training)
-        seq_relationship_score = self.nsp(pooled_output)
-        total_loss = None
-
-        if labels is not None and next_sentence_label is not None:
-            d_labels = {"labels": labels}
-            d_labels["next_sentence_label"] = next_sentence_label
-            total_loss = self.compute_loss(labels=d_labels, logits=(prediction_scores, seq_relationship_score))
-
-        if not return_dict:
-            return (prediction_scores, seq_relationship_score) + outputs[2:]
-
-        return TFBertForPreTrainingOutput(
-            loss=total_loss,
-            prediction_logits=prediction_scores,
-            seq_relationship_logits=seq_relationship_score,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@add_start_docstrings("""Bert Model with a `language modeling` head on top. """, BERT_START_DOCSTRING)
-class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
-
-    authorized_unexpected_keys = [r"pooler"]
-    authorized_missing_keys = [r"pooler"]
+@add_start_docstrings("""{{cookiecutter.modelname}} Model with a `language modeling` head on top. """, {{cookiecutter.uppercase_modelname}}_START_DOCSTRING)
+class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFMaskedLanguageModelingLoss):
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         if config.is_decoder:
             logger.warning(
-                "If you want to use `TFBertForMaskedLM` make sure `config.is_decoder=False` for "
+                "If you want to use `TF{{cookiecutter.camelcase_modelname}}ForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
 
-        self.bert = TFBertMainLayer(config, name="bert")
-        self.mlm = TFBertMLMHead(config, self.bert.embeddings, name="mlm___cls")
+        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
+        self.mlm = TF{{cookiecutter.camelcase_modelname}}MLMHead(config, self.{{cookiecutter.lowercase_modelname}}.embeddings, name="mlm___cls")
 
     def get_output_embeddings(self):
-        return self.bert.embeddings
+        return self.{{cookiecutter.lowercase_modelname}}.embeddings
 
-    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="bert-base-cased",
+        checkpoint="{{cookiecutter.checkpoint_identifier}}",
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -979,11 +772,12 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
-            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+            Labels for computing the masked language modeling loss.
+            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
+            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
+            in ``[0, ..., config.vocab_size]``
         """
-        return_dict = return_dict if return_dict is not None else self.bert.return_dict
+        return_dict = return_dict if return_dict is not None else self.{{cookiecutter.lowercase_modelname}}.return_dict
 
         if isinstance(inputs, (tuple, list)):
             labels = inputs[9] if len(inputs) > 9 else labels
@@ -992,7 +786,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         elif isinstance(inputs, (dict, BatchEncoding)):
             labels = inputs.pop("labels", labels)
 
-        outputs = self.bert(
+        outputs = self.{{cookiecutter.lowercase_modelname}}(
             inputs,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1010,7 +804,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         loss = None if labels is None else self.compute_loss(labels, prediction_scores)
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
+            output = (prediction_scores,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return TFMaskedLMOutput(
@@ -1021,234 +815,84 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         )
 
 
-class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
+class TF{{cookiecutter.camelcase_modelname}}ClassificationHead(tf.keras.layers.Layer):
+    """Head for sentence-level classification tasks."""
 
-    authorized_unexpected_keys = [r"pooler"]
-    authorized_missing_keys = [r"pooler"]
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
 
-    def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-
-        if not config.is_decoder:
-            logger.warning("If you want to use `TFBertLMHeadModel` as a standalone, add `is_decoder=True.`")
-
-        self.bert = TFBertMainLayer(config, name="bert")
-        self.mlm = TFBertMLMHead(config, self.bert.embeddings, name="mlm___cls")
-
-    def get_output_embeddings(self):
-        return self.bert.embeddings
-
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="bert-base-cased",
-        output_type=TFCausalLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def call(
-        self,
-        inputs=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
-    ):
-        r"""
-        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the cross entropy classification loss. Indices should be in ``[0, ...,
-            config.vocab_size - 1]``.
-        """
-        return_dict = return_dict if return_dict is not None else self.bert.return_dict
-
-        if isinstance(inputs, (tuple, list)):
-            labels = inputs[9] if len(inputs) > 9 else labels
-            if len(inputs) > 9:
-                inputs = inputs[:9]
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            labels = inputs.pop("labels", labels)
-
-        outputs = self.bert(
-            inputs,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
+        self.dense = tf.keras.layers.Dense(
+            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
-
-        sequence_output = outputs[0]
-        logits = self.mlm(sequence_output, training=training)
-        loss = None
-
-        if labels is not None:
-            # shift labels to the left and cut last logit token
-            logits = logits[:, :-1]
-            labels = labels[:, 1:]
-            loss = self.compute_loss(labels, logits)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
-        return TFCausalLMOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """Bert Model with a `next sentence prediction (classification)` head on top. """,
-    BERT_START_DOCSTRING,
-)
-class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredictionLoss):
-    def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-
-        self.bert = TFBertMainLayer(config, name="bert")
-        self.nsp = TFBertNSPHead(config, name="nsp___cls")
-
-    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=TFNextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
-    def call(
-        self,
-        inputs=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        next_sentence_label=None,
-        training=False,
-    ):
-        r"""
-        Return:
-
-        Examples::
-
-            >>> import tensorflow as tf
-            >>> from transformers import BertTokenizer, TFBertForNextSentencePrediction
-
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> model = TFBertForNextSentencePrediction.from_pretrained('bert-base-uncased')
-
-            >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
-            >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
-            >>> encoding = tokenizer(prompt, next_sentence, return_tensors='tf')
-
-            >>> logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
-            >>> assert logits[0][0] < logits[0][1] # the next sentence was random
-        """
-        return_dict = return_dict if return_dict is not None else self.bert.return_dict
-
-        if isinstance(inputs, (tuple, list)):
-            next_sentence_label = inputs[9] if len(inputs) > 9 else next_sentence_label
-            if len(inputs) > 9:
-                inputs = inputs[:9]
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            next_sentence_label = inputs.pop("next_sentence_label", next_sentence_label)
-
-        outputs = self.bert(
-            inputs,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-        )
-        pooled_output = outputs[1]
-        seq_relationship_scores = self.nsp(pooled_output)
-
-        next_sentence_loss = (
-            None
-            if next_sentence_label is None
-            else self.compute_loss(labels=next_sentence_label, logits=seq_relationship_scores)
-        )
-
-        if not return_dict:
-            output = (seq_relationship_scores,) + outputs[2:]
-            return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
-
-        return TFNextSentencePredictorOutput(
-            loss=next_sentence_loss,
-            logits=seq_relationship_scores,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    Bert Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
-    output) e.g. for GLUE tasks.
-    """,
-    BERT_START_DOCSTRING,
-)
-class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassificationLoss):
-    def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-
-        self.num_labels = config.num_labels
-        self.bert = TFBertMainLayer(config, name="bert")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
-        self.classifier = tf.keras.layers.Dense(
-            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
+        self.out_proj = tf.keras.layers.Dense(
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
         )
 
-    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+        self.config = config
+
+    def call(self, inputs, **kwargs):
+        x = inputs[:, 0, :]  # take <s> token (equiv. to [CLS])
+        x = self.dropout(x)
+        x = self.dense(x)
+        x = get_tf_activation(self.config.hidden_act)(x)
+        x = self.dropout(x)
+        x = self.out_proj(x)
+
+        return x
+
+
+@add_start_docstrings(
+    """{{cookiecutter.modelname}} Model transformer with a sequence classification/regression head on top 
+    e.g., for GLUE tasks. """,
+    {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
+)
+class TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFSequenceClassificationLoss):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
+        self.classifier = TF{{cookiecutter.camelcase_modelname}}ClassificationHead(config, name="classifier")
+
+    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="bert-base-cased",
+        checkpoint="{{cookiecutter.checkpoint_identifier}}",
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
-        self,
-        inputs=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
+            self,
+            inputs,
+            attention_mask=None,
+            token_type_ids=None,
+            position_ids=None,
+            head_mask=None,
+            inputs_embeds=None,
+            output_attentions=None,
+            output_hidden_states=None,
+            return_dict=None,
+            labels=None,
+            training=False,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            Labels for computing the sequence classification/regression loss.
+            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
+            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.bert.return_dict
+        return_dict = return_dict if return_dict is not None else self.{{cookiecutter.lowercase_modelname}}.config.return_dict
 
         if isinstance(inputs, (tuple, list)):
             labels = inputs[9] if len(inputs) > 9 else labels
+
             if len(inputs) > 9:
                 inputs = inputs[:9]
         elif isinstance(inputs, (dict, BatchEncoding)):
             labels = inputs.pop("labels", labels)
 
-        outputs = self.bert(
+        outputs = self.{{cookiecutter.lowercase_modelname}}(
             inputs,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1260,14 +904,12 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             return_dict=return_dict,
             training=training,
         )
-
-        pooled_output = outputs[1]
-        pooled_output = self.dropout(pooled_output, training=training)
-        logits = self.classifier(pooled_output)
+        logits = self.classifier(outputs[0])
         loss = None if labels is None else self.compute_loss(labels, logits)
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[1:]
+
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
@@ -1279,18 +921,18 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
 
 
 @add_start_docstrings(
-    """
-    Bert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
-    softmax) e.g. for RocStories/SWAG tasks.
-    """,
-    BERT_START_DOCSTRING,
+    """{{cookiecutter.modelname}} Model with a multiple choice classification head on top (a linear layer on top of
+    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
-class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
+class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.bert = TFBertMainLayer(config, name="bert")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
+        self.sequence_summary = TFSequenceSummary(
+            config, initializer_range=config.initializer_range, name="sequence_summary"
+        )
         self.classifier = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
@@ -1305,10 +947,10 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
-    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="bert-base-cased",
+        checkpoint="{{cookiecutter.checkpoint_identifier}}",
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1328,9 +970,9 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
-            num_choices]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
-            :obj:`input_ids` above)
+            Labels for computing the multiple choice classification loss.
+            Indices should be in ``[0, ..., num_choices]`` where :obj:`num_choices` is the size of the second dimension
+            of the input tensors. (See :obj:`input_ids` above)
         """
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -1359,7 +1001,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         else:
             input_ids = inputs
 
-        return_dict = return_dict if return_dict is not None else self.bert.return_dict
+        return_dict = return_dict if return_dict is not None else self.{{cookiecutter.lowercase_modelname}}.config.return_dict
 
         if input_ids is not None:
             num_choices = shape_list(input_ids)[1]
@@ -1377,7 +1019,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             if inputs_embeds is not None
             else None
         )
-        outputs = self.bert(
+        outputs = self.{{cookiecutter.lowercase_modelname}}(
             flat_input_ids,
             flat_attention_mask,
             flat_token_type_ids,
@@ -1389,14 +1031,14 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             return_dict=return_dict,
             training=training,
         )
-        pooled_output = outputs[1]
-        pooled_output = self.dropout(pooled_output, training=training)
-        logits = self.classifier(pooled_output)
+        logits = self.sequence_summary(outputs[0])
+        logits = self.classifier(logits)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
         loss = None if labels is None else self.compute_loss(labels, reshaped_logits)
 
         if not return_dict:
-            output = (reshaped_logits,) + outputs[2:]
+            output = (reshaped_logits,) + outputs[1:]
+
             return ((loss,) + output) if loss is not None else output
 
         return TFMultipleChoiceModelOutput(
@@ -1406,33 +1048,27 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             attentions=outputs.attentions,
         )
 
-
 @add_start_docstrings(
-    """
-    Bert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
-    Named-Entity-Recognition (NER) tasks.
-    """,
-    BERT_START_DOCSTRING,
+    """{{cookiecutter.modelname}} Model with a token classification head on top (a linear layer on top of
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
-class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationLoss):
-
-    authorized_unexpected_keys = [r"pooler"]
-    authorized_missing_keys = [r"pooler"]
+class TF{{cookiecutter.camelcase_modelname}}ForTokenClassification(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFTokenClassificationLoss):
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.bert = TFBertMainLayer(config, name="bert")
+        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="bert-base-cased",
+        checkpoint="{{cookiecutter.checkpoint_identifier}}",
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1452,10 +1088,10 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
-            1]``.
+            Labels for computing the token classification loss.
+            Indices should be in ``[0, ..., config.num_labels - 1]``.
         """
-        return_dict = return_dict if return_dict is not None else self.bert.return_dict
+        return_dict = return_dict if return_dict is not None else self.{{cookiecutter.lowercase_modelname}}.return_dict
 
         if isinstance(inputs, (tuple, list)):
             labels = inputs[9] if len(inputs) > 9 else labels
@@ -1464,7 +1100,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
         elif isinstance(inputs, (dict, BatchEncoding)):
             labels = inputs.pop("labels", labels)
 
-        outputs = self.bert(
+        outputs = self.{{cookiecutter.lowercase_modelname}}(
             inputs,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1482,7 +1118,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
         loss = None if labels is None else self.compute_loss(labels, logits)
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
@@ -1494,30 +1130,25 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
 
 
 @add_start_docstrings(
-    """
-    Bert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    BERT_START_DOCSTRING,
+    """{{cookiecutter.modelname}} Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layer on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
+    {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
-class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss):
-
-    authorized_unexpected_keys = [r"pooler"]
-    authorized_missing_keys = [r"pooler"]
+class TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFQuestionAnsweringLoss):
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.bert = TFBertMainLayer(config, name="bert")
+        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
-    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="bert-base-cased",
+        checkpoint="{{cookiecutter.checkpoint_identifier}}",
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1539,14 +1170,14 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
         r"""
         start_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
         end_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
-            sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
+            Position outside of the sequence are not taken into account for computing the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.bert.return_dict
+        return_dict = return_dict if return_dict is not None else self.{{cookiecutter.lowercase_modelname}}.return_dict
 
         if isinstance(inputs, (tuple, list)):
             start_positions = inputs[9] if len(inputs) > 9 else start_positions
@@ -1557,7 +1188,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             start_positions = inputs.pop("start_positions", start_positions)
             end_positions = inputs.pop("end_positions", start_positions)
 
-        outputs = self.bert(
+        outputs = self.{{cookiecutter.lowercase_modelname}}(
             inputs,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1582,7 +1213,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             loss = self.compute_loss(labels, (start_logits, end_logits))
 
         if not return_dict:
-            output = (start_logits, end_logits) + outputs[2:]
+            output = (start_logits, end_logits) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return TFQuestionAnsweringModelOutput(

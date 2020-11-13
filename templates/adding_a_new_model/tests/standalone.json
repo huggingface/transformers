@@ -1,0 +1,10 @@
+{
+  "modelname": "BIEncoderBERT",
+  "uppercase_modelname": "BI_ENCODER_BERT",
+  "lowercase_modelname": "bi_encoder_bert",
+  "camelcase_modelname": "BiEncoderBert",
+  "authors": "The HuggingFace Team",
+  "checkpoint_identifier": "bi-brand-new-bert-base-cased",
+  "tokenizer_type": "Standalone",
+  "generate_tensorflow_and_pytorch": "PyTorch & TensorFlow"
+}
