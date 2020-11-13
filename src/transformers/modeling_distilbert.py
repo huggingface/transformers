@@ -49,6 +49,9 @@ from .modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
+
+from torch.contrib import swa
+
 from .utils import logging
 
 
@@ -645,6 +648,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
             else:
                 loss_fct = nn.CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            loss = swa(loss)
 
         if not return_dict:
             output = (logits,) + distilbert_output[1:]
