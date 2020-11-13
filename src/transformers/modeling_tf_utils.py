@@ -28,6 +28,8 @@ import tensorflow as tf
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.saving import hdf5_format
 
+from .tokenization_utils_base import BatchEncoding
+
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
     DUMMY_INPUTS,
