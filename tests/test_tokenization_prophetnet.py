@@ -17,6 +17,7 @@
 import os
 import unittest
 
+from transformers import BatchEncoding
 from transformers.testing_utils import require_torch, slow
 from transformers.tokenization_bert import (
     BasicTokenizer,
