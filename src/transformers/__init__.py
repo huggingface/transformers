@@ -583,6 +583,7 @@ if is_torch_available():
         XLMRobertaForSequenceClassification,
         XLMRobertaForTokenClassification,
         XLMRobertaForQuestionAnswering,
+        XLMRobertaModel,
         XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
     from .modeling_mmbt import ModalEmbeddings, MMBTModel, MMBTForClassification

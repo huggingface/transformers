@@ -37,10 +37,6 @@ from .modeling_utils import (
     prune_linear_layer,
     find_pruneable_heads_and_indices,
 )
-from .modeling_bert import (
-    BertIntermediate, 
-    BertOutput, 
-)
 from .modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -50,13 +46,11 @@ from .modeling_outputs import (
     TokenClassifierOutput,
 )
 
-from .modeling_roberta import (
-    RobertaLMHead, 
-    RobertaClassificationHead,
-)
-
 
 logger = logging.getLogger(__name__)
+
+_CONFIG_FOR_DOC = "MPNetConfig"
+_TOKENIZER_FOR_DOC = "MPNetTokenizer"
 
 
 MPNET_PRETRAINED_MODEL_ARCHIVE_MAP = {
@@ -90,7 +84,6 @@ class MPNetPreTrainedModel(PreTrainedModel):
 
 
 class MPNetEmbeddings(nn.Module):
-
     def __init__(self, config): 
         super().__init__()
         self.padding_idx = 1
@@ -105,11 +98,26 @@ class MPNetEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
-    def forward(self, input_ids=None, position_ids=None, **kwargs):
+    def forward(self, input_ids=None, position_ids=None, inputs_embeds=None, **kwargs):
+        # Copied from transformers.modeling_roberta.RobertaEmbeddings.forward
         if position_ids is None:
-            position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx)
+            if input_ids is not None:
+                position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx)
+            else:
+                position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
-        inputs_embeds = self.word_embeddings(input_ids)
+        if input_ids is not None:
+            input_shape = input_ids.size()
+        else:
+            input_shape = inputs_embeds.size()[:-1]
+
+        seq_length = input_shape[1]
+
+        if position_ids is None:
+            position_ids = self.position_ids[:, :seq_length]
+
+        if inputs_embeds is None:
+            inputs_embeds = self.word_embeddings(input_ids)
         position_embeddings = self.position_embeddings(position_ids)
 
         embeddings = inputs_embeds + position_embeddings
@@ -117,6 +125,19 @@ class MPNetEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings
 
+    def create_position_ids_from_inputs_embeds(self, inputs_embeds):
+        """We are provided embeddings directly. We cannot infer which are padded so just generate
+        sequential position ids.
+        :param torch.Tensor inputs_embeds:
+        :return torch.Tensor:
+        """
+        input_shape = inputs_embeds.size()[:-1]
+        sequence_length = input_shape[1]
+
+        position_ids = torch.arange(
+            self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
+        )
+        return position_ids.unsqueeze(0).expand(input_shape)
 
 
 class MPNetSelfAttention(nn.Module):
@@ -163,15 +184,18 @@ class MPNetSelfAttention(nn.Module):
         k = self.transpose_for_scores(k)
         v = self.transpose_for_scores(v)
 
+        # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(q, k.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         
+        # Apply relative position embedding (precomputed in MPNetEncoder) if provided.
         if position_bias is not None:
             attention_scores += position_bias
-
+        
         if attention_mask is not None:
             attention_scores = attention_scores + attention_mask
-
+        
+        # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
 
         attention_probs = self.dropout(attention_probs)
@@ -233,13 +257,43 @@ class MPNetAttention(nn.Module):
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
+# Copied from transformers.modeling_bert.BertIntermediate
+class MPNetIntermediate(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        if isinstance(config.hidden_act, str):
+            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.intermediate_act_fn = config.hidden_act
+
+    def forward(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+        return hidden_states
+
+
+# Copied from transformers.modeling_bert.BertOutput
+class MPNetOutput(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states, input_tensor):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        return hidden_states
+
 
 class MPNetLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.attention = MPNetAttention(config)
-        self.intermediate = BertIntermediate(config)
-        self.output = BertOutput(config)
+        self.intermediate = MPNetIntermediate(config)
+        self.output = MPNetOutput(config)
 
     def forward(
         self,
@@ -303,7 +357,9 @@ class MPNetEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions,
+            last_hidden_state=hidden_states, 
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
     def compute_position_bias(self, x, num_buckets=32):
@@ -344,7 +400,7 @@ class MPNetEncoder(nn.Module):
         return ret    
 
 
-MPNet_START_DOCSTRING = r"""
+MPNET_START_DOCSTRING = r"""
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
     usage and behavior.
@@ -388,6 +444,11 @@ MPNET_INPUTS_DOCSTRING = r"""
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
+
+@add_start_docstrings(
+    "The bare MPNet Model transformer outputting raw hidden-states without any specific head on top.",
+    MPNET_START_DOCSTRING
+)
 class MPNetModel(MPNetPreTrainedModel):
 
     base_model_prefix = "mpnet"
@@ -410,7 +471,14 @@ class MPNetModel(MPNetPreTrainedModel):
     def _prune_heads(self, heads_to_prune):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
-
+    
+    @add_start_docstrings_to_callable(MPNET_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="mpnet-base",
+        output_type=BaseModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids=None,
@@ -462,7 +530,7 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
         super().__init__(config)
 
         self.mpnet = MPNetModel(config)
-        self.lm_head = RobertaLMHead(config)
+        self.lm_head = MPNetLMHead(config)
         
         self.init_weights()
 
@@ -500,6 +568,37 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
         return outputs
 
 
+# Copied from transformers.modeling_roberta.RobertaLMHead
+class MPNetLMHead(nn.Module):
+    """MPNet Head for masked and permuted language modeling."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+
+        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def forward(self, features, **kwargs):
+        x = self.dense(features)
+        x = gelu(x)
+        x = self.layer_norm(x)
+
+        # project back to size of vocabulary with bias
+        x = self.decoder(x)
+
+        return x
+
+
+@add_start_docstrings(
+    """MPNet Model transformer with a sequence classification/regression head on top (a linear layer
+    on top of the pooled output) e.g. for GLUE tasks. """,
+    MPNET_START_DOCSTRING,
+)
 class MPNetForSequenceClassification(MPNetPreTrainedModel):
     
     base_model_prefix = "mpnet"
@@ -509,10 +608,17 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
 
         self.num_labels = config.num_labels
         self.mpnet = MPNetModel(config)
-        self.classifier = RobertaClassificationHead(config)
+        self.classifier = MPNetClassificationHead(config)
 
         self.init_weights()
-
+    
+    @add_start_docstrings_to_callable(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="mpnet-base",
+        output_type=SequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids=None,
@@ -564,11 +670,18 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
-
+@add_start_docstrings(
+    """MPNet Model with a multiple choice classification head on top (a linear layer on top of
+    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    MPNET_START_DOCSTRING,
+)
 class MPNetForMultipleChoice(MPNetPreTrainedModel):
 
     base_model_prefix = "mpnet"
@@ -581,7 +694,14 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         self.init_weights()
-
+    
+    @add_start_docstrings_to_callable(MPNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="mpnet-base",
+        output_type=MultipleChoiceModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids=None,
@@ -639,6 +759,120 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """MPNet Model with a token classification head on top (a linear layer on top of
+    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    MPNET_START_DOCSTRING,
+)
+class MPNetForTokenClassification(MPNetPreTrainedModel):
+    
+    base_model_prefix = "mpnet"
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.mpnet = MPNetModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        self.init_weights()
+
+    @add_start_docstrings_to_callable(MPNET_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="mpnet-base",
+        output_type=TokenClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the token classification loss.
+            Indices should be in ``[0, ..., config.num_labels - 1]``.
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.mpnet(
+			input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+		)
+
+        sequence_output = outputs[0]
+
+        sequence_output = self.dropout(sequence_output)
+        logits = self.classifier(sequence_output)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            # Only keep active parts of the loss
+            if attention_mask is not None:
+                active_loss = attention_mask.view(-1) == 1
+                active_logits = logits.view(-1, self.num_labels)
+                active_labels = torch.where(
+                    active_loss, labels.view(-1), torch.tensor(loss_fct.ignore_index).type_as(labels)
+                )
+                loss = loss_fct(active_logits, active_labels)
+            else:
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TokenClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+# Copied from transformers.modeling_roberta.MPNetClassificationHead
+class MPNetClassificationHead(nn.Module):
+    """Head for sentence-level classification tasks."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
+
+    def forward(self, features, **kwargs):
+        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
+        x = self.dropout(x)
+        x = self.dense(x)
+        x = torch.tanh(x)
+        x = self.dropout(x)
+        x = self.out_proj(x)
+        return x
+
+
+@add_start_docstrings(
+    """MPNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
+    the hidden-states output to compute `span start logits` and `span end logits`). """,
+    MPNET_START_DOCSTRING,
+)
 class MPNetForQuestionAnswering(MPNetPreTrainedModel):
 
     base_model_prefix = "mpnet"
@@ -652,7 +886,13 @@ class MPNetForQuestionAnswering(MPNetPreTrainedModel):
 
         self.init_weights()
 
-
+    @add_start_docstrings_to_callable(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="mpnet-base",
+        output_type=QuestionAnsweringModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids,
