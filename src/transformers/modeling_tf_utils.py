@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """TF general model utils."""
+
 import functools
+import inspect
 import os
 import re
 import warnings
@@ -25,6 +27,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.saving import hdf5_format
+
+from .tokenization_utils_base import BatchEncoding
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import DUMMY_INPUTS, TF2_WEIGHTS_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_remote_url
@@ -234,6 +238,60 @@ class TFNextSentencePredictionLoss:
         next_sentence_label = tf.boolean_mask(tf.reshape(labels, (-1,)), next_sentence_active_loss)
 
         return loss_fn(next_sentence_label, next_sentence_reduced_logits)
+
+
+def input_processing(func, inputs, **kwargs):
+    signature = inspect.signature(func).parameters
+    parameter_names = list(signature.keys())
+    output = {}
+
+    if isinstance(inputs, (tuple, list)):
+        for i, input in enumerate(inputs):
+            if type(input) == tf.Tensor:
+                # Tensor names have always the pattern name:device_id then we check only the
+                # name and not the device id
+                tensor_name = input.name.split(":")[0]
+
+                if tensor_name in parameter_names:
+                    output[tensor_name] = input
+                else:
+                    raise ValueError(
+                        "The tensor named %s does not belong to the authorized list of names %s "
+                        % (input.name, parameter_names)
+                    )
+            elif isinstance(input, tf.Tensor) or input is None:
+                output[parameter_names[i]] = input
+            else:
+                raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted." % type(input))
+    elif isinstance(inputs, (dict, BatchEncoding)):
+        output = dict(inputs)
+
+        for k, v in output.items():
+            if not isinstance(v, tf.Tensor):
+                raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted." % type(input))
+    else:
+        if isinstance(inputs, tf.Tensor) or inputs is None:
+            output[parameter_names[0]] = inputs
+        else:
+            raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted." % type(inputs))
+
+    for name in parameter_names:
+        if name not in list(output.keys()):
+            # When creating a SavedModel TF calls method the method LayerCall.__call__(args, **kwargs)
+            # So to respect the proper output we have to add this exception
+            if name == "kwargs":
+                output.update(kwargs)
+
+                if "input_ids" not in list(output.keys()):
+                    output["input_ids"] = output["args"]
+                elif "input_embeds" not in list(output.keys()):
+                    output["input_embeds"] = output["args"]
+
+                del output["args"]
+            else:
+                output[name] = kwargs.pop(name, signature[name].default)
+
+    return output
 
 
 def detect_tf_missing_unexpected_layers(model, resolved_archive_file):

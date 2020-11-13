@@ -161,7 +161,7 @@ class TFModelTesterMixin:
                 self.assertListEqual(arg_names[:5], expected_arg_names)
 
             else:
-                expected_arg_names = ["inputs"]
+                expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
     @slow
