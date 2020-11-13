@@ -197,7 +197,7 @@ def get_model_doc_files():
 def find_tested_models(test_file):
     """ Parse the content of test_file to detect what's in all_model_classes"""
     # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the class
-    with open(os.path.join(PATH_TO_TESTS, test_file), "r", encoding="utf-8") as f:
+    with open(os.path.join(PATH_TO_TESTS, test_file), "r", encoding="utf-8", newline="\n") as f:
         content = f.read()
     all_models = re.findall(r"all_model_classes\s+=\s+\(\s*\(([^\)]*)\)", content)
     # Check with one less parenthesis
@@ -255,7 +255,7 @@ def check_all_models_are_tested():
 
 def find_documented_classes(doc_file):
     """ Parse the content of doc_file to detect which classes it documents"""
-    with open(os.path.join(PATH_TO_DOC, doc_file), "r", encoding="utf-8") as f:
+    with open(os.path.join(PATH_TO_DOC, doc_file), "r", encoding="utf-8", newline="\n") as f:
         content = f.read()
     return re.findall(r"autoclass:: transformers.(\S+)\s+", content)
 
@@ -360,7 +360,7 @@ _re_decorator = re.compile(r"^\s*@(\S+)\s+$")
 
 def check_decorator_order(filename):
     """ Check that in the test file `filename` the slow decorator is always last."""
-    with open(filename, "r", encoding="utf-8") as f:
+    with open(filename, "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
     decorator_before = None
     errors = []

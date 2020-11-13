@@ -4,10 +4,11 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
+import transformers
 from seq2seq_trainer import Seq2SeqTrainer
 from seq2seq_training_args import Seq2SeqTrainingArguments
 from transformers import AutoConfig, AutoModelForSeq2SeqLM, AutoTokenizer, HfArgumentParser, MBartTokenizer, set_seed
-from transformers.trainer_utils import EvaluationStrategy
+from transformers.trainer_utils import EvaluationStrategy, is_main_process
 from utils import (
     Seq2SeqDataCollator,
     Seq2SeqDataset,
@@ -131,6 +132,11 @@ def main():
         bool(training_args.local_rank != -1),
         training_args.fp16,
     )
+    # Set the verbosity to info of the Transformers logger (on main process only):
+    if is_main_process(training_args.local_rank):
+        transformers.utils.logging.set_verbosity_info()
+        transformers.utils.logging.enable_default_handler()
+        transformers.utils.logging.enable_explicit_format()
     logger.info("Training/evaluation parameters %s", training_args)
 
     # Set seed
