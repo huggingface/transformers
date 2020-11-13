@@ -75,7 +75,6 @@ class T5Config(PretrainedConfig):
     def __init__(
         self,
         vocab_size=32128,
-        n_positions=512,
         d_model=512,
         d_kv=64,
         d_ff=2048,
@@ -98,7 +97,6 @@ class T5Config(PretrainedConfig):
             **kwargs,
         )
         self.vocab_size = vocab_size
-        self.n_positions = n_positions
         self.d_model = d_model
         self.d_kv = d_kv
         self.d_ff = d_ff
@@ -111,10 +109,6 @@ class T5Config(PretrainedConfig):
         self.dropout_rate = dropout_rate
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor
-
-    @property
-    def max_position_embeddings(self):
-        return self.n_positions
 
     @property
     def hidden_size(self):
