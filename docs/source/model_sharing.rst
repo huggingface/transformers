@@ -270,6 +270,7 @@ Once it's created, you can clone it and configure it (replace username by your u
     cd your-model-name
     git lfs install
     git config --global user.email "email@example.com"
+    # Tip: using the same email than for your huggingface.co account will link your commits to your profile
     git config --global user.name "Your name"
 
 Once you've saved your model inside, and your clone is setup with the right remote URL, you can add it and push it with
