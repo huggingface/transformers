@@ -1381,7 +1381,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = XLNetTokenizer.from_pretrained('xlnet-large-cased')
-            >>> model = XLNetLMHeadModel.from_pretrained('xlnet-large-cased', return_dict=True)
+            >>> model = XLNetLMHeadModel.from_pretrained('xlnet-large-cased')
 
             >>> # We show how to setup inputs to predict a next token using a bi-directional context.
             >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is very <mask>", add_special_tokens=False)).unsqueeze(0)  # We will predict the masked token
@@ -1916,7 +1916,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             >>> import torch
 
             >>> tokenizer =  XLNetTokenizer.from_pretrained('xlnet-base-cased')
-            >>> model = XLNetForQuestionAnswering.from_pretrained('xlnet-base-cased', return_dict=True)
+            >>> model = XLNetForQuestionAnswering.from_pretrained('xlnet-base-cased')
 
             >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
             >>> start_positions = torch.tensor([1])

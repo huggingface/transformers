@@ -657,7 +657,7 @@ class ModelTesterMixin:
             model.eval()
 
             with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class), return_dict=True)
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             hidden_states = outputs["hidden_states"] if "hidden_states" in outputs else outputs[-1]
 
             expected_num_layers = getattr(

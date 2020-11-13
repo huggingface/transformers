@@ -132,7 +132,6 @@ class TFXxxModelTest(TFModelTesterMixin, unittest.TestCase):
                 max_position_embeddings=self.max_position_embeddings,
                 type_vocab_size=self.type_vocab_size,
                 initializer_range=self.initializer_range,
-                return_dict=True,
             )
 
             return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels

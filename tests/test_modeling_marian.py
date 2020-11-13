@@ -50,7 +50,6 @@ class ModelTester:
             decoder_ffn_dim=32,
             max_position_embeddings=48,
             add_final_layer_norm=True,
-            return_dict=True,
         )
 
     def prepare_config_and_inputs_for_common(self):

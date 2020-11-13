@@ -920,7 +920,7 @@ class BertForPreTraining(BertPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> model = BertForPreTraining.from_pretrained('bert-base-uncased', return_dict=True)
+            >>> model = BertForPreTraining.from_pretrained('bert-base-uncased')
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -1036,7 +1036,7 @@ class BertLMHeadModel(BertPreTrainedModel):
             >>> tokenizer = BertTokenizer.from_pretrained('bert-base-cased')
             >>> config = BertConfig.from_pretrained("bert-base-cased")
             >>> config.is_decoder = True
-            >>> model = BertLMHeadModel.from_pretrained('bert-base-cased', config=config, return_dict=True)
+            >>> model = BertLMHeadModel.from_pretrained('bert-base-cased', config=config)
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -1250,7 +1250,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-            >>> model = BertForNextSentencePrediction.from_pretrained('bert-base-uncased', return_dict=True)
+            >>> model = BertForNextSentencePrediction.from_pretrained('bert-base-uncased')
 
             >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
             >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."

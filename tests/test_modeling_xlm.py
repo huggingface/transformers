@@ -116,7 +116,6 @@ class XLMModelTester:
             use_proj=self.use_proj,
             num_labels=self.num_labels,
             bos_token_id=self.bos_token_id,
-            return_dict=True,
         )
 
         return (
