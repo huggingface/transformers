@@ -2041,28 +2041,29 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
         self,
         inputs=None,
         attention_mask=None,
-        global_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
+        global_attention_mask=None,
         inputs_embeds=None,
-        labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        labels=None,
+        training=False,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            global_attention_mask = inputs[2] if len(inputs) > 2 else global_attention_mask
-            token_type_ids = inputs[3] if len(inputs) > 3 else token_type_ids
-            position_ids = inputs[4] if len(inputs) > 4 else position_ids
+            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
+            position_ids = inputs[3] if len(inputs) > 3 else position_ids
+            global_attention_mask = inputs[4] if len(inputs) > 4 else global_attention_mask
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
-            labels = inputs[6] if len(inputs) > 6 else labels
-            output_attentions = inputs[7] if len(inputs) > 7 else output_attentions
-            output_hidden_states = inputs[8] if len(inputs) > 8 else output_hidden_states
-            return_dict = inputs[9] if len(inputs) > 9 else return_dict
+            output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
+            output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
+            return_dict = inputs[8] if len(inputs) > 8 else return_dict
+            labels = inputs[9] if len(inputs) > 9 else labels
             assert len(inputs) <= 10, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
@@ -2154,14 +2155,15 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         self,
         inputs,
         attention_mask=None,
-        global_attention_mask=None,
         token_type_ids=None,
         position_ids=None,
+        global_attention_mask=None,
         inputs_embeds=None,
-        labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        labels=None,
+        training=False,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -2172,14 +2174,14 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            global_attention_mask = inputs[2] if len(inputs) > 2 else global_attention_mask
-            token_type_ids = inputs[3] if len(inputs) > 3 else token_type_ids
-            position_ids = inputs[4] if len(inputs) > 4 else position_ids
+            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
+            position_ids = inputs[3] if len(inputs) > 3 else position_ids
+            global_attention_mask = inputs[4] if len(inputs) > 4 else global_attention_mask
             inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
-            labels = inputs[6] if len(inputs) > 6 else labels
-            output_attentions = inputs[7] if len(inputs) > 7 else output_attentions
-            output_hidden_states = inputs[8] if len(inputs) > 8 else output_hidden_states
-            return_dict = inputs[9] if len(inputs) > 9 else return_dict
+            output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
+            output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
+            return_dict = inputs[8] if len(inputs) > 8 else return_dict
+            labels = inputs[9] if len(inputs) > 9 else labels
             assert len(inputs) <= 10, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
