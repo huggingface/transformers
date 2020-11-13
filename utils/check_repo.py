@@ -279,20 +279,9 @@ def check_models_are_documented(module, doc_file):
 def _get_model_name(module):
     """ Get the model name for the module defining it."""
     splits = module.__name__.split("_")
+    splits = splits[(2 if splits[1] in ["flax", "tf"] else 1) :]
 
-    # Secial case for transfo_xl
-    if splits[-1] == "xl":
-        return "_".join(splits[-2:])
-    # Special case for xlm_prophetnet
-    if splits[-1] == "prophetnet" and splits[-2] == "xlm":
-        return "_".join(splits[-2:])
-    # Secial case for xlm_roberta
-    if splits[-1] == "roberta" and splits[-2] == "xlm":
-        return "_".join(splits[-2:])
-    # Special case for bert_generation
-    if splits[-1] == "generation" and splits[-2] == "bert":
-        return "_".join(splits[-2:])
-    return splits[-1]
+    return "_".join(splits)
 
 
 def check_all_models_are_documented():
