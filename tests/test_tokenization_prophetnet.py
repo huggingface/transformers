@@ -164,7 +164,7 @@ class ProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         batch = tokenizer.prepare_seq2seq_batch(
             src_text,
             tgt_texts=tgt_text,
-            return_tensors='pt',
+            return_tensors="pt",
         )
         self.assertIsInstance(batch, BatchEncoding)
         result = list(batch.input_ids.numpy()[0])
