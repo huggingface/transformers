@@ -1050,7 +1050,7 @@ class LongformerEncoder(nn.Module):
         attention_mask=None,
         output_attentions=False,
         output_hidden_states=False,
-        return_dict=False,
+        return_dict=True,
     ):
 
         is_index_masked = attention_mask < 0
