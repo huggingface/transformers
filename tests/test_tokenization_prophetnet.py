@@ -17,7 +17,7 @@
 import os
 import unittest
 
-from transformers.testing_utils import slow
+from transformers.testing_utils import require_torch, slow
 from transformers.tokenization_bert import (
     BasicTokenizer,
     WordpieceTokenizer,
