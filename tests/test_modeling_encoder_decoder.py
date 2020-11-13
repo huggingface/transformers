@@ -443,9 +443,9 @@ class EncoderDecoderMixin:
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_from_pretrained_configs(**input_ids_dict)
 
-    def test_encoder_decoder_model_from_pretrained(self):
-        input_ids_dict = self.prepare_config_and_inputs()
-        self.check_encoder_decoder_model_from_pretrained(**input_ids_dict, return_dict=False)
+    # def test_encoder_decoder_model_from_pretrained(self):
+    #     input_ids_dict = self.prepare_config_and_inputs()
+    #     self.check_encoder_decoder_model_from_pretrained(**input_ids_dict, return_dict=False)
 
     def test_encoder_decoder_model_from_pretrained_return_dict(self):
         input_ids_dict = self.prepare_config_and_inputs()
