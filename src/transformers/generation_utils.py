@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import torch
 from torch.nn import functional as F
@@ -26,6 +26,7 @@ from .generation_logits_process import (
     MinLengthLogitsProcessor,
     NoBadWordsLogitsProcessor,
     NoRepeatNGramLogitsProcessor,
+    PrefixConstrainedLogitsProcessor,
     RepetitionPenaltyLogitsProcessor,
     TemperatureLogitsWarper,
     TopKLogitsWarper,
@@ -249,6 +250,8 @@ class GenerationMixin:
         bad_words_ids: List[List[int]],
         min_length: int,
         eos_token_id: int,
+        prefix_allowed_tokens_fn: Callable,
+        num_beams: int,
     ) -> LogitsProcessorList:
         """
         This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
@@ -276,6 +279,8 @@ class GenerationMixin:
             processors.append(NoBadWordsLogitsProcessor(bad_words_ids, eos_token_id))
         if min_length is not None and eos_token_id is not None and min_length > -1:
             processors.append(MinLengthLogitsProcessor(min_length, eos_token_id))
+        if prefix_allowed_tokens_fn is not None:
+            processors.append(PrefixConstrainedLogitsProcessor(prefix_allowed_tokens_fn, num_beams))
         return processors
 
     @torch.no_grad()
@@ -300,6 +305,7 @@ class GenerationMixin:
         num_return_sequences: Optional[int] = None,
         decoder_start_token_id: Optional[int] = None,
         use_cache: Optional[bool] = None,
+        prefix_allowed_tokens_fn: Callable = None,
         **model_kwargs
     ) -> torch.LongTensor:
         r"""
@@ -366,6 +372,13 @@ class GenerationMixin:
             use_cache: (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not the model should use the past last key/values attentions (if applicable to the model) to
                 speed up decoding.
+            prefix_allowed_tokens_fn: (:obj:`Callable`, `optional`, defaults to :obj:`None`):
+                If provided, it has to be a function that has as arguments :obj:`inputs_id`. At each step of Beam
+                Search, this function is called with the :obj:`inputs_id` containing the previously generated tokens as
+                a tensor of shape :obj:`(batch_size * num_beams)`:. This function has to return a list of lists with
+                the allowed BPE tokens at the next step (list of batches and list of beams).
+                This argument is useful for constrained generation conditioned on the prefix. If not provided no
+                constrain is applied.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
                 model is an Encoder-Decoder model, encoder specific kwargs should not be prefixed and decoder specific
@@ -485,6 +498,8 @@ class GenerationMixin:
             bad_words_ids=bad_words_ids,
             min_length=min_length,
             eos_token_id=eos_token_id,
+            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+            num_beams=num_beams,
         )
 
         if is_greedy_gen_mode:

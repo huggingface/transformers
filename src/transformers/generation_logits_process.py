@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from abc import ABC
-from typing import Iterable, List
+from typing import Callable, Iterable, List
 
 import numpy as np
 import torch
@@ -372,3 +373,25 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
         )
         scores = scores.masked_fill(banned_mask, -float("inf"))
         return scores
+
+
+class PrefixConstrainedLogitsProcessor(LogitsProcessor):
+    r"""
+    :class:`transformers.LogitsProcessor` .
+
+    Args:
+        prefix_allowed_tokens_fn (:obj:`Callable`):
+
+    """
+
+    def __init__(self, prefix_allowed_tokens_fn: Callable, num_beams: int):
+        self._prefix_allowed_tokens_fn = prefix_allowed_tokens_fn
+        self._num_beams = num_beams
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        mask = torch.full_like(scores, -math.inf)
+        for batch_id, beam_sent in enumerate(input_ids.view(-1, self._num_beams, input_ids.shape[-1])):
+            for beam_id, sent in enumerate(beam_sent):
+                mask[batch_id * self._num_beams + beam_id, self._prefix_allowed_tokens_fn(batch_id, sent)] = 0
+
+        return scores + mask
