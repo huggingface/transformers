@@ -20,6 +20,7 @@ from transformers import (
     AutoConfig,
     AutoTokenizer,
     BartForConditionalGeneration,
+    BatchEncoding,
     RagConfig,
     RagSequenceForGeneration,
     RagTokenForGeneration,
@@ -89,24 +90,24 @@ class GenerativeQAModule(BaseTransformer):
         config = config_class.from_pretrained(hparams.model_name_or_path)
 
         # set retriever parameters
-        config.index_name = args.index_name or config.index_name
-        config.passages_path = args.passages_path or config.passages_path
-        config.index_path = args.index_path or config.index_path
-        config.use_dummy_dataset = args.use_dummy_dataset
+        config.index_name = hparams.index_name or config.index_name
+        config.passages_path = hparams.passages_path or config.passages_path
+        config.index_path = hparams.index_path or config.index_path
+        config.use_dummy_dataset = hparams.use_dummy_dataset
 
         # set extra_model_params for generator configs and load_model
         extra_model_params = ("encoder_layerdrop", "decoder_layerdrop", "attention_dropout", "dropout")
         if self.is_rag_model:
-            if args.prefix is not None:
-                config.generator.prefix = args.prefix
+            if hparams.prefix is not None:
+                config.generator.prefix = hparams.prefix
             config.label_smoothing = hparams.label_smoothing
             hparams, config.generator = set_extra_model_params(extra_model_params, hparams, config.generator)
             retriever = RagPyTorchDistributedRetriever.from_pretrained(hparams.model_name_or_path, config=config)
             model = self.model_class.from_pretrained(hparams.model_name_or_path, config=config, retriever=retriever)
             prefix = config.question_encoder.prefix
         else:
-            if args.prefix is not None:
-                config.prefix = args.prefix
+            if hparams.prefix is not None:
+                config.prefix = hparams.prefix
             hparams, config = set_extra_model_params(extra_model_params, hparams, config)
             model = self.model_class.from_pretrained(hparams.model_name_or_path, config=config)
             prefix = config.prefix
@@ -262,6 +263,7 @@ class GenerativeQAModule(BaseTransformer):
 
     def _generative_step(self, batch: dict) -> dict:
         start_time = time.time()
+        batch = BatchEncoding(batch).to(device=self.model.device)
         generated_ids = self.model.generate(
             batch["input_ids"],
             attention_mask=batch["attention_mask"],
@@ -422,7 +424,15 @@ class GenerativeQAModule(BaseTransformer):
         return parser
 
 
-def main(args, model=None) -> GenerativeQAModule:
+def main(args=None, model=None) -> GenerativeQAModule:
+
+    parser = argparse.ArgumentParser()
+    parser = pl.Trainer.add_argparse_args(parser)
+    parser = GenerativeQAModule.add_model_specific_args(parser, os.getcwd())
+    parser = GenerativeQAModule.add_retriever_specific_args(parser)
+
+    args = args or parser.parse_args()
+
     Path(args.output_dir).mkdir(exist_ok=True)
     if model is None:
         model: GenerativeQAModule = GenerativeQAModule(args)
@@ -472,17 +482,8 @@ def main(args, model=None) -> GenerativeQAModule:
     trainer.logger.log_hyperparams(model.hparams)
 
     # test() without a model tests using the best checkpoint automatically
-    trainer.test()
-
-    return model
+    return trainer.test()
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser = pl.Trainer.add_argparse_args(parser)
-    parser = GenerativeQAModule.add_model_specific_args(parser, os.getcwd())
-    parser = GenerativeQAModule.add_retriever_specific_args(parser)
-
-    args = parser.parse_args()
-
-    main(args)
+    main()
