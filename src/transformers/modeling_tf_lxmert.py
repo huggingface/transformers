@@ -1275,6 +1275,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             obj_labels = inputs.pop("obj_labels", obj_labels)
             matched_label = inputs.pop("matched_label", matched_label)
             ans = inputs.pop("ans", ans)
+        return_dict = return_dict if return_dict is not None else self.lxmert.return_dict
 
         lxmert_output = self.lxmert(
             inputs,
