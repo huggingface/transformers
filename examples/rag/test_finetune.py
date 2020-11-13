@@ -9,15 +9,16 @@ import torch
 from transformers.file_utils import is_apex_available
 from transformers.testing_utils import TestCasePlus
 
+
 sys.path.append(os.path.dirname(__file__))
 import finetune  # noqa
+
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger()
 
 
 class RagFinetuneExampleTests(TestCasePlus):
-
     def test_finetune(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -68,6 +69,7 @@ class RagFinetuneExampleTests(TestCasePlus):
         with patch.object(sys, "argv", testargs):
             result = finetune.main()[0]
             import json
+
             print(result)
             open("out.txt", "w").write(json.dumps(result))
             self.assertGreaterEqual(result["test_em"], 0.2)
