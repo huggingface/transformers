@@ -271,3 +271,10 @@ Once it's created, you can clone it and configure it (replace username by your u
     git config --global user.email "email@example.com"
     git config --global user.name "Your name"
 
+Once you've saved your model inside, and your clone is setup with the right remote URL,
+you can add it and push it with usual git commands.
+
+.. code-block:: bash	
+    git add .
+    git commit -m "Initial commit"
+    git push
