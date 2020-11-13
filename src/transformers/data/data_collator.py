@@ -206,6 +206,10 @@ def _collate_batch(examples, tokenizer):
     return result
 
 
+def tolist(x: Union[List[Any], torch.Tensor]):
+    return x.tolist() if isinstance(x, torch.Tensor) else x
+
+
 @dataclass
 class DataCollatorForLanguageModeling:
     """
@@ -315,24 +319,24 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             input_ids = examples
             examples = [{"input_ids": e} for e in examples]
 
-        batch_input = self._tensorize_batch(input_ids)
+        batch_input = _collate_batch(input_ids, self.tokenizer)
 
         mask_labels = []
         for e in examples:
             ref_tokens = []
-            for id in e["input_ids"].tolist():
+            for id in tolist(e["input_ids"]):
                 token = self.tokenizer._convert_id_to_token(id)
                 ref_tokens.append(token)
 
             # For Chinese tokens, we need extra inf to mark sub-word, e.g [喜,欢]-> [喜，##欢]
             if "chinese_ref" in e:
-                ref_pos = e["chinese_ref"].tolist()
+                ref_pos = tolist(e["chinese_ref"])
                 len_seq = e["input_ids"].size(0)
                 for i in range(len_seq):
                     if i in ref_pos:
                         ref_tokens[i] = "##" + ref_tokens[i]
             mask_labels.append(self._whole_word_mask(ref_tokens))
-        batch_mask = self._tensorize_batch(mask_labels)
+        batch_mask = _collate_batch(mask_labels, self.tokenizer)
         inputs, labels = self.mask_tokens(batch_input, batch_mask)
         return {"input_ids": inputs, "labels": labels}
 
@@ -511,27 +515,9 @@ class DataCollatorForPermutationLanguageModeling:
     ) -> Dict[str, torch.Tensor]:
         if isinstance(examples[0], (dict, BatchEncoding)):
             examples = [e["input_ids"] for e in examples]
-        batch = self._tensorize_batch(examples)
+        batch = _collate_batch(examples, self.tokenizer)
         inputs, perm_mask, target_mapping, labels = self.mask_tokens(batch)
         return {"input_ids": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "labels": labels}
-
-    def _tensorize_batch(
-        self, examples: List[Union[List[int], torch.Tensor, Dict[str, torch.Tensor]]]
-    ) -> torch.Tensor:
-        # In order to accept both lists of lists and lists of Tensors
-        if isinstance(examples[0], (list, tuple)):
-            examples = [torch.Tensor(e) for e in examples]
-        length_of_first = examples[0].size(0)
-        are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
-        if are_tensors_same_length:
-            return torch.stack(examples, dim=0)
-        else:
-            if self.tokenizer._pad_token is None:
-                raise ValueError(
-                    "You are attempting to pad samples but the tokenizer you are using"
-                    f" ({self.tokenizer.__class__.__name__}) does not have one."
-                )
-            return pad_sequence(examples, batch_first=True, padding_value=self.tokenizer.pad_token_id)
 
     def mask_tokens(self, inputs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -593,7 +579,7 @@ class DataCollatorForPermutationLanguageModeling:
             masked_indices.masked_fill_(padding_mask, value=0.0)
 
         # Mask indicating non-functional tokens, where functional tokens are [SEP], [CLS], padding, etc.
-        non_func_mask = ~(padding_mask & special_tokens_mask)
+        non_func_mask = ~(padding_mask | special_tokens_mask)
 
         inputs[masked_indices] = self.tokenizer.mask_token_id
         labels[~masked_indices] = -100  # We only compute loss on masked tokens

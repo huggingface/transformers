@@ -28,7 +28,7 @@ from .file_utils import (
     replace_return_docstrings,
 )
 from .modeling_bert import BertEncoder
-from .modeling_outputs import BaseModelOutput, CausalLMOutput
+from .modeling_outputs import BaseModelOutputWithCrossAttentions, CausalLMOutputWithCrossAttentions
 from .modeling_utils import PreTrainedModel
 from .utils import logging
 
@@ -297,7 +297,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/bert_for_seq_generation_L-24_bbc_encoder",
-        output_type=BaseModelOutput,
+        output_type=BaseModelOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -381,10 +381,11 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
 
-        return BaseModelOutput(
+        return BaseModelOutputWithCrossAttentions(
             last_hidden_state=sequence_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+            cross_attentions=encoder_outputs.cross_attentions,
         )
 
 
@@ -422,7 +423,7 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
         return self.lm_head.decoder
 
     @add_start_docstrings_to_model_forward(BERT_GENERATION_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=CausalLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -499,11 +500,12 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
             output = (prediction_scores,) + outputs[1:]
             return ((lm_loss,) + output) if lm_loss is not None else output
 
-        return CausalLMOutput(
+        return CausalLMOutputWithCrossAttentions(
             loss=lm_loss,
             logits=prediction_scores,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
         )
 
     def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):

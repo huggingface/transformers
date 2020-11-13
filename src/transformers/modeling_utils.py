@@ -539,7 +539,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                         ) != len(decoder_modules):
                             # this can happen if the name corresponds to the position in a list module list of layers
                             # in this case the decoder has added a cross-attention that the encoder does not have
-                            # thus skip this step and substract one layer pos from encoder
+                            # thus skip this step and subtract one layer pos from encoder
                             encoder_layer_pos -= 1
                             continue
                     elif name not in encoder_modules:
@@ -598,7 +598,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             new_num_tokens (:obj:`int`, `optional`):
                 The number of new tokens in the embedding matrix. Increasing the size will add newly initialized
                 vectors at the end. Reducing the size will remove vectors from the end. If not provided or :obj:`None`,
-                just returns a pointer to the input tokens :obj:`torch.nn.Embedding` module of the model wihtout doing
+                just returns a pointer to the input tokens :obj:`torch.nn.Embedding` module of the model without doing
                 anything.
 
         Return:
@@ -639,7 +639,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
                 Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
                 vectors from the end. If not provided or :obj:`None`, just returns a pointer to the input tokens
-                :obj:`torch.nn.Embedding`` module of the model wihtout doing anything.
+                :obj:`torch.nn.Embedding`` module of the model without doing anything.
 
         Return:
             :obj:`torch.nn.Embedding`: Pointer to the resized Embedding Module or the old Embedding Module if
@@ -813,9 +813,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (e.g., not try doanloading the model).
-            use_cdn(:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether or not to use Cloudfront (a Content Delivery Network, or CDN) when searching for the model on
-                our S3 (faster). Should be set to :obj:`False` for checkpoints larger than 20GB.
+            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+                identifier allowed by git.
             mirror(:obj:`str`, `optional`, defaults to :obj:`None`):
                 Mirror source to accelerate downloads in China. If you are from China and have an accessibility
                 problem, you can set this option to resolve it. Note that we do not guarantee the timeliness or safety.
@@ -857,7 +858,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
-        use_cdn = kwargs.pop("use_cdn", True)
+        revision = kwargs.pop("revision", None)
         mirror = kwargs.pop("mirror", None)
 
         # Load config if we don't provide a configuration
@@ -872,6 +873,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 resume_download=resume_download,
                 proxies=proxies,
                 local_files_only=local_files_only,
+                revision=revision,
                 **kwargs,
             )
         else:
@@ -909,7 +911,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 archive_file = hf_bucket_url(
                     pretrained_model_name_or_path,
                     filename=(TF2_WEIGHTS_NAME if from_tf else WEIGHTS_NAME),
-                    use_cdn=use_cdn,
+                    revision=revision,
                     mirror=mirror,
                 )
 
@@ -923,9 +925,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     resume_download=resume_download,
                     local_files_only=local_files_only,
                 )
-                if resolved_archive_file is None:
-                    raise EnvironmentError
-            except EnvironmentError:
+            except EnvironmentError as err:
+                logger.error(err)
                 msg = (
                     f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
                     f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
@@ -1047,7 +1048,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
                     f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
                     f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
-                    f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPretraining model).\n"
+                    f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).\n"
                     f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
                     f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
                 )
@@ -1365,7 +1366,7 @@ class SQuADHead(nn.Module):
                 Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS). 1.0 means token
                 should be masked.
             return_dict (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOuput` instead of a plain tuple.
+                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 
         Returns:
         """
@@ -1651,7 +1652,7 @@ def apply_chunking_to_forward(
             The input tensors of ``forward_fn`` which will be chunked
 
     Returns:
-        :obj:`torch.Tensor`: A tensor with the same shape as the :obj:`foward_fn` would have given if applied`.
+        :obj:`torch.Tensor`: A tensor with the same shape as the :obj:`forward_fn` would have given if applied`.
 
 
     Examples::
@@ -1667,12 +1668,12 @@ def apply_chunking_to_forward(
     """
 
     assert len(input_tensors) > 0, "{} has to be a tuple/list of tensors".format(input_tensors)
-    tensor_shape = input_tensors[0].shape
+    tensor_shape = input_tensors[0].shape[chunk_dim]
     assert all(
-        input_tensor.shape == tensor_shape for input_tensor in input_tensors
+        input_tensor.shape[chunk_dim] == tensor_shape for input_tensor in input_tensors
     ), "All input tenors have to be of the same shape"
 
-    # inspect.signature exist since python 3.5 and is a python method -> no problem with backward compability
+    # inspect.signature exist since python 3.5 and is a python method -> no problem with backward compatibility
     num_args_in_forward_chunk_fn = len(inspect.signature(forward_fn).parameters)
     assert num_args_in_forward_chunk_fn == len(
         input_tensors

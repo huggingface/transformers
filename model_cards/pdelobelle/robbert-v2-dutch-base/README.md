@@ -5,7 +5,7 @@ tags:
 - Dutch
 - RoBERTa
 - RobBERT
-license: "MIT"
+license: mit
 datasets:
 - oscar
 - Shuffled Dutch section of the OSCAR corpus (https://oscar-corpus.com/)

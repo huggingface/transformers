@@ -17,6 +17,7 @@
 
 import math
 import os
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -1154,16 +1155,17 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         visual_attention_mask=None,
         token_type_ids=None,
         inputs_embeds=None,
-        masked_lm_labels=None,
+        labels=None,
         obj_labels=None,
         matched_label=None,
         ans=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
-        masked_lm_labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
+        labels (``torch.LongTensor`` of shape ``(batch_size, sequence_length)``, `optional`):
             Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
             config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
@@ -1182,6 +1184,15 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
 
         Returns:
         """
+
+        if "masked_lm_labels" in kwargs:
+            warnings.warn(
+                "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
+                FutureWarning,
+            )
+            labels = kwargs.pop("masked_lm_labels")
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
         lxmert_output = self.lxmert(
@@ -1210,13 +1221,13 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
 
         total_loss = (
             None
-            if (masked_lm_labels is None and matched_label is None and obj_labels is None and ans is None)
+            if (labels is None and matched_label is None and obj_labels is None and ans is None)
             else torch.tensor(0.0, device=device)
         )
-        if masked_lm_labels is not None and self.task_mask_lm:
+        if labels is not None and self.task_mask_lm:
             masked_lm_loss = self.loss_fcts["ce"](
                 lang_prediction_scores.view(-1, self.config.vocab_size),
-                masked_lm_labels.view(-1),
+                labels.view(-1),
             )
             total_loss += masked_lm_loss
         if matched_label is not None and self.task_matched:
@@ -1391,6 +1402,7 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
 
         Returns:
         """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         lxmert_output = self.lxmert(
             input_ids=input_ids,

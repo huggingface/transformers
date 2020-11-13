@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "3.4.0"
+__version__ = "3.5.0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -329,6 +329,7 @@ if is_torch_available():
         MODEL_FOR_CAUSAL_LM_MAPPING,
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+        MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
         MODEL_FOR_PRETRAINING_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
@@ -340,6 +341,7 @@ if is_torch_available():
         AutoModelForCausalLM,
         AutoModelForMaskedLM,
         AutoModelForMultipleChoice,
+        AutoModelForNextSentencePrediction,
         AutoModelForPreTraining,
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
@@ -404,6 +406,9 @@ if is_torch_available():
         DistilBertPreTrainedModel,
     )
     from .modeling_dpr import (
+        DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
         DPRContextEncoder,
         DPRPretrainedContextEncoder,
         DPRPretrainedQuestionEncoder,
@@ -649,6 +654,7 @@ if is_tf_available():
         TF_MODEL_FOR_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_MASKED_LM_MAPPING,
         TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+        TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
         TF_MODEL_FOR_PRETRAINING_MAPPING,
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
@@ -709,6 +715,17 @@ if is_tf_available():
         TFDistilBertMainLayer,
         TFDistilBertModel,
         TFDistilBertPreTrainedModel,
+    )
+    from .modeling_tf_dpr import (
+        TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFDPRContextEncoder,
+        TFDPRPretrainedContextEncoder,
+        TFDPRPretrainedQuestionEncoder,
+        TFDPRPretrainedReader,
+        TFDPRQuestionEncoder,
+        TFDPRReader,
     )
     from .modeling_tf_electra import (
         TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,

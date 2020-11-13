@@ -15,8 +15,6 @@
 # limitations under the License.
 """ XLNet configuration """
 
-import warnings
-
 from .configuration_utils import PretrainedConfig
 from .utils import logging
 
@@ -24,8 +22,8 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "xlnet-base-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-base-cased-config.json",
-    "xlnet-large-cased": "https://s3.amazonaws.com/models.huggingface.co/bert/xlnet-large-cased-config.json",
+    "xlnet-base-cased": "https://huggingface.co/xlnet-base-cased/resolve/main/config.json",
+    "xlnet-large-cased": "https://huggingface.co/xlnet-large-cased/resolve/main/config.json",
 }
 
 
@@ -144,7 +142,7 @@ class XLNetConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         dropout=0.1,
-        mem_len=None,
+        mem_len=512,
         reuse_len=None,
         bi_data=False,
         clamp_len=-1,
@@ -197,17 +195,6 @@ class XLNetConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
-
-        if mem_len is None or mem_len == 0:
-            warnings.warn(
-                "This config doesn't use attention memories, a core feature of XLNet."
-                " Consider setting `mem_len` to a non-zero value, for example "
-                "`xlnet = XLNetLMHeadModel.from_pretrained('xlnet-base-cased'', mem_len=1024)`,"
-                " for accurate training performance as well as an order of magnitude faster inference."
-                " Starting from version 3.5.0, the default parameter will be 1024, following"
-                " the implementation in https://arxiv.org/abs/1906.08237",
-                FutureWarning,
-            )
 
     @property
     def max_position_embeddings(self):

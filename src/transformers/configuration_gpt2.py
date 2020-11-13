@@ -22,11 +22,11 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "gpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json",
-    "gpt2-medium": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-medium-config.json",
-    "gpt2-large": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-large-config.json",
-    "gpt2-xl": "https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-xl-config.json",
-    "distilgpt2": "https://s3.amazonaws.com/models.huggingface.co/bert/distilgpt2-config.json",
+    "gpt2": "https://huggingface.co/gpt2/resolve/main/config.json",
+    "gpt2-medium": "https://huggingface.co/gpt2-medium/resolve/main/config.json",
+    "gpt2-large": "https://huggingface.co/gpt2-large/resolve/main/config.json",
+    "gpt2-xl": "https://huggingface.co/gpt2-xl/resolve/main/config.json",
+    "distilgpt2": "https://huggingface.co/distilgpt2/resolve/main/config.json",
 }
 
 

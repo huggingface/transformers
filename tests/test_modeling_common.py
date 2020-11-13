@@ -23,7 +23,7 @@ from typing import List, Tuple
 
 from transformers import is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
-from transformers.testing_utils import require_torch, require_torch_multigpu, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
 
 
 if is_torch_available():
@@ -35,10 +35,12 @@ if is_torch_available():
         MODEL_FOR_CAUSAL_LM_MAPPING,
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+        MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        MODEL_MAPPING,
         AdaptiveEmbedding,
         BertConfig,
         BertModel,
@@ -88,7 +90,10 @@ class ModelTesterMixin:
                 inputs_dict["end_positions"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
-            elif model_class in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values():
+            elif model_class in [
+                *MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values(),
+                *MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.values(),
+            ]:
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
@@ -204,6 +209,41 @@ class ModelTesterMixin:
                 expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    def test_training(self):
+        if not self.model_tester.is_training:
+            return
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            if model_class in MODEL_MAPPING.values():
+                continue
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
+    def test_training_gradient_checkpointing(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.model_tester.is_training or not hasattr(config, "gradient_checkpointing"):
+            return
+
+        config.gradient_checkpointing = True
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            if model_class in MODEL_MAPPING.values():
+                continue
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -220,12 +260,13 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
             model = model_class(config)
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs[-1]
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             # check that output_attentions also work using config
@@ -235,8 +276,8 @@ class ModelTesterMixin:
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class), return_dict=True)
-            attentions = outputs["attentions"] if "attentions" in outputs.keys() else outputs[-1]
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             if chunk_length is not None:
@@ -252,32 +293,37 @@ class ModelTesterMixin:
             out_len = len(outputs)
 
             if self.is_encoder_decoder:
-                correct_outlen = (
-                    self.model_tester.base_model_out_len if hasattr(self.model_tester, "base_model_out_len") else 4
-                )
-                decoder_attention_idx = (
-                    self.model_tester.decoder_attention_idx
-                    if hasattr(self.model_tester, "decoder_attention_idx")
-                    else 1
-                )
+                correct_outlen = 5
 
                 # loss is at first position
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
-                    decoder_attention_idx += 1
                 # Question Answering model returns start_logits and end_logits
                 if model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
                     correct_outlen += 1  # start_logits and end_logits instead of only 1 output
-                    decoder_attention_idx += 1
 
                 self.assertEqual(out_len, correct_outlen)
 
-                decoder_attentions = outputs[decoder_attention_idx]
+                # decoder attentions
+                decoder_attentions = outputs.decoder_attentions
                 self.assertIsInstance(decoder_attentions, (list, tuple))
                 self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
                     list(decoder_attentions[0].shape[-3:]),
                     [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                )
+
+                # cross attentions
+                cross_attentions = outputs.cross_attentions
+                self.assertIsInstance(cross_attentions, (list, tuple))
+                self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(cross_attentions[0].shape[-3:]),
+                    [
+                        self.model_tester.num_attention_heads,
+                        decoder_seq_length,
+                        encoder_key_length,
+                    ],
                 )
 
             # Check attention is always last and order is fine
@@ -297,7 +343,8 @@ class ModelTesterMixin:
                 added_hidden_states = 1
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
-            self_attentions = outputs["attentions"] if "attentions" in outputs else outputs[-1]
+            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
             if chunk_length is not None:
                 self.assertListEqual(
@@ -881,8 +928,8 @@ class ModelTesterMixin:
             with torch.no_grad():
                 model(**inputs)[0]
 
-    @require_torch_multigpu
-    def test_multigpu_data_parallel_forward(self):
+    @require_torch_multi_gpu
+    def test_multi_gpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         # some params shouldn't be scattered by nn.DataParallel

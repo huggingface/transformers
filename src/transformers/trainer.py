@@ -328,7 +328,7 @@ class Trainer:
         self.hp_search_backend = None
         self.use_tune_checkpoints = False
         default_label_names = (
-            ["start_positions, end_positions"]
+            ["start_positions", "end_positions"]
             if type(self.model) in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values()
             else ["labels"]
         )
@@ -1297,7 +1297,8 @@ class Trainer:
                 :obj:`__len__` method.
 
         Returns:
-            A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
+            A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
+            dictionary also contains the epoch number which comes from the training state.
         """
         if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
             raise ValueError("eval_dataset must implement __len__")
@@ -1332,6 +1333,12 @@ class Trainer:
             test_dataset (:obj:`Dataset`):
                 Dataset to run the predictions on. If it is an :obj:`datasets.Dataset`, columns not accepted by the
                 ``model.forward()`` method are automatically removed. Has to implement the method :obj:`__len__`
+
+        .. note::
+
+            If your predictions or labels have different sequence length (for instance because you're doing dynamic
+            padding in a token classification task) the predictions will be padded (on the right) to allow for
+            concatenation into one array. The padding index is -100.
 
         Returns: `NamedTuple` A namedtuple with the following keys:
 
@@ -1412,9 +1419,9 @@ class Trainer:
                 losses = loss.repeat(batch_size)
                 losses_host = losses if losses_host is None else torch.cat((losses_host, losses), dim=0)
             if logits is not None:
-                preds_host = logits if preds_host is None else nested_concat(preds_host, logits, dim=0)
+                preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
             if labels is not None:
-                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, dim=0)
+                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
             self.control = self.callback_handler.on_prediction_step(self.args, self.state, self.control)
 
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
