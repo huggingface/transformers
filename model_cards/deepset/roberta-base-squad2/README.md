@@ -5,7 +5,7 @@ datasets:
 
 # roberta-base for QA 
 
-NOTE: This is version 2 of the model. See [this github issue](https://github.com/deepset-ai/FARM/issues/552) from the FARM repository for an explanation of why we updated. If you'd like to use version 1, specify `revision="390d6ae6cdc865cb737b742afdd4c33980566f99"` when loading the model in Transformers 3.5
+NOTE: This is version 2 of the model. See [this github issue](https://github.com/deepset-ai/FARM/issues/552) from the FARM repository for an explanation of why we updated. If you'd like to use version 1, specify `revision="v1.0"` when loading the model in Transformers 3.5.
 
 ## Overview
 **Language model:** roberta-base  
