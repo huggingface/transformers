@@ -452,7 +452,7 @@ class TFModelTesterMixin:
 
     def test_compile_tf_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
+        max_input = getattr(self.model_tester, "max_position_embeddings", 512)
         optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
         loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
@@ -461,22 +461,16 @@ class TFModelTesterMixin:
             if self.is_encoder_decoder:
                 input_ids = {
                     "decoder_input_ids": tf.keras.Input(
-                        batch_shape=(2, self.model_tester.max_position_embeddings),
+                        batch_shape=(2, max_input),
                         name="decoder_input_ids",
                         dtype="int32",
                     ),
-                    "input_ids": tf.keras.Input(
-                        batch_shape=(2, self.model_tester.max_position_embeddings), name="input_ids", dtype="int32"
-                    ),
+                    "input_ids": tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32"),
                 }
             elif model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
-                input_ids = tf.keras.Input(
-                    batch_shape=(4, 2, self.model_tester.max_position_embeddings), name="input_ids", dtype="int32"
-                )
+                input_ids = tf.keras.Input(batch_shape=(4, 2, max_input), name="input_ids", dtype="int32")
             else:
-                input_ids = tf.keras.Input(
-                    batch_shape=(2, self.model_tester.max_position_embeddings), name="input_ids", dtype="int32"
-                )
+                input_ids = tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32")
 
             # Prepare our model
             model = model_class(config)

@@ -51,8 +51,6 @@ class TFT5ModelTester:
         self.eos_token_id = 1
         self.pad_token_id = 0
         self.scope = None
-        # This attribute is only here to be able to run the compile_tf_model test
-        self.max_position_embeddings = 512
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
