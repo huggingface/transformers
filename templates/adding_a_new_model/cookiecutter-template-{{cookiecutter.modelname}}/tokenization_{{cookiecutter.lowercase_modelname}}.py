@@ -25,7 +25,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "{{cookiecutter.checkpoint_identifier}}": "https://huggingface.co/bert/{{cookiecutter.checkpoint_identifier}}/vocab.txt",
+        "{{cookiecutter.checkpoint_identifier}}": "https://huggingface.co/{{cookiecutter.checkpoint_identifier}}/resolve/main/vocab.txt",
     }
 }
 
