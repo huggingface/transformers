@@ -534,7 +534,7 @@ class T5Block(nn.Module):
         past_key_value=None,
         use_cache=False,
         output_attentions=False,
-        return_dict=False,
+        return_dict=True,
     ):
 
         if past_key_value is not None:

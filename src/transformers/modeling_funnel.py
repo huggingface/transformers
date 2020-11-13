@@ -619,7 +619,7 @@ class FunnelEncoder(nn.Module):
         token_type_ids=None,
         output_attentions=False,
         output_hidden_states=False,
-        return_dict=False,
+        return_dict=True,
     ):
         # The pooling is not implemented on long tensors, so we convert this mask.
         attention_mask = attention_mask.type_as(inputs_embeds)
@@ -698,7 +698,7 @@ class FunnelDecoder(nn.Module):
         token_type_ids=None,
         output_attentions=False,
         output_hidden_states=False,
-        return_dict=False,
+        return_dict=True,
     ):
         upsampled_hidden = upsample(
             final_hidden,

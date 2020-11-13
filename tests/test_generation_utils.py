@@ -344,6 +344,7 @@ class GenerationTesterMixin:
     def test_beam_sample_generate(self):
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+            print("Return dict", config.return_dict)
             logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
 
             model = model_class(config).to(torch_device)
