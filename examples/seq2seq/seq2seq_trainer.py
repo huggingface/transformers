@@ -136,9 +136,7 @@ class Seq2SeqTrainer(Trainer):
             if self.data_args is not None and self.data_args.ignore_pad_token_for_loss:
                 # force training to ignore pad token
                 logits = model(**inputs, use_cache=False)[0]
-
-                # When we used ProphetNet with `logits.reshape(-1, logits.shape[-1])`, 'RunTimeError' occurred here.
-                loss = self.loss_fn(logits.reshape(-1, logits.shape[-1]), labels.view(-1))
+                loss = self.loss_fn(logits.view(-1, logits.shape[-1]), labels.view(-1))
             else:
                 # compute usual loss via models
                 loss, logits = model(**inputs, labels=labels, use_cache=False)[:2]
