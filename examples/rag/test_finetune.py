@@ -56,12 +56,13 @@ class RagFinetuneExampleTests(TestCasePlus):
                 --use_dummy_dataset 1
             """.split()
 
-        # TODO: test with at least two processes instead of 1
         if torch.cuda.is_available():
+            # To test with at least two processes instead of 1, just change gpus
             testargs.append("--gpus=1")
             if is_apex_available():
                 testargs.append("--fp16")
         else:
+            # To test with at least two processes instead of 1, just change num_processes
             testargs.append("--gpus=0")
             testargs.append("--distributed_backend=ddp_cpu")
             testargs.append("--num_processes=1")
