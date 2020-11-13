@@ -558,9 +558,7 @@ class RagModel(RagPreTrainedModel):
         if encoder_outputs is None:
 
             if has_to_retrieve:
-                question_enc_outputs = self.question_encoder(
-                    input_ids, attention_mask=attention_mask, return_dict=True
-                )
+                question_enc_outputs = self.question_encoder(input_ids, attention_mask=attention_mask)
                 question_encoder_last_hidden_state = question_enc_outputs[0]  # hidden states of question encoder
 
                 retriever_outputs = self.retriever(
@@ -620,7 +618,6 @@ class RagModel(RagPreTrainedModel):
             decoder_attention_mask=decoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            return_dict=True,
         )
 
         if not has_to_retrieve:
@@ -1364,7 +1361,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         batch_size = context_input_ids.shape[0] // n_docs
 
         encoder = self.rag.generator.get_encoder()
-        encoder_outputs = encoder(input_ids=context_input_ids, attention_mask=context_attention_mask, return_dict=True)
+        encoder_outputs = encoder(input_ids=context_input_ids, attention_mask=context_attention_mask)
 
         input_ids = torch.full(
             (batch_size * num_beams, 1),

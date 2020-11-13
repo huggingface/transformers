@@ -40,7 +40,7 @@ Usage:
   labels = tokenizer('This is a short summary', return_tensors="pt").input_ids
 
   # train...
-  loss = bert2bert(input_ids=input_ids, decoder_input_ids=labels, labels=labels, return_dict=True).loss
+  loss = bert2bert(input_ids=input_ids, decoder_input_ids=labels, labels=labels).loss
   loss.backward()
 
 

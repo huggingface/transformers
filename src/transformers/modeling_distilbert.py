@@ -885,7 +885,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
-            >>> model = DistilBertForMultipleChoice.from_pretrained('distilbert-base-cased', return_dict=True)
+            >>> model = DistilBertForMultipleChoice.from_pretrained('distilbert-base-cased')
 
             >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
             >>> choice0 = "It is eaten with a fork and a knife."

@@ -297,7 +297,6 @@ class TFLxmertModelTester(object):
             matched_label=matched_label,
             ans=ans,
             output_attentions=output_attentions,
-            return_dict=True,
         )
         result = model(
             input_ids,
@@ -352,7 +351,6 @@ class TFLxmertModelTester(object):
             matched_label=matched_label,
             ans=ans,
             output_attentions=not output_attentions,
-            return_dict=True,
         )
 
         self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))

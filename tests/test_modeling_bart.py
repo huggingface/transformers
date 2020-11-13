@@ -259,7 +259,6 @@ class BartHeadTests(unittest.TestCase):
             eos_token_id=2,
             pad_token_id=1,
             bos_token_id=0,
-            return_dict=True,
         )
         return config, input_ids, batch_size
 
@@ -310,7 +309,6 @@ class BartHeadTests(unittest.TestCase):
             encoder_ffn_dim=8,
             decoder_ffn_dim=8,
             max_position_embeddings=48,
-            return_dict=True,
         )
         lm_model = BartForConditionalGeneration(config).to(torch_device)
         context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long().to(torch_device)
@@ -713,6 +711,6 @@ class FastIntegrationTests(unittest.TestCase):
             padding="longest",
             truncation=True,
         )
-        features = self.xsum_1_1_model.get_encoder()(**batch, return_dict=True).last_hidden_state
+        features = self.xsum_1_1_model.get_encoder()(**batch).last_hidden_state
         expected = [[-0.0828, -0.0251, -0.0674], [0.1277, 0.3311, -0.0255], [0.2613, -0.0840, -0.2763]]
         assert_tensors_close(features[0, :3, :3], torch.tensor(expected), atol=1e-3)

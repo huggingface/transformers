@@ -118,7 +118,7 @@ class GenerationTesterMixin:
     @staticmethod
     def _get_encoder_outputs(model, input_ids, attention_mask, num_interleave=1):
         encoder = model.get_encoder()
-        encoder_outputs = encoder(input_ids, attention_mask=attention_mask, return_dict=True)
+        encoder_outputs = encoder(input_ids, attention_mask=attention_mask)
         encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
             num_interleave, dim=0
         )

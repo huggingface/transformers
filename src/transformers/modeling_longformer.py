@@ -1388,7 +1388,7 @@ class LongformerModel(LongformerPreTrainedModel):
             >>> import torch
             >>> from transformers import LongformerModel, LongformerTokenizer
 
-            >>> model = LongformerModel.from_pretrained('allenai/longformer-base-4096', return_dict=True)
+            >>> model = LongformerModel.from_pretrained('allenai/longformer-base-4096')
             >>> tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
 
             >>> SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
@@ -1526,7 +1526,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
             >>> import torch
             >>> from transformers import LongformerForMaskedLM, LongformerTokenizer
 
-            >>> model = LongformerForMaskedLM.from_pretrained('allenai/longformer-base-4096', return_dict=True)
+            >>> model = LongformerForMaskedLM.from_pretrained('allenai/longformer-base-4096')
             >>> tokenizer = LongformerTokenizer.from_pretrained('allenai/longformer-base-4096')
 
             >>> SAMPLE_TEXT = ' '.join(['Hello world! '] * 1000)  # long input document
@@ -1742,7 +1742,7 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
-            >>> model = LongformerForQuestionAnswering.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa", return_dict=True)
+            >>> model = LongformerForQuestionAnswering.from_pretrained("allenai/longformer-large-4096-finetuned-triviaqa")
 
             >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
             >>> encoding = tokenizer(question, text, return_tensors="pt")

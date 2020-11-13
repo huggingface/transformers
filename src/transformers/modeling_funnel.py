@@ -1111,7 +1111,7 @@ class FunnelForPreTraining(FunnelPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = FunnelTokenizer.from_pretrained('funnel-transformer/small')
-            >>> model = FunnelForPreTraining.from_pretrained('funnel-transformer/small', return_dict=True)
+            >>> model = FunnelForPreTraining.from_pretrained('funnel-transformer/small')
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors= "pt")
             >>> logits = model(**inputs).logits
