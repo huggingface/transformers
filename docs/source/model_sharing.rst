@@ -66,7 +66,7 @@ Once you are logged in with your model hub credentials, you can start building y
 
     transformers-cli repo create your-model-name
 
-This creates a repo on the model hub, which can be cloned. 
+This creates a repo on the model hub, which can be cloned.
 
 .. code-block:: bash
 
@@ -76,7 +76,8 @@ This creates a repo on the model hub, which can be cloned.
     # (https://git-lfs.github.com/)
     git lfs install
 
-When you have your local clone of your repo and lfs installed, you can then add/remove from that clone as you would with any other git repo.
+When you have your local clone of your repo and lfs installed, you can then add/remove from that clone as you would
+with any other git repo.
 
 .. code-block:: bash
 
@@ -271,8 +272,8 @@ Once it's created, you can clone it and configure it (replace username by your u
     git config --global user.email "email@example.com"
     git config --global user.name "Your name"
 
-Once you've saved your model inside, and your clone is setup with the right remote URL,
-you can add it and push it with usual git commands.
+Once you've saved your model inside, and your clone is setup with the right remote URL, you can add it and push it with
+usual git commands.
 
 .. code-block:: bash	
     git add .
