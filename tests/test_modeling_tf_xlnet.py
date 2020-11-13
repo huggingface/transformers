@@ -69,7 +69,7 @@ class TFXLNetModelTester:
         self.eos_token_id = 2
         self.pad_token_id = 5
         self.num_choices = 4
-        # This attribute is only here to be able to run the loss_computation test
+        # This attribute is only here to be able to run the compile_tf_model test
         self.max_position_embeddings = 512
 
     def prepare_config_and_inputs(self):

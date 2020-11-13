@@ -56,7 +56,7 @@ class TransfoXLModelTester:
         self.scope = None
         self.seed = 1
         self.eos_token_id = 0
-        # This attribute is only here to be able to run the loss_computation test
+        # This attribute is only here to be able to run the compile_tf_model test
         self.max_position_embeddings = 512
 
     def prepare_config_and_inputs(self):
