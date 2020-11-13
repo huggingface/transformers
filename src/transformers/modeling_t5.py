@@ -136,7 +136,6 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
                 pointer = getattr(pointer, "bias")
             elif scope_names[0] == "squad":
                 pointer = getattr(pointer, "classifier")
-
             elif scope_names[0] == "decoder" and name[1] == "logits":
                 continue
             elif scope_names[0] == "logits":
