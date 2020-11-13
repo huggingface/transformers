@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from argparse import ArgumentParser
 
+from transformers.commands.add_new_model import AddNewModelCommand
 from transformers.commands.convert import ConvertCommand
 from transformers.commands.download import DownloadCommand
 from transformers.commands.env import EnvironmentCommand
@@ -20,6 +21,7 @@ def main():
     RunCommand.register_subcommand(commands_parser)
     ServeCommand.register_subcommand(commands_parser)
     UserCommands.register_subcommand(commands_parser)
+    AddNewModelCommand.register_subcommand(commands_parser)
 
     # Let's go
     args = parser.parse_args()

@@ -59,6 +59,7 @@ from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfi
 ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     (key, value)
     for pretrained_map in [
+        # Add archive maps here
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BART_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -95,6 +96,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 
 CONFIG_MAPPING = OrderedDict(
     [
+        # Add configs here
         ("retribert", RetriBertConfig),
         ("t5", T5Config),
         ("mobilebert", MobileBertConfig),
@@ -136,6 +138,7 @@ CONFIG_MAPPING = OrderedDict(
 
 MODEL_NAMES_MAPPING = OrderedDict(
     [
+        # Add full (and cased) model names here
         ("retribert", "RetriBERT"),
         ("t5", "T5"),
         ("mobilebert", "MobileBERT"),
