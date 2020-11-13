@@ -624,13 +624,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         if inputs["token_type_ids"] is None:
             inputs["token_type_ids"] = tf.fill(input_shape, 0)
 
-        embedding_output = self.embeddings(
-            inputs["input_ids"],
-            inputs["position_ids"],
-            inputs["token_type_ids"],
-            inputs["inputs_embeds"],
-            training=inputs["training"],
-        )
+        embedding_output = self.embeddings(inputs["input_ids"], inputs["position_ids"], inputs["token_type_ids"], inputs["inputs_embeds"], training=inputs["training"])
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
@@ -956,6 +950,19 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
             return_dict=return_dict,
             training=inputs["training"],
         )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        outputs = self.bert(
+            inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            position_ids=inputs["position_ids"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
+        )
         sequence_output, pooled_output = outputs[:2]
         prediction_scores = self.mlm(sequence_output, training=inputs["training"])
         seq_relationship_score = self.nsp(pooled_output)
@@ -1224,6 +1231,19 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             next_sentence_label=next_sentence_label,
             training=training,
             kwargs_call=kwargs,
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        outputs = self.bert(
+            inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            position_ids=inputs["position_ids"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
@@ -1550,6 +1570,19 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             return_dict=return_dict,
             training=inputs["training"],
         )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        outputs = self.bert(
+            inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            position_ids=inputs["position_ids"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
+        )
         sequence_output = outputs[0]
         sequence_output = self.dropout(sequence_output, training=inputs["training"])
         logits = self.classifier(sequence_output)
@@ -1636,6 +1669,19 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             end_positions=end_positions,
             training=training,
             kwargs_call=kwargs,
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        outputs = self.bert(
+            inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            position_ids=inputs["position_ids"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
