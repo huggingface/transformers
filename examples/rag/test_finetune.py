@@ -1,6 +1,7 @@
 import logging
 import os
 import sys
+from pathlib import Path
 from unittest.mock import patch
 
 import torch
@@ -22,9 +23,11 @@ class RagFinetuneExampleTests(TestCasePlus):
         logger.addHandler(stream_handler)
 
         tmp_dir = self.get_auto_remove_tmp_dir()
+        data_dir = Path(__file__).parent / "test_data" / "dummy_seq2seq"
+        data_dir = str(data_dir.resolve())
         testargs = f"""
             finetune.py \
-                --data_dir test_data/dummy_seq2seq \
+                --data_dir {data_dir} \
                 --output_dir {tmp_dir} \
                 --model_name_or_path facebook/rag-sequence-base \
                 --model_type rag_sequence \
@@ -32,9 +35,9 @@ class RagFinetuneExampleTests(TestCasePlus):
                 --do_predict \
                 --n_val -1 \
                 --val_check_interval 0.25 \
-                --train_batch_size 8 \
+                --train_batch_size 4 \
                 --eval_batch_size 1 \
-                --max_source_length 128 \
+                --max_source_length 25 \
                 --max_target_length 25 \
                 --val_max_target_length 25 \
                 --test_max_target_length 25 \
@@ -46,7 +49,7 @@ class RagFinetuneExampleTests(TestCasePlus):
                 --max_grad_norm 0.1 \
                 --lr_scheduler polynomial \
                 --learning_rate 3e-05 \
-                --num_train_epochs 1 \
+                --num_train_epochs 5 \
                 --warmup_steps 5 \
                 --gradient_accumulation_steps 1 \
                 --use_dummy_dataset 1
@@ -63,7 +66,8 @@ class RagFinetuneExampleTests(TestCasePlus):
             testargs.append("--num_processes=1")
 
         with patch.object(sys, "argv", testargs):
-            result = finetune.main()
-            del result["eval_loss"]
-            for value in result.values():
-                self.assertGreaterEqual(value, 0.75)
+            result = finetune.main()[0]
+            import json
+            print(result)
+            open("out.txt", "w").write(json.dumps(result))
+            self.assertGreaterEqual(result["test_em"], 0.2)
