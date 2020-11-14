@@ -55,13 +55,9 @@ from ...modeling_tf_utils import (
     shape_list,
     input_processing,
 )
-<<<<<<< HEAD:src/transformers/models/bert/modeling_tf_bert.py
 from ...tokenization_utils import BatchEncoding
 from ...utils import logging
 from .configuration_bert import BertConfig
-=======
-from .utils import logging
->>>>>>> 345be8e7... Apply on BERT and ALBERT:src/transformers/modeling_tf_bert.py
 
 
 logger = logging.get_logger(__name__)
