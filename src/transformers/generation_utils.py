@@ -376,9 +376,8 @@ class GenerationMixin:
                 If provided, it has to be a function that has as arguments :obj:`inputs_id`. At each step of Beam
                 Search, this function is called with the :obj:`inputs_id` containing the previously generated tokens as
                 a tensor of shape :obj:`(batch_size * num_beams)`:. This function has to return a list of lists with
-                the allowed BPE tokens at the next step (list of batches and list of beams).
-                This argument is useful for constrained generation conditioned on the prefix. If not provided no
-                constrain is applied.
+                the allowed BPE tokens at the next step (list of batches and list of beams). This argument is useful
+                for constrained generation conditioned on the prefix. If not provided no constrain is applied.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
                 model is an Encoder-Decoder model, encoder specific kwargs should not be prefixed and decoder specific

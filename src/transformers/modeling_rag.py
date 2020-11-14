@@ -15,7 +15,7 @@
 """RAG model implementation."""
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import torch
 
@@ -896,8 +896,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             generator_input_ids = context_input_ids[index * n_docs : (index + 1) * n_docs]  # (n_docs, max_len)
 
             output_sequences = self.generator.generate(
-                generator_input_ids,
-                **model_kwargs,
+                generator_input_ids, **model_kwargs,
             )  # n_docs * n_beam, tgt_len
             if do_deduplication:
                 # do_deduplication, max_output_len
@@ -1234,6 +1233,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         num_return_sequences=None,
         decoder_start_token_id=None,
         n_docs=None,
+        prefix_allowed_tokens_fn: Callable = None,
         **model_kwargs
     ):
         """
@@ -1307,6 +1307,12 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 If an encoder-decoder model starts decoding with a different token than `bos`, the id of that token.
             n_docs (:obj:`int`, `optional`, defaults to :obj:`config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.
+            prefix_allowed_tokens_fn: (:obj:`Callable`, `optional`, defaults to :obj:`None`):
+                If provided, it has to be a function that has as arguments :obj:`inputs_id`. At each step of Beam
+                Search, this function is called with the :obj:`inputs_id` containing the previously generated tokens as
+                a tensor of shape :obj:`(batch_size * num_beams)`:. This function has to return a list of lists with
+                the allowed BPE tokens at the next step (list of batches and list of beams). This argument is useful
+                for constrained generation conditioned on the prefix. If not provided no constrain is applied.
 
         Return:
             :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
@@ -1400,6 +1406,8 @@ class RagTokenForGeneration(RagPreTrainedModel):
             bad_words_ids=bad_words_ids,
             min_length=min_length,
             eos_token_id=eos_token_id,
+            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+            num_beams=num_beams,
         )
 
         if num_beams == 1:
