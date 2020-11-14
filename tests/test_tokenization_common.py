@@ -2537,3 +2537,12 @@ class TokenizerTesterMixin:
                 )
                 for key in python_output:
                     self.assertEqual(python_output[key], rust_output[key])
+
+    def test_model_max_length(self):
+        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
+            with self.subTest("{}.model_max_length ({})".format(tokenizer.__class__.__name__, pretrained_name)):
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
+                self.assertTrue(hasattr(tokenizer_p, "model_max_length"))
+                self.assertTrue(hasattr(tokenizer_r, "model_max_length"))
+

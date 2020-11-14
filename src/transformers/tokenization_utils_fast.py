@@ -40,7 +40,7 @@ from .tokenization_utils_base import (
     PreTrainedTokenizerBase,
     TextInput,
     TextInputPair,
-    TruncationStrategy,
+    TruncationStrategy, VERY_LARGE_INTEGER,
 )
 from .utils import logging
 
@@ -81,6 +81,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def __init__(self, *args, **kwargs):
         slow_tokenizer = kwargs.pop("__slow_tokenizer", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
+
+        # For backward compatibility we fallback to set model_max_length from max_len if provided
+        model_max_length = kwargs.pop("model_max_length", kwargs.pop("max_len", None))
+        self.model_max_length = model_max_length if model_max_length is not None else VERY_LARGE_INTEGER
 
         if fast_tokenizer_file is not None:
             # We have a serialization from tokenizers which let us directly build the backend
