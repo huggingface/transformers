@@ -45,6 +45,7 @@ from ...modeling_tf_utils import (
     input_processing,
     keras_serializable,
     shape_list,
+    input_processing,
 )
 from ...utils import logging
 from .configuration_bart import BartConfig
@@ -867,17 +868,12 @@ class TFSinusoidalPositionalEmbedding(tf.keras.layers.Embedding):
         return super().call(positions)
 
 
-# Public API
-
-
-@add_start_docstrings(
-    "The bare BART Model outputting raw hidden-states without any specific head on top.",
-    BART_START_DOCSTRING,
-)
 @keras_serializable
-class TFBartModel(TFPretrainedBartModel):
-    def __init__(self, config: BartConfig, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
+class TFBartMainLayer(Layer):
+    config_class = BartConfig
+
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, config.pad_token_id, name="model.shared")
 
         with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
@@ -887,6 +883,10 @@ class TFBartModel(TFPretrainedBartModel):
         embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
         embed_tokens.vocab_size = self.shared.vocab_size
         embed_tokens.hidden_size = self.shared.hidden_size
+        self.use_cache = config.use_cache
+        self.output_attentions = config.output_attentions
+        self.output_hidden_states = config.output_hidden_states
+        self.return_dict = config.use_return_dict
 
         self.encoder = TFBartEncoder(config, embed_tokens, name="encoder")
         self.decoder = TFBartDecoder(config, embed_tokens, name="decoder")
@@ -1028,6 +1028,68 @@ class TFBartModel(TFPretrainedBartModel):
 
     def get_output_embeddings(self):
         return self.shared
+
+
+@add_start_docstrings(
+    "The bare BART Model outputting raw hidden-states without any specific head on top.",
+    BART_START_DOCSTRING,
+)
+class TFBartModel(TFPretrainedBartModel):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.bart = TFBartMainLayer(config, name="bart")
+    
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="facebook/bart-large",
+        output_type=TFSeq2SeqModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(
+        self,
+        input_ids,
+        attention_mask=None,
+        decoder_input_ids=None,  # BAD DEFAULT LEFT FOR CONSISTENT SIGNATURE
+        decoder_attention_mask=None,
+        encoder_outputs: Optional[TFBaseModelOutput] = None,
+        past_key_values=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False,
+    ):
+        inputs = input_processing(
+            func=self.call,
+            inputs=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            encoder_outputs=encoder_outputs,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bart.return_dict
+        outputs = self.bart(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            decoder_input_ids=inputs["decoder_input_ids"],
+            decoder_attention_mask=inputs["decoder_attention_mask"],
+            encoder_outputs=inputs["encoder_outputs"],
+            past_key_values=inputs["past_key_values"],
+            use_cache=inputs["use_cache"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
+        )
+
+        return outputs
 
 
 @add_start_docstrings(
