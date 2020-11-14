@@ -307,7 +307,7 @@ def load_tf_weights(model, resolved_archive_file):
 
                     # Add the updated name to the final list for computing missing/unexpected values
                     symbolic_weights_names.add(symbolic_weight_name)
-                    
+
                     # here we check if the current weight is among the weights from the H5 file
                     # If yes, get the weight_value of the corresponding weight from the H5 file
                     # If not, keep the value to None
