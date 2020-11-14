@@ -16,7 +16,7 @@ on:
 
 jobs:
   run_all_tests_torch_gpu:
-    runs-on: [self-hosted, gpu-tests]
+    runs-on: [self-hosted, single-gpu]
     steps:
       - uses: actions/checkout@v2
 
@@ -110,7 +110,7 @@ jobs:
 
 
   run_all_tests_tf_gpu:
-    runs-on: [self-hosted, gpu-tests]
+    runs-on: [self-hosted, single-gpu]
     steps:
       - uses: actions/checkout@v2
 
@@ -189,7 +189,7 @@ jobs:
           path: reports
           
   run_all_tests_torch_multi_gpu:
-    runs-on: [self-hosted, multi-gpu-tests]
+    runs-on: [self-hosted, multi-gpu]
     steps:
       - uses: actions/checkout@v2
 
@@ -280,7 +280,7 @@ jobs:
           path: reports
 
   run_all_tests_tf_multi_gpu:
-    runs-on: [self-hosted, multi-gpu-tests]
+    runs-on: [self-hosted, multi-gpu]
     steps:
       - uses: actions/checkout@v2
 
