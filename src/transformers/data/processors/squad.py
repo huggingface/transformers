@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from ...file_utils import is_tf_available, is_torch_available
 from ...tokenization_bert import whitespace_tokenize
-from ...tokenization_utils_base import PreTrainedTokenizerBase, TruncationStrategy
+from ...tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase, TruncationStrategy
 from ...utils import logging
 from .utils import DataProcessor
 
@@ -765,6 +765,7 @@ class SquadFeatures:
         token_to_orig_map: mapping between the tokens and the original text, needed in order to identify the answer.
         start_position: start of the answer token index
         end_position: end of the answer token index
+        encoding: optionally store the BatchEncoding with the fast-tokenizer alignement methods.
     """
 
     def __init__(
@@ -784,6 +785,7 @@ class SquadFeatures:
         end_position,
         is_impossible,
         qas_id: str = None,
+        encoding: BatchEncoding = None,
     ):
         self.input_ids = input_ids
         self.attention_mask = attention_mask
@@ -802,6 +804,8 @@ class SquadFeatures:
         self.end_position = end_position
         self.is_impossible = is_impossible
         self.qas_id = qas_id
+
+        self.encoding = encoding
 
 
 class SquadResult:
