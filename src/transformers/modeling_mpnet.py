@@ -365,8 +365,8 @@ class MPNetEncoder(nn.Module):
     def compute_position_bias(self, x, position_ids=None, num_buckets=32):
         bsz, qlen, klen = x.size(0), x.size(1), x.size(1)
         if position_ids is not None:
-            context_position = torch.arange(qlen, dtype=torch.long)[:, None]
-            memory_position = torch.arange(klen, dtype=torch.long)[None, :]
+            context_position = position_ids[:, :, None]
+            memory_position = position_ids[:, None, :]
         else:
             context_position = torch.arange(qlen, dtype=torch.long)[:, None]
             memory_position = torch.arange(klen, dtype=torch.long)[None, :]
