@@ -1713,6 +1713,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        reduction="sum"
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1768,7 +1769,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self._compute_loss(predict_logits, labels)
+            loss = self._compute_loss(predict_logits, labels, reduction=reduction)
 
         if not return_dict:
             all_logits = tuple(v for v in [logits, logits_ngram] if v is not None)
@@ -1789,8 +1790,8 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
                 encoder_attentions=outputs.encoder_attentions,
             )
 
-    def _compute_loss(self, logits, labels):
-        expend_targets = labels.new_zeros(self.config.ngram, labels.size(0), labels.size(1)).fill_(self.padding_idx)
+    def _compute_loss(self, logits, labels, reduction="sum"):
+        expend_targets = labels.new_zeros(self.config.ngram, labels.size(0), labels.size(1)).fill_(-100)
 
         for i in range(self.config.ngram):
             if i > 0 and self.disable_ngram_loss:
@@ -1803,7 +1804,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
             dtype=torch.float32,
         )
 
-        loss = F.nll_loss(lprobs, expend_targets.view(-1), reduction="sum")
+        loss = F.nll_loss(lprobs, expend_targets.view(-1), reduction=reduction)
 
         if self.config.eps > 0.0:
             smooth_loss = -lprobs.sum(dim=-1, keepdim=True)
