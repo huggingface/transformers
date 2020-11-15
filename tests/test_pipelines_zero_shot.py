@@ -12,6 +12,18 @@ class ZeroShotClassificationPipelineTests(CustomInputPipelineCommonMixin, unitte
         "sshleifer/tiny-distilbert-base-uncased-finetuned-sst-2-english"
     ]  # Models tested without the @slow decorator
     large_models = ["roberta-large-mnli"]  # Models tested with the @slow decorator
+    valid_inputs = [
+        {"sequences": "Who are you voting for in 2020?", "candidate_labels": "politics"},
+        {"sequences": "Who are you voting for in 2020?", "candidate_labels": ["politics"]},
+        {"sequences": "Who are you voting for in 2020?", "candidate_labels": "politics, public health"},
+        {"sequences": "Who are you voting for in 2020?", "candidate_labels": ["politics", "public health"]},
+        {"sequences": ["Who are you voting for in 2020?"], "candidate_labels": "politics"},
+        {
+            "sequences": "Who are you voting for in 2020?",
+            "candidate_labels": "politics",
+            "hypothesis_template": "This text is about {}",
+        },
+    ]
 
     def _test_scores_sum_to_one(self, result):
         sum = 0.0
