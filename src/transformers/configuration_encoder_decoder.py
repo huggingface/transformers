@@ -40,6 +40,9 @@ class EncoderDecoderConfig(PretrainedConfig):
                   object that defines the encoder config.
                 - **decoder** (:class:`~transformers.PretrainedConfig`, `optional`) -- An instance of a configuration
                   object that defines the decoder config.
+                - **tie_encoder_decoder_word_embeds** (:obj:`bool`, `optional`, defaults to :obj:`True`) -- Whether
+                encoder and decoder should share word embeddings. If True, encoder word embeddings are assigned to
+                  decoder word embeddings.
 
     Examples::
 
@@ -80,6 +83,7 @@ class EncoderDecoderConfig(PretrainedConfig):
         encoder_model_type = encoder_config.pop("model_type")
         decoder_config = kwargs.pop("decoder")
         decoder_model_type = decoder_config.pop("model_type")
+        self.tie_encoder_decoder_word_embeds = kwargs.pop("tie_encoder_decoder_word_embeds", True)
 
         from .configuration_auto import AutoConfig
 

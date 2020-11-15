@@ -385,6 +385,94 @@ class EncoderDecoderMixin:
                 )
             )
 
+    def create_and_check_encoder_decoder_shared_words(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        encoder_hidden_states,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        labels,
+        **kwargs
+    ):
+        # model with tied words (by default)
+        torch.manual_seed(0)
+        encoder_model, _ = self.get_encoder_decoder_model(config, decoder_config)
+        from transformers.modeling_auto import AutoModelForCausalLM
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            encoder_model.save_pretrained(tmpdirname)
+            decoder_model = AutoModelForCausalLM.from_pretrained(tmpdirname)
+        model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        model.to(torch_device)
+        model.eval()
+
+        # model with not tied words (full not tied)
+        torch.manual_seed(0)
+        not_tied_encoder_model, _ = self.get_encoder_decoder_model(config, decoder_config)
+        from transformers.modeling_auto import AutoModelForCausalLM
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            not_tied_encoder_model.save_pretrained(tmpdirname)
+            not_tied_decoder_model = AutoModelForCausalLM.from_pretrained(tmpdirname)
+        config = EncoderDecoderConfig.from_encoder_decoder_configs(
+            not_tied_encoder_model.config, not_tied_decoder_model.config, tie_encoder_decoder_word_embeds=False
+        )
+        not_tied_model = EncoderDecoderModel(encoder=not_tied_encoder_model, decoder=not_tied_decoder_model,
+                                           config=config)
+        not_tied_model.to(torch_device)
+        not_tied_model.eval()
+
+        model_result = model(
+            input_ids=input_ids,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
+        )
+
+        not_tied_model_result = not_tied_model(
+            input_ids=input_ids,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
+        )
+
+        # check that models has less parameters
+        self.assertLess(sum(p.numel() for p in model.parameters()), sum(p.numel() for p in not_tied_model.parameters()))
+        random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
+
+        # check that outputs are equal
+        self.assertTrue(
+            torch.allclose(
+                model_result[0][0, :, random_slice_idx], not_tied_model_result[0][0, :, random_slice_idx], atol=1e-4
+            )
+        )
+
+        # check that outputs after saving and loading are equal
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model = EncoderDecoderModel.from_pretrained(tmpdirname)
+            model.to(torch_device)
+            model.eval()
+
+            # check that models has less parameters
+            self.assertLess(sum(p.numel() for p in model.parameters()), sum(p.numel() for p in not_tied_model.parameters()))
+            random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
+
+            model_result = model(
+                input_ids=input_ids,
+                decoder_input_ids=decoder_input_ids,
+                attention_mask=attention_mask,
+                decoder_attention_mask=decoder_attention_mask,
+            )
+
+            # check that outputs are equal
+            self.assertTrue(
+                torch.allclose(
+                    model_result[0][0, :, random_slice_idx], not_tied_model_result[0][0, :, random_slice_idx], atol=1e-4
+                )
+            )
+
     def test_encoder_decoder_model(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model(**input_ids_dict)
@@ -420,6 +508,10 @@ class EncoderDecoderMixin:
     def test_encoder_decoder_model_shared_weights(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.create_and_check_encoder_decoder_shared_weights(**input_ids_dict)
+
+    def test_encoder_decoder_model_shared_words(self):
+        input_ids_dict = self.prepare_config_and_inputs()
+        self.create_and_check_encoder_decoder_shared_words(**input_ids_dict)
 
     @slow
     def test_real_model_save_load_from_pretrained(self):

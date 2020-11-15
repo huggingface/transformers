@@ -496,18 +496,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             self._tie_encoder_decoder_weights(self.encoder, self.decoder, self.base_model_prefix)
 
     @staticmethod
-    def _tie_encoder_decoder_word_embeddings(encoder: nn.Module, decoder: nn.Module):
-        encoder_embeddings = encoder.get_input_embeddings()
-        decoder_embeddings = decoder.get_input_embeddings()
-        if encoder_embeddings is not None and decoder_embeddings is not None:
-            if decoder_embeddings.weight.size() == encoder_embeddings.weight.size():
-                # the priority is given to encoder embeddings, because e.g. in Longformer2Roberta case Longformer
-                # embeddings are additionally pretrained for MLM task
-                decoder_embeddings.weight = encoder_embeddings.weight
-                # tie input and output embeddings of decoder
-                decoder.tie_weights()
-
-    @staticmethod
     def _tie_encoder_decoder_weights(encoder: nn.Module, decoder: nn.Module, base_model_prefix: str):
         uninitialized_encoder_weights: List[str] = []
         if decoder.__class__ != encoder.__class__:

@@ -17,6 +17,8 @@
 
 from typing import Optional
 
+import torch
+
 from .configuration_encoder_decoder import EncoderDecoderConfig
 from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
@@ -175,7 +177,7 @@ class EncoderDecoderModel(PreTrainedModel):
 
     def tie_weights(self):
         if self.config.tie_encoder_decoder_word_embeds:
-            self._tie_encoder_decoder_word_embeddings(self.encoder, self.decoder)
+            self._tie_encoder_decoder_word_embeddings()
         # tie encoder & decoder if needed
         if self.config.tie_encoder_decoder:
             # tie encoder and decoder base model
@@ -183,6 +185,25 @@ class EncoderDecoderModel(PreTrainedModel):
             self._tie_encoder_decoder_weights(
                 self.encoder, self.decoder._modules[decoder_base_model_prefix], self.decoder.base_model_prefix
             )
+
+    def _tie_encoder_decoder_word_embeddings(self):
+        encoder_embs = self.encoder.get_input_embeddings()
+        decoder_embs = self.decoder.get_input_embeddings()
+        if encoder_embs is not None and decoder_embs is not None:
+            # check if embeddings are the same
+            if encoder_embs.weight.size() == decoder_embs.weight.size() and \
+                    torch.allclose(encoder_embs.weight, decoder_embs.weight, atol=1e-3):
+                encoder_embs.weight = decoder_embs.weight
+                if type(self.encoder.config.__class__) != type(self.decoder.config.__class__):
+                    logger.info(f"Tying word embedding matrices of encoder of type {self.encoder.config.__class__} and "
+                                f"decoder of type {type(self.decoder.config.__class__)}. If this is undesirable behavior "
+                                f"set model.config.tie_encoder_decoder_word_embeds to False and reinitialize the model.")
+            else:
+                logger.info("Word embeddings of encoder and decoder do not match. Setting "
+                            "config.tie_encoder_decoder_word_embeds to False. If you still want to tie them something like "
+                            "model.encoder.roberta.word_embeddings = model.decoder.roberta.word_embeddings. If you tie them in "
+                            "reverse order note that decoder output embeddings will point to the older decoder input embeddings.")
+                self.config.tie_encoder_decoder_word_embeds = False
 
     def get_encoder(self):
         return self.encoder
