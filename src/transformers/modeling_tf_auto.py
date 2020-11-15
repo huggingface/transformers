@@ -32,6 +32,7 @@ from .configuration_auto import (
     GPT2Config,
     LongformerConfig,
     MobileBertConfig,
+    MPNetConfig,
     OpenAIGPTConfig,
     RobertaConfig,
     T5Config,
@@ -117,6 +118,13 @@ from .modeling_tf_mobilebert import (
     TFMobileBertForTokenClassification,
     TFMobileBertModel,
 )
+from .modeling_tf_mpnet import (
+    TFMPNetForMultipleChoice,
+    TFMPNetForQuestionAnswering,
+    TFMPNetForTokenClassification,
+    TFMPNetForSequenceClassification,
+    TFMPNetModel,
+)
 from .modeling_tf_openai import TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
 from .modeling_tf_roberta import (
     TFRobertaForMaskedLM,
@@ -172,6 +180,7 @@ TF_MODEL_MAPPING = OrderedDict(
         (OpenAIGPTConfig, TFOpenAIGPTModel),
         (GPT2Config, TFGPT2Model),
         (MobileBertConfig, TFMobileBertModel),
+        (MPNetConfig, TFMPNetModel),
         (TransfoXLConfig, TFTransfoXLModel),
         (XLNetConfig, TFXLNetModel),
         (FlaubertConfig, TFFlaubertModel),
@@ -275,6 +284,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (BertConfig, TFBertForSequenceClassification),
         (XLNetConfig, TFXLNetForSequenceClassification),
         (MobileBertConfig, TFMobileBertForSequenceClassification),
+        (MPNetConfig, TFMPNetForSequenceClassification),
         (FlaubertConfig, TFFlaubertForSequenceClassification),
         (XLMConfig, TFXLMForSequenceClassification),
         (ElectraConfig, TFElectraForSequenceClassification),
@@ -293,6 +303,7 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (BertConfig, TFBertForQuestionAnswering),
         (XLNetConfig, TFXLNetForQuestionAnsweringSimple),
         (MobileBertConfig, TFMobileBertForQuestionAnswering),
+        (MPNetConfig, TFMPNetForQuestionAnswering),
         (FlaubertConfig, TFFlaubertForQuestionAnsweringSimple),
         (XLMConfig, TFXLMForQuestionAnsweringSimple),
         (ElectraConfig, TFElectraForQuestionAnswering),
@@ -311,6 +322,7 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (RobertaConfig, TFRobertaForTokenClassification),
         (BertConfig, TFBertForTokenClassification),
         (MobileBertConfig, TFMobileBertForTokenClassification),
+        (MPNetConfig, TFMPNetForTokenClassification),
         (XLNetConfig, TFXLNetForTokenClassification),
         (ElectraConfig, TFElectraForTokenClassification),
         (FunnelConfig, TFFunnelForTokenClassification),
@@ -326,6 +338,7 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (BertConfig, TFBertForMultipleChoice),
         (DistilBertConfig, TFDistilBertForMultipleChoice),
         (MobileBertConfig, TFMobileBertForMultipleChoice),
+        (MPNetConfig, TFMPNetForMultipleChoice),
         (XLNetConfig, TFXLNetForMultipleChoice),
         (FlaubertConfig, TFFlaubertForMultipleChoice),
         (AlbertConfig, TFAlbertForMultipleChoice),

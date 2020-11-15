@@ -621,10 +621,11 @@ if is_torch_available():
     )
     from .modeling_mpnet import (
         MPNetForMaskedLM,
-        MPNetModel,
+        MPNetForMultipleChoice,
         MPNetForQuestionAnswering,
         MPNetForSequenceClassification,
-        MPNetForMultipleChoice,
+        MPNetForTokenClassification,
+        MPNetModel,
     )
     from .modeling_longformer import (
         LongformerModel,
@@ -824,6 +825,16 @@ if is_tf_available():
         TFMobileBertMainLayer,
         TFMobileBertModel,
         TFMobileBertPreTrainedModel,
+    )
+    from .modeling_tf_mpnet import (
+        TF_MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFMPNetForMultipleChoice,
+        TFMPNetForQuestionAnswering,
+        TFMPNetForSequenceClassification,
+        TFMPNetForTokenClassification,
+        TFMPNetMainLayer,
+        TFMPNetModel,
+        TFMPNetPreTrainedModel,
     )
     from .modeling_tf_openai import (
         TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,

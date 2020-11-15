@@ -362,10 +362,14 @@ class MPNetEncoder(nn.Module):
             attentions=all_attentions,
         )
 
-    def compute_position_bias(self, x, num_buckets=32):
+    def compute_position_bias(self, x, position_ids=None, num_buckets=32):
         bsz, qlen, klen = x.size(0), x.size(1), x.size(1)
-        context_position = torch.arange(qlen, dtype=torch.long)[:, None]
-        memory_position = torch.arange(klen, dtype=torch.long)[None, :]
+        if position_ids is not None:
+            context_position = torch.arange(qlen, dtype=torch.long)[:, None]
+            memory_position = torch.arange(klen, dtype=torch.long)[None, :]
+        else:
+            context_position = torch.arange(qlen, dtype=torch.long)[:, None]
+            memory_position = torch.arange(klen, dtype=torch.long)[None, :]
         
         relative_position = memory_position - context_position
     
@@ -414,7 +418,7 @@ MPNET_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
-            Indices can be obtained using :class:`transformers.RobertaTokenizer`.
+            Indices can be obtained using :class:`transformers.MPNetTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
             `What are input IDs? <../glossary.html#input-ids>`__
@@ -755,7 +759,10 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
