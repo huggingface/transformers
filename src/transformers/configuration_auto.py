@@ -99,6 +99,7 @@ CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
         ("retribert", RetriBertConfig),
+        ("mt5", MT5Config),
         ("t5", T5Config),
         ("mobilebert", MobileBertConfig),
         ("distilbert", DistilBertConfig),
@@ -134,7 +135,6 @@ CONFIG_MAPPING = OrderedDict(
         ("dpr", DPRConfig),
         ("layoutlm", LayoutLMConfig),
         ("rag", RagConfig),
-        ("mt5", MT5Config),
     ]
 )
 
