@@ -96,13 +96,13 @@ else:
     extras["retrieval"] = ["faiss-cpu", "datasets"]
     extras["flax"] = ["jaxlib==0.1.55", "jax>=0.2.0", "flax==0.2.2"]
 
-extras["tokenizers"] = ["tokenizers==0.9.2"]
+extras["tokenizers"] = ["tokenizers==0.9.4"]
 extras["onnxruntime"] = ["onnxruntime>=1.4.0", "onnxruntime-tools>=1.4.2"]
 extras["modelcreation"] = ["cookiecutter==1.7.2"]
 
 extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
 
-extras["sentencepiece"] = ["sentencepiece==0.1.91"]
+extras["sentencepiece"] = ["sentencepiece==0.1.91", "protobuf"]
 extras["retrieval"] = ["faiss-cpu", "datasets"]
 extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil"] + extras["retrieval"] + extras["modelcreation"]
 # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
@@ -130,7 +130,7 @@ setup(
     packages=find_packages("src"),
     install_requires=[
         "numpy",
-        "tokenizers == 0.9.3",
+        "tokenizers == 0.9.4",
         # dataclasses for Python versions that don't have it
         "dataclasses;python_version<'3.7'",
         # utilities from PyPA to e.g. compare versions
@@ -143,9 +143,6 @@ setup(
         "tqdm >= 4.27",
         # for OpenAI GPT
         "regex != 2019.12.17",
-        # for SentencePiece models
-        "sentencepiece == 0.1.91",
-        "protobuf",
         # for XLM
         "sacremoses",
     ],

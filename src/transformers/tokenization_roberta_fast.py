@@ -18,6 +18,7 @@ from typing import List, Optional
 
 from .tokenization_gpt2_fast import GPT2TokenizerFast
 from .tokenization_roberta import RobertaTokenizer
+from .tokenization_utils_base import AddedToken
 from .utils import logging
 
 
@@ -171,6 +172,32 @@ class RobertaTokenizerFast(GPT2TokenizerFast):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
+
+    @property
+    def mask_token(self) -> str:
+        """
+        :obj:`str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while
+        not having been set.
+
+        Roberta tokenizer has a special mask token to be usble in the fill-mask pipeline. The mask token will greedily
+        comprise the space before the `<mask>`.
+        """
+        if self._mask_token is None and self.verbose:
+            logger.error("Using mask_token, but it is not set yet.")
+            return None
+        return str(self._mask_token)
+
+    @mask_token.setter
+    def mask_token(self, value):
+        """
+        Overriding the default behavior of the mask token to have it eat the space before it.
+
+        This is needed to preserve backward compatibility with all the previously used models based on Roberta.
+        """
+        # Mask token behave like a normal word, i.e. include the space before it
+        # So we set lstrip to True
+        value = AddedToken(value, lstrip=True, rstrip=False) if isinstance(value, str) else value
+        self._mask_token = value
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
