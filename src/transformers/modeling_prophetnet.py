@@ -1720,7 +1720,8 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
             Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[-100, 0, ...,
             config.vocab_size - 1]`. All labels set to ``-100`` are ignored (masked), the loss is only computed for
             labels in ``[0, ..., config.vocab_size]``
-
+        reduction (:obj:`str`, `optional`, defaults to :obj:`"sum"`):
+            reduction strategy for loss calculation
         Returns:
 
         Example::
