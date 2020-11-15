@@ -39,6 +39,7 @@ from .configuration_lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertCo
 from .configuration_marian import MarianConfig
 from .configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig
 from .configuration_mobilebert import MobileBertConfig
+from .configuration_mt5 import MT5Config
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .configuration_pegasus import PegasusConfig
 from .configuration_prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig
@@ -133,6 +134,7 @@ CONFIG_MAPPING = OrderedDict(
         ("dpr", DPRConfig),
         ("layoutlm", LayoutLMConfig),
         ("rag", RagConfig),
+        ("mt5", MT5Config),
     ]
 )
 
@@ -175,6 +177,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("rag", "RAG"),
         ("xlm-prophetnet", "XLMProphetNet"),
         ("prophetnet", "ProphetNet"),
+        ("mt5", "mT5"),
     ]
 )
 

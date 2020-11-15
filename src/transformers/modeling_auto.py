@@ -41,6 +41,7 @@ from .configuration_auto import (
     LxmertConfig,
     MBartConfig,
     MobileBertConfig,
+    MT5Config,
     OpenAIGPTConfig,
     PegasusConfig,
     ProphetNetConfig,
@@ -158,6 +159,7 @@ from .modeling_mobilebert import (
     MobileBertForTokenClassification,
     MobileBertModel,
 )
+from .modeling_mt5 import MT5ForConditionalGeneration, MT5Model
 from .modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
 from .modeling_pegasus import PegasusForConditionalGeneration
 from .modeling_prophetnet import ProphetNetForCausalLM, ProphetNetForConditionalGeneration, ProphetNetModel
@@ -235,6 +237,7 @@ MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
         (RetriBertConfig, RetriBertModel),
+        (MT5Config, MT5Model),
         (T5Config, T5Model),
         (DistilBertConfig, DistilBertModel),
         (AlbertConfig, AlbertModel),
@@ -376,6 +379,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        (MT5Config, MT5ForConditionalGeneration),
         (T5Config, T5ForConditionalGeneration),
         (PegasusConfig, PegasusForConditionalGeneration),
         (MarianConfig, MarianMTModel),
