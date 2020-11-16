@@ -8,7 +8,7 @@ from transformers.testing_utils import (
     execute_subprocess_async,
     get_gpu_count,
     require_torch_gpu,
-    require_torch_multigpu,
+    require_torch_multi_gpu,
     slow,
 )
 
@@ -21,8 +21,8 @@ class TestSummarizationDistillerMultiGPU(TestCasePlus):
     def setUpClass(cls):
         return cls
 
-    @require_torch_multigpu
-    def test_multigpu(self):
+    @require_torch_multi_gpu
+    def test_multi_gpu(self):
 
         updates = dict(
             no_teacher=True,
@@ -95,7 +95,7 @@ class TestSummarizationDistillerMultiGPU(TestCasePlus):
         args = f"""
             --model_name Helsinki-NLP/opus-mt-en-ro
             --save_dir {output_dir}
-            --data_dir test_data/wmt_en_ro
+            --data_dir {self.test_file_dir_str}/test_data/wmt_en_ro
             --num_beams 2
             --task translation
         """.split()

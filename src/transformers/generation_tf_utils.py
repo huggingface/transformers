@@ -348,8 +348,7 @@ class TFGenerationMixin:
                 shape=(-1,),
             )
             # expand encoder_outputs
-            encoder_outputs = (tf.gather(encoder_outputs[0], expanded_batch_idxs, axis=0), *encoder_outputs[1:])
-
+            encoder_outputs = (tf.gather(encoder_outputs[0], expanded_batch_idxs, axis=0),)
         else:
             encoder_outputs = None
             cur_len = shape_list(input_ids)[-1]

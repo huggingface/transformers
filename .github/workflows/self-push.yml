@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - master
+      - model-templates
     paths:
       - "src/**"
       - "tests/**"
       - ".github/**"
+      - "templates/**"
   # pull_request:
   repository_dispatch:
 
@@ -54,6 +56,14 @@ jobs:
           source .env/bin/activate
           python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
           python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+
+      - name: Create model files
+        run: |
+          source .env/bin/activate
+          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/pt-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/standalone.json --path=templates/adding_a_new_model
+          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/tf-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
 
       - name: Run all non-slow tests on GPU
         env:
@@ -116,6 +126,14 @@ jobs:
           TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
           TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
 
+      - name: Create model files
+        run: |
+          source .env/bin/activate
+          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/pt-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/standalone.json --path=templates/adding_a_new_model
+          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/tf-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+
       - name: Run all non-slow tests on GPU
         env:
           OMP_NUM_THREADS: 1
@@ -135,7 +153,7 @@ jobs:
           name: run_all_tests_tf_gpu_test_reports
           path: reports
 
-  run_tests_torch_multiple_gpu:
+  run_tests_torch_multi_gpu:
     runs-on: [self-hosted, multi-gpu]
     steps:
       - uses: actions/checkout@v2
@@ -154,7 +172,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v1.1-tests_torch_multiple_gpu-${{ hashFiles('setup.py') }}
+          key: v1.1-tests_torch_multi_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
@@ -181,11 +199,11 @@ jobs:
           OMP_NUM_THREADS: 1
         run: |
           source .env/bin/activate
-          python -m pytest -n 2 --dist=loadfile -s --make-reports=tests_torch_multiple_gpu tests
+          python -m pytest -n 2 --dist=loadfile -s --make-reports=tests_torch_multi_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/tests_torch_multiple_gpu_failures_short.txt          
+        run: cat reports/tests_torch_multi_gpu_failures_short.txt          
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
@@ -194,7 +212,7 @@ jobs:
           name: run_all_tests_torch_multi_gpu_test_reports
           path: reports
 
-  run_tests_tf_multiple_gpu:
+  run_tests_tf_multi_gpu:
     runs-on: [self-hosted, multi-gpu]
     steps:
       - uses: actions/checkout@v2
@@ -213,7 +231,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v1.1-tests_tf_multiple_gpu-${{ hashFiles('setup.py') }}
+          key: v1.1-tests_tf_multi_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
@@ -240,11 +258,11 @@ jobs:
           OMP_NUM_THREADS: 1
         run: |
           source .env/bin/activate
-          python -m pytest -n 2 --dist=loadfile -s --make-reports=tests_tf_multiple_gpu tests
+          python -m pytest -n 2 --dist=loadfile -s --make-reports=tests_tf_multi_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/tests_tf_multiple_gpu_failures_short.txt
+        run: cat reports/tests_tf_multi_gpu_failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}

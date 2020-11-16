@@ -59,6 +59,7 @@ from .configuration_xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfi
 ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     (key, value)
     for pretrained_map in [
+        # Add archive maps here
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BART_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -95,6 +96,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 
 CONFIG_MAPPING = OrderedDict(
     [
+        # Add configs here
         ("retribert", RetriBertConfig),
         ("t5", T5Config),
         ("mobilebert", MobileBertConfig),
@@ -136,6 +138,7 @@ CONFIG_MAPPING = OrderedDict(
 
 MODEL_NAMES_MAPPING = OrderedDict(
     [
+        # Add full (and cased) model names here
         ("retribert", "RetriBERT"),
         ("t5", "T5"),
         ("mobilebert", "MobileBERT"),
@@ -289,6 +292,10 @@ class AutoConfig:
             proxies (:obj:`Dict[str, str]`, `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+                identifier allowed by git.
             return_unused_kwargs (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 If :obj:`False`, then this function returns just the final configuration object.
 

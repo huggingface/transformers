@@ -77,6 +77,7 @@ from .modeling_bart import (
 from .modeling_bert import (
     BertForMaskedLM,
     BertForMultipleChoice,
+    BertForNextSentencePrediction,
     BertForPreTraining,
     BertForQuestionAnswering,
     BertForSequenceClassification,
@@ -128,6 +129,7 @@ from .modeling_fsmt import FSMTForConditionalGeneration, FSMTModel
 from .modeling_funnel import (
     FunnelForMaskedLM,
     FunnelForMultipleChoice,
+    FunnelForPreTraining,
     FunnelForQuestionAnswering,
     FunnelForSequenceClassification,
     FunnelForTokenClassification,
@@ -143,12 +145,13 @@ from .modeling_longformer import (
     LongformerForTokenClassification,
     LongformerModel,
 )
-from .modeling_lxmert import LxmertForPreTraining, LxmertModel
+from .modeling_lxmert import LxmertForPreTraining, LxmertForQuestionAnswering, LxmertModel
 from .modeling_marian import MarianMTModel
 from .modeling_mbart import MBartForConditionalGeneration
 from .modeling_mobilebert import (
     MobileBertForMaskedLM,
     MobileBertForMultipleChoice,
+    MobileBertForNextSentencePrediction,
     MobileBertForPreTraining,
     MobileBertForQuestionAnswering,
     MobileBertForSequenceClassification,
@@ -166,6 +169,7 @@ from .modeling_rag import (  # noqa: F401 - need to import all RagModels to be i
 from .modeling_reformer import (
     ReformerForMaskedLM,
     ReformerForQuestionAnswering,
+    ReformerForSequenceClassification,
     ReformerModel,
     ReformerModelWithLMHead,
 )
@@ -222,11 +226,14 @@ from .modeling_xlnet import (
 from .utils import logging
 
 
+# Add modeling imports here
+
 logger = logging.get_logger(__name__)
 
 
 MODEL_MAPPING = OrderedDict(
     [
+        # Base model mapping
         (RetriBertConfig, RetriBertModel),
         (T5Config, T5Model),
         (DistilBertConfig, DistilBertModel),
@@ -262,6 +269,7 @@ MODEL_MAPPING = OrderedDict(
 
 MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
+        # Model for pre-training mapping
         (LayoutLMConfig, LayoutLMForMaskedLM),
         (RetriBertConfig, RetriBertModel),
         (T5Config, T5ForConditionalGeneration),
@@ -285,11 +293,13 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (CTRLConfig, CTRLLMHeadModel),
         (ElectraConfig, ElectraForPreTraining),
         (LxmertConfig, LxmertForPreTraining),
+        (FunnelConfig, FunnelForPreTraining),
     ]
 )
 
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
+        # Model with LM heads mapping
         (LayoutLMConfig, LayoutLMForMaskedLM),
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
@@ -320,6 +330,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
+        # Model for Causal LM mapping
         (CamembertConfig, CamembertForCausalLM),
         (XLMRobertaConfig, XLMRobertaForCausalLM),
         (RobertaConfig, RobertaForCausalLM),
@@ -342,6 +353,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
 
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
+        # Model for Masked LM mapping
         (LayoutLMConfig, LayoutLMForMaskedLM),
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForMaskedLM),
@@ -363,6 +375,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
 
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
+        # Model for Seq2Seq Causal LM mapping
         (T5Config, T5ForConditionalGeneration),
         (PegasusConfig, PegasusForConditionalGeneration),
         (MarianConfig, MarianMTModel),
@@ -378,6 +391,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
+        # Model for Sequence Classification mapping
         (DistilBertConfig, DistilBertForSequenceClassification),
         (AlbertConfig, AlbertForSequenceClassification),
         (CamembertConfig, CamembertForSequenceClassification),
@@ -396,11 +410,13 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (DebertaConfig, DebertaForSequenceClassification),
         (GPT2Config, GPT2ForSequenceClassification),
         (OpenAIGPTConfig, OpenAIGPTForSequenceClassification),
+        (ReformerConfig, ReformerForSequenceClassification),
     ]
 )
 
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
+        # Model for Question Answering mapping
         (DistilBertConfig, DistilBertForQuestionAnswering),
         (AlbertConfig, AlbertForQuestionAnswering),
         (CamembertConfig, CamembertForQuestionAnswering),
@@ -417,11 +433,13 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForQuestionAnswering),
         (ReformerConfig, ReformerForQuestionAnswering),
         (FunnelConfig, FunnelForQuestionAnswering),
+        (LxmertConfig, LxmertForQuestionAnswering),
     ]
 )
 
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
+        # Model for Token Classification mapping
         (LayoutLMConfig, LayoutLMForTokenClassification),
         (DistilBertConfig, DistilBertForTokenClassification),
         (CamembertConfig, CamembertForTokenClassification),
@@ -443,6 +461,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
+        # Model for Multiple Choice mapping
         (CamembertConfig, CamembertForMultipleChoice),
         (ElectraConfig, ElectraForMultipleChoice),
         (XLMRobertaConfig, XLMRobertaForMultipleChoice),
@@ -457,6 +476,13 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (XLMConfig, XLMForMultipleChoice),
         (FlaubertConfig, FlaubertForMultipleChoice),
         (FunnelConfig, FunnelForMultipleChoice),
+    ]
+)
+
+MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = OrderedDict(
+    [
+        (BertConfig, BertForNextSentencePrediction),
+        (MobileBertConfig, MobileBertForNextSentencePrediction),
     ]
 )
 
@@ -523,9 +549,10 @@ AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
                 Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (e.g., not try downloading the model).
-            use_cdn(:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether or not to use Cloudfront (a Content Delivery Network, or CDN) when searching for the model on
-                our S3 (faster). Should be set to :obj:`False` for checkpoints larger than 20GB.
+            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+                identifier allowed by git.
             kwargs (additional keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
@@ -1517,5 +1544,105 @@ class AutoModelForMultipleChoice:
                 config.__class__,
                 cls.__name__,
                 ", ".join(c.__name__ for c in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys()),
+            )
+        )
+
+
+class AutoModelForNextSentencePrediction:
+    r"""
+    This is a generic model class that will be instantiated as one of the model classes of the library---with a
+    multiple choice classification head---when created with the when created with the
+    :meth:`~transformers.AutoModelForNextSentencePrediction.from_pretrained` class method or the
+    :meth:`~transformers.AutoModelForNextSentencePrediction.from_config` class method.
+
+    This class cannot be instantiated directly using ``__init__()`` (throws an error).
+    """
+
+    def __init__(self):
+        raise EnvironmentError(
+            "AutoModelForNextSentencePrediction is designed to be instantiated "
+            "using the `AutoModelForNextSentencePrediction.from_pretrained(pretrained_model_name_or_path)` or "
+            "`AutoModelForNextSentencePrediction.from_config(config)` methods."
+        )
+
+    @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING, use_model_types=False)
+    def from_config(cls, config):
+        r"""
+        Instantiates one of the model classes of the library---with a multiple choice classification head---from a
+        configuration.
+
+        Note:
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForNextSentencePrediction.from_pretrained` to load
+            the model weights.
+
+        Args:
+            config (:class:`~transformers.PretrainedConfig`):
+                The model class to instantiate is selected based on the configuration class:
+
+                List options
+
+        Examples::
+
+            >>> from transformers import AutoConfig, AutoModelForNextSentencePrediction
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = AutoModelForNextSentencePrediction.from_config(config)
+        """
+        if type(config) in MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys():
+            return MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING[type(config)](config)
+
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__,
+                cls.__name__,
+                ", ".join(c.__name__ for c in MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys()),
+            )
+        )
+
+    @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING)
+    @add_start_docstrings(
+        "Instantiate one of the model classes of the library---with a multiple choice classification head---from a "
+        "pretrained model.",
+        AUTO_MODEL_PRETRAINED_DOCSTRING,
+    )
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        r"""
+        Examples::
+
+            >>> from transformers import AutoConfig, AutoModelForNextSentencePrediction
+
+            >>> # Download model and configuration from S3 and cache.
+            >>> model = AutoModelForNextSentencePrediction.from_pretrained('bert-base-uncased')
+
+            >>> # Update configuration during loading
+            >>> model = AutoModelForNextSentencePrediction.from_pretrained('bert-base-uncased', output_attentions=True)
+            >>> model.config.output_attentions
+            True
+
+            >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
+            >>> config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            >>> model = AutoModelForNextSentencePrediction.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+        """
+        config = kwargs.pop("config", None)
+        if not isinstance(config, PretrainedConfig):
+            config, kwargs = AutoConfig.from_pretrained(
+                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+            )
+
+        if type(config) in MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys():
+            return MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__,
+                cls.__name__,
+                ", ".join(c.__name__ for c in MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys()),
             )
         )

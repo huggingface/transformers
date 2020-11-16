@@ -133,23 +133,21 @@ class TFLongformerModelTester:
     def create_and_check_longformer_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
+        config.return_dict = True
         model = TFLongformerModel(config=config)
-        sequence_output, pooled_output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        sequence_output, pooled_output = model(input_ids, token_type_ids=token_type_ids)
-        sequence_output, pooled_output = model(input_ids)
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        result = model(input_ids, token_type_ids=token_type_ids)
+        result = model(input_ids)
 
-        result = {
-            "sequence_output": sequence_output,
-            "pooled_output": pooled_output,
-        }
         self.parent.assertListEqual(
-            shape_list(result["sequence_output"]), [self.batch_size, self.seq_length, self.hidden_size]
+            shape_list(result.last_hidden_state), [self.batch_size, self.seq_length, self.hidden_size]
         )
-        self.parent.assertListEqual(shape_list(result["pooled_output"]), [self.batch_size, self.hidden_size])
+        self.parent.assertListEqual(shape_list(result.pooler_output), [self.batch_size, self.hidden_size])
 
     def create_and_check_longformer_model_with_global_attention_mask(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
+        config.return_dict = True
         model = TFLongformerModel(config=config)
         half_input_mask_length = shape_list(input_mask)[-1] // 2
         global_attention_mask = tf.concat(
@@ -160,59 +158,43 @@ class TFLongformerModelTester:
             axis=-1,
         )
 
-        sequence_output, pooled_output = model(
+        result = model(
             input_ids,
             attention_mask=input_mask,
             global_attention_mask=global_attention_mask,
             token_type_ids=token_type_ids,
         )
-        sequence_output, pooled_output = model(
-            input_ids, token_type_ids=token_type_ids, global_attention_mask=global_attention_mask
-        )
-        sequence_output, pooled_output = model(input_ids, global_attention_mask=global_attention_mask)
+        result = model(input_ids, token_type_ids=token_type_ids, global_attention_mask=global_attention_mask)
+        result = model(input_ids, global_attention_mask=global_attention_mask)
 
-        result = {
-            "sequence_output": sequence_output,
-            "pooled_output": pooled_output,
-        }
         self.parent.assertListEqual(
-            shape_list(result["sequence_output"]), [self.batch_size, self.seq_length, self.hidden_size]
+            shape_list(result.last_hidden_state), [self.batch_size, self.seq_length, self.hidden_size]
         )
-        self.parent.assertListEqual(shape_list(result["pooled_output"]), [self.batch_size, self.hidden_size])
+        self.parent.assertListEqual(shape_list(result.pooler_output), [self.batch_size, self.hidden_size])
 
     def create_and_check_longformer_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
+        config.return_dict = True
         model = TFLongformerForMaskedLM(config=config)
-        loss, prediction_scores = model(
-            input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
-        )
-        result = {
-            "loss": loss,
-            "prediction_scores": prediction_scores,
-        }
-        self.parent.assertListEqual(
-            shape_list(result["prediction_scores"]), [self.batch_size, self.seq_length, self.vocab_size]
-        )
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        self.parent.assertListEqual(shape_list(result.logits), [self.batch_size, self.seq_length, self.vocab_size])
 
     def create_and_check_longformer_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
+        config.return_dict = True
         model = TFLongformerForQuestionAnswering(config=config)
-        loss, start_logits, end_logits = model(
+        result = model(
             input_ids,
             attention_mask=input_mask,
             token_type_ids=token_type_ids,
             start_positions=sequence_labels,
             end_positions=sequence_labels,
         )
-        result = {
-            "loss": loss,
-            "start_logits": start_logits,
-            "end_logits": end_logits,
-        }
-        self.parent.assertListEqual(shape_list(result["start_logits"]), [self.batch_size, self.seq_length])
-        self.parent.assertListEqual(shape_list(result["end_logits"]), [self.batch_size, self.seq_length])
+
+        self.parent.assertListEqual(shape_list(result.start_logits), [self.batch_size, self.seq_length])
+        self.parent.assertListEqual(shape_list(result.end_logits), [self.batch_size, self.seq_length])
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -622,3 +604,25 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         tf.debugging.assert_near(tf.reduce_mean(loss), expected_loss, rtol=1e-4)
         tf.debugging.assert_near(tf.reduce_sum(prediction_scores), expected_prediction_scores_sum, rtol=1e-4)
         tf.debugging.assert_near(tf.reduce_mean(prediction_scores), expected_prediction_scores_mean, rtol=1e-4)
+
+    @slow
+    def test_inference_masked_lm(self):
+        model = TFLongformerForMaskedLM.from_pretrained("lysandre/tiny-longformer-random")
+        input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
+        output = model(input_ids)[0]
+
+        expected_shape = [1, 6, 10]
+        self.assertEqual(output.shape, expected_shape)
+
+        print(output[:, :3, :3])
+
+        expected_slice = tf.constant(
+            [
+                [
+                    [-0.04926379, 0.0367098, 0.02099686],
+                    [0.03940692, 0.01547744, -0.01448723],
+                    [0.03495252, -0.05900355, -0.01675752],
+                ]
+            ]
+        )
+        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-4)
