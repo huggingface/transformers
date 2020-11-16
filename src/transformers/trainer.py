@@ -727,7 +727,7 @@ class Trainer:
         self.state.is_local_process_zero = self.is_local_process_zero()
         self.state.is_world_process_zero = self.is_world_process_zero()
 
-        tr_loss = torch.tensor(0.0).to(self.args.device)
+        tr_loss = 0.0
         self._logging_loss_scalar = 0
         self._globalstep_last_logged = 0
         self._total_flos = self.state.total_flos
@@ -770,9 +770,9 @@ class Trainer:
                     and _use_ddp_no_sync
                 ):
                     with model.no_sync():
-                        tr_loss += self.training_step(model, inputs)
+                        tr_loss += self.training_step(model, inputs).item()
                 else:
-                    tr_loss += self.training_step(model, inputs)
+                    tr_loss += self.training_step(model, inputs).item()
                 self._total_flos += self.floating_point_ops(inputs)
 
                 if (step + 1) % self.args.gradient_accumulation_steps == 0 or (
@@ -844,13 +844,12 @@ class Trainer:
 
         self.control = self.callback_handler.on_train_end(self.args, self.state, self.control)
 
-        return TrainOutput(self.state.global_step, tr_loss.item() / self.state.global_step)
+        return TrainOutput(self.state.global_step, tr_loss / self.state.global_step)
 
     def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch):
         if self.control.should_log:
             logs: Dict[str, float] = {}
-            tr_loss_scalar = tr_loss.item()
-            logs["loss"] = (tr_loss_scalar - self._logging_loss_scalar) / (
+            logs["loss"] = (tr_loss - self._logging_loss_scalar) / (
                 self.state.global_step - self._globalstep_last_logged
             )
             # backward compatibility for pytorch schedulers
@@ -859,7 +858,7 @@ class Trainer:
                 if version.parse(torch.__version__) >= version.parse("1.4")
                 else self.lr_scheduler.get_lr()[0]
             )
-            self._logging_loss_scalar = tr_loss_scalar
+            self._logging_loss_scalar = tr_loss
             self._globalstep_last_logged = self.state.global_step
 
             self.log(logs)
