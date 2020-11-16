@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import tensorflow as tf
+from tensorflow.python.framework import dtypes
 
 from .activations_tf import get_tf_activation
 from .configuration_gpt2 import GPT2Config
@@ -97,8 +98,8 @@ class TFAttention(tf.keras.layers.Layer):
         # q, k, v have shape [batch, heads, sequence, features]
         w = tf.matmul(q, k, transpose_b=True)
         if self.scale:
-            dk = tf.cast(shape_list(k)[-1], tf.float32)  # scale attention_scores
-            w = w / tf.math.sqrt(dk)
+            dk = tf.cast(shape_list(k)[-1], dtype=w.dtype)  # scale attention_scores
+            w = w / tf.math.sqrt(dk, dtype=dk.dtype)
 
         # w has shape [batch, heads, dst_sequence, src_sequence], where information flows from src to dst.
         _, _, nd, ns = shape_list(w)
