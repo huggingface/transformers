@@ -381,10 +381,10 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
 
     Args:
         prefix_allowed_tokens_fn (:obj:`Callable[[int, torch.Tensor], List[int]]`):
-                a function that has as arguments :obj:`batch_id` and :obj:`inputs_id`.
+                a function that has as arguments :obj:`batch_id` and :obj:`inputs_ids`.
                 This function has to return a list with the allowed tokens for
                 the next generation step conditioning on the previously generated
-                tokens :obj:`inputs_id` and the batch ID :obj:`batch_id`.
+                tokens :obj:`inputs_ids` and the batch ID :obj:`batch_id`.
 
     """
 
