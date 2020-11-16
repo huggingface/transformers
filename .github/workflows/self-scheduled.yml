@@ -9,7 +9,6 @@ on:
   push:
     branches:
       - ci_*
-      - return_dict_switch
   repository_dispatch:
   schedule:
     - cron: "0 0 * * *"
