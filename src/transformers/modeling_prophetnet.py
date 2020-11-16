@@ -1180,7 +1180,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
-            >>> model = ProphetNetEncoder.from_pretrained('patrickvonplaten/prophetnet-large-uncased-standalone', return_dict=True)
+            >>> model = ProphetNetEncoder.from_pretrained('patrickvonplaten/prophetnet-large-uncased-standalone')
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
 
@@ -1319,7 +1319,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
-            >>> model = ProphetNetDecoder.from_pretrained('patrickvonplaten/prophetnet-large-uncased-standalone', add_cross_attention=False, return_dict=True)
+            >>> model = ProphetNetDecoder.from_pretrained('patrickvonplaten/prophetnet-large-uncased-standalone', add_cross_attention=False)
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -1621,7 +1621,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
 
             >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
             >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids, return_dict=True)
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
             >>> last_hidden_states = outputs.last_hidden_state  # main stream hidden states
             >>> last_hidden_states_ngram = outputs.last_hidden_state_ngram  # predict hidden states
@@ -1731,7 +1731,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
 
             >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
             >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids, return_dict=True)
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
             >>> logits_next_token = outputs.logits  # logits to predict next token as usual
             >>> logits_ngram_next_tokens = outputs.logits_ngram  # logits to predict 2nd, 3rd, ... next tokens
@@ -1940,10 +1940,10 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
-            >>> model = ProphetNetForCausalLM.from_pretrained('patrickvonplaten/prophetnet-decoder-clm-large-uncased', return_dict=True)
+            >>> model = ProphetNetForCausalLM.from_pretrained('patrickvonplaten/prophetnet-decoder-clm-large-uncased')
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-            >>> outputs = model(**inputs, return_dict=True)
+            >>> outputs = model(**inputs)
 
             >>> logits = outputs.logits
 
@@ -1962,7 +1962,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
             ... )
             >>> input_ids = tokenizer_enc(ARTICLE, return_tensors="pt").input_ids
             >>> labels = tokenizer_dec("us rejects charges against its ambassador in bolivia", return_tensors="pt").input_ids
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=labels[:, :-1], labels=labels[:, 1:], return_dict=True)
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=labels[:, :-1], labels=labels[:, 1:])
 
             >>> loss = outputs.loss
         """

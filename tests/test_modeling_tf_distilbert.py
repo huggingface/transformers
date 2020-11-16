@@ -91,7 +91,6 @@ class TFDistilBertModelTester:
             attention_dropout=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
             initializer_range=self.initializer_range,
-            return_dict=True,
         )
 
         return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels

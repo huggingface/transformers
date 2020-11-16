@@ -39,7 +39,7 @@ head on top of the encoder with an output size of 2. Models are initialized in `
 .. code-block:: python
 
     from transformers import BertForSequenceClassification
-    model = BertForSequenceClassification.from_pretrained('bert-base-uncased', return_dict=True)
+    model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
     model.train()
 
 This is useful because it allows us to make use of the pre-trained BERT encoder and easily train it on whatever

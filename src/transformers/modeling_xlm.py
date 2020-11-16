@@ -1020,7 +1020,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = XLMTokenizer.from_pretrained('xlm-mlm-en-2048')
-            >>> model = XLMForQuestionAnswering.from_pretrained('xlm-mlm-en-2048', return_dict=True)
+            >>> model = XLMForQuestionAnswering.from_pretrained('xlm-mlm-en-2048')
 
             >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
             >>> start_positions = torch.tensor([1])

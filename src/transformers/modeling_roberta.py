@@ -390,7 +390,7 @@ class RobertaEncoder(nn.Module):
         encoder_attention_mask=None,
         output_attentions=False,
         output_hidden_states=False,
-        return_dict=False,
+        return_dict=True,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -770,7 +770,7 @@ class RobertaForCausalLM(RobertaPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
-            >>> config = RobertaConfig.from_pretrained("roberta-base", return_dict=True)
+            >>> config = RobertaConfig.from_pretrained("roberta-base")
             >>> config.is_decoder = True
             >>> model = RobertaForCausalLM.from_pretrained('roberta-base', config=config)
 
