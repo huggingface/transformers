@@ -4,82 +4,93 @@ import random
 import ray
 
 from transformers import RagRetriever
-from transformers.retrieval_rag import LegacyIndex
 
 logger = logging.getLogger(__name__)
 
-class RayRetriever(RagRetriever):
-    _init_retrieval = False
-
+class RayRetriever:
     def __init__(self):
         self.initialized = False
-        self.test = False
-        # import pdb; pdb.set_trace()
-        print("----------------------------------actor created")
-        pass
 
-    def init(self, config, question_encoder_tokenizer, generator_tokenizer,
+    def create_rag_retriever(self, config, question_encoder_tokenizer,
+                  generator_tokenizer,
              index):
         if not self.initialized:
-            assert not self._init_retrieval
-            super(RayRetriever, self).__init__(config,
-                             question_encoder_tokenizer=question_encoder_tokenizer, generator_tokenizer=generator_tokenizer, index=index)
+            self.retriever = RagRetriever(config,
+                                          question_encoder_tokenizer=question_encoder_tokenizer, generator_tokenizer=generator_tokenizer, index=index, init_retrieval=False)
             self.initialized = True
 
     def init_retrieval(self):
-        assert not self.test
-        print(
-            "*******************************************************************************************initializing retrieval actor")
-        #assert isinstance(self.index, LegacyIndex)
-        self.index.init_index()
-        assert self.index is not None
-        self.test = True
-
-    def test_f(self):
-        return self.test
+        self.retriever.index.init_index()
 
     def retrieve(self, question_hidden_states, n_docs):
-        doc_ids, retrieved_doc_embeds = self._main_retrieve(
+        doc_ids, retrieved_doc_embeds = self.retriever._main_retrieve(
             question_hidden_states, n_docs)
-        #return retrieved_doc_embeds, doc_ids, self.index.get_doc_dicts(
-        # doc_ids)
         return doc_ids, retrieved_doc_embeds
 
 class RagRayDistributedRetriever(RagRetriever):
-    _init_retrieval = False
+    """
+        A distributed retriever built on top of the ``Ray`` API, a library
+        for building distributed applications (https://docs.ray.io/en/master/).
+        package. During training, all training workers initialize their own
+        instance of a `RagRayDistributedRetriever`, and each instance of
+        this distributed retriever shares a common set of Retrieval Ray
+        Actors (https://docs.ray.io/en/master/walkthrough.html#remote
+        -classes-actors) that load the index on separate processes. Ray
+        handles the communication between the `RagRayDistributedRetriever`
+        instances and the remote Ray actors. If training is done in a
+        non-distributed setup, the index will simply be loaded in the same
+        process as the training worker and Ray will not be used.
+
+        Args:
+            config (:class:`~transformers.RagConfig`):
+                The configuration of the RAG model this Retriever is used with. Contains parameters indicating which ``Index`` to build.
+            question_encoder_tokenizer (:class:`~transformers.PretrainedTokenizer`):
+                The tokenizer that was used to tokenize the question.
+                It is used to decode the question and then use the generator_tokenizer.
+            generator_tokenizer (:class:`~transformers.PretrainedTokenizer`):
+                The tokenizer used for the generator part of the RagModel.
+            retrieval_workers (:obj:`List[ray.ActorClass(RayRetriever)]`): A list of already initialized `RayRetriever` actors.
+                These actor classes run on remote processes and are responsible for performing the index lookup.
+            index (:class:`~transformers.retrieval_rag.Index`, optional, defaults to the one defined by the configuration):
+                If specified, use this index instead of the one built using the configuration
+    """
 
     def __init__(self, config, question_encoder_tokenizer,
                  generator_tokenizer, retrieval_workers, index=None):
-        #import pdb; pdb.set_trace()
-        #assert len(retrieval_workers) == 1
         super().__init__(
             config, question_encoder_tokenizer=question_encoder_tokenizer,
-            generator_tokenizer=generator_tokenizer, index=index
+            generator_tokenizer=generator_tokenizer, index=index,
+            init_retrieval=False
         )
         self.retrieval_workers = retrieval_workers
-        ray.get([worker.init.remote(config, question_encoder_tokenizer,
+        ray.get([worker.create_rag_retriever.remote(config,
+                                             question_encoder_tokenizer,
                              generator_tokenizer, index) for worker in
                  self.retrieval_workers])
 
-    def init_retrieval(self, num_actors):
-        # self.retrieval_workers = [RayRetriever.remote(self.config,
-        #                                          self.question_encoder_tokenizer,
-        #                                          self.generator_tokenizer)] \
-        #                          * num_actors
-        #import pdb; pdb.set_trace()
-        ray.get([worker.init_retrieval.remote() for worker in
-                 self.retrieval_workers])
+    def init_retrieval(self):
+        logger.info("initializing retrieval")
+
+        if len(self.retrieval_workers) > 0:
+            ray.get([worker.init_retrieval.remote() for worker in
+                     self.retrieval_workers])
+        else:
+            # Non-distributed training. Load index into this same process.
+            self.index.init_index()
+
 
     def retrieve(self, question_hidden_states, n_docs):
-        #assert len(self.retrieval_workers) == 2
-        random_worker = self.retrieval_workers[random.randint(0,
-                                               len(self.retrieval_workers)-1)]
-        #assert ray.get(random_worker.test_f.remote())
-        # return ray.get(random_worker.retrieve.remote(
-        #     question_hidden_states, n_docs))
-        doc_ids, retrieved_doc_embeds = ray.get(
-            random_worker.retrieve.remote(question_hidden_states, n_docs))
-        return retrieved_doc_embeds, doc_ids, self.index.get_doc_dicts(doc_ids)
+        if len(self.retrieval_workers) > 0:
+            # Select a random retrieval actor.
+            random_worker = self.retrieval_workers[random.randint(0,
+                                                   len(self.retrieval_workers)-1)]
+            doc_ids, retrieved_doc_embeds = ray.get(
+                random_worker.retrieve.remote(question_hidden_states, n_docs))
+        else:
+            doc_ids, retrieved_doc_embeds = self._main_retrieve(
+                question_hidden_states, n_docs)
+        return retrieved_doc_embeds, doc_ids, self.index.get_doc_dicts(
+            doc_ids)
 
     @classmethod
     def get_tokenizers(cls, retriever_name_or_path,

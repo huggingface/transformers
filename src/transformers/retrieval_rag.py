@@ -372,9 +372,9 @@ class RagRetriever:
 
     """
 
-    _init_retrieval = True
-
-    def __init__(self, config, question_encoder_tokenizer, generator_tokenizer, index=None):
+    def __init__(self, config, question_encoder_tokenizer,
+                 generator_tokenizer, index=None, init_retrieval=True):
+        self._init_retrieval = init_retrieval
         requires_datasets(self)
         requires_faiss(self)
         super().__init__()
@@ -418,8 +418,6 @@ class RagRetriever:
         requires_datasets(cls)
         requires_faiss(cls)
         config = RagConfig.from_pretrained(retriever_name_or_path, **kwargs)
-        #config.index_name = "legacy"
-        #config.use_dummy_dataset = False
         rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path,
                                                      config=config)
         question_encoder_tokenizer = rag_tokenizer.question_encoder

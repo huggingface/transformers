@@ -370,7 +370,7 @@ def generic_train(
     if logging_callback is None:
         logging_callback = LoggingCallback()
 
-    train_params = extra_train_kwargs
+    train_params = {}
 
     # TODO: remove with PyTorch 1.6 since pl uses native amp
     if args.fp16:
@@ -381,13 +381,14 @@ def generic_train(
         train_params["distributed_backend"] = "ddp"
 
     train_params["accumulate_grad_batches"] = args.accumulate_grad_batches
+    train_params["accelerator"] = extra_train_kwargs.get("accelerator", None)
+    train_params["profiler"] = extra_train_kwargs.get("profiler", None)
 
     trainer = pl.Trainer.from_argparse_args(
         args,
         weights_summary=None,
         callbacks=[logging_callback] + extra_callbacks,
         logger=logger,
-        profiler=pl.profiler.AdvancedProfiler(),
         checkpoint_callback=checkpoint_callback,
         **train_params,
     )
