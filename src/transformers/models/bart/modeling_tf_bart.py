@@ -878,7 +878,7 @@ class TFSinusoidalPositionalEmbedding(tf.keras.layers.Embedding):
 
 
 @keras_serializable
-class TFBartMainLayer(Layer):
+class TFBartMainLayer(tf.keras.layers.Layer):
     config_class = BartConfig
 
     def __init__(self, config, **kwargs):
