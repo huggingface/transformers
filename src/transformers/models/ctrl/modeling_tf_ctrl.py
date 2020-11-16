@@ -27,6 +27,7 @@ from ...modeling_tf_utils import (
     input_processing,
     keras_serializable,
     shape_list,
+    input_processing,
 )
 from ...utils import logging
 from .configuration_ctrl import CTRLConfig
@@ -685,6 +686,21 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
             labels=labels,
             training=training,
             kwargs_call=kwargs,
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
+        transformer_outputs = self.transformer(
+            input_ids=inputs["input_ids"],
+            past=inputs["past"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            position_ids=inputs["position_ids"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            use_cache=inputs["use_cache"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
         transformer_outputs = self.transformer(
