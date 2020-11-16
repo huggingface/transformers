@@ -1204,7 +1204,7 @@ class BartForSequenceClassification(PretrainedBartModel):
 
         # Attempt to gather the latest eos_token representation in an ONNX compatible way
         # (-1: remove the batch indexes from the vector, -1: Take the last occurrence of eos_token)
-        sentence_representation = torch.index_select(x, 1, eos_mask.nonzero().t()[-1, -1])
+        sentence_representation = torch.index_select(x, 1, eos_mask.nonzero(as_tuple=False).t()[-1, -1])
         logits = self.classification_head(sentence_representation).squeeze(1)
 
         loss = None
