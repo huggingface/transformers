@@ -25,7 +25,7 @@ from tensorflow import Tensor
 from tensorflow.keras.layers import Dense, Layer, LayerNormalization
 
 from ...activations_tf import ACT2FN
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPast,
