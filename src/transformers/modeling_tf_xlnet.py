@@ -441,8 +441,8 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         self.layer = [TFXLNetLayer(config, name="layer_._{}".format(i)) for i in range(config.n_layer)]
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
-        self.use_mems_eval = self.config.use_mems_eval
-        self.use_mems_train = self.config.use_mems_train
+        self.use_mems_eval = config.use_mems_eval
+        self.use_mems_train = config.use_mems_train
 
     def get_input_embeddings(self):
         return self.word_embedding
