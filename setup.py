@@ -42,6 +42,8 @@ To create the package for pypi.
 8. Add the release version to docs/source/_static/js/custom.js and .circleci/deploy.sh
 
 9. Update README.md to redirect to correct documentation.
+
+10. Update the version in __init__.py, setup.py to the new version "-dev" and push to master.
 """
 
 import os
@@ -117,7 +119,7 @@ extras["dev"] = extras["all"] + extras["testing"] + extras["quality"] + extras["
 
 setup(
     name="transformers",
-    version="3.5.0",
+    version="4.0.0-dev",
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
