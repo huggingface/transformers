@@ -250,7 +250,7 @@ class GenerationMixin:
         bad_words_ids: List[List[int]],
         min_length: int,
         eos_token_id: int,
-        prefix_allowed_tokens_fn: Callable,
+        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
         num_beams: int,
     ) -> LogitsProcessorList:
         """
@@ -305,7 +305,7 @@ class GenerationMixin:
         num_return_sequences: Optional[int] = None,
         decoder_start_token_id: Optional[int] = None,
         use_cache: Optional[bool] = None,
-        prefix_allowed_tokens_fn: Callable = None,
+        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]] = None,
         **model_kwargs
     ) -> torch.LongTensor:
         r"""
@@ -372,12 +372,12 @@ class GenerationMixin:
             use_cache: (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not the model should use the past last key/values attentions (if applicable to the model) to
                 speed up decoding.
-            prefix_allowed_tokens_fn: (:obj:`Callable`, `optional`, defaults to :obj:`None`):
-                If provided, it has to be a function that has as arguments :obj:`inputs_id`. At each step of Beam
-                Search, this function is called with the :obj:`inputs_id` containing the previously generated tokens as
-                a tensor of shape :obj:`(batch_size * num_beams)`:. This function has to return a list of lists with
-                the allowed BPE tokens at the next step (list of batches and list of beams). This argument is useful
-                for constrained generation conditioned on the prefix. If not provided no constrain is applied.
+            prefix_allowed_tokens_fn: (:obj:`Callable[[int, torch.Tensor], List[int]]`, `optional`, defaults to :obj:`None`):
+                If provided, at each step of Beam Search, this function constraints the search to only allowed tokens.
+                If not provided no constrain is applied. This function takes 2 arguments :obj:`inputs_id` and
+                the batch ID :obj:`batch_id`. It has to return a list with the allowed tokens for the next
+                generation step conditioning on the previously generated tokens :obj:`inputs_id` and the batch
+                ID :obj:`batch_id`. This argument is useful for constrained generation conditioned on the prefix.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
                 model is an Encoder-Decoder model, encoder specific kwargs should not be prefixed and decoder specific

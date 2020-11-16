@@ -1234,7 +1234,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         num_return_sequences=None,
         decoder_start_token_id=None,
         n_docs=None,
-        prefix_allowed_tokens_fn: Callable = None,
+        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]] = None,
         **model_kwargs
     ):
         """
@@ -1308,12 +1308,12 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 If an encoder-decoder model starts decoding with a different token than `bos`, the id of that token.
             n_docs (:obj:`int`, `optional`, defaults to :obj:`config.n_docs`)
                 Number of documents to retrieve and/or number of documents for which to generate an answer.
-            prefix_allowed_tokens_fn: (:obj:`Callable`, `optional`, defaults to :obj:`None`):
-                If provided, it has to be a function that has as arguments :obj:`inputs_id`. At each step of Beam
-                Search, this function is called with the :obj:`inputs_id` containing the previously generated tokens as
-                a tensor of shape :obj:`(batch_size * num_beams)`:. This function has to return a list of lists with
-                the allowed BPE tokens at the next step (list of batches and list of beams). This argument is useful
-                for constrained generation conditioned on the prefix. If not provided no constrain is applied.
+            prefix_allowed_tokens_fn: (:obj:`Callable[[int, torch.Tensor], List[int]]`, `optional`, defaults to :obj:`None`):
+                If provided, at each step of Beam Search, this function constraints the search to only allowed tokens.
+                If not provided no constrain is applied. This function takes 2 arguments :obj:`inputs_id` and
+                the batch ID :obj:`batch_id`. It has to return a list with the allowed tokens for the next
+                generation step conditioning on the previously generated tokens :obj:`inputs_id` and the batch
+                ID :obj:`batch_id`. This argument is useful for constrained generation conditioned on the prefix.
 
         Return:
             :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
