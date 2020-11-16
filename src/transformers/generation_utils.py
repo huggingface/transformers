@@ -374,10 +374,10 @@ class GenerationMixin:
                 speed up decoding.
             prefix_allowed_tokens_fn: (:obj:`Callable[[int, torch.Tensor], List[int]]`, `optional`, defaults to :obj:`None`):
                 If provided, at each step of Beam Search, this function constraints the search to only allowed tokens.
-                If not provided no constrain is applied. This function takes 2 arguments :obj:`inputs_ids` and
-                the batch ID :obj:`batch_id`. It has to return a list with the allowed tokens for the next
-                generation step conditioning on the previously generated tokens :obj:`inputs_ids` and the batch
-                ID :obj:`batch_id`. This argument is useful for constrained generation conditioned on the prefix.
+                If not provided no constrain is applied. This function takes 2 arguments :obj:`inputs_ids` and the
+                batch ID :obj:`batch_id`. It has to return a list with the allowed tokens for the next generation step
+                conditioning on the previously generated tokens :obj:`inputs_ids` and the batch ID :obj:`batch_id`.
+                This argument is useful for constrained generation conditioned on the prefix.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
                 model is an Encoder-Decoder model, encoder specific kwargs should not be prefixed and decoder specific

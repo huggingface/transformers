@@ -1310,10 +1310,10 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 Number of documents to retrieve and/or number of documents for which to generate an answer.
             prefix_allowed_tokens_fn: (:obj:`Callable[[int, torch.Tensor], List[int]]`, `optional`, defaults to :obj:`None`):
                 If provided, at each step of Beam Search, this function constraints the search to only allowed tokens.
-                If not provided no constrain is applied. This function takes 2 arguments :obj:`inputs_ids` and
-                the batch ID :obj:`batch_id`. It has to return a list with the allowed tokens for the next
-                generation step conditioning on the previously generated tokens :obj:`inputs_ids` and the batch
-                ID :obj:`batch_id`. This argument is useful for constrained generation conditioned on the prefix.
+                If not provided no constrain is applied. This function takes 2 arguments :obj:`inputs_ids` and the
+                batch ID :obj:`batch_id`. It has to return a list with the allowed tokens for the next generation step
+                conditioning on the previously generated tokens :obj:`inputs_ids` and the batch ID :obj:`batch_id`.
+                This argument is useful for constrained generation conditioned on the prefix.
 
         Return:
             :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
