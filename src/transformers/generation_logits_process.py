@@ -380,11 +380,14 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     :class:`transformers.LogitsProcessor` .
 
     Args:
-        prefix_allowed_tokens_fn (:obj:`Callable`):
-
+        prefix_allowed_tokens_fn (:obj:`Callable[[int, torch.Tensor], List[int]]`):
+                a function that has as arguments :obj:`batch_id` and :obj:`inputs_id`. 
+                This function has to return a list with the allowed tokens for 
+                the next generation step conditioning on the previously generated
+                tokens :obj:`inputs_id` and the batch ID :obj:`batch_id`.
     """
 
-    def __init__(self, prefix_allowed_tokens_fn: Callable, num_beams: int):
+    def __init__(self, prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]], num_beams: int):
         self._prefix_allowed_tokens_fn = prefix_allowed_tokens_fn
         self._num_beams = num_beams
 
