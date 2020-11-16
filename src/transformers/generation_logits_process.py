@@ -377,11 +377,12 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
 
 class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     r"""
-    :class:`transformers.LogitsProcessor` .
+    :class:`transformers.LogitsProcessor` that enforces that only specified sequences can be generated.
 
     Args:
         prefix_allowed_tokens_fn (:obj:`Callable`):
-
+            This function has to return a list of lists with the allowed BPE tokens at the next step
+            (list of batches and list of beams).
     """
 
     def __init__(self, prefix_allowed_tokens_fn: Callable, num_beams: int):
