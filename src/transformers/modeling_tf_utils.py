@@ -274,18 +274,16 @@ def input_processing(func, inputs, **kwargs):
             output[parameter_names[0]] = inputs
         else:
             raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted." % type(inputs))
-
+    
     for name in parameter_names:
         if name not in list(output.keys()):
-            # When creating a SavedModel TF calls method the method LayerCall.__call__(args, **kwargs)
+            # When creating a SavedModel TF calls the method with LayerCall.__call__(args, **kwargs)
             # So to respect the proper output we have to add this exception
-            if name == "kwargs":
+            if name == "kwargs" and "args" in output:
                 output.update(kwargs)
 
-                if "input_ids" not in list(output.keys()):
-                    output["input_ids"] = output["args"]
-                elif "input_embeds" not in list(output.keys()):
-                    output["input_embeds"] = output["args"]
+                tensor_name = output["args"].name.split(":")[0]
+                output[tensor_name] = output["args"]
 
                 del output["args"]
             else:
@@ -437,6 +435,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             :obj:`tf.keras.layers.Layer`: A torch module mapping vocabulary to hidden states.
         """
         base_model = getattr(self, self.base_model_prefix, self)
+
         if base_model is not self:
             return base_model.get_input_embeddings()
         else:
@@ -1101,8 +1100,13 @@ def shape_list(x: tf.Tensor) -> List[int]:
     Returns:
         :obj:`List[int]`: The shape of the tensor as a list.
     """
-    static = x.shape.as_list()
     dynamic = tf.shape(x)
+
+    if x.shape == tf.TensorShape(None):
+        return dynamic.as_list()
+
+    static = x.shape.as_list()
+    
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 
