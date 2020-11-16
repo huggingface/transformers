@@ -9,13 +9,14 @@ python finetune.py \
     --output_dir outputs \
     --model_name_or_path ./rag-seq-base \
     --model_type rag_sequence \
-    --gpus 3 \
+    --gpus 4 \
+    --profile \
     --do_train \
     --do_predict \
     --fp16 \
     --profiler \
     --n_train 500 \
-    --n_val 1 \
+    --n_val 4 \
     --train_batch_size 8 \
     --eval_batch_size 1 \
     --max_source_length 128 \

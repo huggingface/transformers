@@ -63,7 +63,8 @@ class RagRayDistributedRetriever(RagRetriever):
             init_retrieval=False
         )
         self.retrieval_workers = retrieval_workers
-        ray.get([worker.create_rag_retriever.remote(config,
+        if len(self.retrieval_workers) > 0:
+            ray.get([worker.create_rag_retriever.remote(config,
                                              question_encoder_tokenizer,
                              generator_tokenizer, index) for worker in
                  self.retrieval_workers])

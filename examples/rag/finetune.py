@@ -648,8 +648,7 @@ if __name__ == "__main__":
     # Pytorch Lightning Profiler
     parser.add_argument(
         "--profile",
-        default=False,
-        type=bool,
+        action="store_true",
         help="If True, use pytorch_lightning.profiler.AdvancedProfiler to "
              "profile the Trainer.",
     )
