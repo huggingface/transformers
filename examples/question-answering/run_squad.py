@@ -736,6 +736,7 @@ def main():
         args.tokenizer_name if args.tokenizer_name else args.model_name_or_path,
         do_lower_case=args.do_lower_case,
         cache_dir=args.cache_dir if args.cache_dir else None,
+        use_fast=False,  # SquadDataset is not compatible with Fast tokenizers which have a smarter overflow handeling
     )
     model = AutoModelForQuestionAnswering.from_pretrained(
         args.model_name_or_path,
@@ -784,7 +785,10 @@ def main():
 
         # Load a trained model and vocabulary that you have fine-tuned
         model = AutoModelForQuestionAnswering.from_pretrained(args.output_dir)  # , force_download=True)
-        tokenizer = AutoTokenizer.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case)
+
+        # SquadDataset is not compatible with Fast tokenizers which have a smarter overflow handeling
+        # So we use use_fast=False here for now until Fast-tokenizer-compatible-examples are out
+        tokenizer = AutoTokenizer.from_pretrained(args.output_dir, do_lower_case=args.do_lower_case, use_fast=False)
         model.to(args.device)
 
     # Evaluation - we can ask to evaluate all the checkpoints (sub-directories) in a directory

@@ -186,6 +186,15 @@ except ImportError:
 
 
 try:
+    import google.protobuf  # noqa: F401
+
+    _protobuf_available = True
+
+except ImportError:
+    _protobuf_available = False
+
+
+try:
     import tokenizers  # noqa: F401
 
     _tokenizers_available = True
@@ -270,6 +279,10 @@ def is_sentencepiece_available():
     return _sentencepiece_available
 
 
+def is_protobuf_available():
+    return _protobuf_available
+
+
 def is_tokenizers_available():
     return _tokenizers_available
 
@@ -326,6 +339,14 @@ In a notebook or a colab, you can install it by executing a cell with
 SENTENCEPIECE_IMPORT_ERROR = """
 {0} requires the SentencePiece library but it was not found in your environment. Checkout the instructions on the
 installation page of its repo: https://github.com/google/sentencepiece#installation and follow the ones
+that match your environment.
+"""
+
+
+# docstyle-ignore
+PROTOBUF_IMPORT_ERROR = """
+{0} requires the protobuf library but it was not found in your environment. Checkout the instructions on the
+installation page of its repo: https://github.com/protocolbuffers/protobuf/tree/master/python#installation and follow the ones
 that match your environment.
 """
 
@@ -418,6 +439,12 @@ def requires_sentencepiece(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_sentencepiece_available():
         raise ImportError(SENTENCEPIECE_IMPORT_ERROR.format(name))
+
+
+def requires_protobuf(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_protobuf_available():
+        raise ImportError(PROTOBUF_IMPORT_ERROR.format(name))
 
 
 def add_start_docstrings(*docstr):

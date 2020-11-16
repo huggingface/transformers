@@ -197,7 +197,7 @@ class TestAll(TestCasePlus):
     )
     @require_torch_non_multi_gpu_but_fix_me
     def test_dataset_kwargs(self, tok_name):
-        tokenizer = AutoTokenizer.from_pretrained(tok_name)
+        tokenizer = AutoTokenizer.from_pretrained(tok_name, use_fast=False)
         if tok_name == MBART_TINY:
             train_dataset = Seq2SeqDataset(
                 tokenizer,
