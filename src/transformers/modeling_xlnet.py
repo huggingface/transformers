@@ -1091,11 +1091,11 @@ class XLNetModel(XLNetPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        use_mems = (
-            use_mems
-            if use_mems is not None
-            else (self.config.use_mems_eval and (not self.is_training or self.config.use_mems_train))
-        )
+
+        if self.training:
+            use_mems = use_mems if use_mems is not None else self.config.use_mems_train
+        else:
+            use_mems = use_mems if use_mems is not None else self.config.use_mems_eval
 
         # the original code for XLNet uses shapes [len, bsz] with the batch dimension at the end
         # but we want a unified interface in the library with the batch size on the first dimension
@@ -1411,11 +1411,6 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             >>> next_token_logits = outputs.logits  # Logits have shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        use_mems = (
-            use_mems
-            if use_mems is not None
-            else (self.config.use_mems_eval and (not self.is_training or self.config.use_mems_train))
-        )
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1503,11 +1498,6 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        use_mems = (
-            use_mems
-            if use_mems is not None
-            else (self.config.use_mems_eval and (not self.is_training or self.config.use_mems_train))
-        )
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -1600,11 +1590,6 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
             `input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        use_mems = (
-            use_mems
-            if use_mems is not None
-            else (self.config.use_mems_eval and (not self.is_training or self.config.use_mems_train))
-        )
 
         outputs = self.transformer(
             input_ids,
@@ -1701,11 +1686,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             :obj:`input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        use_mems = (
-            use_mems
-            if use_mems is not None
-            else (self.config.use_mems_eval and (not self.is_training or self.config.use_mems_train))
-        )
+
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         flat_input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -1811,11 +1792,6 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        use_mems = (
-            use_mems
-            if use_mems is not None
-            else (self.config.use_mems_eval and (not self.is_training or self.config.use_mems_train))
-        )
 
         outputs = self.transformer(
             input_ids,
@@ -1950,11 +1926,6 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             >>> loss = outputs.loss
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        use_mems = (
-            use_mems
-            if use_mems is not None
-            else (self.config.use_mems_eval and (not self.is_training or self.config.use_mems_train))
-        )
 
         transformer_outputs = self.transformer(
             input_ids,
