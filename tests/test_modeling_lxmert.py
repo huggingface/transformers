@@ -282,7 +282,6 @@ class LxmertModelTester:
             attention_mask=input_mask,
             labels=ans,
             output_attentions=output_attentions,
-            return_dict=True,
         )
         result = model(input_ids, visual_feats, bounding_boxes, labels=ans)
         result = model(
@@ -302,7 +301,6 @@ class LxmertModelTester:
             attention_mask=input_mask,
             labels=ans,
             output_attentions=not output_attentions,
-            return_dict=True,
         )
 
         self.parent.assertEqual(result.question_answering_score.shape, (self.batch_size, self.num_qa_labels))
@@ -335,7 +333,6 @@ class LxmertModelTester:
             matched_label=matched_label,
             ans=ans,
             output_attentions=output_attentions,
-            return_dict=True,
         )
         result = model(
             input_ids,
@@ -390,7 +387,6 @@ class LxmertModelTester:
             matched_label=matched_label,
             ans=ans,
             output_attentions=not output_attentions,
-            return_dict=True,
         )
 
         self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
@@ -427,7 +423,6 @@ class LxmertModelTester:
             token_type_ids=token_type_ids,
             attention_mask=input_mask,
             ans=ans,
-            return_dict=True,
         )
 
         result_qa = model_qa(
@@ -437,7 +432,6 @@ class LxmertModelTester:
             labels=ans,
             token_type_ids=token_type_ids,
             attention_mask=input_mask,
-            return_dict=True,
         )
 
         model_pretrain.resize_num_qa_labels(num_small_labels)
@@ -450,7 +444,6 @@ class LxmertModelTester:
             token_type_ids=token_type_ids,
             attention_mask=input_mask,
             ans=less_labels_ans,
-            return_dict=True,
         )
 
         result_qa_less = model_qa(
@@ -460,7 +453,6 @@ class LxmertModelTester:
             labels=less_labels_ans,
             token_type_ids=token_type_ids,
             attention_mask=input_mask,
-            return_dict=True,
         )
 
         model_pretrain.resize_num_qa_labels(num_large_labels)
@@ -473,7 +465,6 @@ class LxmertModelTester:
             token_type_ids=token_type_ids,
             attention_mask=input_mask,
             ans=more_labels_ans,
-            return_dict=True,
         )
 
         result_qa_more = model_qa(
@@ -483,7 +474,6 @@ class LxmertModelTester:
             labels=more_labels_ans,
             token_type_ids=token_type_ids,
             attention_mask=input_mask,
-            return_dict=True,
         )
 
         model_qa_labels = model_qa.num_qa_labels

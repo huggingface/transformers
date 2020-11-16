@@ -558,7 +558,7 @@ class MobileBertEncoder(nn.Module):
         encoder_attention_mask=None,
         output_attentions=False,
         output_hidden_states=False,
-        return_dict=False,
+        return_dict=True,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1006,7 +1006,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = MobileBertTokenizer.from_pretrained("google/mobilebert-uncased")
-            >>> model = MobileBertForPreTraining.from_pretrained("google/mobilebert-uncased", return_dict=True)
+            >>> model = MobileBertForPreTraining.from_pretrained("google/mobilebert-uncased")
 
             >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
             >>> outputs = model(input_ids)
@@ -1216,7 +1216,7 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = MobileBertTokenizer.from_pretrained('google/mobilebert-uncased')
-            >>> model = MobileBertForNextSentencePrediction.from_pretrained('google/mobilebert-uncased', return_dict=True)
+            >>> model = MobileBertForNextSentencePrediction.from_pretrained('google/mobilebert-uncased')
 
             >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
             >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."

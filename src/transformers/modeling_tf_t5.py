@@ -1022,7 +1022,7 @@ class TFT5Model(TFT5PreTrainedModel):
 
             >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="tf").input_ids  # Batch size 1
             >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="tf").input_ids  # Batch size 1
-            >>> outputs = model(input_ids, decoder_input_ids=decoder_input_ids, return_dict=True)
+            >>> outputs = model(input_ids, decoder_input_ids=decoder_input_ids)
 
 
         """
@@ -1219,7 +1219,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
             >>> from transformers import T5Tokenizer, TFT5ForConditionalGeneration
 
-            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small', return_dict=True)
+            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
             >>> model = TFT5ForConditionalGeneration.from_pretrained('t5-small')
 
             >>> inputs = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='tf').input_ids

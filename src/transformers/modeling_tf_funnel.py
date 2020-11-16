@@ -634,7 +634,7 @@ class TFFunnelEncoder(tf.keras.layers.Layer):
         token_type_ids=None,
         output_attentions=False,
         output_hidden_states=False,
-        return_dict=False,
+        return_dict=True,
         training=False,
     ):
         # The pooling is not implemented on long tensors, so we convert this mask.
@@ -719,7 +719,7 @@ class TFFunnelDecoder(tf.keras.layers.Layer):
         token_type_ids=None,
         output_attentions=False,
         output_hidden_states=False,
-        return_dict=False,
+        return_dict=True,
         training=False,
     ):
         upsampled_hidden = upsample(

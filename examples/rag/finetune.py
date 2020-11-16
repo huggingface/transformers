@@ -204,7 +204,6 @@ class GenerativeQAModule(BaseTransformer):
             decoder_input_ids=decoder_input_ids,
             use_cache=False,
             labels=lm_labels,
-            return_dict=True,
             **rag_kwargs,
         )
 

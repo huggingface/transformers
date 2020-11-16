@@ -434,7 +434,7 @@ class FSMTEncoder(nn.Module):
         )  # type: List[EncoderLayer]
 
     def forward(
-        self, input_ids, attention_mask=None, output_attentions=False, output_hidden_states=False, return_dict=False
+        self, input_ids, attention_mask=None, output_attentions=False, output_hidden_states=False, return_dict=True
     ):
         """
         Args:
@@ -617,7 +617,7 @@ class FSMTDecoder(nn.Module):
         use_cache=False,
         output_attentions=False,
         output_hidden_states=False,
-        return_dict=False,
+        return_dict=True,
         **unused,
     ):
         """
