@@ -144,6 +144,10 @@ class GenerationMixin:
         )
         input_ids = input_ids.index_select(0, expanded_return_idx)
 
+        if "token_type_ids" in model_kwargs:
+            token_type_ids = model_kwargs["token_type_ids"]
+            model_kwargs["token_type_ids"] = token_type_ids.index_select(0, expanded_return_idx)
+
         if attention_mask is not None:
             model_kwargs["attention_mask"] = attention_mask.index_select(0, expanded_return_idx)
 
@@ -193,6 +197,11 @@ class GenerationMixin:
             model_kwargs["past"] = outputs.past_buckets_states
         else:
             model_kwargs["past"] = None
+
+        # update token_type_ids with last value
+        if "token_type_ids" in model_kwargs:
+            token_type_ids = model_kwargs["token_type_ids"]
+            model_kwargs["token_type_ids"] = torch.cat([token_type_ids, token_type_ids[:, -1].unsqueeze(-1)], dim=-1)
 
         # update attention mask
         if not is_encoder_decoder:
