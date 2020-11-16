@@ -31,11 +31,11 @@ if is_torch_available():
         MinLengthLogitsProcessor,
         NoBadWordsLogitsProcessor,
         NoRepeatNGramLogitsProcessor,
+        PrefixConstrainedLogitsProcessor,
         RepetitionPenaltyLogitsProcessor,
         TemperatureLogitsWarper,
         TopKLogitsWarper,
         TopPLogitsWarper,
-        PrefixConstrainedLogitsProcessor,
     )
 
 
