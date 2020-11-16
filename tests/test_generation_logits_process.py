@@ -286,7 +286,6 @@ class LogitsProcessorTest(unittest.TestCase):
     def test_prefix_constrained_logits_processor(self):
         vocab_size = 5
         batch_size = 2
-        eos_token_id = 4
 
         input_ids = torch.tensor([[0, 1, 3, 1], [0, 1, 0, 1]], device=torch_device, dtype=torch.long)
         scores = self._get_uniform_logits(batch_size, vocab_size)
@@ -301,5 +300,5 @@ class LogitsProcessorTest(unittest.TestCase):
         # batch 1: 1st, 2nd (0, 1) token are allowed
         # batch 2: 3rd, 4th (2, 3) token are allowed
         self.assertListEqual(
-            torch.isinf(filtered_scores).tolist(), [[False, False, True, True, True], [True, True, False, True, True]]
+            torch.isinf(filtered_scores).tolist(), [[False, False, True, True, True], [True, True, False, False, True]]
         )
