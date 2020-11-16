@@ -17,8 +17,10 @@ import collections
 import os
 from typing import List, Optional, Tuple
 
+from .file_utils import add_start_docstrings
 from .tokenization_bert import BasicTokenizer, WordpieceTokenizer
-from .tokenization_utils import PreTrainedTokenizer
+from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
+from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
 from .utils import logging
 
 
@@ -286,3 +288,43 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
             return token_ids_0 + [self.sep_token_id]
         sep = [self.sep_token_id]
         return token_ids_0 + sep + token_ids_1 + sep
+
+    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
+    def prepare_seq2seq_batch(
+        self,
+        src_texts: List[str],
+        tgt_texts: Optional[List[str]] = None,
+        max_length: Optional[int] = None,
+        max_target_length: Optional[int] = None,
+        padding: str = "longest",
+        return_tensors: str = None,
+        truncation: bool = True,
+        **kwargs,
+    ) -> BatchEncoding:
+        if max_length is None:
+            max_length = self.max_len
+        model_inputs = self(
+            src_texts,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            max_length=max_length,
+            padding=padding,
+            truncation=truncation,
+            **kwargs,
+        )
+        if tgt_texts is None:
+            return model_inputs
+        # Process tgt_texts
+        if max_target_length is None:
+            max_target_length = max_length
+        labels_and_decoder_mask = self(
+            tgt_texts,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            padding=padding,
+            max_length=max_target_length,
+            truncation=truncation,
+            **kwargs,
+        )
+        model_inputs["labels"] = labels_and_decoder_mask["input_ids"]
+        return model_inputs

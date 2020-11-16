@@ -17,7 +17,8 @@
 import os
 import unittest
 
-from transformers.testing_utils import slow
+from transformers import BatchEncoding
+from transformers.testing_utils import require_torch, slow
 from transformers.tokenization_bert import (
     BasicTokenizer,
     WordpieceTokenizer,
@@ -149,6 +150,28 @@ class ProphetNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokenizer.tokenize("unwanted running"), ["un", "##want", "##ed", "runn", "##ing"])
 
         self.assertListEqual(tokenizer.tokenize("unwantedX running"), ["[UNK]", "runn", "##ing"])
+
+    @require_torch
+    def test_prepare_seq2seq_batch(self):
+        tokenizer = self.tokenizer_class.from_pretrained("microsoft/prophetnet-large-uncased")
+
+        src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
+        tgt_text = [
+            "Summary of the text.",
+            "Another summary.",
+        ]
+        expected_src_tokens = [1037, 2146, 20423, 2005, 7680, 7849, 3989, 1012, 102]
+        batch = tokenizer.prepare_seq2seq_batch(
+            src_text,
+            tgt_texts=tgt_text,
+            return_tensors="pt",
+        )
+        self.assertIsInstance(batch, BatchEncoding)
+        result = list(batch.input_ids.numpy()[0])
+        self.assertListEqual(expected_src_tokens, result)
+
+        self.assertEqual((2, 9), batch.input_ids.shape)
+        self.assertEqual((2, 9), batch.attention_mask.shape)
 
     def test_is_whitespace(self):
         self.assertTrue(_is_whitespace(" "))
