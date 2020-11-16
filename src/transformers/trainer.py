@@ -729,7 +729,8 @@ class Trainer:
 
         # tr_loss is a tensor to avoid synchronization of TPUs through .item()
         tr_loss = torch.tensor(0.0).to(self.args.device)
-
+        # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
+        self._total_loss_scalar = 0.0
         self._globalstep_last_logged = 0
         self._total_flos = self.state.total_flos
         model.zero_grad()
@@ -845,7 +846,7 @@ class Trainer:
 
         self.control = self.callback_handler.on_train_end(self.args, self.state, self.control)
 
-        return TrainOutput(self.state.global_step, tr_loss.item() / self.state.global_step)
+        return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step)
 
     def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch):
         if self.control.should_log:
@@ -861,6 +862,7 @@ class Trainer:
                 if version.parse(torch.__version__) >= version.parse("1.4")
                 else self.lr_scheduler.get_lr()[0]
             )
+            self._total_loss_scalar += tr_loss_scalar
             self._globalstep_last_logged = self.state.global_step
 
             self.log(logs)
