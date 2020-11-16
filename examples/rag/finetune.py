@@ -40,7 +40,7 @@ from callbacks import (  # noqa: E402 # isort:skipq
     get_early_stopping_callback,
     Seq2SeqLoggingCallback,
 )
-from distributed_retriever import \
+from distributed_pytorch_retriever import \
     RagPyTorchDistributedRetriever  # noqa: E402 # isort:skip
 from utils import (  # noqa: E402 # isort:skip
     calculate_exact_match,
@@ -552,7 +552,7 @@ def main(args, model=None) -> GenerativeQAModule:
         try:
             ray.init(address=args.address)
         except:
-            logger.warn("Connection to Ray cluster failed. Make sure a Ray"
+            logger.warning("Connection to Ray cluster failed. Make sure a Ray"
                         "cluster is running by either using Ray's cluster "
                         "launcher (`ray up`) or by manually starting Ray on "
                         "each node via `ray start --head` for the head node "
@@ -575,8 +575,8 @@ def main(args, model=None) -> GenerativeQAModule:
                         .format(os.environ["NODE_RANK"], os.environ["LOCAL_RANK"]))
             named_actors = [ray.get_actor("retrieval_worker_{}".format(i))
                             for i in range(args.num_retrieval_workers)]
-        args.actor_handles = named_actors
-        assert args.actor_handles == named_actors
+    args.actor_handles = named_actors
+    assert args.actor_handles == named_actors
 
     if model is None:
         model: GenerativeQAModule = GenerativeQAModule(args)
@@ -588,17 +588,18 @@ def main(args, model=None) -> GenerativeQAModule:
             or str(args.output_dir).startswith("/tmp")
             or str(args.output_dir).startswith("/var")
     ):
-        logger = True  # don't pollute wandb logs unnecessarily
+        training_logger = True  # don't pollute wandb logs unnecessarily
     elif args.logger_name == "wandb":
         from pytorch_lightning.loggers import WandbLogger
 
         project = os.environ.get("WANDB_PROJECT", dataset)
-        logger = WandbLogger(name=model.output_dir.name, project=project)
+        training_logger = WandbLogger(name=model.output_dir.name,
+                                    project=project)
 
     elif args.logger_name == "wandb_shared":
         from pytorch_lightning.loggers import WandbLogger
 
-        logger = WandbLogger(name=model.output_dir.name,
+        training_logger = WandbLogger(name=model.output_dir.name,
                              project=f"hf_{dataset}")
 
     es_callback = (
@@ -615,7 +616,7 @@ def main(args, model=None) -> GenerativeQAModule:
         checkpoint_callback=get_checkpoint_callback(args.output_dir,
                                                     model.val_metric),
         early_stopping_callback=es_callback,
-        logger=logger,
+        logger=training_logger,
         accelerator=CustomAccel() if args.gpus > 1 else None,
         profiler=pl.profiler.AdvancedProfiler() if args.profile else None,
     )
