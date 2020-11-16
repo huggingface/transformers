@@ -5,7 +5,11 @@ datasets:
 
 # roberta-base for QA 
 
-NOTE: This is version 2 of the model. See [this github issue](https://github.com/deepset-ai/FARM/issues/552) from the FARM repository for an explanation of why we updated. If you'd like to use version 1, specify `revision="v1.0"` when loading the model in Transformers 3.5.
+NOTE: This is version 2 of the model. See [this github issue](https://github.com/deepset-ai/FARM/issues/552) from the FARM repository for an explanation of why we updated. If you'd like to use version 1, specify `revision="v1.0"` when loading the model in Transformers 3.5. For exmaple:
+```
+model_name = "deepset/roberta-base-squad2"
+pipeline(model=model_name, tokenizer=model_name, revision="v1.0", task="question-answering")
+```
 
 ## Overview
 **Language model:** roberta-base  
