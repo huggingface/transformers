@@ -1,6 +1,7 @@
 ---
 language: zh
-datasets: CLUECorpus
+datasets: 
+- CLUECorpus
 ---
 
 # Chinese RoBERTa Miniatures
