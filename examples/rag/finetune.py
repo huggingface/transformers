@@ -550,7 +550,7 @@ def main(args, model=None) -> GenerativeQAModule:
     if args.distributed_retriever == "ray" and args.gpus > 1:
         # Connect to an existing Ray cluster.
         try:
-            ray.init(address=args.address)
+            ray.init(address=args.ray_address)
         except:
             logger.warning("Connection to Ray cluster failed. Make sure a Ray"
                         "cluster is running by either using Ray's cluster "
