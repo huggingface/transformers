@@ -89,7 +89,6 @@ class BertGenerationEncoderTester:
             max_position_embeddings=self.max_position_embeddings,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            return_dict=True,
         )
 
         return config, input_ids, input_mask, token_labels

@@ -594,7 +594,9 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         # 'Hello world! ' repeated 1000 times
         input_ids = tf.convert_to_tensor([[0] + [20920, 232, 328, 1437] * 1000 + [2]], dtype=tf.dtypes.int32)
 
-        loss, prediction_scores = model(input_ids, labels=input_ids)
+        output = model(input_ids, labels=input_ids)
+        loss = output.loss
+        prediction_scores = output.logits
 
         expected_loss = tf.constant(0.0073798)
         expected_prediction_scores_sum = tf.constant(-610476600.0)

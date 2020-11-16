@@ -39,7 +39,7 @@ class TFCamembertModelIntegrationTest(unittest.TestCase):
             dtype=tf.int32,
         )  # J'aime le camembert !"
 
-        output = model(input_ids, return_dict=True)["last_hidden_state"]
+        output = model(input_ids)["last_hidden_state"]
         expected_shape = tf.TensorShape((1, 10, 768))
         self.assertEqual(output.shape, expected_shape)
         # compare the actual values for a slice.

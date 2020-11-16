@@ -259,7 +259,6 @@ class FSMTHeadTests(unittest.TestCase):
             eos_token_id=2,
             pad_token_id=1,
             bos_token_id=0,
-            return_dict=True,
         )
 
     def _get_config_and_data(self):

@@ -131,7 +131,6 @@ if is_torch_available():
                 post_attention_groups=self.post_attention_groups,
                 intermediate_groups=self.intermediate_groups,
                 output_groups=self.output_groups,
-                return_dict=True,
             )
 
             return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels

@@ -370,7 +370,7 @@ class EncoderDecoderModel(PreTrainedModel):
             >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
 
             >>> # training
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids, return_dict=True)
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)
             >>> loss, logits = outputs.loss, outputs.logits
 
             >>> # save and load from pretrained

@@ -77,7 +77,6 @@ class TFTransfoXLModelTester:
             div_val=self.div_val,
             n_layer=self.num_hidden_layers,
             eos_token_id=self.eos_token_id,
-            return_dict=True,
         )
 
         return (config, input_ids_1, input_ids_2, lm_labels)

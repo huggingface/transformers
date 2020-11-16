@@ -534,7 +534,7 @@ class T5Block(nn.Module):
         past_key_value=None,
         use_cache=False,
         output_attentions=False,
-        return_dict=False,
+        return_dict=True,
     ):
 
         if past_key_value is not None:
@@ -1022,7 +1022,7 @@ class T5Model(T5PreTrainedModel):
 
             >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
             >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids, return_dict=True)
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
             >>> last_hidden_states = outputs.last_hidden_state
         """
@@ -1177,7 +1177,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             >>> from transformers import T5Tokenizer, T5ForConditionalGeneration
 
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-            >>> model = T5ForConditionalGeneration.from_pretrained('t5-small', return_dict=True)
+            >>> model = T5ForConditionalGeneration.from_pretrained('t5-small')
 
             >>> input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids
             >>> labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2> </s>', return_tensors='pt').input_ids

@@ -314,7 +314,7 @@ class SqueezeBertEncoder(nn.Module):
         head_mask=None,
         output_attentions=False,
         output_hidden_states=False,
-        return_dict=False,
+        return_dict=True,
     ):
 
         if head_mask is None:

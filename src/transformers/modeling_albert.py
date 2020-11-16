@@ -416,7 +416,7 @@ class AlbertTransformer(nn.Module):
         head_mask=None,
         output_attentions=False,
         output_hidden_states=False,
-        return_dict=False,
+        return_dict=True,
     ):
         hidden_states = self.embedding_hidden_mapping_in(hidden_states)
 
@@ -764,7 +764,7 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
-            >>> model = AlbertForPreTraining.from_pretrained('albert-base-v2', return_dict=True)
+            >>> model = AlbertForPreTraining.from_pretrained('albert-base-v2')
 
             >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
             >>> outputs = model(input_ids)

@@ -114,7 +114,6 @@ class TFXLMModelTester:
             summary_type=self.summary_type,
             use_proj=self.use_proj,
             bos_token_id=self.bos_token_id,
-            return_dict=True,
         )
 
         return (

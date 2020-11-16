@@ -466,7 +466,7 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
 
             >>> from transformers import TFDPRContextEncoder, DPRContextEncoderTokenizer
             >>> tokenizer = DPRContextEncoderTokenizer.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base')
-            >>> model = TFDPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base', return_dict=True, from_pt=True)
+            >>> model = TFDPRContextEncoder.from_pretrained('facebook/dpr-ctx_encoder-single-nq-base', from_pt=True)
             >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='tf')["input_ids"]
             >>> embeddings = model(input_ids).pooler_output
         """
@@ -565,7 +565,7 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
 
             >>> from transformers import TFDPRQuestionEncoder, DPRQuestionEncoderTokenizer
             >>> tokenizer = DPRQuestionEncoderTokenizer.from_pretrained('facebook/dpr-question_encoder-single-nq-base')
-            >>> model = TFDPRQuestionEncoder.from_pretrained('facebook/dpr-question_encoder-single-nq-base', return_dict=True, from_pt=True)
+            >>> model = TFDPRQuestionEncoder.from_pretrained('facebook/dpr-question_encoder-single-nq-base', from_pt=True)
             >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='tf')["input_ids"]
             >>> embeddings = model(input_ids).pooler_output
         """
@@ -663,7 +663,7 @@ class TFDPRReader(TFDPRPretrainedReader):
 
             >>> from transformers import TFDPRReader, DPRReaderTokenizer
             >>> tokenizer = DPRReaderTokenizer.from_pretrained('facebook/dpr-reader-single-nq-base')
-            >>> model = TFDPRReader.from_pretrained('facebook/dpr-reader-single-nq-base', return_dict=True, from_pt=True)
+            >>> model = TFDPRReader.from_pretrained('facebook/dpr-reader-single-nq-base', from_pt=True)
             >>> encoded_inputs = tokenizer(
             ...         questions=["What is love ?"],
             ...         titles=["Haddaway"],

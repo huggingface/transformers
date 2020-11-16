@@ -1063,7 +1063,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             TXT = "My friends are <mask> but they eat too many carbs."
             model = TFBartForConditionalGeneration.from_pretrained(mname)
             batch = tokenizer([TXT], return_tensors='tf')
-            logits = model(inputs=batch.input_ids, return_dict=True).logits
+            logits = model(inputs=batch.input_ids).logits
             probs = tf.nn.softmax(logits[0])
             # probs[5] is associated with the mask token
         """

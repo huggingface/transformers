@@ -297,7 +297,6 @@ class TFLxmertModelTester(object):
             matched_label=matched_label,
             ans=ans,
             output_attentions=output_attentions,
-            return_dict=True,
         )
         result = model(
             input_ids,
@@ -352,7 +351,6 @@ class TFLxmertModelTester(object):
             matched_label=matched_label,
             ans=ans,
             output_attentions=not output_attentions,
-            return_dict=True,
         )
 
         self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
@@ -695,7 +693,8 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
                 model = tf.keras.models.load_model(tmpdirname)
                 outputs = model(class_inputs_dict)
 
-                language_hidden_states, vision_hidden_states = outputs[-2], outputs[-1]
+                language_hidden_states = outputs["language_hidden_states"]
+                vision_hidden_states = outputs["vision_hidden_states"]
 
                 self.assertEqual(len(language_hidden_states), self.model_tester.num_hidden_layers["language"] + 1)
                 self.assertEqual(len(vision_hidden_states), self.model_tester.num_hidden_layers["vision"] + 1)
@@ -731,11 +730,9 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
                 model = tf.keras.models.load_model(tmpdirname)
                 outputs = model(class_inputs_dict)
 
-                language_attentions, vision_attentions, cross_encoder_attentions = (
-                    outputs[-3],
-                    outputs[-2],
-                    outputs[-1],
-                )
+                language_attentions = outputs["language_attentions"]
+                vision_attentions = outputs["vision_attentions"]
+                cross_encoder_attentions = outputs["cross_encoder_attentions"]
 
                 self.assertEqual(len(language_attentions), self.model_tester.num_hidden_layers["language"])
                 self.assertEqual(len(vision_attentions), self.model_tester.num_hidden_layers["vision"])

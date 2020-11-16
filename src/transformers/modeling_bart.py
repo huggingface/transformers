@@ -329,7 +329,7 @@ class BartEncoder(nn.Module):
         self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else None
 
     def forward(
-        self, input_ids, attention_mask=None, output_attentions=False, output_hidden_states=False, return_dict=False
+        self, input_ids, attention_mask=None, output_attentions=False, output_hidden_states=False, return_dict=True
     ):
         """
         Args:
@@ -528,7 +528,7 @@ class BartDecoder(nn.Module):
         use_cache=False,
         output_attentions=False,
         output_hidden_states=False,
-        return_dict=False,
+        return_dict=True,
         **unused,
     ):
         """

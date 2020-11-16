@@ -85,7 +85,6 @@ class EncoderDecoderMixin:
             decoder_input_ids=decoder_input_ids,
             attention_mask=attention_mask,
             decoder_attention_mask=decoder_attention_mask,
-            return_dict=True,
         )
 
         self.assertEqual(
@@ -117,7 +116,6 @@ class EncoderDecoderMixin:
             decoder_input_ids=decoder_input_ids,
             attention_mask=attention_mask,
             decoder_attention_mask=decoder_attention_mask,
-            return_dict=True,
         )
         self.assertEqual(
             outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
@@ -132,7 +130,6 @@ class EncoderDecoderMixin:
             decoder_input_ids=decoder_input_ids,
             attention_mask=attention_mask,
             decoder_attention_mask=decoder_attention_mask,
-            return_dict=True,
         )
 
         self.assertEqual(
@@ -278,7 +275,6 @@ class EncoderDecoderMixin:
             attention_mask=attention_mask,
             decoder_attention_mask=decoder_attention_mask,
             labels=labels,
-            return_dict=True,
         )
 
         loss = outputs_encoder_decoder["loss"]
@@ -313,7 +309,6 @@ class EncoderDecoderMixin:
             attention_mask=attention_mask,
             decoder_attention_mask=decoder_attention_mask,
             output_attentions=True,
-            return_dict=True,
         )
 
         encoder_attentions = outputs_encoder_decoder["encoder_attentions"]

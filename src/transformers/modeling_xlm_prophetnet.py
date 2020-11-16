@@ -46,7 +46,7 @@ class XLMProphetNetEncoder(ProphetNetEncoder):
         >>> import torch
 
         >>> tokenizer = XLMProphetNetTokenizer.from_pretrained('microsoft/xprophetnet-large-wiki100-cased')
-        >>> model = XLMProphetNetEncoder.from_pretrained('patrickvonplaten/xprophetnet-large-uncased-standalone', return_dict=True)
+        >>> model = XLMProphetNetEncoder.from_pretrained('patrickvonplaten/xprophetnet-large-uncased-standalone')
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -68,7 +68,7 @@ class XLMProphetNetDecoder(ProphetNetDecoder):
         >>> import torch
 
         >>> tokenizer = XLMProphetNetTokenizer.from_pretrained('microsoft/xprophetnet-large-wiki100-cased')
-        >>> model = XLMProphetNetDecoder.from_pretrained('patrickvonplaten/xprophetnet-large-uncased-standalone', add_cross_attention=False, return_dict=True)
+        >>> model = XLMProphetNetDecoder.from_pretrained('patrickvonplaten/xprophetnet-large-uncased-standalone', add_cross_attention=False)
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -93,7 +93,7 @@ class XLMProphetNetModel(ProphetNetModel):
 
         >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
-        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids, return_dict=True)
+        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
         >>> last_hidden_states = outputs.last_hidden_state  # main stream hidden states
             >>> last_hidden_states_ngram = outputs.last_hidden_state_ngram  # predict hidden states
@@ -116,7 +116,7 @@ class XLMProphetNetForConditionalGeneration(ProphetNetForConditionalGeneration):
 
         >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
-        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids, return_dict=True)
+        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
 
         >>> logits_next_token = outputs.logits  # logits to predict next token as usual
         >>> logits_ngram_next_tokens = outputs.logits_ngram  # logits to predict 2nd, 3rd, ... next tokens
@@ -136,7 +136,7 @@ class XLMProphetNetForCausalLM(ProphetNetForCausalLM):
         >>> import torch
 
         >>> tokenizer = XLMProphetNetTokenizer.from_pretrained('microsoft/xprophetnet-large-wiki100-cased')
-        >>> model = XLMProphetNetForCausalLM.from_pretrained('patrickvonplaten/xprophetnet-decoder-clm-large-uncased', return_dict=True)
+        >>> model = XLMProphetNetForCausalLM.from_pretrained('patrickvonplaten/xprophetnet-decoder-clm-large-uncased')
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -158,7 +158,7 @@ class XLMProphetNetForCausalLM(ProphetNetForCausalLM):
         ... )
         >>> input_ids = tokenizer_enc(ARTICLE, return_tensors="pt").input_ids
         >>> labels = tokenizer_dec("us rejects charges against its ambassador in bolivia", return_tensors="pt").input_ids
-        >>> outputs = model(input_ids=input_ids, decoder_input_ids=labels[:, :-1], labels=labels[:, 1:], return_dict=True)
+        >>> outputs = model(input_ids=input_ids, decoder_input_ids=labels[:, :-1], labels=labels[:, 1:])
 
         >>> loss = outputs.loss
     """

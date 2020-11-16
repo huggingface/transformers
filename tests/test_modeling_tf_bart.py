@@ -182,7 +182,6 @@ class TFBartHeadTests(unittest.TestCase):
             eos_token_id=2,
             pad_token_id=1,
             bos_token_id=0,
-            return_dict=True,
             decoder_start_token_id=2,
         )
         return config, input_ids, batch_size
@@ -206,7 +205,6 @@ class TFBartHeadTests(unittest.TestCase):
             encoder_ffn_dim=32,
             decoder_ffn_dim=32,
             max_position_embeddings=48,
-            return_dict=True,
         )
         lm_model = TFBartForConditionalGeneration(config)
         context = tf.fill((7, 2), 4)
@@ -356,7 +354,7 @@ class FasterTFBartModelIntegrationTests(unittest.TestCase):
             padding="longest",
             truncation=True,
         )
-        features = self.xsum_1_1_model.get_encoder()(**batch, return_dict=True).last_hidden_state
+        features = self.xsum_1_1_model.get_encoder()(**batch).last_hidden_state
         import numpy as np
 
         expected = np.array([[-0.0828, -0.0251, -0.0674], [0.1277, 0.3311, -0.0255], [0.2613, -0.0840, -0.2763]])

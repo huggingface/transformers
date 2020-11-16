@@ -137,7 +137,6 @@ class TFFunnelModelTester:
             activation_dropout=self.activation_dropout,
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
-            return_dict=True,
         )
 
         return (

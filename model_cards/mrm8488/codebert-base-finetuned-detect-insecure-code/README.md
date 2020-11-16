@@ -45,7 +45,7 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 import numpy as np
 tokenizer = AutoTokenizer.from_pretrained('mrm8488/codebert-base-finetuned-detect-insecure-code')
-model = AutoModelForSequenceClassification.from_pretrained('mrm8488/codebert-base-finetuned-detect-insecure-code', return_dict=True)
+model = AutoModelForSequenceClassification.from_pretrained('mrm8488/codebert-base-finetuned-detect-insecure-code')
 
 inputs = tokenizer("your code here", return_tensors="pt", truncation=True, padding='max_length')
 labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1

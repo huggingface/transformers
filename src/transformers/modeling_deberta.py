@@ -384,7 +384,7 @@ class DebertaEncoder(nn.Module):
         output_attentions=False,
         query_states=None,
         relative_pos=None,
-        return_dict=False,
+        return_dict=True,
     ):
         attention_mask = self.get_attention_mask(attention_mask)
         relative_pos = self.get_rel_pos(hidden_states, query_states, relative_pos)

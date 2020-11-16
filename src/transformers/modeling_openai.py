@@ -670,7 +670,7 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
-            >>> model = OpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt', return_dict=True)
+            >>> model = OpenAIGPTDoubleHeadsModel.from_pretrained('openai-gpt')
             >>> tokenizer.add_special_tokens({'cls_token': '[CLS]'})  # Add a [CLS] to the vocabulary (we should train it also!)
             >>> model.resize_token_embeddings(len(tokenizer))
 

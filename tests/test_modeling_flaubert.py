@@ -113,7 +113,6 @@ class FlaubertModelTester(object):
             initializer_range=self.initializer_range,
             summary_type=self.summary_type,
             use_proj=self.use_proj,
-            return_dict=True,
         )
 
         return (

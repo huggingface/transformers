@@ -29,7 +29,7 @@ class FlaxBertModelTest(unittest.TestCase):
                 # Check for simple input
                 pt_inputs = tokenizer.encode_plus("This is a simple input", return_tensors=TensorType.PYTORCH)
                 fx_inputs = tokenizer.encode_plus("This is a simple input", return_tensors=TensorType.JAX)
-                pt_outputs = pt_model(**pt_inputs)
+                pt_outputs = pt_model(**pt_inputs).to_tuple()
                 fx_outputs = fx_model(**fx_inputs)
 
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")

@@ -153,7 +153,6 @@ class SummarizationDistiller(SummarizationModule):
             output_hidden_states=self.do_calc_hidden_loss,
             output_attentions=False,
             use_cache=False,
-            return_dict=True,
         )
         lm_logits = student_outputs.logits
 
@@ -179,7 +178,6 @@ class SummarizationDistiller(SummarizationModule):
                 input_ids,
                 attention_mask=src_mask,
                 output_hidden_states=self.do_calc_hidden_loss,
-                return_dict=True,
             )
             if self.different_base_models:
                 teacher_enc_outputs = all_teacher_encoder_outputs.last_hidden_state
@@ -199,7 +197,6 @@ class SummarizationDistiller(SummarizationModule):
             decoder_input_ids=decoder_input_ids,
             output_hidden_states=self.do_calc_hidden_loss,
             use_cache=False,  # since we are not passing labels, never let this default to True
-            return_dict=True,
         )
         dec_mask = decoder_input_ids.ne(pad_token_id)
         loss_ce = self.calc_ce_loss(dec_mask, lm_logits, teacher_outputs.logits)

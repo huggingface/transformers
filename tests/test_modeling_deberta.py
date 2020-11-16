@@ -148,7 +148,7 @@ class DebertaModelTest(ModelTesterMixin, unittest.TestCase):
             return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
         def check_loss_output(self, result):
-            self.parent.assertListEqual(list(result["loss"].size()), [])
+            self.parent.assertListEqual(list(result.loss.size()), [])
 
         def create_and_check_deberta_model(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -160,11 +160,8 @@ class DebertaModelTest(ModelTesterMixin, unittest.TestCase):
             sequence_output = model(input_ids, token_type_ids=token_type_ids)[0]
             sequence_output = model(input_ids)[0]
 
-            result = {
-                "sequence_output": sequence_output,
-            }
             self.parent.assertListEqual(
-                list(result["sequence_output"].size()), [self.batch_size, self.seq_length, self.hidden_size]
+                list(sequence_output.size()), [self.batch_size, self.seq_length, self.hidden_size]
             )
 
         def create_and_check_deberta_for_sequence_classification(
@@ -174,14 +171,8 @@ class DebertaModelTest(ModelTesterMixin, unittest.TestCase):
             model = DebertaForSequenceClassification(config)
             model.to(torch_device)
             model.eval()
-            loss, logits = model(
-                input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
-            )
-            result = {
-                "loss": loss,
-                "logits": logits,
-            }
-            self.parent.assertListEqual(list(result["logits"].size()), [self.batch_size, self.num_labels])
+            result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
+            self.parent.assertListEqual(list(result.logits.size()), [self.batch_size, self.num_labels])
             self.check_loss_output(result)
 
         def prepare_config_and_inputs_for_common(self):

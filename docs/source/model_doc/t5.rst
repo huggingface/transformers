@@ -64,7 +64,7 @@ token. T5 can be trained / fine-tuned both in a supervised and unsupervised fash
   input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids
   labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2>', return_tensors='pt').input_ids
   # the forward function automatically creates the correct decoder_input_ids
-  loss = model(input_ids=input_ids, labels=labels, return_dict=True).loss
+  loss = model(input_ids=input_ids, labels=labels).loss
 
 - Supervised training
 
@@ -77,7 +77,7 @@ token. T5 can be trained / fine-tuned both in a supervised and unsupervised fash
   input_ids = tokenizer('translate English to German: The house is wonderful.', return_tensors='pt').input_ids
   labels = tokenizer('Das Haus ist wunderbar.', return_tensors='pt').input_ids
   # the forward function automatically creates the correct decoder_input_ids
-  loss = model(input_ids=input_ids, labels=labels, return_dict=True).loss
+  loss = model(input_ids=input_ids, labels=labels).loss
 
 
 T5Config
