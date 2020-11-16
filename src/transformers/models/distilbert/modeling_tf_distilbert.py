@@ -45,6 +45,7 @@ from ...modeling_tf_utils import (
     input_processing,
     keras_serializable,
     shape_list,
+    input_processing,
 )
 from ...utils import logging
 from .configuration_distilbert import DistilBertConfig
@@ -708,6 +709,17 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
             return_dict=return_dict,
             training=inputs["training"],
         )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
+        distilbert_output = self.distilbert(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
+        )
 
         hidden_states = distilbert_output[0]  # (bs, seq_length, dim)
         prediction_logits = self.vocab_transform(hidden_states)  # (bs, seq_length, dim)
@@ -803,6 +815,17 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
             return_dict=return_dict,
             training=inputs["training"],
         )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
+        distilbert_output = self.distilbert(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
+        )
 
         hidden_state = distilbert_output[0]  # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]  # (bs, dim)
@@ -879,6 +902,17 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
             labels=labels,
             training=training,
             kwargs_call=kwargs,
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
+        outputs = self.distilbert(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
         outputs = self.distilbert(
@@ -1096,6 +1130,17 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
             end_positions=end_positions,
             training=training,
             kwargs_call=kwargs,
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
+        distilbert_output = self.distilbert(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
         distilbert_output = self.distilbert(
