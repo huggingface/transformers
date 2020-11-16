@@ -20,8 +20,8 @@ from tokenizers import processors
 from ...file_utils import add_start_docstrings, is_sentencepiece_available
 from ...tokenization_utils import BatchEncoding
 from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
-from ..xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
 from ...utils import logging
+from ..xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
 
 
 if is_sentencepiece_available():

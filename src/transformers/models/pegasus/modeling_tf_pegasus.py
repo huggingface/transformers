@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """TF Pegasus model, ported from the fairseq repo."""
-from .configuration_pegasus import PegasusConfig
 from ...file_utils import add_start_docstrings
-from ..bart.modeling_tf_bart import BART_START_DOCSTRING, TFBartForConditionalGeneration
 from ...utils import logging
+from ..bart.modeling_tf_bart import BART_START_DOCSTRING, TFBartForConditionalGeneration
+from .configuration_pegasus import PegasusConfig
 
 
 _CONFIG_FOR_DOC = "PegasusConfig"

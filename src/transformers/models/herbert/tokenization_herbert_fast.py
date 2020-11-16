@@ -15,14 +15,14 @@
 
 from typing import List, Optional, Tuple
 
+from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...utils import logging
 from .tokenization_herbert import (
     PRETRAINED_INIT_CONFIGURATION,
     PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES,
     PRETRAINED_VOCAB_FILES_MAP,
     HerbertTokenizer,
 )
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import logging
 
 
 logger = logging.get_logger(__name__)

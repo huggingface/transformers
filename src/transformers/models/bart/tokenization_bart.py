@@ -15,9 +15,9 @@
 
 from typing import List, Optional
 
-from ..roberta.tokenization_roberta import RobertaTokenizer
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
+from ..roberta.tokenization_roberta import RobertaTokenizer
 
 
 logger = logging.get_logger(__name__)

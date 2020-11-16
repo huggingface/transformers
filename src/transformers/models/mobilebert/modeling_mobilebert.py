@@ -32,7 +32,6 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from .configuration_mobilebert import MobileBertConfig
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -52,6 +51,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
+from .configuration_mobilebert import MobileBertConfig
 
 
 logger = logging.get_logger(__name__)

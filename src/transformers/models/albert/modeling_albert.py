@@ -25,7 +25,6 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from .configuration_albert import AlbertConfig
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -49,6 +48,7 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
+from .configuration_albert import AlbertConfig
 
 
 logger = logging.get_logger(__name__)

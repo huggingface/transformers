@@ -19,9 +19,9 @@ import collections
 from typing import List, Optional, Union
 
 from ...file_utils import add_end_docstrings, add_start_docstrings
-from ..bert.tokenization_bert import BertTokenizer
 from ...tokenization_utils_base import BatchEncoding, TensorType
 from ...utils import logging
+from ..bert.tokenization_bert import BertTokenizer
 
 
 logger = logging.get_logger(__name__)

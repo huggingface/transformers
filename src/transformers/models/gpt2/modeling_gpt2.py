@@ -25,7 +25,6 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from .configuration_gpt2 import GPT2Config
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -46,6 +45,7 @@ from ...modeling_utils import (
     prune_conv1d_layer,
 )
 from ...utils import logging
+from .configuration_gpt2 import GPT2Config
 
 
 logger = logging.get_logger(__name__)

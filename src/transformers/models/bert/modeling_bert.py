@@ -28,7 +28,6 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from .configuration_bert import BertConfig
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -54,6 +53,7 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
+from .configuration_bert import BertConfig
 
 
 logger = logging.get_logger(__name__)

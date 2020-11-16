@@ -21,10 +21,10 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 
-from .configuration_bert import BertConfig
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_utils import FlaxPreTrainedModel, gelu
 from ...utils import logging
+from .configuration_bert import BertConfig
 
 
 logger = logging.get_logger(__name__)

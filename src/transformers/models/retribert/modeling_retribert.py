@@ -23,11 +23,11 @@ import torch
 import torch.nn as nn
 import torch.utils.checkpoint as checkpoint
 
-from .configuration_retribert import RetriBertConfig
 from ...file_utils import add_start_docstrings
-from ..bert.modeling_bert import BertModel
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ..bert.modeling_bert import BertModel
+from .configuration_retribert import RetriBertConfig
 
 
 logger = logging.get_logger(__name__)

@@ -21,8 +21,8 @@ import os
 import unicodedata
 from typing import Optional
 
-from ..bert.tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer, load_vocab
 from ...utils import logging
+from ..bert.tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer, load_vocab
 
 
 logger = logging.get_logger(__name__)

@@ -21,10 +21,10 @@ from typing import Optional, Tuple
 
 from tokenizers import pre_tokenizers
 
-from .tokenization_gpt2 import GPT2Tokenizer
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from .tokenization_gpt2 import GPT2Tokenizer
 
 
 logger = logging.get_logger(__name__)

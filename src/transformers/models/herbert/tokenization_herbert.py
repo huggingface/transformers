@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ...utils import logging
 from ..bert.tokenization_bert import BasicTokenizer
 from ..xlm.tokenization_xlm import XLMTokenizer
-from ...utils import logging
 
 
 logger = logging.get_logger(__name__)

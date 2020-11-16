@@ -25,7 +25,6 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from .configuration_t5 import T5Config
 from ...file_utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -41,6 +40,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
+from .configuration_t5 import T5Config
 
 
 logger = logging.get_logger(__name__)

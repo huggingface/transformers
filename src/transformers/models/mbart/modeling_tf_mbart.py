@@ -13,10 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """TF mBART model, originally from fairseq."""
-from .configuration_mbart import MBartConfig
 from ...file_utils import add_start_docstrings
-from ..bart.modeling_tf_bart import BART_START_DOCSTRING, TFBartForConditionalGeneration
 from ...utils import logging
+from ..bart.modeling_tf_bart import BART_START_DOCSTRING, TFBartForConditionalGeneration
+from .configuration_mbart import MBartConfig
 
 
 _CONFIG_FOR_DOC = "MBartConfig"

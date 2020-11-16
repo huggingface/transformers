@@ -22,7 +22,6 @@ from typing import Optional, Tuple
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from .configuration_openai import OpenAIGPTConfig
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -43,6 +42,7 @@ from ...modeling_tf_utils import (
 )
 from ...tokenization_utils import BatchEncoding
 from ...utils import logging
+from .configuration_openai import OpenAIGPTConfig
 
 
 logger = logging.get_logger(__name__)

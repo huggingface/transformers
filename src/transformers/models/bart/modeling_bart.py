@@ -25,7 +25,6 @@ from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from .configuration_bart import BartConfig
 from ...file_utils import (
     add_code_sample_docstrings,
     add_end_docstrings,
@@ -43,6 +42,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from .configuration_bart import BartConfig
 
 
 logger = logging.get_logger(__name__)

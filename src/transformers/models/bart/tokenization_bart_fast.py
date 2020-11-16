@@ -15,10 +15,10 @@
 
 from typing import List, Optional
 
-from .tokenization_bart import BartTokenizer
-from ..roberta.tokenization_roberta_fast import RobertaTokenizerFast
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
+from ..roberta.tokenization_roberta_fast import RobertaTokenizerFast
+from .tokenization_bart import BartTokenizer
 
 
 logger = logging.get_logger(__name__)

@@ -15,8 +15,8 @@
 # limitations under the License.
 """ TF 2.0  XLM-RoBERTa model. """
 
-from .configuration_xlm_roberta import XLMRobertaConfig
 from ...file_utils import add_start_docstrings
+from ...utils import logging
 from ..roberta.modeling_tf_roberta import (
     TFRobertaForMaskedLM,
     TFRobertaForMultipleChoice,
@@ -25,7 +25,7 @@ from ..roberta.modeling_tf_roberta import (
     TFRobertaForTokenClassification,
     TFRobertaModel,
 )
-from ...utils import logging
+from .configuration_xlm_roberta import XLMRobertaConfig
 
 
 logger = logging.get_logger(__name__)

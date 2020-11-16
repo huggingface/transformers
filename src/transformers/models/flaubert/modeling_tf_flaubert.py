@@ -24,7 +24,6 @@ import tensorflow as tf
 
 from transformers.activations_tf import get_tf_activation
 
-from .configuration_flaubert import FlaubertConfig
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -33,14 +32,15 @@ from ...file_utils import (
 )
 from ...modeling_tf_outputs import TFBaseModelOutput
 from ...modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, get_initializer, keras_serializable, shape_list
+from ...tokenization_utils import BatchEncoding
+from ...utils import logging
 from ..xlm.modeling_tf_xlm import (
     TFXLMForMultipleChoice,
     TFXLMForQuestionAnsweringSimple,
     TFXLMForSequenceClassification,
     TFXLMForTokenClassification,
 )
-from ...tokenization_utils import BatchEncoding
-from ...utils import logging
+from .configuration_flaubert import FlaubertConfig
 
 
 logger = logging.get_logger(__name__)

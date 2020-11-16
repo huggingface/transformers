@@ -25,7 +25,6 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, get_activation
-from .configuration_electra import ElectraConfig
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -49,6 +48,7 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
+from .configuration_electra import ElectraConfig
 
 
 logger = logging.get_logger(__name__)

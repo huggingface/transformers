@@ -19,8 +19,8 @@ import unicodedata
 
 import six
 
-from ..xlm.tokenization_xlm import XLMTokenizer
 from ...utils import logging
+from ..xlm.tokenization_xlm import XLMTokenizer
 
 
 logger = logging.get_logger(__name__)

@@ -16,10 +16,10 @@
 import os
 from typing import List, Optional
 
-from .configuration_rag import RagConfig
 from ...file_utils import add_start_docstrings
 from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncoding
 from ...utils import logging
+from .configuration_rag import RagConfig
 
 
 logger = logging.get_logger(__name__)

@@ -19,14 +19,14 @@ from typing import List, Optional, Tuple
 
 import torch
 
-from .configuration_rag import RagConfig
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...generation_beam_search import BeamSearchScorer
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
-from .retrieval_rag import RagRetriever
 from ...utils import logging
+from .configuration_rag import RagConfig
+from .retrieval_rag import RagRetriever
 
 
 logger = logging.get_logger(__name__)

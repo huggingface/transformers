@@ -25,16 +25,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .configuration_transfo_xl import TransfoXLConfig
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
 )
-from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from .configuration_transfo_xl import TransfoXLConfig
+from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax
 
 
 logger = logging.get_logger(__name__)

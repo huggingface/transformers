@@ -14,9 +14,9 @@
 # limitations under the License.
 """Tokenization classes for SqueezeBERT."""
 
+from ...utils import logging
 from ..bert.tokenization_bert_fast import BertTokenizerFast
 from .tokenization_squeezebert import SqueezeBertTokenizer
-from ...utils import logging
 
 
 logger = logging.get_logger(__name__)

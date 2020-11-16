@@ -26,7 +26,6 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, SmoothL1Loss
 
 from ...activations import ACT2FN, gelu
-from .configuration_lxmert import LxmertConfig
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -36,6 +35,7 @@ from ...file_utils import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from .configuration_lxmert import LxmertConfig
 
 
 logger = logging.get_logger(__name__)

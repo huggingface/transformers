@@ -23,11 +23,11 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
-from .configuration_ctrl import CTRLConfig
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import Conv1D, PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
+from .configuration_ctrl import CTRLConfig
 
 
 logger = logging.get_logger(__name__)

@@ -15,8 +15,8 @@
 """ XLM-ProphetNet model configuration """
 
 
-from ..prophetnet.configuration_prophetnet import ProphetNetConfig
 from ...utils import logging
+from ..prophetnet.configuration_prophetnet import ProphetNetConfig
 
 
 logger = logging.get_logger(__name__)

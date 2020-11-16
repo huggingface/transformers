@@ -15,8 +15,8 @@
 from typing import Dict, List, Optional
 
 from ...file_utils import add_start_docstrings
-from ..reformer.tokenization_reformer import ReformerTokenizer
 from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncoding
+from ..reformer.tokenization_reformer import ReformerTokenizer
 
 
 SPIECE_UNDERLINE = "▁"

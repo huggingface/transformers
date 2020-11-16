@@ -16,8 +16,8 @@
 
 from typing import List, Union
 
-from ..roberta.configuration_roberta import RobertaConfig
 from ...utils import logging
+from ..roberta.configuration_roberta import RobertaConfig
 
 
 logger = logging.get_logger(__name__)

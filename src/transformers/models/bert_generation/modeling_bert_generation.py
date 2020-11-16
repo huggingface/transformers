@@ -20,17 +20,17 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from .configuration_bert_generation import BertGenerationConfig
 from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ..bert.modeling_bert import BertEncoder
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ..bert.modeling_bert import BertEncoder
+from .configuration_bert_generation import BertGenerationConfig
 
 
 logger = logging.get_logger(__name__)

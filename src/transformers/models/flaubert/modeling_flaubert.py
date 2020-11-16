@@ -20,9 +20,9 @@ import random
 import torch
 from torch.nn import functional as F
 
-from .configuration_flaubert import FlaubertConfig
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import BaseModelOutput
+from ...utils import logging
 from ..xlm.modeling_xlm import (
     XLMForMultipleChoice,
     XLMForQuestionAnswering,
@@ -33,7 +33,7 @@ from ..xlm.modeling_xlm import (
     XLMWithLMHeadModel,
     get_masks,
 )
-from ...utils import logging
+from .configuration_flaubert import FlaubertConfig
 
 
 logger = logging.get_logger(__name__)

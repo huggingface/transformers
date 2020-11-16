@@ -13,9 +13,9 @@
 # limitations under the License.
 """Tokenization classes for MobileBERT."""
 
+from ...utils import logging
 from ..bert.tokenization_bert_fast import BertTokenizerFast
 from .tokenization_mobilebert import MobileBertTokenizer
-from ...utils import logging
 
 
 logger = logging.get_logger(__name__)

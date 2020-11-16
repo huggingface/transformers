@@ -17,9 +17,9 @@
 
 from typing import Optional, Tuple
 
-from .tokenization_openai import OpenAIGPTTokenizer
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
+from .tokenization_openai import OpenAIGPTTokenizer
 
 
 logger = logging.get_logger(__name__)

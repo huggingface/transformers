@@ -1,5 +1,5 @@
-from .configuration_mbart import MBartConfig
 from ..bart.modeling_bart import BartForConditionalGeneration
+from .configuration_mbart import MBartConfig
 
 
 _CONFIG_FOR_DOC = "MBartConfig"

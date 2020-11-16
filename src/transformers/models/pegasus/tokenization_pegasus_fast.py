@@ -15,8 +15,8 @@
 from typing import List, Optional
 
 from ...file_utils import add_start_docstrings, is_sentencepiece_available
-from ..reformer.tokenization_reformer_fast import ReformerTokenizerFast
 from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncoding
+from ..reformer.tokenization_reformer_fast import ReformerTokenizerFast
 
 
 if is_sentencepiece_available():

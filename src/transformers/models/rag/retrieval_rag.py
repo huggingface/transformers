@@ -21,7 +21,6 @@ from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
 
-from .configuration_rag import RagConfig
 from ...file_utils import (
     cached_path,
     is_datasets_available,
@@ -30,9 +29,10 @@ from ...file_utils import (
     requires_datasets,
     requires_faiss,
 )
-from .tokenization_rag import RagTokenizer
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
+from .configuration_rag import RagConfig
+from .tokenization_rag import RagTokenizer
 
 
 if is_datasets_available():

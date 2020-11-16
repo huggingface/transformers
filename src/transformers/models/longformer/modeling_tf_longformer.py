@@ -21,7 +21,6 @@ import tensorflow as tf
 
 from transformers.activations_tf import get_tf_activation
 
-from .configuration_longformer import LongformerConfig
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -39,6 +38,7 @@ from ...modeling_tf_utils import (
 )
 from ...tokenization_utils import BatchEncoding
 from ...utils import logging
+from .configuration_longformer import LongformerConfig
 
 
 logger = logging.get_logger(__name__)

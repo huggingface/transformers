@@ -17,11 +17,11 @@
 
 from collections import OrderedDict
 
-from .configuration_auto import AutoConfig, BertConfig, RobertaConfig
 from ...configuration_utils import PretrainedConfig
+from ...utils import logging
 from ..bert.modeling_flax_bert import FlaxBertModel
 from ..roberta.modeling_flax_roberta import FlaxRobertaModel
-from ...utils import logging
+from .configuration_auto import AutoConfig, BertConfig, RobertaConfig
 
 
 logger = logging.get_logger(__name__)

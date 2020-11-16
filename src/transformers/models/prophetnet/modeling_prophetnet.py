@@ -25,7 +25,6 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from .configuration_prophetnet import ProphetNetConfig
 from ...file_utils import (
     ModelOutput,
     add_start_docstrings,
@@ -35,6 +34,7 @@ from ...file_utils import (
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from .configuration_prophetnet import ProphetNetConfig
 
 
 logger = logging.get_logger(__name__)

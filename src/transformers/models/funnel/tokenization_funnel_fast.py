@@ -16,9 +16,9 @@
 
 from typing import List, Optional
 
+from ...utils import logging
 from ..bert.tokenization_bert_fast import BertTokenizerFast
 from .tokenization_funnel import FunnelTokenizer
-from ...utils import logging
 
 
 logger = logging.get_logger(__name__)

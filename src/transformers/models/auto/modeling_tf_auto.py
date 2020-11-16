@@ -18,38 +18,9 @@
 import warnings
 from collections import OrderedDict
 
-from .configuration_auto import (
-    AlbertConfig,
-    AutoConfig,
-    BartConfig,
-    BertConfig,
-    BlenderbotConfig,
-    CamembertConfig,
-    CTRLConfig,
-    DistilBertConfig,
-    DPRConfig,
-    ElectraConfig,
-    FlaubertConfig,
-    FunnelConfig,
-    GPT2Config,
-    LongformerConfig,
-    LxmertConfig,
-    MarianConfig,
-    MBartConfig,
-    MobileBertConfig,
-    OpenAIGPTConfig,
-    PegasusConfig,
-    RobertaConfig,
-    T5Config,
-    TransfoXLConfig,
-    XLMConfig,
-    XLMRobertaConfig,
-    XLNetConfig,
-    replace_list_option_in_docstrings,
-)
-
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings
+from ...utils import logging
 from ..albert.modeling_tf_albert import (
     TFAlbertForMaskedLM,
     TFAlbertForMultipleChoice,
@@ -117,7 +88,11 @@ from ..funnel.modeling_tf_funnel import (
     TFFunnelModel,
 )
 from ..gpt2.modeling_tf_gpt2 import TFGPT2LMHeadModel, TFGPT2Model
-from ..longformer.modeling_tf_longformer import TFLongformerForMaskedLM, TFLongformerForQuestionAnswering, TFLongformerModel
+from ..longformer.modeling_tf_longformer import (
+    TFLongformerForMaskedLM,
+    TFLongformerForQuestionAnswering,
+    TFLongformerModel,
+)
 from ..lxmert.modeling_tf_lxmert import TFLxmertForPreTraining, TFLxmertModel
 from ..marian.modeling_tf_marian import TFMarianMTModel
 from ..mbart.modeling_tf_mbart import TFMBartForConditionalGeneration
@@ -167,7 +142,35 @@ from ..xlnet.modeling_tf_xlnet import (
     TFXLNetLMHeadModel,
     TFXLNetModel,
 )
-from ...utils import logging
+from .configuration_auto import (
+    AlbertConfig,
+    AutoConfig,
+    BartConfig,
+    BertConfig,
+    BlenderbotConfig,
+    CamembertConfig,
+    CTRLConfig,
+    DistilBertConfig,
+    DPRConfig,
+    ElectraConfig,
+    FlaubertConfig,
+    FunnelConfig,
+    GPT2Config,
+    LongformerConfig,
+    LxmertConfig,
+    MarianConfig,
+    MBartConfig,
+    MobileBertConfig,
+    OpenAIGPTConfig,
+    PegasusConfig,
+    RobertaConfig,
+    T5Config,
+    TransfoXLConfig,
+    XLMConfig,
+    XLMRobertaConfig,
+    XLNetConfig,
+    replace_list_option_in_docstrings,
+)
 
 
 # Add modeling imports here

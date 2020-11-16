@@ -22,7 +22,6 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from .configuration_layoutlm import LayoutLMConfig
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
@@ -37,6 +36,7 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
+from .configuration_layoutlm import LayoutLMConfig
 
 
 logger = logging.get_logger(__name__)

@@ -23,7 +23,6 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
-from .configuration_roberta import RobertaConfig
 from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -47,6 +46,7 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
+from .configuration_roberta import RobertaConfig
 
 
 logger = logging.get_logger(__name__)

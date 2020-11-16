@@ -25,7 +25,6 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
 from ...activations import ACT2FN
-from .configuration_funnel import FunnelConfig
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -43,6 +42,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from .configuration_funnel import FunnelConfig
 
 
 logger = logging.get_logger(__name__)

@@ -25,7 +25,6 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
 from ...activations import ACT2FN, gelu
-from .configuration_longformer import LongformerConfig
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -41,6 +40,7 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
+from .configuration_longformer import LongformerConfig
 
 
 logger = logging.get_logger(__name__)

@@ -14,8 +14,8 @@
 # limitations under the License.
 """Tokenization classes for RetriBERT."""
 
-from ..bert.tokenization_bert import BertTokenizer
 from ...utils import logging
+from ..bert.tokenization_bert import BertTokenizer
 
 
 logger = logging.get_logger(__name__)

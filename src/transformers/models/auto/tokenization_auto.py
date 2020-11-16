@@ -17,6 +17,37 @@
 
 from collections import OrderedDict
 
+from ...configuration_utils import PretrainedConfig
+from ...file_utils import is_sentencepiece_available, is_tokenizers_available
+from ...utils import logging
+from ..bart.tokenization_bart import BartTokenizer
+from ..bert.tokenization_bert import BertTokenizer
+from ..bert_japanese.tokenization_bert_japanese import BertJapaneseTokenizer
+from ..bertweet.tokenization_bertweet import BertweetTokenizer
+from ..blenderbot.tokenization_blenderbot import BlenderbotSmallTokenizer
+from ..ctrl.tokenization_ctrl import CTRLTokenizer
+from ..deberta.tokenization_deberta import DebertaTokenizer
+from ..distilbert.tokenization_distilbert import DistilBertTokenizer
+from ..dpr.tokenization_dpr import DPRQuestionEncoderTokenizer
+from ..electra.tokenization_electra import ElectraTokenizer
+from ..flaubert.tokenization_flaubert import FlaubertTokenizer
+from ..fsmt.tokenization_fsmt import FSMTTokenizer
+from ..funnel.tokenization_funnel import FunnelTokenizer
+from ..gpt2.tokenization_gpt2 import GPT2Tokenizer
+from ..herbert.tokenization_herbert import HerbertTokenizer
+from ..layoutlm.tokenization_layoutlm import LayoutLMTokenizer
+from ..longformer.tokenization_longformer import LongformerTokenizer
+from ..lxmert.tokenization_lxmert import LxmertTokenizer
+from ..mobilebert.tokenization_mobilebert import MobileBertTokenizer
+from ..openai.tokenization_openai import OpenAIGPTTokenizer
+from ..phobert.tokenization_phobert import PhobertTokenizer
+from ..prophetnet.tokenization_prophetnet import ProphetNetTokenizer
+from ..rag.tokenization_rag import RagTokenizer
+from ..retribert.tokenization_retribert import RetriBertTokenizer
+from ..roberta.tokenization_roberta import RobertaTokenizer
+from ..squeezebert.tokenization_squeezebert import SqueezeBertTokenizer
+from ..transfo_xl.tokenization_transfo_xl import TransfoXLTokenizer
+from ..xlm.tokenization_xlm import XLMTokenizer
 from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
@@ -57,37 +88,6 @@ from .configuration_auto import (
     XLNetConfig,
     replace_list_option_in_docstrings,
 )
-from ...configuration_utils import PretrainedConfig
-from ...file_utils import is_sentencepiece_available, is_tokenizers_available
-from ..bart.tokenization_bart import BartTokenizer
-from ..bert.tokenization_bert import BertTokenizer
-from ..bert_japanese.tokenization_bert_japanese import BertJapaneseTokenizer
-from ..bertweet.tokenization_bertweet import BertweetTokenizer
-from ..blenderbot.tokenization_blenderbot import BlenderbotSmallTokenizer
-from ..ctrl.tokenization_ctrl import CTRLTokenizer
-from ..deberta.tokenization_deberta import DebertaTokenizer
-from ..distilbert.tokenization_distilbert import DistilBertTokenizer
-from ..dpr.tokenization_dpr import DPRQuestionEncoderTokenizer
-from ..electra.tokenization_electra import ElectraTokenizer
-from ..flaubert.tokenization_flaubert import FlaubertTokenizer
-from ..fsmt.tokenization_fsmt import FSMTTokenizer
-from ..funnel.tokenization_funnel import FunnelTokenizer
-from ..gpt2.tokenization_gpt2 import GPT2Tokenizer
-from ..herbert.tokenization_herbert import HerbertTokenizer
-from ..layoutlm.tokenization_layoutlm import LayoutLMTokenizer
-from ..longformer.tokenization_longformer import LongformerTokenizer
-from ..lxmert.tokenization_lxmert import LxmertTokenizer
-from ..mobilebert.tokenization_mobilebert import MobileBertTokenizer
-from ..openai.tokenization_openai import OpenAIGPTTokenizer
-from ..phobert.tokenization_phobert import PhobertTokenizer
-from ..prophetnet.tokenization_prophetnet import ProphetNetTokenizer
-from ..rag.tokenization_rag import RagTokenizer
-from ..retribert.tokenization_retribert import RetriBertTokenizer
-from ..roberta.tokenization_roberta import RobertaTokenizer
-from ..squeezebert.tokenization_squeezebert import SqueezeBertTokenizer
-from ..transfo_xl.tokenization_transfo_xl import TransfoXLTokenizer
-from ..xlm.tokenization_xlm import XLMTokenizer
-from ...utils import logging
 
 
 if is_sentencepiece_available():

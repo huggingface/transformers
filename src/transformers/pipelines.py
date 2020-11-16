@@ -30,11 +30,11 @@ from uuid import UUID
 
 import numpy as np
 
-from .models.auto.configuration_auto import AutoConfig
 from .configuration_utils import PretrainedConfig
 from .data import SquadExample, SquadFeatures, squad_convert_examples_to_features
 from .file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from .modelcard import ModelCard
+from .models.auto.configuration_auto import AutoConfig
 from .models.auto.tokenization_auto import AutoTokenizer
 from .models.bert.tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer

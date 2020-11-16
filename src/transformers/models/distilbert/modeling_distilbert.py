@@ -28,7 +28,6 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import gelu
-from .configuration_distilbert import DistilBertConfig
 from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -50,6 +49,7 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
+from .configuration_distilbert import DistilBertConfig
 
 
 logger = logging.get_logger(__name__)

@@ -15,9 +15,9 @@
 """PyTorch Pegasus model, ported from https://github.com/google-research/pegasus"""
 
 
-from .configuration_pegasus import PegasusConfig
 from ...file_utils import add_start_docstrings
 from ..bart.modeling_bart import BART_START_DOCSTRING, BartForConditionalGeneration
+from .configuration_pegasus import PegasusConfig
 
 
 @add_start_docstrings("The Pegasus Model for summarization ", BART_START_DOCSTRING)

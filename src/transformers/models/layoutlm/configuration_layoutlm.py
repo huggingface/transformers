@@ -15,8 +15,8 @@
 """ LayoutLM model configuration """
 
 
-from ..bert.configuration_bert import BertConfig
 from ...utils import logging
+from ..bert.configuration_bert import BertConfig
 
 
 logger = logging.get_logger(__name__)

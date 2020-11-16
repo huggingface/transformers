@@ -19,7 +19,6 @@
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from .configuration_roberta import RobertaConfig
 from ...file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     add_code_sample_docstrings,
@@ -48,6 +47,7 @@ from ...modeling_tf_utils import (
 )
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
+from .configuration_roberta import RobertaConfig
 
 
 logger = logging.get_logger(__name__)

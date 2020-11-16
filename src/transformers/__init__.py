@@ -27,49 +27,6 @@ from .integrations import (  # isort:skip
     is_wandb_available,
 )
 
-from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-from .models.auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, AutoConfig, TOKENIZER_MAPPING, AutoTokenizer
-from .models.bart import BartConfig, BartTokenizer
-from .models.bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig, BasicTokenizer, BertTokenizer, WordpieceTokenizer
-from .models.bert_generation import BertGenerationConfig
-from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
-from .models.bertweet import BertweetTokenizer
-from .models.blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig, BlenderbotSmallTokenizer, BlenderbotTokenizer
-from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
-from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
-from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
-from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
-from .models.dpr import DPR_PRETRAINED_CONFIG_ARCHIVE_MAP, DPRConfig, DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer, DPRReaderOutput, DPRReaderTokenizer
-from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
-from .models.encoder_decoder import EncoderDecoderConfig
-from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
-from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
-from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
-from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
-from .models.herbert import HerbertTokenizer
-from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
-from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
-from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
-from .models.marian import MarianConfig
-from .models.mbart import MBartConfig
-from .models.mmbt import MMBTConfig
-from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
-from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
-from .models.pegasus import PegasusConfig
-from .models.phobert import PhobertTokenizer
-from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
-from .models.rag import RagConfig, RagRetriever, RagTokenizer
-from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
-from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
-from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
-from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
-from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
-from .models.transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig, TransfoXLCorpus, TransfoXLTokenizer
-from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer
-from .models.xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
-from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
-from .models.xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
-
 # Configuration
 from .configuration_utils import PretrainedConfig
 
@@ -137,6 +94,77 @@ from .modeling_tf_pytorch_utils import (
     load_tf2_model_in_pytorch_model,
     load_tf2_weights_in_pytorch_model,
 )
+from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+from .models.auto import (
+    ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    CONFIG_MAPPING,
+    TOKENIZER_MAPPING,
+    AutoConfig,
+    AutoTokenizer,
+)
+from .models.bart import BartConfig, BartTokenizer
+from .models.bert import (
+    BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    BasicTokenizer,
+    BertConfig,
+    BertTokenizer,
+    WordpieceTokenizer,
+)
+from .models.bert_generation import BertGenerationConfig
+from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
+from .models.bertweet import BertweetTokenizer
+from .models.blenderbot import (
+    BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    BlenderbotConfig,
+    BlenderbotSmallTokenizer,
+    BlenderbotTokenizer,
+)
+from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
+from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
+from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
+from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
+from .models.dpr import (
+    DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    DPRConfig,
+    DPRContextEncoderTokenizer,
+    DPRQuestionEncoderTokenizer,
+    DPRReaderOutput,
+    DPRReaderTokenizer,
+)
+from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
+from .models.encoder_decoder import EncoderDecoderConfig
+from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
+from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
+from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
+from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
+from .models.herbert import HerbertTokenizer
+from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
+from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
+from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
+from .models.marian import MarianConfig
+from .models.mbart import MBartConfig
+from .models.mmbt import MMBTConfig
+from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
+from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
+from .models.pegasus import PegasusConfig
+from .models.phobert import PhobertTokenizer
+from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
+from .models.rag import RagConfig, RagRetriever, RagTokenizer
+from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
+from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
+from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
+from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
+from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
+from .models.transfo_xl import (
+    TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    TransfoXLConfig,
+    TransfoXLCorpus,
+    TransfoXLTokenizer,
+)
+from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer
+from .models.xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
+from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
+from .models.xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
 
 # Pipelines
 from .pipelines import (
@@ -212,9 +240,9 @@ if is_tokenizers_available():
     from .models.roberta import RobertaTokenizerFast
     from .models.squeezebert import SqueezeBertTokenizerFast
     from .models.t5 import T5TokenizerFast
-    from .tokenization_utils_fast import PreTrainedTokenizerFast
     from .models.xlm_roberta import XLMRobertaTokenizerFast
     from .models.xlnet import XLNetTokenizerFast
+    from .tokenization_utils_fast import PreTrainedTokenizerFast
 
     if is_sentencepiece_available():
         from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
@@ -279,6 +307,7 @@ if is_torch_available():
         TopPLogitsWarper,
     )
     from .generation_utils import top_k_top_p_filtering
+    from .modeling_utils import Conv1D, PreTrainedModel, apply_chunking_to_forward, prune_layer
     from .models.albert import (
         ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         AlbertForMaskedLM,
@@ -536,7 +565,6 @@ if is_torch_available():
         TransfoXLPreTrainedModel,
         load_tf_weights_in_transfo_xl,
     )
-    from .modeling_utils import Conv1D, PreTrainedModel, apply_chunking_to_forward, prune_layer
     from .models.xlm import (
         XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
         XLMForMultipleChoice,
@@ -604,6 +632,7 @@ if is_tf_available():
     # Benchmarks
     from .benchmark.benchmark_tf import TensorFlowBenchmark
     from .generation_tf_utils import tf_top_k_top_p_filtering
+    from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, shape_list
     from .models.albert import (
         TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFAlbertForMaskedLM,
@@ -796,7 +825,6 @@ if is_tf_available():
         TFTransfoXLModel,
         TFTransfoXLPreTrainedModel,
     )
-    from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, shape_list
     from .models.xlm import (
         TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFXLMForMultipleChoice,

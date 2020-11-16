@@ -15,8 +15,8 @@
 """PyTorch MarianMTModel model, ported from the Marian C++ repo."""
 
 
-from .configuration_marian import MarianConfig
 from ..bart.modeling_bart import BartForConditionalGeneration
+from .configuration_marian import MarianConfig
 
 
 # See all Marian models at https://huggingface.co/models?search=Helsinki-NLP

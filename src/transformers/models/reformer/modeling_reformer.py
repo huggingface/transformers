@@ -29,7 +29,6 @@ from torch.autograd.function import Function
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from .configuration_reformer import ReformerConfig
 from ...file_utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -41,6 +40,7 @@ from ...file_utils import (
 from ...modeling_outputs import CausalLMOutput, MaskedLMOutput, QuestionAnsweringModelOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
 from ...utils import logging
+from .configuration_reformer import ReformerConfig
 
 
 logger = logging.get_logger(__name__)

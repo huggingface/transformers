@@ -20,9 +20,9 @@ import os
 import re
 from typing import Optional, Tuple
 
-from ..bert.tokenization_bert import BasicTokenizer
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ..bert.tokenization_bert import BasicTokenizer
 
 
 logger = logging.get_logger(__name__)

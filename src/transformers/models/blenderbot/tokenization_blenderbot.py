@@ -21,9 +21,9 @@ from typing import Dict, List, Optional, Tuple
 
 import regex as re
 
-from ..roberta.tokenization_roberta import RobertaTokenizer
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
+from ..roberta.tokenization_roberta import RobertaTokenizer
 
 
 logger = logging.get_logger(__name__)

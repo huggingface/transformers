@@ -2,10 +2,10 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-from ...file_utils import is_tokenizers_available, is_torch_available, is_tf_available
-
+from ...file_utils import is_tf_available, is_tokenizers_available, is_torch_available
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .tokenization_openai import OpenAIGPTTokenizer
+
 
 if is_tokenizers_available():
     from .tokenization_openai_fast import OpenAIGPTTokenizerFast

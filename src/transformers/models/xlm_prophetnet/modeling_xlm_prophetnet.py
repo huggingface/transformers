@@ -14,7 +14,7 @@
 # limitations under the License.
 """ PyTorch XLM-ProphetNet model."""
 
-from .configuration_xlm_prophetnet import XLMProphetNetConfig
+from ...utils import logging
 from ..prophetnet.modeling_prophetnet import (
     ProphetNetDecoder,
     ProphetNetEncoder,
@@ -22,7 +22,7 @@ from ..prophetnet.modeling_prophetnet import (
     ProphetNetForConditionalGeneration,
     ProphetNetModel,
 )
-from ...utils import logging
+from .configuration_xlm_prophetnet import XLMProphetNetConfig
 
 
 logger = logging.get_logger(__name__)

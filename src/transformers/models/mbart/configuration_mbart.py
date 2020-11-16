@@ -14,8 +14,8 @@
 # limitations under the License.
 """ MBART configuration """
 
-from ..bart.configuration_bart import BartConfig
 from ...utils import logging
+from ..bart.configuration_bart import BartConfig
 
 
 logger = logging.get_logger(__name__)

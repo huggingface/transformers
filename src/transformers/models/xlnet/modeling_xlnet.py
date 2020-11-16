@@ -25,7 +25,6 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
 from ...activations import ACT2FN
-from .configuration_xlnet import XLNetConfig
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -42,6 +41,7 @@ from ...modeling_utils import (
     apply_chunking_to_forward,
 )
 from ...utils import logging
+from .configuration_xlnet import XLNetConfig
 
 
 logger = logging.get_logger(__name__)

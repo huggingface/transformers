@@ -22,17 +22,17 @@ from typing import List, Optional, Tuple
 
 import tensorflow as tf
 
-from .configuration_transfo_xl import TransfoXLConfig
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
 )
-from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
 from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
 from ...tokenization_utils import BatchEncoding
 from ...utils import logging
+from .configuration_transfo_xl import TransfoXLConfig
+from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
 
 
 logger = logging.get_logger(__name__)

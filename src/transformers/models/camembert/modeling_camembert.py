@@ -15,8 +15,8 @@
 # limitations under the License.
 """PyTorch CamemBERT model. """
 
-from .configuration_camembert import CamembertConfig
 from ...file_utils import add_start_docstrings
+from ...utils import logging
 from ..roberta.modeling_roberta import (
     RobertaForCausalLM,
     RobertaForMaskedLM,
@@ -26,7 +26,7 @@ from ..roberta.modeling_roberta import (
     RobertaForTokenClassification,
     RobertaModel,
 )
-from ...utils import logging
+from .configuration_camembert import CamembertConfig
 
 
 logger = logging.get_logger(__name__)

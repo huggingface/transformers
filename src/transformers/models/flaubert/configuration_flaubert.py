@@ -14,8 +14,8 @@
 # limitations under the License.
 """ Flaubert configuration, based on XLM. """
 
-from ..xlm.configuration_xlm import XLMConfig
 from ...utils import logging
+from ..xlm.configuration_xlm import XLMConfig
 
 
 logger = logging.get_logger(__name__)

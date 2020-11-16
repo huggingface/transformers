@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .tokenization_longformer import LongformerTokenizer
-from ..roberta.tokenization_roberta_fast import RobertaTokenizerFast
 from ...utils import logging
+from ..roberta.tokenization_roberta_fast import RobertaTokenizerFast
+from .tokenization_longformer import LongformerTokenizer
 
 
 logger = logging.get_logger(__name__)

@@ -26,7 +26,6 @@ import tensorflow as tf
 
 from transformers.modeling_tf_utils import TFWrappedEmbeddings
 
-from .configuration_t5 import T5Config
 from ...file_utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -45,6 +44,7 @@ from ...modeling_tf_utils import (
 )
 from ...tokenization_utils import BatchEncoding
 from ...utils import logging
+from .configuration_t5 import T5Config
 
 
 logger = logging.get_logger(__name__)

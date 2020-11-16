@@ -18,9 +18,9 @@
 
 import torch
 
-from .configuration_blenderbot import BlenderbotConfig
 from ...file_utils import add_start_docstrings
 from ..bart.modeling_bart import BartForConditionalGeneration
+from .configuration_blenderbot import BlenderbotConfig
 
 
 BLENDER_START_DOCSTRING = r"""
