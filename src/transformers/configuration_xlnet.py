@@ -107,9 +107,9 @@ class XLNetConfig(PretrainedConfig):
         end_n_top (:obj:`int`, `optional`, defaults to 5):
             Used in the SQuAD evaluation script.
         use_mems_eval (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the model should make use of the recurrent memory mechanism in evaluation mode
+            Whether or not the model should make use of the recurrent memory mechanism in evaluation mode.
         use_mems_train (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not the model should make use of the recurrent memory mechanism in train mode
+            Whether or not the model should make use of the recurrent memory mechanism in train mode.
 
             .. note::
                 If one wants to pre-train XLNet, ``use_mems_train`` should be set to :obj:`True`. For fine-tuning, it

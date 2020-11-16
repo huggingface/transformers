@@ -876,7 +876,7 @@ XLNET_INPUTS_DOCSTRING = r"""
             decoding. The token ids which have their past given to this model should not be passed as :obj:`input_ids`
             as they have already been computed.
 
-            :obj::obj:`use_mems` has to be set to :obj:`True` to make use of :obj:`mems`.
+            :obj:`use_mems` has to be set to :obj:`True` to make use of :obj:`mems`.
         perm_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, sequence_length)`, `optional`):
             Mask to indicate the attention pattern for each input token with values selected in ``[0, 1]``:
 
@@ -1091,6 +1091,11 @@ class XLNetModel(XLNetPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        use_mems = (
+            use_mems
+            if use_mems is not None
+            else (self.config.use_mems_eval and (not self.is_training or self.config.use_mems_train))
+        )
 
         # the original code for XLNet uses shapes [len, bsz] with the batch dimension at the end
         # but we want a unified interface in the library with the batch size on the first dimension
@@ -1406,8 +1411,10 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             >>> next_token_logits = outputs.logits  # Logits have shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        use_mems = (use_mems if use_mems is not None else self.config.use_mems_eval) and (
-            not self.is_training or self.config.use_mems_train
+        use_mems = (
+            use_mems
+            if use_mems is not None
+            else (self.config.use_mems_eval and (not self.is_training or self.config.use_mems_train))
         )
 
         transformer_outputs = self.transformer(
@@ -1496,8 +1503,10 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        use_mems = (use_mems if use_mems is not None else self.config.use_mems_eval) and (
-            not self.is_training or self.config.use_mems_train
+        use_mems = (
+            use_mems
+            if use_mems is not None
+            else (self.config.use_mems_eval and (not self.is_training or self.config.use_mems_train))
         )
 
         transformer_outputs = self.transformer(
@@ -1591,8 +1600,10 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
             `input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        use_mems = (use_mems if use_mems is not None else self.config.use_mems_eval) and (
-            not self.is_training or self.config.use_mems_train
+        use_mems = (
+            use_mems
+            if use_mems is not None
+            else (self.config.use_mems_eval and (not self.is_training or self.config.use_mems_train))
         )
 
         outputs = self.transformer(
@@ -1690,8 +1701,10 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             :obj:`input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        use_mems = (use_mems if use_mems is not None else self.config.use_mems_eval) and (
-            not self.is_training or self.config.use_mems_train
+        use_mems = (
+            use_mems
+            if use_mems is not None
+            else (self.config.use_mems_eval and (not self.is_training or self.config.use_mems_train))
         )
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
@@ -1798,8 +1811,10 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        use_mems = (use_mems if use_mems is not None else self.config.use_mems_eval) and (
-            not self.is_training or self.config.use_mems_train
+        use_mems = (
+            use_mems
+            if use_mems is not None
+            else (self.config.use_mems_eval and (not self.is_training or self.config.use_mems_train))
         )
 
         outputs = self.transformer(
@@ -1935,8 +1950,10 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             >>> loss = outputs.loss
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        use_mems = (use_mems if use_mems is not None else self.config.use_mems_eval) and (
-            not self.is_training or self.config.use_mems_train
+        use_mems = (
+            use_mems
+            if use_mems is not None
+            else (self.config.use_mems_eval and (not self.is_training or self.config.use_mems_train))
         )
 
         transformer_outputs = self.transformer(
