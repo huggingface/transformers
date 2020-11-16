@@ -19,7 +19,7 @@ import copy
 import json
 import os
 
-from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
+from .models.auto.configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .file_utils import (
     CONFIG_NAME,
     MODEL_CARD_NAME,
