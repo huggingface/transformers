@@ -562,10 +562,10 @@ if is_torch_available():
     )
     from .modeling_tapas import (
         TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TapasModel,
         TapasForMaskedLM,
         TapasForQuestionAnswering,
         TapasForSequenceClassification,
+        TapasModel,
         load_tf_weights_in_tapas,
     )
     from .modeling_transfo_xl import (

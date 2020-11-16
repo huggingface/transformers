@@ -14,7 +14,6 @@
 # limitations under the License.
 
 
-
 import unittest
 
 import numpy as np
@@ -26,17 +25,16 @@ from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
-
 if is_torch_available():
     import torch
 
     from transformers import (
         TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
         TapasConfig,
-        TapasModel,
         TapasForMaskedLM,
-        TapasForSequenceClassification,
         TapasForQuestionAnswering,
+        TapasForSequenceClassification,
+        TapasModel,
     )
 
 
@@ -143,10 +141,8 @@ class TapasModelTester:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
         token_type_ids = []
-        for type_vocab_size in self.type_vocab_sizes:   
-            token_type_ids.append(
-                ids_tensor(shape=[self.batch_size, self.seq_length], vocab_size=type_vocab_size)
-            )
+        for type_vocab_size in self.type_vocab_sizes:
+            token_type_ids.append(ids_tensor(shape=[self.batch_size, self.seq_length], vocab_size=type_vocab_size))
         token_type_ids = torch.stack(token_type_ids, dim=2)
 
         sequence_labels = None
@@ -219,8 +215,18 @@ class TapasModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, input_mask, token_type_ids, sequence_labels, token_labels, label_ids, answer,
-        numeric_values, numeric_values_scale, aggregation_labels
+        self,
+        config,
+        input_ids,
+        input_mask,
+        token_type_ids,
+        sequence_labels,
+        token_labels,
+        label_ids,
+        answer,
+        numeric_values,
+        numeric_values_scale,
+        aggregation_labels,
     ):
         model = TapasModel(config=config)
         model.to(torch_device)
@@ -232,8 +238,18 @@ class TapasModelTester:
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_for_masked_lm(
-        self, config, input_ids, input_mask, token_type_ids, sequence_labels, token_labels, label_ids, answer,
-        numeric_values, numeric_values_scale, aggregation_labels
+        self,
+        config,
+        input_ids,
+        input_mask,
+        token_type_ids,
+        sequence_labels,
+        token_labels,
+        label_ids,
+        answer,
+        numeric_values,
+        numeric_values_scale,
+        aggregation_labels,
     ):
         model = TapasForMaskedLM(config=config)
         model.to(torch_device)
@@ -242,22 +258,48 @@ class TapasModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_for_question_answering(
-        self, config, input_ids, input_mask, token_type_ids, sequence_labels, token_labels, label_ids, answer,
-        numeric_values, numeric_values_scale, aggregation_labels
+        self,
+        config,
+        input_ids,
+        input_mask,
+        token_type_ids,
+        sequence_labels,
+        token_labels,
+        label_ids,
+        answer,
+        numeric_values,
+        numeric_values_scale,
+        aggregation_labels,
     ):
         model = TapasForQuestionAnswering(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids,
-                       label_ids=label_ids, answer=answer, numeric_values=numeric_values,
-                       numeric_values_scale=numeric_values_scale, aggregation_labels=aggregation_labels
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            label_ids=label_ids,
+            answer=answer,
+            numeric_values=numeric_values,
+            numeric_values_scale=numeric_values_scale,
+            aggregation_labels=aggregation_labels,
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.logits_aggregation.shape, (self.batch_size, self.num_aggregation_labels))
 
     def create_and_check_for_sequence_classification(
-        self, config, input_ids, input_mask, token_type_ids, sequence_labels, token_labels, label_ids, answer,
-        numeric_values, numeric_values_scale, aggregation_labels
+        self,
+        config,
+        input_ids,
+        input_mask,
+        token_type_ids,
+        sequence_labels,
+        token_labels,
+        label_ids,
+        answer,
+        numeric_values,
+        numeric_values_scale,
+        aggregation_labels,
     ):
         config.num_labels = self.num_labels
         model = TapasForSequenceClassification(config)
@@ -374,6 +416,7 @@ class TapasModelTest(ModelTesterMixin, unittest.TestCase):
     # @require_torch_and_cuda
     # def test_large_inputs_in_fp16_dont_cause_overflow(self):
     #     pass
+
 
 # Below: tests for Tapas utilities, based on segmented_tensor_test.py of the original implementation.
 # These test the operations on segmented tensors.
