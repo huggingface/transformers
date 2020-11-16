@@ -106,12 +106,18 @@ class XLNetConfig(PretrainedConfig):
             Used in the SQuAD evaluation script.
         end_n_top (:obj:`int`, `optional`, defaults to 5):
             Used in the SQuAD evaluation script.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the model should return the last pre-computed hidden states.
+        use_mems_eval (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not the model should make use of the recurrent memory mechanism in evaluation mode
+        use_mems_train (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not the model should make use of the recurrent memory mechanism in train mode
 
             .. note::
-                This flag behaves differently from with other models: it just controls the inference behavior, during
-                training the model always uses ``use_cache=True``.
+                If one wants to pre-train XLNet, ``use_mems_train`` should be set to :obj:`True`. For fine-tuning, it
+                is recommend to set ``use_mems_train`` to :obj:`False` as discussed `here
+                <https://github.com/zihangdai/xlnet/issues/41#issuecomment-505102587>`__. Note that if
+                ``use_mems_train`` is set to :obj:`True` one has to make sure that train batches are correctly
+                pre-processed, `e.g.` :obj:`batch_1 = [[This line is], [This is the]]` and :obj:`batch_2 = [[ the first
+                line], [ second line]]`.
 
     Examples::
 
@@ -144,6 +150,8 @@ class XLNetConfig(PretrainedConfig):
         dropout=0.1,
         mem_len=512,
         reuse_len=None,
+        use_mems_eval=True,
+        use_mems_train=False,
         bi_data=False,
         clamp_len=-1,
         same_length=False,
