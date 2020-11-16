@@ -28,6 +28,8 @@ import tensorflow as tf
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.saving import hdf5_format
 
+from transformers.modeling_tf_outputs import TFBaseModelOutput
+
 from .tokenization_utils_base import BatchEncoding
 
 from .configuration_utils import PretrainedConfig
@@ -245,6 +247,12 @@ def input_processing(func, inputs, **kwargs):
     parameter_names = list(signature.keys())
     output = {}
 
+    for k, v in kwargs.items():
+        if isinstance(v, (tf.Tensor, bool, TFBaseModelOutput, tuple, list)) or v is None:
+            output[k] = v
+        else:
+            raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted for %s." % (type(v), k))
+
     if isinstance(inputs, (tuple, list)):
         for i, input in enumerate(inputs):
             if type(input) == tf.Tensor:
@@ -259,29 +267,27 @@ def input_processing(func, inputs, **kwargs):
                         "The tensor named %s does not belong to the authorized list of names %s "
                         % (input.name, parameter_names)
                     )
-            elif isinstance(input, tf.Tensor) or input is None:
+            elif isinstance(input, (tf.Tensor, bool, TFBaseModelOutput, tuple, list)) or input is None:
                 output[parameter_names[i]] = input
             else:
-                raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted." % type(input))
+                raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted for %s." % (type(input), parameter_names[i]))
     elif isinstance(inputs, (dict, BatchEncoding)):
-        output = dict(inputs)
-
-        for k, v in output.items():
-            if not isinstance(v, tf.Tensor):
-                raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted." % type(input))
+        for k, v in dict(inputs).items():
+            if not isinstance(v, (tf.Tensor, bool, TFBaseModelOutput, tuple, list)):
+                raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted for %s." % (type(v), k))
+            else:
+                output[k] = v
     else:
         if isinstance(inputs, tf.Tensor) or inputs is None:
             output[parameter_names[0]] = inputs
         else:
-            raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted." % type(inputs))
-    
+            raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted for %s." % (type(inputs), parameter_names[0]))
+
     for name in parameter_names:
         if name not in list(output.keys()):
             # When creating a SavedModel TF calls the method with LayerCall.__call__(args, **kwargs)
             # So to respect the proper output we have to add this exception
             if name == "kwargs" and "args" in output:
-                output.update(kwargs)
-
                 tensor_name = output["args"].name.split(":")[0]
                 output[tensor_name] = output["args"]
 
