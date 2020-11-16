@@ -1174,7 +1174,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
     def get_output_embeddings(self):
         return self.lm_loss.input_embeddings
 
-    def prepare_inputs_for_generation(self, inputs, past, **kwargs):
+    def prepare_inputs_for_generation(self, inputs, past, use_mems=None, **kwargs):
         # Add dummy token at the end (no attention on this one)
 
         # At every pass, the attention values for the new token and the two last generated tokens
@@ -1201,12 +1201,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         target_mapping_seq_end = tf.ones((effective_batch_size, 1, 1), dtype=tf.float32)
         target_mapping = tf.concat([target_mapping, target_mapping_seq_end], axis=-1)
 
-        inputs = {
-            "inputs": inputs,
-            "perm_mask": perm_mask,
-            "target_mapping": target_mapping,
-            "use_mems": kwargs["use_mems"],
-        }
+        inputs = {"inputs": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "use_mems": use_mems}
 
         # if past is defined in model kwargs then use it for faster decoding
         if past:
