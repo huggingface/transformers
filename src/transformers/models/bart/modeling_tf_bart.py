@@ -173,7 +173,7 @@ def invert_mask(attention_mask: tf.Tensor):
 
 class TFPretrainedBartModel(TFPreTrainedModel):
     config_class = BartConfig
-    base_model_prefix = "model"
+    base_model_prefix = "bart"
 
     @property
     def dummy_inputs(self):
@@ -259,9 +259,12 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         if self.normalize_before:
             x = self.self_attn_layer_norm(x)
         x, self_attn_weights = self.self_attn(query=x, key=x, key_padding_mask=encoder_padding_mask)
+        # TODO (JP): This assert is not graph compliant, create a TF assert instead
+        """
         assert shape_list(x) == shape_list(
             residual
         ), f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(x)}"
+        """
         x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
         if not self.normalize_before:
@@ -641,15 +644,19 @@ class TFBartDecoder(tf.keras.layers.Layer):
         encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))  # could maybe be avoided.
 
         next_cache = (encoder_hidden_states, next_decoder_cache) if use_cache else None
+        
         if not return_dict:
-            return x, next_cache, all_hidden_states, all_self_attns
-        else:
-            return TFBaseModelOutputWithPast(
-                last_hidden_state=x,
-                past_key_values=next_cache,
-                hidden_states=all_hidden_states,
-                attentions=all_self_attns,
+            return tuple(
+                v for v in [x, next_cache, all_hidden_states, all_self_attns] if v is not None
             )
+
+        return TFBaseModelOutputWithPast(
+            last_hidden_state=x,
+            past_key_values=next_cache,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+        )
+
 
 
 def _reorder_buffer(attn_cache, new_order):
@@ -765,7 +772,8 @@ class TFAttention(tf.keras.layers.Layer):
             attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
 
         if key_padding_mask is not None:  # don't attend to padding symbols
-            attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
+            attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
+
             if key_padding_mask.dtype == tf.bool:
                 key_padding_mask = tf.cast(key_padding_mask, attn_weights.dtype) * -1e9
             extended_mask = tf.expand_dims(tf.expand_dims(key_padding_mask, 1), 2)
@@ -779,7 +787,7 @@ class TFAttention(tf.keras.layers.Layer):
         attn_output = tf.transpose(attn_output, perm=(1, 0, 2))
         attn_output = tf.reshape(attn_output, (tgt_len, bsz, embed_dim))
         attn_output = self.out_proj(attn_output)
-        attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
+        attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
         return attn_output, attn_weights
 
     def _concat_saved_state(self, k, v, saved_state, static_kv, bsz) -> Tuple[tf.Tensor]:
@@ -887,6 +895,7 @@ class TFBartMainLayer(Layer):
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.return_dict = config.use_return_dict
+        self.pad_token_id = config.pad_token_id
 
         self.encoder = TFBartEncoder(config, embed_tokens, name="encoder")
         self.decoder = TFBartDecoder(config, embed_tokens, name="decoder")
@@ -902,12 +911,11 @@ class TFBartMainLayer(Layer):
         Prepare masks that ignore padding tokens decoder and a causal lm mask for the decoder if none are provided.
         This mimics the default behavior in fairseq. To override it pass in masks.
         """
-        pad_token_id = self.config.pad_token_id
         if decoder_input_ids is None:
             decoder_input_ids = self._shift_right(inputs)
         bsz, tgt_len = shape_list(decoder_input_ids)[:2]
         if decoder_attn_mask is None:
-            decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
+            decoder_padding_mask = make_padding_mask(decoder_input_ids, self.pad_token_id)
         else:
             decoder_padding_mask = invert_mask(decoder_attn_mask)
 
@@ -1173,7 +1181,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             if inputs["decoder_input_ids"] is None:
                 inputs["decoder_input_ids"] = self._shift_right(inputs["labels"])
 
-        outputs = self.model(
+        outputs = self.bart(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             decoder_input_ids=inputs["decoder_input_ids"],
@@ -1192,7 +1200,6 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
-
         return TFSeq2SeqLMOutput(
             loss=masked_lm_loss,
             logits=lm_logits,
@@ -1259,10 +1266,10 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             return logits
 
     def get_output_embeddings(self):
-        return self.model.shared
+        return self.bart.shared
 
     def get_encoder(self):
-        return self.model.encoder
+        return self.bart.encoder
 
     def compute_loss(self, labels, logits):
         """CrossEntropyLoss that ignores pad tokens"""

@@ -249,7 +249,6 @@ class TFNextSentencePredictionLoss:
         return loss_fn(next_sentence_label, next_sentence_reduced_logits)
 
 
-<<<<<<< HEAD
 def input_processing(func, input_ids, **kwargs):
     signature = dict(inspect.signature(func).parameters)
     signature.pop("kwargs", None)
