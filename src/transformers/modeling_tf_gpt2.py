@@ -99,7 +99,7 @@ class TFAttention(tf.keras.layers.Layer):
         w = tf.matmul(q, k, transpose_b=True)
         if self.scale:
             dk = tf.cast(shape_list(k)[-1], dtype=w.dtype)  # scale attention_scores
-            w = w / tf.math.sqrt(dk, dtype=dk.dtype)
+            w = w / tf.math.sqrt(dk, dtype=w.dtype)
 
         # w has shape [batch, heads, dst_sequence, src_sequence], where information flows from src to dst.
         _, _, nd, ns = shape_list(w)
