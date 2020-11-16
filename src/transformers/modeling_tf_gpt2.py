@@ -20,7 +20,6 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import tensorflow as tf
-from tensorflow.python.framework import dtypes
 
 from .activations_tf import get_tf_activation
 from .configuration_gpt2 import GPT2Config
@@ -353,6 +352,9 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             token_type_embeds = self.wte(token_type_ids, mode="embedding")
         else:
             token_type_embeds = 0
+
+        position_embeds = tf.cast(position_embeds, dtype=inputs_embeds.dtype)
+        token_type_embeds = tf.cast(token_type_embeds, dtype=inputs_embeds.dtype)
         hidden_states = inputs_embeds + position_embeds + token_type_embeds
         hidden_states = self.drop(hidden_states, training=training)
 
