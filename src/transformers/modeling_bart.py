@@ -1199,7 +1199,7 @@ class BartForSequenceClassification(PretrainedBartModel):
         )
         x = outputs[0]  # last hidden state
         eos_mask = input_ids.eq(self.config.eos_token_id)
-        if torch.unique(eos_mask.sum(1)).item() > 1:
+        if torch.unique(eos_mask.sum(1)).size(-1) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
 
         # Attempt to gather the latest eos_token representation in an ONNX compatible way
