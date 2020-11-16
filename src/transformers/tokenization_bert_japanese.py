@@ -21,7 +21,7 @@ import os
 import unicodedata
 from typing import Optional
 
-from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer, load_vocab
+from .models.bert.tokenization_slow import BasicTokenizer, BertTokenizer, WordpieceTokenizer, load_vocab
 from .utils import logging
 
 

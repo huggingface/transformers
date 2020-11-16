@@ -60,7 +60,7 @@ from .configuration_auto import (
 from .configuration_utils import PretrainedConfig
 from .file_utils import is_sentencepiece_available, is_tokenizers_available
 from .tokenization_bart import BartTokenizer
-from .tokenization_bert import BertTokenizer
+from .models.bert.tokenization_slow import BertTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer
 from .tokenization_bertweet import BertweetTokenizer
 from .tokenization_blenderbot import BlenderbotSmallTokenizer
@@ -91,7 +91,7 @@ from .utils import logging
 
 
 if is_sentencepiece_available():
-    from .tokenization_albert import AlbertTokenizer
+    from .models.albert.tokenization_slow import AlbertTokenizer
     from .tokenization_bert_generation import BertGenerationTokenizer
     from .tokenization_camembert import CamembertTokenizer
     from .tokenization_marian import MarianTokenizer
@@ -116,9 +116,9 @@ else:
     XLMProphetNetTokenizer = None
 
 if is_tokenizers_available():
-    from .tokenization_albert_fast import AlbertTokenizerFast
+    from .models.albert.tokenization_fast import AlbertTokenizerFast
     from .tokenization_bart_fast import BartTokenizerFast
-    from .tokenization_bert_fast import BertTokenizerFast
+    from .models.bert.tokenization_fast import BertTokenizerFast
     from .tokenization_camembert_fast import CamembertTokenizerFast
     from .tokenization_distilbert_fast import DistilBertTokenizerFast
     from .tokenization_dpr_fast import DPRQuestionEncoderTokenizerFast

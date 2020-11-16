@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for DistilBERT."""
 
-from .tokenization_bert_fast import BertTokenizerFast
+from .models.bert.tokenization_fast import BertTokenizerFast
 from .tokenization_distilbert import DistilBertTokenizer
 from .utils import logging
 

@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .tokenization_bert import BertTokenizer
+from .models.bert.tokenization_slow import BertTokenizer
 
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}

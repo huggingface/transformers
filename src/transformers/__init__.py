@@ -28,10 +28,8 @@ from .integrations import (  # isort:skip
 )
 
 # Configurations
-from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
 from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, AutoConfig
 from .configuration_bart import BartConfig
-from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from .configuration_bert_generation import BertGenerationConfig
 from .configuration_blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig
 from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
@@ -120,6 +118,9 @@ from .hf_argparser import HfArgumentParser
 # Model Cards
 from .modelcard import ModelCard
 
+from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+from .models.bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig, BasicTokenizer, BertTokenizer, WordpieceTokenizer
+
 # TF 2.0 <=> PyTorch conversion utilities
 from .modeling_tf_pytorch_utils import (
     convert_tf_weight_name_to_pt_weight_name,
@@ -160,7 +161,6 @@ from .retrieval_rag import RagRetriever
 # Tokenizers
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from .tokenization_bart import BartTokenizer
-from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer
 from .tokenization_bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .tokenization_bertweet import BertweetTokenizer
 from .tokenization_blenderbot import BlenderbotSmallTokenizer, BlenderbotTokenizer
@@ -205,7 +205,7 @@ from .tokenization_xlm import XLMTokenizer
 
 
 if is_sentencepiece_available():
-    from .tokenization_albert import AlbertTokenizer
+    from .models.albert import AlbertTokenizer
     from .tokenization_bert_generation import BertGenerationTokenizer
     from .tokenization_camembert import CamembertTokenizer
     from .tokenization_marian import MarianTokenizer
@@ -220,9 +220,9 @@ else:
     from .utils.dummy_sentencepiece_objects import *
 
 if is_tokenizers_available():
-    from .tokenization_albert_fast import AlbertTokenizerFast
+    from .models.albert import AlbertTokenizerFast
     from .tokenization_bart_fast import BartTokenizerFast
-    from .tokenization_bert_fast import BertTokenizerFast
+    from .models.bert import BertTokenizerFast
     from .tokenization_camembert_fast import CamembertTokenizerFast
     from .tokenization_distilbert_fast import DistilBertTokenizerFast
     from .tokenization_dpr_fast import (
@@ -313,7 +313,7 @@ if is_torch_available():
         TopPLogitsWarper,
     )
     from .generation_utils import top_k_top_p_filtering
-    from .modeling_albert import (
+    from .models.albert import (
         ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         AlbertForMaskedLM,
         AlbertForMultipleChoice,
@@ -357,7 +357,7 @@ if is_torch_available():
         BartModel,
         PretrainedBartModel,
     )
-    from .modeling_bert import (
+    from .models.bert import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         BertForMaskedLM,
         BertForMultipleChoice,
@@ -638,7 +638,7 @@ if is_tf_available():
     # Benchmarks
     from .benchmark.benchmark_tf import TensorFlowBenchmark
     from .generation_tf_utils import tf_top_k_top_p_filtering
-    from .modeling_tf_albert import (
+    from .models.albert import (
         TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFAlbertForMaskedLM,
         TFAlbertForMultipleChoice,
@@ -674,7 +674,7 @@ if is_tf_available():
         TFAutoModelWithLMHead,
     )
     from .modeling_tf_bart import TFBartForConditionalGeneration, TFBartModel
-    from .modeling_tf_bert import (
+    from .models.bert import (
         TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFBertEmbeddings,
         TFBertForMaskedLM,
@@ -876,7 +876,7 @@ else:
 
 
 if is_flax_available():
-    from .modeling_flax_bert import FlaxBertModel
+    from .models.bert import FlaxBertModel
     from .modeling_flax_roberta import FlaxRobertaModel
 else:
     # Import the same objects as dummies to get them in the namespace.

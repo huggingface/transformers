@@ -16,7 +16,7 @@
 
 from typing import List, Optional
 
-from .tokenization_bert_fast import BertTokenizerFast
+from .models.bert.tokenization_fast import BertTokenizerFast
 from .tokenization_funnel import FunnelTokenizer
 from .utils import logging
 

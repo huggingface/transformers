@@ -16,7 +16,7 @@
 
 from typing import List, Optional
 
-from .tokenization_bert import BertTokenizer
+from .models.bert.tokenization_slow import BertTokenizer
 from .utils import logging
 
 

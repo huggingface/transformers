@@ -73,7 +73,7 @@ class ConvertCommand(BaseTransformersCLICommand):
     def run(self):
         if self._model_type == "albert":
             try:
-                from transformers.convert_albert_original_tf_checkpoint_to_pytorch import (
+                from transformers.models.albert.convert_albert_original_tf_checkpoint_to_pytorch import (
                     convert_tf_checkpoint_to_pytorch,
                 )
             except ImportError:
@@ -82,7 +82,7 @@ class ConvertCommand(BaseTransformersCLICommand):
             convert_tf_checkpoint_to_pytorch(self._tf_checkpoint, self._config, self._pytorch_dump_output)
         elif self._model_type == "bert":
             try:
-                from transformers.convert_bert_original_tf_checkpoint_to_pytorch import (
+                from transformers.models.bert.convert_bert_original_tf_checkpoint_to_pytorch import (
                     convert_tf_checkpoint_to_pytorch,
                 )
             except ImportError:

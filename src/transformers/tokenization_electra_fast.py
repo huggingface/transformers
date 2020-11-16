@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .tokenization_bert_fast import BertTokenizerFast
+from .models.bert.tokenization_fast import BertTokenizerFast
 from .tokenization_electra import ElectraTokenizer
 
 

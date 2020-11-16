@@ -15,7 +15,7 @@
 """ LayoutLM model configuration """
 
 
-from .configuration_bert import BertConfig
+from .models.bert.configuration import BertConfig
 from .utils import logging
 
 

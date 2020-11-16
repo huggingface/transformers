@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .tokenization_bert import BasicTokenizer
+from .models.bert.tokenization_slow import BasicTokenizer
 from .tokenization_xlm import XLMTokenizer
 from .utils import logging
 

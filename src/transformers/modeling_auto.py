@@ -59,7 +59,7 @@ from .configuration_auto import (
 from .configuration_marian import MarianConfig
 from .configuration_utils import PretrainedConfig
 from .file_utils import add_start_docstrings
-from .modeling_albert import (
+from .models.albert.pt_model import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
     AlbertForPreTraining,
@@ -74,7 +74,7 @@ from .modeling_bart import (
     BartForSequenceClassification,
     BartModel,
 )
-from .modeling_bert import (
+from .models.bert.pt_model import (
     BertForMaskedLM,
     BertForMultipleChoice,
     BertForNextSentencePrediction,
