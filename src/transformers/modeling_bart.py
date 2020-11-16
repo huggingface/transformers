@@ -1199,9 +1199,12 @@ class BartForSequenceClassification(PretrainedBartModel):
         )
         x = outputs[0]  # last hidden state
         eos_mask = input_ids.eq(self.config.eos_token_id)
-        if torch.unique(eos_mask.sum(1)).size(-1) > 1:
+        if torch.unique(eos_mask.sum(1)).item() > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
-        sentence_representation = x[eos_mask, :].view(x.size(0), -1, x.size(-1))[:, -1, :]
+
+        # Attempt to gather the latest eos_token representation in an ONNX compatible way
+        # (-1: remove the batch indexes from the vector, -1: Take the last occurrence of eos_token)
+        sentence_representation = torch.index_select(x, 1, eos_mask.nonzero().T[-1, -1])
         logits = self.classification_head(sentence_representation)
 
         loss = None
