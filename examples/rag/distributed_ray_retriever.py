@@ -29,30 +29,30 @@ class RayRetriever:
 
 class RagRayDistributedRetriever(RagRetriever):
     """
-        A distributed retriever built on top of the ``Ray`` API, a library
-        for building distributed applications (https://docs.ray.io/en/master/).
-        package. During training, all training workers initialize their own
-        instance of a `RagRayDistributedRetriever`, and each instance of
-        this distributed retriever shares a common set of Retrieval Ray
-        Actors (https://docs.ray.io/en/master/walkthrough.html#remote
-        -classes-actors) that load the index on separate processes. Ray
-        handles the communication between the `RagRayDistributedRetriever`
-        instances and the remote Ray actors. If training is done in a
-        non-distributed setup, the index will simply be loaded in the same
-        process as the training worker and Ray will not be used.
+    A distributed retriever built on top of the ``Ray`` API, a library
+    for building distributed applications (https://docs.ray.io/en/master/).
+    package. During training, all training workers initialize their own
+    instance of a `RagRayDistributedRetriever`, and each instance of
+    this distributed retriever shares a common set of Retrieval Ray
+    Actors (https://docs.ray.io/en/master/walkthrough.html#remote
+    -classes-actors) that load the index on separate processes. Ray
+    handles the communication between the `RagRayDistributedRetriever`
+    instances and the remote Ray actors. If training is done in a
+    non-distributed setup, the index will simply be loaded in the same
+    process as the training worker and Ray will not be used.
 
-        Args:
-            config (:class:`~transformers.RagConfig`):
-                The configuration of the RAG model this Retriever is used with. Contains parameters indicating which ``Index`` to build.
-            question_encoder_tokenizer (:class:`~transformers.PretrainedTokenizer`):
-                The tokenizer that was used to tokenize the question.
-                It is used to decode the question and then use the generator_tokenizer.
-            generator_tokenizer (:class:`~transformers.PretrainedTokenizer`):
-                The tokenizer used for the generator part of the RagModel.
-            retrieval_workers (:obj:`List[ray.ActorClass(RayRetriever)]`): A list of already initialized `RayRetriever` actors.
-                These actor classes run on remote processes and are responsible for performing the index lookup.
-            index (:class:`~transformers.retrieval_rag.Index`, optional, defaults to the one defined by the configuration):
-                If specified, use this index instead of the one built using the configuration
+    Args:
+        config (:class:`~transformers.RagConfig`):
+            The configuration of the RAG model this Retriever is used with. Contains parameters indicating which ``Index`` to build.
+        question_encoder_tokenizer (:class:`~transformers.PretrainedTokenizer`):
+            The tokenizer that was used to tokenize the question.
+            It is used to decode the question and then use the generator_tokenizer.
+        generator_tokenizer (:class:`~transformers.PretrainedTokenizer`):
+            The tokenizer used for the generator part of the RagModel.
+        retrieval_workers (:obj:`List[ray.ActorClass(RayRetriever)]`): A list of already initialized `RayRetriever` actors.
+            These actor classes run on remote processes and are responsible for performing the index lookup.
+        index (:class:`~transformers.retrieval_rag.Index`, optional, defaults to the one defined by the configuration):
+            If specified, use this index instead of the one built using the configuration
     """
 
     def __init__(self, config, question_encoder_tokenizer,
@@ -69,6 +69,12 @@ class RagRayDistributedRetriever(RagRetriever):
                  self.retrieval_workers])
 
     def init_retrieval(self):
+        """
+        Retriever initialization function, needs to be called from the
+        training process. This function triggers retrieval initialization
+        for all retrieval actors if using distributed setting, or loads
+        index into current process if training is not distributed.
+        """
         logger.info("initializing retrieval")
 
         if len(self.retrieval_workers) > 0:
@@ -80,6 +86,25 @@ class RagRayDistributedRetriever(RagRetriever):
 
 
     def retrieve(self, question_hidden_states, n_docs):
+        """
+        Retrieves documents for specified ``question_hidden_states``. If
+        running training with multiple workers, a random retrieval actor is
+        selected to perform the index lookup and return the result.
+
+        Args:
+            question_hidden_states (:obj:`np.ndarray` of shape :obj:`(batch_size, vector_size)`):
+                A batch of query vectors to retrieve with.
+            n_docs (:obj:`int`):
+                The number of docs retrieved per query.
+
+        Output:
+            retrieved_doc_embeds (:obj:`np.ndarray` of shape :obj:`(batch_size, n_docs, dim)`
+                The retrieval embeddings of the retrieved docs per query.
+            doc_ids (:obj:`np.ndarray` of shape :obj:`batch_size, n_docs`)
+                The ids of the documents in the index
+            doc_dicts (:obj:`List[dict]`):
+                The retrieved_doc_embeds examples per query.
+        """
         if len(self.retrieval_workers) > 0:
             # Select a random retrieval actor.
             random_worker = self.retrieval_workers[random.randint(0,
