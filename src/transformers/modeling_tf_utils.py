@@ -244,7 +244,7 @@ def load_tf_weights(model, resolved_archive_file):
         model (:obj:`tf.keras.models.Model`):
             The model to load the weights into.
         resolved_archive_file (:obj:`str`):
-            The location of the H5 file
+            The location of the H5 file.
 
     Returns:
         Two lists, one for the missing layers, and another one for the unexpected layers.
@@ -258,11 +258,11 @@ def load_tf_weights(model, resolved_archive_file):
         saved_h5_model_layers_name = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
         model_layers_name_value = {}
 
-        # Retrieve the name of each layer from the instanciated model
+        # Retrieve the name of each layer from the instantiated model
         # make it a dict that looks like {"layer_name": Layer object}
         model_layers_name_value = {layer.name: layer for layer in model.layers}
 
-        # Create a set of unique names of the layers that come from the instanciated model
+        # Create a set of unique names of the layers that come from the instantiated model
         model_layers_name = set(model_layers_name_value.keys())
 
         # Find the missing layers from the high level list of layers
@@ -279,22 +279,22 @@ def load_tf_weights(model, resolved_archive_file):
         for layer_name in saved_h5_model_layers_name:
             # if layer_name from the H5 file belongs to the layers from the instanciated model
             if layer_name in model_layers_name:
-                # Get layer_name from the H5 file
-                g = f[layer_name]
+                # Get the H5 layer object from its name
+                h5_layer_object = f[layer_name]
                 # Get all the weights that are attach to layer_name
-                saved_weight_names = hdf5_format.load_attributes_from_hdf5_group(g, "weight_names")
+                saved_weight_names = hdf5_format.load_attributes_from_hdf5_group(h5_layer_object, "weight_names")
                 # Get the layer object from the layer_name in the dict that represents the instanciated model
                 layer = model_layers_name_value[layer_name]
                 # Get all the weights as a list from the layer object
                 symbolic_weights = layer.trainable_weights + layer.non_trainable_weights
-                saved_weight_names_values = {}
+                saved_weights = {}
 
                 # Create a dict from the H5 saved model that looks like {"weight_name": weight_value}
                 # And a set with only the names
                 for weight_name in saved_weight_names:
                     # TF names always start with the model name so we ignore it
                     name = "/".join(weight_name.split("/")[1:])
-                    saved_weight_names_values[name] = np.asarray(g[weight_name])
+                    saved_weights[name] = np.asarray(h5_layer_object[weight_name])
 
                     # Add the updated name to the final list for computing missing/unexpected values
                     saved_weight_names_set.add(name)
@@ -303,16 +303,14 @@ def load_tf_weights(model, resolved_archive_file):
                 for symbolic_weight in symbolic_weights:
                     # TF names always start with the model name so we ignore it
                     symbolic_weight_name = "/".join(symbolic_weight.name.split("/")[1:])
-                    saved_weight_value = None
-
-                    # Add the updated name to the final list for computing missing/unexpected values
-                    symbolic_weights_names.add(symbolic_weight_name)
 
                     # here we check if the current weight is among the weights from the H5 file
                     # If yes, get the weight_value of the corresponding weight from the H5 file
-                    # If not, keep the value to None
-                    if symbolic_weight_name in saved_weight_names_values:
-                        saved_weight_value = saved_weight_names_values[symbolic_weight_name]
+                    # If not, make the value to None
+                    saved_weight_value = saved_weights.get(symbolic_weight_name, None)
+
+                    # Add the updated name to the final list for computing missing/unexpected values
+                    symbolic_weights_names.add(symbolic_weight_name)
 
                     # If the current weight is found
                     if saved_weight_value is not None:
