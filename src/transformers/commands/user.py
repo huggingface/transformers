@@ -31,7 +31,7 @@ class UserCommands(BaseTransformersCLICommand):
         ls_parser.add_argument("--organization", type=str, help="Optional: organization namespace.")
         ls_parser.set_defaults(func=lambda args: ListObjsCommand(args))
         rm_parser = s3_subparsers.add_parser("rm")
-        rm_parser.add_argument("filename", type=str, help="individual object filename to delete from S3.")
+        rm_parser.add_argument("filename", type=str, help="individual object filename to delete from huggingface.co.")
         rm_parser.add_argument("--organization", type=str, help="Optional: organization namespace.")
         rm_parser.set_defaults(func=lambda args: DeleteObjCommand(args))
         upload_parser = s3_subparsers.add_parser("upload", help="Upload a file to S3.")
