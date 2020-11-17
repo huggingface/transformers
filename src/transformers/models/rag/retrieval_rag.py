@@ -105,7 +105,7 @@ class LegacyIndex(Index):
             The dimension of indexed vectors.
         index_path (:obj:`str`):
             A path to a `directory` containing index files compatible with
-            :class:`~transformers.retrieval_rag.LegacyIndex`
+            :class:`~transformers.models.rag.retrieval_rag.LegacyIndex`
     """
 
     INDEX_FILENAME = "hf_bert_base.hnswSQ8_correct_phi_128.c_index"
@@ -344,7 +344,7 @@ class RagRetriever:
             generator_tokenizer.
         generator_tokenizer (:class:`~transformers.PreTrainedTokenizer`):
             The tokenizer used for the generator part of the RagModel.
-        index (:class:`~transformers.retrieval_rag.Index`, optional, defaults to the one defined by the configuration):
+        index (:class:`~transformers.models.rag.retrieval_rag.Index`, optional, defaults to the one defined by the configuration):
             If specified, use this index instead of the one built using the configuration
 
     Examples::

@@ -205,7 +205,7 @@ class RagTestMixin:
         )
         dataset.add_faiss_index("embeddings", string_factory="Flat", metric_type=faiss.METRIC_INNER_PRODUCT)
         tokenizer = self.bart_tokenizer if config.generator.model_type == "bart" else self.t5_tokenizer
-        with patch("transformers.retrieval_rag.load_dataset") as mock_load_dataset:
+        with patch("transformers.models.rag.retrieval_rag.load_dataset") as mock_load_dataset:
             mock_load_dataset.return_value = dataset
             retriever = RagRetriever(
                 config,

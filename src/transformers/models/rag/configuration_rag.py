@@ -53,7 +53,7 @@ RAG_CONFIG_DOC = r"""
             The path to the serialized faiss index on disk.
         passages_path: (:obj:`str`, `optional`):
             A path to text passages compatible with the faiss index. Required if using
-            :class:`~transformers.retrieval_rag.LegacyIndex`
+            :class:`~transformers.models.rag.retrieval_rag.LegacyIndex`
         use_dummy_dataset (:obj:`bool`, `optional`, defaults to ``False``)
             Whether to load a "dummy" variant of the dataset specified by :obj:`dataset`.
         label_smoothing (:obj:`float`, `optional`, defaults to 0.0):

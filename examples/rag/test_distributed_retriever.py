@@ -133,7 +133,7 @@ class RagRetrieverTest(TestCase):
             question_encoder=DPRConfig().to_dict(),
             generator=BartConfig().to_dict(),
         )
-        with patch("transformers.retrieval_rag.load_dataset") as mock_load_dataset:
+        with patch("transformers.models.rag.retrieval_rag.load_dataset") as mock_load_dataset:
             mock_load_dataset.return_value = dataset
             retriever = RagPyTorchDistributedRetriever(
                 config,
