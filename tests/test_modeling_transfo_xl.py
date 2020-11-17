@@ -28,7 +28,7 @@ if is_torch_available():
     import torch
 
     from transformers import TransfoXLConfig, TransfoXLLMHeadModel, TransfoXLModel
-    from transformers.modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.transfo_xl.modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class TransfoXLModelTester:

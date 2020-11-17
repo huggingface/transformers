@@ -13,7 +13,11 @@ from transformers import is_faiss_available
 from transformers.configuration_bart import BartConfig
 from transformers.configuration_dpr import DPRConfig
 from transformers.configuration_rag import RagConfig
-from transformers.retrieval_rag import CustomHFIndex, RagRetriever
+from transformers.models.bart.tokenization_bart import BartTokenizer
+from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
+from transformers.models.dpr.tokenization_dpr import DPRQuestionEncoderTokenizer
+from transformers.models.rag.retrieval_rag import CustomHFIndex, RagRetriever
+from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 from transformers.testing_utils import (
     require_datasets,
     require_faiss,
@@ -21,10 +25,6 @@ from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
 )
-from transformers.tokenization_bart import BartTokenizer
-from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
-from transformers.tokenization_dpr import DPRQuestionEncoderTokenizer
-from transformers.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 
 
 if is_faiss_available():

@@ -8,12 +8,12 @@ from transformers.tokenization_bert_fast import BertTokenizerFast
 
 
 if is_flax_available():
-    from transformers.modeling_flax_bert import FlaxBertModel
+    from transformers.models.bert.modeling_flax_bert import FlaxBertModel
 
 if is_torch_available():
     import torch
 
-    from transformers.modeling_bert import BertModel
+    from transformers.models.bert.modeling_bert import BertModel
 
 
 @require_flax

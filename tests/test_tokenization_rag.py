@@ -5,17 +5,17 @@ import tempfile
 from unittest import TestCase
 
 from transformers import BartTokenizer, BartTokenizerFast, DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast
-from transformers.configuration_bart import BartConfig
-from transformers.configuration_dpr import DPRConfig
 from transformers.file_utils import is_datasets_available, is_faiss_available, is_torch_available
+from transformers.models.bart.configuration_bart import BartConfig
+from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
+from transformers.models.dpr.configuration_dpr import DPRConfig
+from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 from transformers.testing_utils import require_datasets, require_faiss, require_tokenizers, require_torch, slow
-from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
-from transformers.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 
 
 if is_torch_available() and is_datasets_available() and is_faiss_available():
-    from transformers.configuration_rag import RagConfig
-    from transformers.tokenization_rag import RagTokenizer
+    from transformers.models.rag.configuration_rag import RagConfig
+    from transformers.models.rag.tokenization_rag import RagTokenizer
 
 
 @require_faiss

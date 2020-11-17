@@ -37,7 +37,7 @@ if is_torch_available():
         AlbertForTokenClassification,
         AlbertModel,
     )
-    from transformers.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.albert.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class AlbertModelTester:
