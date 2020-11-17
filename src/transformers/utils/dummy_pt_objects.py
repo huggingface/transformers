@@ -1361,6 +1361,29 @@ def load_tf_weights_in_mobilebert(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_mobilebert)
 
 
+class MT5Config:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MT5ForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MT5Model:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
