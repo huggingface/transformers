@@ -67,19 +67,20 @@ class AttrDict(dict):
         super(AttrDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
 
+
 # In PTL >v1.0, `init_ddp_connection` method in the `LightningModule`
 # is no longer used, and is moved into DDPAccelerator instead.
 # We override DDPAccelerator to add our custom logic for initializing the
 # retriever.
 # https://github.com/PyTorchLightning/pytorch-lightning/blob/master/tests/backends/test_accelerator_connector.py
 
+
 class CustomAccel(DDPAccelerator):
     def __init__(self, trainer=None, **kwargs):
         # Trainer is set later.
         super().__init__(trainer, **kwargs)
 
-    def init_ddp_connection(self, global_rank: int, world_size: int,
-                            is_slurm_managing_tasks: bool = True):
+    def init_ddp_connection(self, global_rank: int, world_size: int, is_slurm_managing_tasks: bool = True):
         logger.info("Custom init_ddp_connection.")
         module = self.trainer.model
         if self.cluster_environment is None:
