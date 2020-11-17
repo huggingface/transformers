@@ -71,7 +71,7 @@ class RagTokenizer:
         max_length: Optional[int] = None,
         max_target_length: Optional[int] = None,
         padding: str = "longest",
-        return_tensors: str = "np",
+        return_tensors: str = None,
         truncation=True,
         **kwargs,
     ) -> BatchEncoding:

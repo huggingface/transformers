@@ -22,7 +22,7 @@ class MBartForConditionalGeneration(BartForConditionalGeneration):
         >>> model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-en-ro")
         >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro")
         >>> article = "UN Chief Says There Is No Military Solution in Syria"
-        >>> batch = tokenizer.prepare_seq2seq_batch(src_texts=[article])
+        >>> batch = tokenizer.prepare_seq2seq_batch(src_texts=[article], return_tensors="pt")
         >>> translated_tokens = model.generate(**batch)
         >>> translation = tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
         >>> assert translation == "Şeful ONU declară că nu există o soluţie militară în Siria"

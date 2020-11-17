@@ -89,7 +89,7 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
         >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
         >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
         >>> batch: dict = tokenizer.prepare_seq2seq_batch(
-        ...     example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian
+        ...     example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian, return_tensors="pt"
         ... )
     """
 
@@ -181,7 +181,7 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
         max_target_length: Optional[int] = None,
         truncation: bool = True,
         padding: str = "longest",
-        return_tensors: str = "pt",
+        return_tensors: str = None,
         **kwargs,
     ) -> BatchEncoding:
         if max_length is None:
