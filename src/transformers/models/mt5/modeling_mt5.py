@@ -34,10 +34,11 @@ class MT5Model(T5Model):
         >>> from transformers import MT5Model, T5Tokenizer
         >>> model = MT5Model.from_pretrained("google/mt5-small")
         >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
-        >>> article = "UN Chief Says There Is No Military Solution in Syria"
-        >>> batch = tokenizer.prepare_seq2seq_batch(src_texts=[article])
-        >>> outputs = model(**batch)
-        >>> last_hidden_states = outputs.last_hidden_states
+        >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
+        >>> summary = "Weiter Verhandlung in Syrien."
+        >>> batch = tokenizer.prepare_seq2seq_batch(src_texts=[article], tgt_texts=[summary], return_tensors="pt")
+        >>> outputs = model(input_ids=batch.input_ids, decoder_input_ids=batch.labels)
+        >>> hidden_states = outputs.last_hidden_state
     """
     model_type = "mt5"
     config_class = MT5Config
@@ -61,9 +62,11 @@ class MT5ForConditionalGeneration(T5ForConditionalGeneration):
         >>> from transformers import MT5ForConditionalGeneration, T5Tokenizer
         >>> model = MT5ForConditionalGeneration.from_pretrained("google/mt5-small")
         >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
-        >>> article = "UN Chief Says There Is No Military Solution in Syria"
-        >>> batch = tokenizer.prepare_seq2seq_batch(src_texts=[article])
-        >>> generated_tokens = model.generate(**batch)
+        >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
+        >>> summary = "Weiter Verhandlung in Syrien."
+        >>> batch = tokenizer.prepare_seq2seq_batch(src_texts=[article], tgt_texts=[summary], return_tensors="pt")
+        >>> outputs = model(**batch)
+        >>> loss = outputs.loss
     """
 
     model_type = "mt5"
