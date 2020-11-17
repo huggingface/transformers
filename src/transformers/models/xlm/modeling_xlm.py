@@ -16,10 +16,8 @@
  PyTorch XLM model.
 """
 
-
 import itertools
 import math
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 

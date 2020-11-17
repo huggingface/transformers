@@ -15,9 +15,6 @@
 # limitations under the License.
 """ PyTorch CTRL model."""
 
-
-import warnings
-
 import numpy as np
 import torch
 import torch.nn as nn

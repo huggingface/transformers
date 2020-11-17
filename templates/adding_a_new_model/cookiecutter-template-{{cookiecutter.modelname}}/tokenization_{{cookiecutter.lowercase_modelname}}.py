@@ -73,7 +73,6 @@ class {{cookiecutter.camelcase_modelname}}TokenizerFast(BertTokenizerFast):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
 {%- elif cookiecutter.tokenizer_type == "Standalone" %}
-import warnings
 from typing import List, Optional
 
 from tokenizers import ByteLevelBPETokenizer

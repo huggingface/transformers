@@ -16,9 +16,7 @@
  TF 2.0 XLM model.
 """
 
-
 import itertools
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 

@@ -19,7 +19,6 @@
 import itertools
 import re
 import unicodedata
-import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union, overload
 
 from .file_utils import add_end_docstrings
@@ -441,7 +440,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 "More information on available tokenizers at "
                 "https://github.com/huggingface/transformers/pull/2674"
             )
-
 
         first_ids = get_input_ids(text)
         second_ids = get_input_ids(text_pair) if text_pair is not None else None

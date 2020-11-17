@@ -15,9 +15,6 @@
 # limitations under the License.
 """ Transformer XL configuration """
 
-
-import warnings
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 

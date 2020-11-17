@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tokenization classes for RoBERTa."""
 
-import warnings
 from typing import List, Optional
 
 from ...tokenization_utils import AddedToken

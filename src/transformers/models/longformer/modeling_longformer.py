@@ -15,7 +15,6 @@
 """PyTorch Longformer model. """
 
 import math
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 

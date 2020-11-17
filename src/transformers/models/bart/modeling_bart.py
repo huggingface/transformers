@@ -15,7 +15,6 @@
 """PyTorch BART model, ported from the fairseq repo."""
 import math
 import random
-import warnings
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np

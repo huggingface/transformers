@@ -16,7 +16,6 @@
 
 
 import json
-import warnings
 from typing import Optional, Tuple
 
 from tokenizers import pre_tokenizers

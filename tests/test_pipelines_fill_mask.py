@@ -1,7 +1,5 @@
 import unittest
 
-import pytest
-
 from transformers import pipeline
 from transformers.testing_utils import require_tf, require_torch, slow
 

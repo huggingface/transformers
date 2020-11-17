@@ -20,7 +20,6 @@
 
 import copy
 import math
-import warnings
 
 import numpy as np
 import torch
