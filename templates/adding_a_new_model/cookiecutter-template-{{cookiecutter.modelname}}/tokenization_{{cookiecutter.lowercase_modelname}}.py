@@ -73,7 +73,6 @@ class {{cookiecutter.camelcase_modelname}}TokenizerFast(BertTokenizerFast):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
 {%- elif cookiecutter.tokenizer_type == "Standalone" %}
-import warnings
 from typing import List, Optional
 
 from tokenizers import ByteLevelBPETokenizer
@@ -234,13 +233,6 @@ class {{cookiecutter.camelcase_modelname}}Tokenizer(PreTrainedTokenizer):
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
     def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
-        if "is_pretokenized" in kwargs:
-            warnings.warn(
-                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
-                FutureWarning,
-            )
-            is_split_into_words = kwargs.pop("is_pretokenized")
-
         add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
         if (is_split_into_words or add_prefix_space) and (len(text) > 0 and not text[0].isspace()):
             text = " " + text
@@ -284,29 +276,6 @@ class {{cookiecutter.camelcase_modelname}}TokenizerFast(PreTrainedTokenizerFast)
             **kwargs,
         )
         self.add_prefix_space = add_prefix_space
-
-    def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
-        is_split_into_words = None
-        if "is_pretokenized" in kwargs:
-            warnings.warn(
-                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
-                FutureWarning,
-            )
-            is_split_into_words = kwargs.pop("is_pretokenized")
-
-        is_split_into_words = kwargs.get("is_split_into_words", False) if is_split_into_words is None else is_split_into_words
-        return super()._batch_encode_plus(*args, **kwargs)
-
-    def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
-        is_split_into_words = None
-        if "is_pretokenized" in kwargs:
-            warnings.warn(
-                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
-                FutureWarning,
-            )
-        is_split_into_words = kwargs.get("is_split_into_words", False) if is_split_into_words is None else is_split_into_words
-        return super()._encode_plus(*args, **kwargs)
-
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]

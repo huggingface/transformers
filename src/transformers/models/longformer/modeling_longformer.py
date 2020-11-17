@@ -15,7 +15,6 @@
 """PyTorch Longformer model. """
 
 import math
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -1509,7 +1508,6 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1538,14 +1536,6 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
             >>> loss = outputs.loss
             >>> prediction_logits = output.logits
         """
-
-        if "masked_lm_labels" in kwargs:
-            warnings.warn(
-                "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
-                FutureWarning,
-            )
-            labels = kwargs.pop("masked_lm_labels")
-        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.longformer(
