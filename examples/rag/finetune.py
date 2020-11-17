@@ -461,6 +461,9 @@ def main(args=None, model=None) -> GenerativeQAModule:
         if args.early_stopping_patience >= 0
         else False
     )
+
+    os.environ["MASTER_PORT"] = str(args.distributed_port)
+
     trainer: pl.Trainer = generic_train(
         model,
         args,
@@ -473,13 +476,6 @@ def main(args=None, model=None) -> GenerativeQAModule:
 
     if not args.do_predict:
         return model
-
-    model.hparams.test_checkpoint = ""
-    checkpoints = list(sorted(glob.glob(os.path.join(args.output_dir, "*.ckpt"), recursive=True)))
-    if checkpoints:
-        model.hparams.test_checkpoint = checkpoints[-1]
-        trainer.resume_from_checkpoint = checkpoints[-1]  # best checkpoint
-    trainer.logger.log_hyperparams(model.hparams)
 
     # test() without a model tests using the best checkpoint automatically
     return trainer.test()
