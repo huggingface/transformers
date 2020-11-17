@@ -47,6 +47,7 @@ from ...modeling_tf_utils import (
     input_processing,
     keras_serializable,
     shape_list,
+    input_processing,
 )
 from ...utils import logging
 from .configuration_funnel import FunnelConfig
@@ -1299,6 +1300,17 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.funnel.return_dict
+        discriminator_hidden_states = self.funnel(
+            inputs["input_ids"],
+            inputs["attention_mask"],
+            inputs["token_type_ids"],
+            inputs["inputs_embeds"],
+            inputs["output_attentions"],
+            inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
+        )
         discriminator_sequence_output = discriminator_hidden_states[0]
         logits = self.discriminator_predictions(discriminator_sequence_output)
 
@@ -1450,6 +1462,17 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
             inputs["output_attentions"],
             inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.funnel.return_dict
+        outputs = self.funnel(
+            inputs["input_ids"],
+            inputs["attention_mask"],
+            inputs["token_type_ids"],
+            inputs["inputs_embeds"],
+            inputs["output_attentions"],
+            inputs["output_hidden_states"],
+            return_dict=return_dict,
             training=inputs["training"],
         )
 
