@@ -773,7 +773,7 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
             langs = tf.ones_like(inputs) * lang_id
         else:
             langs = None
-        return {"inputs": inputs, "langs": langs}
+        return {"input_ids": inputs, "langs": langs}
 
     @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
