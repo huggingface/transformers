@@ -213,6 +213,9 @@ class RagRetrieverTest(TestCase):
 
     def get_dummy_custom_hf_index_ray_retriever(self, init_retrieval: bool,
                                                 from_disk: bool):
+        # Have to run in local mode because sys.path modifications at top of
+        # file are not propogated to remote workers.
+        # https://stackoverflow.com/questions/54338013/parallel-import-a-python-file-from-sibling-folder
         ray.init(local_mode=True)
         dataset = self.get_dummy_dataset()
         config = RagConfig(
