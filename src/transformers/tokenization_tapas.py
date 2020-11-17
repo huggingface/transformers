@@ -304,8 +304,6 @@ class TapasTokenizer(PreTrainedTokenizer):
         out_string = " ".join(tokens).replace(" ##", "").strip()
         return out_string
 
-    # the code below was also copied from tokenization_bert.py, but should be updated for TAPAS
-
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         index = 0
         if os.path.isdir(save_directory):
@@ -351,12 +349,12 @@ class TapasTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        Build model inputs from a question and flattened table for question answering or sequence classification tasks by concatenating and
         adding special tokens.
 
         Args:
-            token_ids_0 (:obj:`List[int]`): The first tokenized sequence.
-            token_ids_1 (:obj:`List[int]`, `optional`): The second tokenized sequence.
+            token_ids_0 (:obj:`List[int]`): The ids of the question.
+            token_ids_1 (:obj:`List[int]`, `optional`): The ids of the flattened table.
 
         Returns:
             :obj:`List[int]`: The model input with special tokens.
@@ -375,9 +373,9 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of IDs.
+                List of question IDs.
             token_ids_1 (:obj:`List[int]`, `optional`):
-                Optional second list of IDs for sequence pairs.
+                List of flattened table IDs.
             already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not the token list is already formatted with special tokens for the model.
 
@@ -410,8 +408,18 @@ class TapasTokenizer(PreTrainedTokenizer):
                 List[EncodedInput],
             ]
         ] = None,
-        answer_coordinates: Optional[List[Tuple]] = None,
-        answer_texts: Optional[List[TextInput]] = None,
+        answer_coordinates: Optional[
+            Union[
+                List[Tuple],
+                List[List[Tuple]]
+            ]
+        ] = None,
+        answer_text: Optional[
+            Union[
+                List[TextInput],
+                List[List[TextInput]]
+            ]
+        ] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -474,7 +482,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 table=table,
                 queries=queries,
                 answer_coordinates=answer_coordinates,
-                answer_texts=answer_texts,
+                answer_text=answer_text,
                 add_special_tokens=add_special_tokens,
                 padding=padding,
                 truncation=truncation,
@@ -497,7 +505,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 table=table,
                 query=queries,
                 answer_coordinates=answer_coordinates,
-                answer_text=answer_texts,
+                answer_text=answer_text,
                 add_special_tokens=add_special_tokens,
                 padding=padding,
                 truncation=truncation,
@@ -526,8 +534,8 @@ class TapasTokenizer(PreTrainedTokenizer):
                 List[EncodedInput],
             ]
         ] = None,
-        answer_coordinates: Optional[List[Tuple]] = None,
-        answer_texts: Optional[List[TextInput]] = None,
+        answer_coordinates: Optional[List[List[Tuple]]] = None,
+        answer_text: Optional[List[List[TextInput]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -562,10 +570,10 @@ class TapasTokenizer(PreTrainedTokenizer):
                 "set return_token_type_ids to None."
             )
 
-        if (answer_coordinates and not answer_texts) or (not answer_coordinates and answer_texts):
+        if (answer_coordinates and not answer_text) or (not answer_coordinates and answer_text):
             raise ValueError("In case you provide answers, both answer_coordinates and answer_text should be provided")
-        elif answer_coordinates is None and answer_texts is None:
-            answer_coordinates = answer_texts = [None] * len(queries)
+        elif answer_coordinates is None and answer_text is None:
+            answer_coordinates = answer_text = [None] * len(queries)
 
         if "is_split_into_words" in kwargs:
             raise NotImplementedError("Currently TapasTokenizer only supports questions as strings.")
@@ -590,7 +598,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             table=table,
             queries=queries,
             answer_coordinates=answer_coordinates,
-            answer_texts=answer_texts,
+            answer_text=answer_text,
             add_special_tokens=add_special_tokens,
             padding_strategy=padding_strategy,
             truncation_strategy=truncation_strategy,
@@ -617,8 +625,8 @@ class TapasTokenizer(PreTrainedTokenizer):
             List[PreTokenizedInput],
             List[EncodedInput],
         ],
-        answer_coordinates: Optional[List[Tuple]] = None,
-        answer_texts: Optional[List[TextInput]] = None,
+        answer_coordinates: Optional[List[List[Tuple]]] = None,
+        answer_text: Optional[List[List[TextInput]]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -664,7 +672,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             table_data=table_data,
             queries_tokens=queries_tokens,
             answer_coordinates=answer_coordinates,
-            answer_texts=answer_texts,
+            answer_text=answer_text,
             add_special_tokens=add_special_tokens,
             padding=padding_strategy.value,
             truncation=truncation_strategy.value,
@@ -693,8 +701,8 @@ class TapasTokenizer(PreTrainedTokenizer):
             List[PreTokenizedInput],
             List[EncodedInput],
         ],
-        answer_coordinates: Optional[List[Tuple]] = None,
-        answer_texts: Optional[List[TextInput]] = None,
+        answer_coordinates: Optional[List[List[Tuple]]] = None,
+        answer_text: Optional[List[List[TextInput]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -735,8 +743,8 @@ class TapasTokenizer(PreTrainedTokenizer):
             table_data = None
             queries_tokens = [None] * len(queries_ids)
 
-        for query_ids, raw_query, query_tokens, answer_coords, answer_text in zip(
-            queries_ids, raw_queries, queries_tokens, answer_coordinates, answer_texts
+        for query_ids, raw_query, query_tokens, answer_coords, answer_txt in zip(
+            queries_ids, raw_queries, queries_tokens, answer_coordinates, answer_text
         ):
             outputs = self.prepare_for_model(
                 table_ids,
@@ -746,7 +754,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 table_data=table_data,
                 query_tokens=query_tokens,
                 answer_coordinates=answer_coords,
-                answer_text=answer_text,
+                answer_text=answer_txt,
                 add_special_tokens=add_special_tokens,
                 padding=PaddingStrategy.DO_NOT_PAD.value,  # we pad in batch afterward
                 truncation=truncation,
@@ -882,6 +890,8 @@ class TapasTokenizer(PreTrainedTokenizer):
         return self._encode_plus(
             table=table,
             query=query,
+            answer_coordinates=answer_coordinates,
+            answer_text=answer_text,
             add_special_tokens=add_special_tokens,
             padding_strategy=padding_strategy,
             truncation_strategy=truncation_strategy,
@@ -1066,11 +1076,18 @@ class TapasTokenizer(PreTrainedTokenizer):
         row_ids = self.create_row_token_type_ids_from_sequences(query_ids, table_data)
         prev_label_ids = [0] * len(row_ids)
 
-        column_ranks, inv_column_ranks, columns_to_numeric_values = self._get_numeric_column_ranks(
+        ### FIRST: parse both the table and question in terms of numeric values
+        
+        raw_table = add_numeric_table_values(raw_table)
+        raw_query = add_numeric_values_to_question(raw_query)
+        
+        ### SECOND: add numeric-related features (and not parse them in these functions):
+        
+        column_ranks, inv_column_ranks = self._get_numeric_column_ranks(
             column_ids, row_ids, raw_table
         )
         numeric_relations = self._get_numeric_relations(
-            raw_query, column_ids, row_ids, raw_table, columns_to_numeric_values
+            raw_query, column_ids, row_ids, raw_table
         )
 
         # Load from model defaults
@@ -1085,9 +1102,9 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         if answer_coordinates is not None and answer_text is not None:
             label_ids = self.get_answer_ids(
-                column_ids, row_ids, table_data, query_tokens, answer_text, answer_coordinates
+                column_ids, row_ids, table_data, answer_text, answer_coordinates
             )
-            numeric_values = self._get_numeric_values(raw_table, column_ids, row_ids, columns_to_numeric_values)
+            numeric_values = self._get_numeric_values(raw_table, column_ids, row_ids)
             numeric_values_scale = self._get_numeric_values_scale(raw_table, column_ids, row_ids)
 
             encoded_inputs["label_ids"] = label_ids
@@ -1330,18 +1347,13 @@ class TapasTokenizer(PreTrainedTokenizer):
             row_ids=row_ids,
         )
 
-    def _get_column_values(self, table_numeric_values):
-        """
-        This is an adaptation from _get_column_values in tf_example_utils.py of the original implementation. Given
-        table_numeric_values, a dictionary that maps row indices of a certain column of a Pandas dataframe to either an
-        empty list (no numeric value) or a list containing a NumericValue object, it returns the same dictionary, but
-        only for the row indices that have a corresponding NumericValue object.
-        """
-        table_numeric_values_without_empty_lists = {}
-        for row_index, value in table_numeric_values.items():
-            if len(value) != 0:
-                table_numeric_values_without_empty_lists[row_index] = value[0]
-        return table_numeric_values_without_empty_lists
+    def _get_column_values(self, table, col_index):
+        table_numeric_values = {}
+        for row_index, row in table.iterrows():
+            cell = row[col_index]
+            if cell.numeric_value is not None:
+                table_numeric_values[row_index] = cell.numeric_value
+        return table_numeric_values
 
     def _get_cell_token_indexes(self, column_ids, row_ids, column_id, row_id):
         for index in range(len(column_ids)):
@@ -1354,15 +1366,11 @@ class TapasTokenizer(PreTrainedTokenizer):
         ranks = [0] * len(column_ids)
         inv_ranks = [0] * len(column_ids)
 
-        # original code from number_annotations_utils.py of the original implementation
-        columns_to_numeric_values = {}
+        # original code from tf_example_utils.py of the original implementation
         if table is not None:
             for col_index in range(len(table.columns)):
-                table_numeric_values = _parse_column_values(table, col_index)
-                # we remove row indices for which no numeric value was found
-                table_numeric_values = self._get_column_values(table_numeric_values)
-                # we add the numeric values to a dictionary, to be used in _add_numeric_relations
-                columns_to_numeric_values[col_index] = table_numeric_values
+                table_numeric_values = self._get_column_values(table, col_index)
+
                 if not table_numeric_values:
                     continue
 
@@ -1385,7 +1393,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                             ranks[index] = rank + 1
                             inv_ranks[index] = len(unique_values) - rank
 
-        return ranks, inv_ranks, columns_to_numeric_values
+        return ranks, inv_ranks
 
     def _get_numeric_sort_key_fn(self, table_numeric_values, value):
         """
@@ -1408,16 +1416,15 @@ class TapasTokenizer(PreTrainedTokenizer):
         except ValueError:
             return None
 
-    def _get_numeric_relations(self, question, column_ids, row_ids, table, columns_to_numeric_values):
+    def _get_numeric_relations(self, question, column_ids, row_ids, table):
         """
         Returns numeric relations embeddings
 
         Args:
-            question: The question, numeric values are used.
+            question: Question object.
             column_ids: Maps word piece position to column id.
             row_ids: Maps word piece position to row id.
             table: The table containing the numeric cell values.
-            columns_to_numeric_values: Dictionary that maps column indices to numeric values.
         """
 
         numeric_relations = [0] * len(column_ids)
@@ -1427,11 +1434,10 @@ class TapasTokenizer(PreTrainedTokenizer):
         # this cell has with any value in the question.
         cell_indices_to_relations = collections.defaultdict(set)
         if question is not None and table is not None:
-            question, numeric_spans = add_numeric_values_to_question(question)
-            for numeric_value_span in numeric_spans:
+            for numeric_value_span in question.numeric_spans:
                 for value in numeric_value_span.values:
                     for column_index in range(len(table.columns)):
-                        table_numeric_values = columns_to_numeric_values[column_index]
+                        table_numeric_values = self._get_column_values(table, column_index)
                         sort_key_fn = self._get_numeric_sort_key_fn(table_numeric_values, value)
                         if sort_key_fn is None:
                             continue
@@ -1451,7 +1457,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         return numeric_relations
 
-    def _get_numeric_values(self, table, column_ids, row_ids, columns_to_numeric_values):
+    def _get_numeric_values(self, table, column_ids, row_ids):
         """Returns numeric values for computation of answer loss."""
 
         numeric_values = [float("nan")] * self.model_max_length
@@ -1461,18 +1467,14 @@ class TapasTokenizer(PreTrainedTokenizer):
             num_columns = table.shape[1]
 
             for col_index in range(num_columns):
-                if not columns_to_numeric_values[col_index]:
-                    continue
-                else:
-                    for row_index in range(num_rows):
-                        numeric_value = columns_to_numeric_values[col_index][row_index]
+                for row_index in range(num_rows):
+                    numeric_value = table.iloc[row_index, col_index].numeric_value
+                    if numeric_value is not None:
                         if numeric_value.float_value is None:
                             continue
-
                         float_value = numeric_value.float_value
                         if float_value == float("inf"):
                             continue
-
                         for index in self._get_cell_token_indexes(column_ids, row_ids, col_index, row_index):
                             numeric_values[index] = float_value
 
@@ -1525,12 +1527,14 @@ class TapasTokenizer(PreTrainedTokenizer):
         missing_count = len(all_answers) - len(found_answers)
         return answer_ids, missing_count
 
-    def _get_all_answer_ids(self, column_ids, row_ids, question, answer_coordinates):
+    def _get_all_answer_ids(self, column_ids, row_ids, answer_coordinates):
         """
-        Maps lists of questions with answer coordinates to token indexes. Here, we swap column and row coordinates. In
-        the TSV format, the coordinates are given as (row, column) tuples. Here, we swap them to (column, row) format.
+        Maps answer coordinates of a question to token indexes. 
+        
+        In the SQA format (TSV), the coordinates are given as (row, column) tuples. Here, we first 
+        swap them to (column, row) format before calling _get_all_answer_ids_from_coordinates.
         """
-
+        
         def _to_coordinates(answer_coordinates_question):
             return [(coords[1], coords[0]) for coords in answer_coordinates_question]
 
@@ -1607,25 +1611,28 @@ class TapasTokenizer(PreTrainedTokenizer):
                     break
         return answer_ids
 
-    def _get_answer_ids(self, column_ids, row_ids, question, answer_coordinates):
-        """Maps answer coordinates to token indexes."""
-        answer_ids, missing_count = self._get_all_answer_ids(column_ids, row_ids, [question], answer_coordinates)
+    def _get_answer_ids(self, column_ids, row_ids, answer_coordinates):
+        """Maps answer coordinates of a question to token indexes."""
+        answer_ids, missing_count = self._get_all_answer_ids(column_ids, row_ids, answer_coordinates)
 
         if missing_count:
             raise ValueError("Couldn't find all answers")
         return answer_ids
 
     def get_answer_ids(
-        self, column_ids, row_ids, tokenized_table, question, answer_texts_question, answer_coordinates_question
+        self, column_ids, row_ids, tokenized_table, answer_texts_question, answer_coordinates_question
     ):
         if self.update_answer_coordinates:
             return self._find_answer_ids_from_answer_texts(
                 column_ids,
                 row_ids,
                 tokenized_table,
-                answer_texts=[self.tokenize(at) for at in answer_texts_question],
+                answer_texts=[
+                    self.tokenize(at) 
+                    for at in answer_texts_question
+                ],
             )
-        return self._get_answer_ids(column_ids, row_ids, question, answer_coordinates_question)
+        return self._get_answer_ids(column_ids, row_ids, answer_coordinates_question)
 
     def _pad(
         self,
@@ -1719,10 +1726,6 @@ class TapasTokenizer(PreTrainedTokenizer):
             coords_to_probs[(col, row)].append(prob)
         return {coords: torch.as_tensor(cell_probs).mean() for coords, cell_probs in coords_to_probs.items()}
 
-    def _parse_coordinates(self, raw_coordinates):
-        """Parses cell coordinates from text."""
-        return [ast.literal_eval(x) for x in raw_coordinates]
-
     def convert_logits_to_predictions(
         self, data, logits, logits_agg=None, logits_cls=None, cell_classification_threshold=0.5
     ):
@@ -1803,8 +1806,8 @@ class TapasTokenizer(PreTrainedTokenizer):
                     cell_prob = cell_coords_to_prob.get((col, row), None)
                     if cell_prob is not None:
                         if cell_prob > cell_classification_threshold:
-                            answer_coordinates.append(str((row, col)))
-            answer_coordinates = sorted(self._parse_coordinates(answer_coordinates))
+                            answer_coordinates.append((row, col))
+            answer_coordinates = sorted(answer_coordinates)
             answer_coordinates_batch.append(answer_coordinates)
 
         output = answer_coordinates_batch
@@ -2077,6 +2080,13 @@ class NumericValueSpan:
 class Cell:
     text: Text
     numeric_value: Optional[NumericValue] = None
+
+
+@dataclass
+class Question:
+    original_text: Text # The original raw question string.
+    text: Text # The question string after normalization.
+    numeric_spans: Optional[List[NumericValueSpan]] = None
 
 
 # Constants for parsing date expressions.
@@ -2429,27 +2439,29 @@ def _get_numeric_values(text):
     return itertools.chain(*(span.values for span in numeric_spans))
 
 
-def _parse_column_values(table, col_index):
-    """
-    Parses text in column and returns a dict mapping row_index to values.
-
+def _get_column_values(table, col_index):
+    """Parses text in column and returns a dict mapping row_index to values.
+    This is the _get_column_values function from number_annotation_utils.py of the
+    original implementation.
     Args:
       table: Pandas dataframe
       col_index: integer, indicating the index of the column to get the numeric values of
     """
     index_to_values = {}
     for row_index, row in table.iterrows():
-        text = normalize_for_match(row[col_index])
+        text = normalize_for_match(row[col_index].text)
         index_to_values[row_index] = list(_get_numeric_values(text))
     return index_to_values
 
 
 def add_numeric_values_to_question(question):
     """Adds numeric value spans to a question."""
+    original_text = question
     question = normalize_for_match(question)
     numeric_spans = parse_text(question)
-
-    return (question, numeric_spans)
+    return Question(original_text=original_text, 
+                    text=question, 
+                    numeric_spans=numeric_spans)
 
 
 def get_numeric_relation(value, other_value, sort_key_fn):
@@ -2463,3 +2475,115 @@ def get_numeric_relation(value, other_value, sort_key_fn):
     if value > other_value:
         return Relation.GT
     return None
+
+
+def filter_invalid_unicode(text):
+    """Return an empty string and True if 'text' is in invalid unicode."""
+    return ("", True) if isinstance(text, bytes) else (text, False)
+
+
+def filter_invalid_unicode_from_table(table):
+    """Removes invalid unicode from table.
+    Checks whether a table cell text contains an invalid unicode encoding. If yes,
+    reset the table cell text to an empty str and log a warning for each invalid
+    cell.
+    Args:
+        table: table to clean.
+    """
+    # to do: add table id support
+    if not hasattr(table, "table_id"):
+        table.table_id = 0
+
+    for row_index, row in table.iterrows():
+        for col_index, cell in enumerate(row):
+            cell, is_invalid = filter_invalid_unicode(cell)
+            if is_invalid:
+                logging.warning(
+                    "Scrub an invalid table body @ table_id: %s, row_index: %d, "
+                    "col_index: %d", table.table_id, row_index, col_index)
+    for col_index, column in enumerate(table.columns):
+        column, is_invalid = filter_invalid_unicode(column)
+        if is_invalid:
+            logging.warning(
+                "Scrub an invalid table header @ table_id: %s, col_index: %d",
+                table.table_id, col_index)
+
+
+def _consolidate_numeric_values(
+        row_index_to_values,
+        min_consolidation_fraction,
+        debug_info):
+    """Finds the most common numeric values in a column and returns them.
+    Args:
+    row_index_to_values: For each row index all the values in that cell.
+    min_consolidation_fraction: Fraction of cells that need to have consolidated
+        value.
+    debug_info: Additional information only used for logging.
+    Returns:
+    For each row index the first value that matches the most common value.
+    Rows that don't have a matching value are dropped. Empty list if values can't
+    be consolidated.
+    """
+    type_counts = collections.Counter()
+    for numeric_values in row_index_to_values.values():
+        type_counts.update(_get_all_types(numeric_values))
+    if not type_counts:
+        return {}
+    max_count = max(type_counts.values())
+    if max_count < len(row_index_to_values) * min_consolidation_fraction:
+        # logging.log_every_n(logging.INFO, 'Can\'t consolidate types: %s %s %d', 100,
+        #                     debug_info, row_index_to_values, max_count)
+        return {}
+
+    valid_types = set()
+    for value_type, count in type_counts.items():
+        if count == max_count:
+            valid_types.add(value_type)
+    if len(valid_types) > 1:
+        assert DATE_TYPE in valid_types
+        max_type = DATE_TYPE
+    else:
+        max_type = next(iter(valid_types))
+    
+    new_row_index_to_value = {}
+    for index, values in row_index_to_values.items():
+        # Extract the first matching value.
+        for value in values:
+            if _get_value_type(value) == max_type:
+                new_row_index_to_value[index] = value
+                break
+
+    return new_row_index_to_value
+
+
+def add_numeric_table_values(table,
+                             min_consolidation_fraction=0.7,
+                             debug_info = None):
+    """Parses text in table column-wise and adds the consolidated values.
+    Consolidation refers to finding values with a common types (date or number).
+    Args:
+    table: Table to annotate.
+    min_consolidation_fraction: Fraction of cells in a column that need to have
+        consolidated value.
+    debug_info: Additional information used for logging.
+    """
+    table = table.copy()
+    # First, filter table on invalid unicode
+    filter_invalid_unicode_from_table(table)
+    
+    # Second, replace cell values by Cell objects
+    for row_index, row in table.iterrows():
+        for col_index, cell in enumerate(row):
+            table.iloc[row_index, col_index] = Cell(text=cell)
+    
+    # Third, add numeric_value attributes to these Cell objects
+    for col_index, column in enumerate(table.columns):
+        column_values = _consolidate_numeric_values(
+            _get_column_values(table, col_index),
+            min_consolidation_fraction=min_consolidation_fraction,
+            debug_info=(debug_info, column))
+
+        for row_index, numeric_value in column_values.items():
+            table.iloc[row_index, col_index].numeric_value = numeric_value
+
+    return table
