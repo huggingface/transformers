@@ -183,7 +183,7 @@ class MBartTokenizer(XLMRobertaTokenizer):
         max_target_length: Optional[int] = None,
         truncation: bool = True,
         padding: str = "longest",
-        return_tensors: str = None,
+        return_tensors: Optional[str] = None,
         add_prefix_space: bool = False,  # ignored
         **kwargs,
     ) -> BatchEncoding:
