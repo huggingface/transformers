@@ -2,11 +2,11 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-{%- if cookiecutter.generate_tensorflow_and_pytorch == "PyTorch & TensorFlow"}
+{%- if cookiecutter.generate_tensorflow_and_pytorch == "PyTorch & TensorFlow" %}
 from ...file_utils import is_tf_available, is_torch_available
-{%- elif cookiecutter.generate_tensorflow_and_pytorch == "PyTorch"}
+{%- elif cookiecutter.generate_tensorflow_and_pytorch == "PyTorch" %}
 from ...file_utils import is_torch_available
-{%- elif cookiecutter.generate_tensorflow_and_pytorch == "TensorFlow"}
+{%- elif cookiecutter.generate_tensorflow_and_pytorch == "TensorFlow" %}
 from ...file_utils import is_tf_available
 {% endif %}
 from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP, {{cookiecutter.camelcase_modelname}}Config
