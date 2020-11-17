@@ -682,6 +682,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
             config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
         """
+
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -776,6 +777,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
             config.num_labels - 1]``. If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
             If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
         """
+
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -863,6 +865,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
             Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
             1]``.
         """
+
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -965,6 +968,7 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
             num_choices]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
             :obj:`input_ids` above)
         """
+
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1076,6 +1080,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
             Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
         """
+
         inputs = input_processing(
             func=self.call,
             config=self.config,

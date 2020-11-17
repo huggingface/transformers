@@ -1066,10 +1066,11 @@ class TFBartModel(TFPretrainedBartModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
+        **kwargs,
     ):
         inputs = input_processing(
             func=self.call,
-            inputs=input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
@@ -1156,6 +1157,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel, TFCausalLanguageMode
             probs = tf.nn.softmax(logits[0])
             # probs[5] is associated with the mask token
         """
+
         inputs = input_processing(
             func=self.call,
             config=self.config,

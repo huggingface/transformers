@@ -17,6 +17,7 @@
 
 from dataclasses import dataclass
 from typing import Optional, Tuple
+import warnings
 
 import tensorflow as tf
 
@@ -1111,6 +1112,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             Labels for computing the cross entropy classification loss. Indices should be in ``[0, ...,
             config.vocab_size - 1]``.
         """
+
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1207,6 +1209,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             >>> logits = model(encoding['input_ids'], token_type_ids=encoding['token_type_ids'])[0]
             >>> assert logits[0][0] < logits[0][1] # the next sentence was random
         """
+
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1301,6 +1304,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
+
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1401,6 +1405,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             num_choices]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
             :obj:`input_ids` above)
         """
+
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1519,6 +1524,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
             1]``.
         """
+
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1618,6 +1624,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
         """
+
         inputs = input_processing(
             func=self.call,
             config=self.config,
