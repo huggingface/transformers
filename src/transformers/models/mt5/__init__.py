@@ -9,5 +9,5 @@ from .configuration_mt5 import MT5Config
 if is_torch_available():
     from .modeling_mt5 import MT5ForConditionalGeneration, MT5Model
 
-# if is_tf_available():
-#    from .modeling_tf_mt5 import MTFT5ForConditionalGeneration, MTFT5Model
+if is_tf_available():
+    from .modeling_tf_mt5 import TFMT5ForConditionalGeneration, TFMT5Model

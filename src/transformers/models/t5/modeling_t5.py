@@ -242,7 +242,7 @@ class T5LayerFF(nn.Module):
             self.DenseReluDense = T5DenseGatedGeluDense(config)
         else:
             raise ValueError(
-                f"{self.config.feed_forward_proj} is not supported. Choose between `default` and `gated-gelu`"
+                f"{self.config.feed_forward_proj} is not supported. Choose between `relu` and `gated-gelu`"
             )
 
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)

@@ -577,7 +577,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = T5ForConditionalGeneration.from_pretrained("t5-small", return_dict=True).to(torch_device)
+        model = T5ForConditionalGeneration.from_pretrained("t5-small").to(torch_device)
         tokenizer = T5Tokenizer.from_pretrained("t5-small")
 
         input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
@@ -603,7 +603,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = T5ForConditionalGeneration.from_pretrained("google/t5-v1_1-small", return_dict=True).to(torch_device)
+        model = T5ForConditionalGeneration.from_pretrained("google/t5-v1_1-small").to(torch_device)
         tokenizer = T5Tokenizer.from_pretrained("google/t5-v1_1-small")
 
         input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
