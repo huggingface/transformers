@@ -921,8 +921,8 @@ class Trainer:
                 or operator(metric_value, self.state.best_metric)
             ):
                 if (
-                    self.state.best_metric is not None
-                    and abs(metric_value - self.state.best_metric) > self.args.early_stopping_threshold
+                    self.state.best_metric is None
+                    or abs(metric_value - self.state.best_metric) > self.args.early_stopping_threshold
                 ):
                     self.state.early_stopping_patience_counter = 0
                 else:
