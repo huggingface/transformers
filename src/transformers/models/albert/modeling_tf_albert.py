@@ -50,7 +50,6 @@ from ...modeling_tf_utils import (
     input_processing,
     keras_serializable,
     shape_list,
-    input_processing,
 )
 from ...utils import logging
 from .configuration_albert import AlbertConfig
