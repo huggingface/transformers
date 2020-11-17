@@ -14,6 +14,8 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 import torch.distributed as dist
+from pytorch_lightning.accelerators.ddp_accelerator import DDPAccelerator
+from pytorch_lightning.cluster_environments import TorchElasticEnvironment
 from torch.utils.data import DataLoader
 
 from transformers import (
@@ -64,6 +66,29 @@ class AttrDict(dict):
     def __init__(self, *args, **kwargs):
         super(AttrDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
+
+# In PTL >v1.0, `init_ddp_connection` method in the `LightningModule`
+# is no longer used, and is moved into DDPAccelerator instead.
+# We override DDPAccelerator to add our custom logic for initializing the
+# retriever.
+# https://github.com/PyTorchLightning/pytorch-lightning/blob/master/tests/backends/test_accelerator_connector.py
+
+class CustomAccel(DDPAccelerator):
+    def __init__(self, trainer=None, **kwargs):
+        # Trainer is set later.
+        super().__init__(trainer, **kwargs)
+
+    def init_ddp_connection(self, global_rank: int, world_size: int,
+                            is_slurm_managing_tasks: bool = True):
+        logger.info("Custom init_ddp_connection.")
+        module = self.trainer.model
+        if self.cluster_environment is None:
+            self.cluster_environment = TorchElasticEnvironment()
+        self.distributed_port = module.hparams.distributed_port
+        os.environ["MASTER_PORT"] = str(self.distributed_port)
+        super().init_ddp_connection(global_rank, world_size, is_slurm_managing_tasks)
+        if module.is_rag_model:
+            module.model.rag.retriever.init_retrieval(self.distributed_port)
 
 
 class GenerativeQAModule(BaseTransformer):
@@ -151,6 +176,11 @@ class GenerativeQAModule(BaseTransformer):
         self.hparams.git_sha = get_git_info()["repo_sha"]
         self.num_workers = hparams.num_workers
         self.distributed_port = self.hparams.distributed_port
+
+        # For single GPU training, init_ddp_connection is not called.
+        # So we need to initialize the retrievers here.
+        if hparams.gpus <= 1:
+            self.model.retriever.init_retrieval(self.distributed_port)
 
     def forward(self, input_ids, **kwargs):
         return self.model(input_ids, **kwargs)
@@ -331,9 +361,6 @@ class GenerativeQAModule(BaseTransformer):
         self.model.save_pretrained(save_path)
         self.tokenizer.save_pretrained(save_path)
 
-    def on_pretrain_routine_start(self):
-        self.model.retriever.init_retrieval(self.distributed_port)
-
     @staticmethod
     def add_model_specific_args(parser, root_dir):
         BaseTransformer.add_model_specific_args(parser, root_dir)
@@ -462,8 +489,6 @@ def main(args=None, model=None) -> GenerativeQAModule:
         else False
     )
 
-    os.environ["MASTER_PORT"] = str(args.distributed_port)
-
     trainer: pl.Trainer = generic_train(
         model,
         args,
@@ -471,6 +496,7 @@ def main(args=None, model=None) -> GenerativeQAModule:
         checkpoint_callback=get_checkpoint_callback(args.output_dir, model.val_metric),
         early_stopping_callback=es_callback,
         logger=logger,
+        accelerator=CustomAccel() if args.gpus > 1 else None,
     )
     pickle_save(model.hparams, model.output_dir / "hparams.pkl")
 
