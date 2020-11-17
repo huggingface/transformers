@@ -1,6 +1,9 @@
 # Add parent directory to python path to access lightning_base.py
 export PYTHONPATH="../":"${PYTHONPATH}"
 
+# Start a single-node Ray cluster.
+ray start --head
+
 # A sample finetuning run, you need to specify data_dir, output_dir and model_name_or_path
 # run ./examples/rag/finetune.sh --help to see all the possible options
 
@@ -32,3 +35,8 @@ python examples/rag/finetune.py \
     --num_train_epochs 100 \
     --warmup_steps 500 \
     --gradient_accumulation_steps 1 \
+    --distributed_retriever ray \
+    --num_retrieval_workers 4
+
+# Stop the Ray cluster.
+ray stop
