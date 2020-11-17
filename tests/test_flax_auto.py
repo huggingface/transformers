@@ -7,8 +7,8 @@ from transformers.testing_utils import require_flax, slow
 if is_flax_available():
     import jax
     from transformers.models.auto.modeling_flax_auto import FlaxAutoModel
-    from transformers.models.auto.modeling_flax_bert import FlaxBertModel
-    from transformers.models.auto.modeling_flax_roberta import FlaxRobertaModel
+    from transformers.models.bert.modeling_flax_bert import FlaxBertModel
+    from transformers.models.roberta.modeling_flax_roberta import FlaxRobertaModel
 
 
 @require_flax
