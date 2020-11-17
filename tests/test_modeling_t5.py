@@ -31,7 +31,7 @@ if is_torch_available():
     import torch
 
     from transformers import T5Config, T5ForConditionalGeneration, T5Model, T5Tokenizer
-    from transformers.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.t5.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class T5ModelTester:
@@ -115,7 +115,6 @@ class T5ModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.decoder_start_token_id,
-            return_dict=True,
         )
 
         return (

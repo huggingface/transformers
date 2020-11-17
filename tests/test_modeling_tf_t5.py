@@ -78,7 +78,6 @@ class TFT5ModelTester:
             bos_token_id=self.pad_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.pad_token_id,
-            return_dict=True,
         )
 
         return (config, input_ids, input_mask, token_labels)

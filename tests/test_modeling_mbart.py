@@ -37,7 +37,6 @@ class ModelTester:
             decoder_ffn_dim=32,
             max_position_embeddings=48,
             add_final_layer_norm=True,
-            return_dict=True,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -132,7 +131,6 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
             decoder_ffn_dim=32,
             max_position_embeddings=48,
             add_final_layer_norm=True,
-            return_dict=True,
         )
         lm_model = MBartForConditionalGeneration(config).to(torch_device)
         context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long().to(torch_device)

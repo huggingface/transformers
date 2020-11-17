@@ -94,7 +94,6 @@ class OpenAIGPTModelTester:
             # type_vocab_size=self.type_vocab_size,
             # initializer_range=self.initializer_range
             pad_token_id=self.pad_token_id,
-            return_dict=True,
         )
 
         head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)

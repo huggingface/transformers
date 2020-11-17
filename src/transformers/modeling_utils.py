@@ -812,7 +812,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to only look at local files (e.g., not try doanloading the model).
+                Whether or not to only look at local files (i.e., do not try to download the model).
             revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any

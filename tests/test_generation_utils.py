@@ -118,7 +118,7 @@ class GenerationTesterMixin:
     @staticmethod
     def _get_encoder_outputs(model, input_ids, attention_mask, num_interleave=1):
         encoder = model.get_encoder()
-        encoder_outputs = encoder(input_ids, attention_mask=attention_mask, return_dict=True)
+        encoder_outputs = encoder(input_ids, attention_mask=attention_mask)
         encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
             num_interleave, dim=0
         )
@@ -344,6 +344,7 @@ class GenerationTesterMixin:
     def test_beam_sample_generate(self):
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+            print("Return dict", config.return_dict)
             logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
 
             model = model_class(config).to(torch_device)

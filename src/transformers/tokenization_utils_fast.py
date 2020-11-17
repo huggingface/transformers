@@ -169,9 +169,10 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> Tuple[Dict[str, Any], List[EncodingFast]]:
         """
-        Convert the encoding representation (from low-level HuggingFace tokenizer output) to a python Dict.
+        Convert the encoding representation (from low-level HuggingFace tokenizer output) to a python Dict and a list
+        of encodings, take care of building a batch from overflowing tokens.
 
         Overflowing tokens are converted to additional examples (like batches) so the output values of the dict are
         lists (overflows) of lists (tokens).
@@ -203,7 +204,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             if return_length:
                 encoding_dict["length"].append(len(e.ids))
 
-        return encoding_dict
+        return encoding_dict, encodings
 
     def convert_tokens_to_ids(self, tokens: Union[str, List[str]]) -> Union[int, List[int]]:
         """
@@ -390,9 +391,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         )
 
         # Convert encoding to dict
-        # `Tokens` has type: List[Dict[str, List[List[int]]]] or List[Dict[str, 2D-Tensor]]
+        # `Tokens` has type: Tuple[
+        #                       List[Dict[str, List[List[int]]]] or List[Dict[str, 2D-Tensor]],
+        #                       List[EncodingFast]
+        #                    ]
         # with nested dimensions corresponding to batch, overflows, sequence length
-        tokens = [
+        tokens_and_encodings = [
             self._convert_encoding(
                 encoding=encoding,
                 return_token_type_ids=return_token_type_ids,
@@ -406,22 +410,27 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             for encoding in encodings
         ]
 
-        # Convert the output to have dict[list] from list[dict]
-        sanitized = {}
-        for key in tokens[0].keys():
-            # To List[List[List[int]]] of shape (batch, overflows, sequence length)
-            stack = [e for item in tokens for e in item[key]]
-            sanitized[key] = stack
+        # Convert the output to have dict[list] from list[dict] and remove the additional overflows dimension
+        # From (variable) shape (batch, overflows, sequence length) to ~ (batch * overflows, sequence length)
+        # (we say ~ because the number of overflow varies with the example in the batch)
+        #
+        # To match each overflowing sample with the original sample in the batch
+        # we add an overflow_to_sample_mapping array (see below)
+        sanitized_tokens = {}
+        for key in tokens_and_encodings[0][0].keys():
+            stack = [e for item, _ in tokens_and_encodings for e in item[key]]
+            sanitized_tokens[key] = stack
+        sanitized_encodings = [e for _, item in tokens_and_encodings for e in item]
 
         # If returning overflowing tokens, we need to return a mapping
         # from the batch idx to the original sample
         if return_overflowing_tokens:
             overflow_to_sample_mapping = []
-            for i, enc in enumerate(tokens):
-                overflow_to_sample_mapping += [i] * len(enc["input_ids"])
-            sanitized["overflow_to_sample_mapping"] = overflow_to_sample_mapping
+            for i, (toks, _) in enumerate(tokens_and_encodings):
+                overflow_to_sample_mapping += [i] * len(toks["input_ids"])
+            sanitized_tokens["overflow_to_sample_mapping"] = overflow_to_sample_mapping
 
-        return BatchEncoding(sanitized, encodings, tensor_type=return_tensors)
+        return BatchEncoding(sanitized_tokens, sanitized_encodings, tensor_type=return_tensors)
 
     def _encode_plus(
         self,
@@ -518,6 +527,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         Fast tokenizers can also be saved in a unique JSON file containing {config + vocab + added-tokens} using the
         specific :meth:`~transformers.PreTrainedTokenizerFast._save_pretrained`
         """
+        save_directory = str(save_directory)
+
         if legacy_format:
             added_tokens_file = os.path.join(
                 save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
