@@ -155,12 +155,12 @@ class EncoderDecoderModel(PreTrainedModel):
         super().__init__(config)
 
         if encoder is None:
-            from .modeling_auto import AutoModel
+            from ..auto.modeling_auto import AutoModel
 
             encoder = AutoModel.from_config(config.encoder)
 
         if decoder is None:
-            from .modeling_auto import AutoModelForCausalLM
+            from ..auto.modeling_auto import AutoModelForCausalLM
 
             decoder = AutoModelForCausalLM.from_config(config.decoder)
 
@@ -286,10 +286,10 @@ class EncoderDecoderModel(PreTrainedModel):
             assert (
                 encoder_pretrained_model_name_or_path is not None
             ), "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
-            from .modeling_auto import AutoModel
+            from ..auto.modeling_auto import AutoModel
 
             if "config" not in kwargs_encoder:
-                from .configuration_auto import AutoConfig
+                from ..auto.configuration_auto import AutoConfig
 
                 encoder_config = AutoConfig.from_pretrained(encoder_pretrained_model_name_or_path)
                 if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
@@ -309,10 +309,10 @@ class EncoderDecoderModel(PreTrainedModel):
             assert (
                 decoder_pretrained_model_name_or_path is not None
             ), "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
-            from .modeling_auto import AutoModelForCausalLM
+            from ..auto.modeling_auto import AutoModelForCausalLM
 
             if "config" not in kwargs_decoder:
-                from .configuration_auto import AutoConfig
+                from ..auto.configuration_auto import AutoConfig
 
                 decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
