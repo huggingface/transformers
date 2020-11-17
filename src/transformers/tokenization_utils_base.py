@@ -1615,10 +1615,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             pretrained_model_name_or_path (:obj:`str`):
                 Can be either:
 
-                - A string with the `shortcut name` of a predefined tokenizer to load from cache or download, e.g.,
-                  ``bert-base-uncased``.
-                - A string with the `identifier name` of a predefined tokenizer that was user-uploaded to our S3, e.g.,
-                  ``dbmdz/bert-base-german-cased``.
+                - A string, the `model id` of a predefined tokenizer hosted inside a model repo on huggingface.co.
+                  Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under a
+                  user or organization name, like ``dbmdz/bert-base-german-cased``.
                 - A path to a `directory` containing vocabulary files required by the tokenizer, for instance saved
                   using the :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.save_pretrained`
                   method, e.g., ``./my_model_directory/``.
