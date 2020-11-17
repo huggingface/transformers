@@ -2,9 +2,8 @@ import unittest
 
 from numpy import ndarray
 
-from transformers import TensorType, is_flax_available, is_torch_available
+from transformers import BertTokenizerFast, TensorType, is_flax_available, is_torch_available
 from transformers.testing_utils import require_flax, require_torch
-from transformers.tokenization_bert_fast import BertTokenizerFast
 
 
 if is_flax_available():
