@@ -214,6 +214,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         self.output_hidden_states = config.output_hidden_states
         self.use_cache = config.use_cache
         self.return_dict = config.use_return_dict
+        self.return_multilayer = config.use_return_multilayer
 
         self.num_hidden_layers = config.n_layer
         self.vocab_size = config.vocab_size
@@ -614,6 +615,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        return_multilayer=None,
         labels=None,
         training=False,
     ):
@@ -623,6 +625,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
             config.vocab_size - 1]``.
         """
         return_dict = return_dict if return_dict is not None else self.transformer.return_dict
+        return_multilayer = return_multilayer if return_multilayer is not None else self.transformer.return_multilayer
         if isinstance(inputs, (tuple, list)):
             labels = inputs[11] if len(inputs) > 11 else labels
             if len(inputs) > 11:
@@ -657,7 +660,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
             loss = self.compute_loss(labels, logits)
 
         if not return_dict:
-            output = (logits,) + transformer_outputs[1:]
+            output = (logits,) + transformer_outputs[1:] if return_multilayer else (logits,)
             return ((loss,) + output) if loss is not None else output
 
         return TFCausalLMOutputWithPast(
