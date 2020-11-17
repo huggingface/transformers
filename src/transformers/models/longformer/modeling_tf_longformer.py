@@ -16,6 +16,7 @@
 
 from dataclasses import dataclass
 from typing import Optional, Tuple
+import warnings
 
 import tensorflow as tf
 
@@ -38,6 +39,7 @@ from ...modeling_tf_utils import (
     input_processing,
     keras_serializable,
     shape_list,
+    input_processing,
 )
 from ...utils import logging
 from .configuration_longformer import LongformerConfig
@@ -2063,6 +2065,19 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.longformer.return_dict
+        outputs = self.longformer(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            global_attention_mask=inputs["global_attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            position_ids=inputs["position_ids"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
             training=inputs["training"],
         )
         sequence_output = outputs[0]
