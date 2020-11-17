@@ -52,14 +52,12 @@ class RagPyTorchDistributedRetriever(RagRetriever):
                 The port on which the main communication of the training run is carried out. We set the port for retrieval-related
                 communication as ``distributed_port + 1``.
         """
+
         logger.info("initializing retrieval")
+
         # initializing a separate process group for retrieval as the default
         # nccl backend doesn't support gather/scatter operations while gloo
         # is too slow to replace nccl for the core gpu communication
-        if dist.is_initialized():
-            rank = dist.get_rank()
-        else:
-            rank = "undefined"
         if dist.is_initialized():
             logger.info("dist initialized")
             # needs to be set manually
