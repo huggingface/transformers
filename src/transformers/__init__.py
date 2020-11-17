@@ -145,6 +145,7 @@ from .models.marian import MarianConfig
 from .models.mbart import MBartConfig
 from .models.mmbt import MMBTConfig
 from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
+from .models.mt5 import MT5Config
 from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
 from .models.pegasus import PegasusConfig
 from .models.phobert import PhobertTokenizer
@@ -498,7 +499,7 @@ if is_torch_available():
         MobileBertPreTrainedModel,
         load_tf_weights_in_mobilebert,
     )
-    from .models.mt5 import MT5Config, MT5ForConditionalGeneration, MT5Model
+    from .models.mt5 import MT5ForConditionalGeneration, MT5Model
     from .models.openai import (
         OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         OpenAIGPTDoubleHeadsModel,
