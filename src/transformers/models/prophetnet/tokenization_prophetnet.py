@@ -302,7 +302,7 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
         **kwargs,
     ) -> BatchEncoding:
         if max_length is None:
-            max_length = self.max_len
+            max_length = self.model_max_length
         model_inputs = self(
             src_texts,
             add_special_tokens=True,

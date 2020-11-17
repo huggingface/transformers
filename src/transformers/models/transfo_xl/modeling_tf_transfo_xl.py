@@ -16,7 +16,6 @@
 """
  TF 2.0 Transformer XL model.
 """
-import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -864,13 +863,6 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         if len(self.crit.out_layers) > 0:
             return self.crit.out_layers[-1]
         return None
-
-    def reset_length(self, tgt_len, ext_len, mem_len):
-        warnings.warn(
-            "The method `reset_length` is deprecated and will be removed in a future version, use `reset_memory_length` instead.",
-            FutureWarning,
-        )
-        self.transformer.reset_memory_length(mem_len)
 
     def reset_memory_length(self, mem_len):
         self.transformer.reset_memory_length(mem_len)

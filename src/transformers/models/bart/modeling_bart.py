@@ -15,7 +15,6 @@
 """PyTorch BART model, ported from the fairseq repo."""
 import math
 import random
-import warnings
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -529,7 +528,6 @@ class BartDecoder(nn.Module):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
-        **unused,
     ):
         """
         Includes several features from "Jointly Learning to Align and Translate with Transformer Models" (Garg et al.,
@@ -551,18 +549,6 @@ class BartDecoder(nn.Module):
                 - hidden states
                 - attentions
         """
-        if "decoder_cached_states" in unused:
-            warnings.warn(
-                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = unused.pop("decoder_cached_states")
-        if "decoder_past_key_values" in unused:
-            warnings.warn(
-                "The `decoder_past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = unused.pop("decoder_past_key_values")
 
         # check attention mask and invert
         if encoder_padding_mask is not None:
@@ -873,14 +859,7 @@ class BartModel(PretrainedBartModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs,
     ):
-        if "decoder_past_key_values" in kwargs:
-            warnings.warn(
-                "The `decoder_past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = kwargs.pop("decoder_past_key_values")
 
         if decoder_input_ids is None:
             use_cache = False
@@ -1006,7 +985,6 @@ class BartForConditionalGeneration(PretrainedBartModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **unused,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1034,24 +1012,6 @@ class BartForConditionalGeneration(PretrainedBartModel):
             >>> tokenizer.decode(predictions).split()
             >>> # ['good', 'great', 'all', 'really', 'very']
         """
-        if "lm_labels" in unused:
-            warnings.warn(
-                "The `lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
-                FutureWarning,
-            )
-            labels = unused.pop("lm_labels")
-        if "decoder_cached_states" in unused:
-            warnings.warn(
-                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = unused.pop("decoder_cached_states")
-        if "decoder_past_key_values" in unused:
-            warnings.warn(
-                "The `decoder_past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = unused.pop("decoder_past_key_values")
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:

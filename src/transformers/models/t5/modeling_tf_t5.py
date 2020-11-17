@@ -595,7 +595,6 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         output_attentions=None,
         output_hidden_states=None,
         training=False,
-        **kwargs,
     ) -> Tuple:
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -621,21 +620,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
             assert len(inputs) <= 10, "Too many inputs."
-
-            if "past_key_values" in inputs:
-                warnings.warn(
-                    "The `past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                    FutureWarning,
-                )
-                past_key_values = inputs.pop("past_key_values")
         else:
             input_ids = inputs
-            if "past_key_values" in kwargs:
-                warnings.warn(
-                    "The `past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                    FutureWarning,
-                )
-                past_key_values = kwargs.pop("past_key_values")
 
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
@@ -1078,22 +1064,8 @@ class TFT5Model(TFT5PreTrainedModel):
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
             assert len(inputs) <= 13, "Too many inputs."
-
-            if "past_key_value_states" in inputs:
-                warnings.warn(
-                    "The `past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                    FutureWarning,
-                )
-                past_key_values = inputs.pop("past_key_value_states")
         else:
             input_ids = inputs
-
-            if "past_key_value_states" in kwargs:
-                warnings.warn(
-                    "The `past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                    FutureWarning,
-                )
-                past_key_values = kwargs.pop("past_key_value_states")
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions else self.config.output_attentions
@@ -1294,22 +1266,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
             return_dict = inputs.get("return_dict", return_dict)
             assert len(inputs) <= 14, "Too many inputs."
-
-            if "past_key_value_states" in inputs:
-                warnings.warn(
-                    "The `past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                    FutureWarning,
-                )
-                past_key_values = inputs.pop("past_key_value_states")
         else:
             input_ids = inputs
-
-            if "past_key_value_states" in kwargs:
-                warnings.warn(
-                    "The `past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                    FutureWarning,
-                )
-                past_key_values = kwargs.pop("past_key_value_states")
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions else self.config.output_attentions

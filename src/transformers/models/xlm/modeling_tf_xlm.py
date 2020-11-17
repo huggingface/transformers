@@ -16,9 +16,7 @@
  TF 2.0 XLM model.
 """
 
-
 import itertools
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -997,10 +995,9 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         )
 
         if lengths is not None:
-            warnings.warn(
+            logger.warn(
                 "The `lengths` parameter cannot be used with the XLM multiple choice models. Please use the "
                 "attention mask instead.",
-                FutureWarning,
             )
             lengths = None
 

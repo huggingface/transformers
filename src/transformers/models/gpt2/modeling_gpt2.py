@@ -16,7 +16,6 @@
 """PyTorch OpenAI GPT-2 model."""
 
 import os
-import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -528,16 +527,7 @@ class GPT2Model(GPT2PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs,
     ):
-        if "past" in kwargs:
-            warnings.warn(
-                "The `past` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = kwargs.pop("past")
-        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -758,7 +748,6 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -766,13 +755,6 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             ``labels = input_ids`` Indices are selected in ``[-100, 0, ..., config.vocab_size]`` All labels set to
             ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size]``
         """
-        if "past" in kwargs:
-            warnings.warn(
-                "The `past` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = kwargs.pop("past")
-        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_outputs = self.transformer(
@@ -900,8 +882,6 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
             num_choices]`` where `num_choices` is the size of the second dimension of the input tensors. (see
             `input_ids` above)
-        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
-            Used to hide legacy arguments that have been deprecated.
 
         Return:
 
@@ -930,19 +910,6 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             >>> mc_logits = outputs.mc_logits
 
         """
-        if "lm_labels" in kwargs:
-            warnings.warn(
-                "The `lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
-                FutureWarning,
-            )
-            labels = kwargs.pop("lm_labels")
-        if "past" in kwargs:
-            warnings.warn(
-                "The `past` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = kwargs.pop("past")
-        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_outputs = self.transformer(

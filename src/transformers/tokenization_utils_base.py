@@ -1533,18 +1533,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         super().__init__(**kwargs)
 
     @property
-    def max_len(self) -> int:
-        """
-        :obj:`int`: **Deprecated** Kept here for backward compatibility. Now renamed to :obj:`model_max_length` to
-        avoid ambiguity.
-        """
-        warnings.warn(
-            "The `max_len` attribute has been deprecated and will be removed in a future version, use `model_max_length` instead.",
-            FutureWarning,
-        )
-        return self.model_max_length
-
-    @property
     def max_len_single_sentence(self) -> int:
         """
         :obj:`int`: The maximum length of a sentence that can be fed to the model.
@@ -2784,15 +2772,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 Tokenized input ids of the second sequence. Can be obtained from a string by chaining the ``tokenize``
                 and ``convert_tokens_to_ids`` methods.
         """
-
-        if "return_lengths" in kwargs:
-            if verbose:
-                warnings.warn(
-                    "The PreTrainedTokenizerBase.prepare_for_model `return_lengths` parameter is deprecated. "
-                    "Please use `return_length` instead.",
-                    FutureWarning,
-                )
-            return_length = kwargs["return_lengths"]
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
