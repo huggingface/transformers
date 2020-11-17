@@ -17,10 +17,9 @@
 import unittest
 
 from transformers import BarthezTokenizer, BatchEncoding
-from transformers.testing_utils import _torch_available, require_sentencepiece, require_tokenizers, require_torch
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch
 
 from .test_tokenization_common import TokenizerTesterMixin
-
 
 
 @require_tokenizers
