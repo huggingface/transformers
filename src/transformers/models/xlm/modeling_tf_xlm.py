@@ -50,6 +50,7 @@ from ...modeling_tf_utils import (
     input_processing,
     keras_serializable,
     shape_list,
+    input_processing,
 )
 from ...utils import logging
 from .configuration_xlm import XLMConfig
@@ -951,6 +952,22 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
             training=training,
             kwargs_call=kwargs,
         )
+        transformer_outputs = self.transformer(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            langs=inputs["langs"],
+            token_type_ids=inputs["token_type_ids"],
+            position_ids=inputs["position_ids"],
+            lengths=inputs["lengths"],
+            cache=inputs["cache"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
         transformer_outputs = self.transformer(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
