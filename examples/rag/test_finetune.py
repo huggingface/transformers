@@ -26,10 +26,6 @@ class RagFinetuneExampleTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         data_dir = Path(__file__).parent / "test_data" / "dummy_seq2seq"
         data_dir = str(data_dir.resolve())
-        # Note:
-        # We use the ddp_spawn backend here because of a memory issue with ddp.
-        # Indeed ddp doesn't seem to always unload models between fit and test (as of pl 1.0.6)
-        # which causes memory to fill up.
         testargs = f"""
             finetune.py \
                 --data_dir {data_dir} \
@@ -59,7 +55,6 @@ class RagFinetuneExampleTests(TestCasePlus):
                 --gradient_accumulation_steps 1 \
                 --distributed-port 8888 \
                 --use_dummy_dataset 1 \
-                --accelerator ddp_spawn
             """.split()
 
         if gpus > 0:
@@ -77,21 +72,10 @@ class RagFinetuneExampleTests(TestCasePlus):
 
     @require_torch_gpu
     def test_finetune_gpu(self):
-        import json
-
         result = self._run_finetune(gpus=1)
-        print(result)
-        open("out.txt", "w").write(json.dumps(result))
         self.assertGreaterEqual(result["test_em"], 0.2)
 
     @require_torch_multigpu
     def test_finetune_multigpu(self):
-        import json
-
-        import filelock
-
-        filelock.logger().setLevel(level=logging.ERROR)
-
         result = self._run_finetune(gpus=2)
-        open("out.txt", "w").write(json.dumps(result))
         self.assertGreaterEqual(result["test_em"], 0.2)
