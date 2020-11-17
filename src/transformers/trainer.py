@@ -213,8 +213,6 @@ class Trainer:
             containing the optimizer and the scheduler to use. Will default to an instance of
             :class:`~transformers.AdamW` on your model and a scheduler given by
             :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
-        kwargs:
-            Deprecated keyword arguments.
     """
 
     def __init__(
@@ -229,7 +227,6 @@ class Trainer:
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         callbacks: Optional[List[TrainerCallback]] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
-        **kwargs,
     ):
         if args is None:
             logger.info("No `TrainingArguments` passed, using the current path as `output_dir`.")
@@ -262,27 +259,6 @@ class Trainer:
         self.callback_handler = CallbackHandler(callbacks, self.model, self.optimizer, self.lr_scheduler)
         self.add_callback(PrinterCallback if self.args.disable_tqdm else DEFAULT_PROGRESS_CALLBACK)
 
-        # Deprecated arguments
-        if "tb_writer" in kwargs:
-            warnings.warn(
-                "Passing `tb_writer` as a keyword argument is deprecated and won't be possible in a "
-                + "future version. Use `TensorBoardCallback(tb_writer=...)` instead and pass it to the `callbacks`"
-                + "argument",
-                FutureWarning,
-            )
-            tb_writer = kwargs.pop("tb_writer")
-            self.remove_callback(TensorBoardCallback)
-            self.add_callback(TensorBoardCallback(tb_writer=tb_writer))
-        if "prediction_loss_only" in kwargs:
-            warnings.warn(
-                "Passing `prediction_loss_only` as a keyword argument is deprecated and won't be possible in a "
-                + "future version. Use `args.prediction_loss_only` instead. Setting "
-                + f"`args.prediction_loss_only={kwargs['prediction_loss_only']}",
-                FutureWarning,
-            )
-            self.args.prediction_loss_only = kwargs.pop("prediction_loss_only")
-        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
-
         # Will be set to True by `self._setup_loggers()` on first call to `self.log()`.
         self._loggers_initialized = False
 
@@ -294,14 +270,7 @@ class Trainer:
             # We'll find a more elegant and not need to do this in the future.
             self.model.config.xla_device = True
         if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
-            self.data_collator = self.data_collator.collate_batch
-            warnings.warn(
-                (
-                    "The `data_collator` should now be a simple callable (function, class with `__call__`), classes "
-                    + "with a `collate_batch` are deprecated and won't be supported in a future version."
-                ),
-                FutureWarning,
-            )
+            raise ValueError("The `data_collator` should be a simple callable (function, class with `__call__`).")
 
         if args.max_steps > 0:
             logger.info("max_steps is given, it will override any value given in num_train_epochs")
@@ -1050,12 +1019,6 @@ class Trainer:
             logs (:obj:`Dict[str, float]`):
                 The values to log.
         """
-        if hasattr(self, "_log"):
-            warnings.warn(
-                "The `_log` method is deprecated and won't be called in a future version, define `log` in your subclass.",
-                FutureWarning,
-            )
-            return self._log(logs)
         if self.state.epoch is not None:
             logs["epoch"] = self.state.epoch
 
@@ -1095,12 +1058,6 @@ class Trainer:
         Return:
             :obj:`torch.Tensor`: The tensor with training loss on this batch.
         """
-        if hasattr(self, "_training_step"):
-            warnings.warn(
-                "The `_training_step` method is deprecated and won't be called in a future version, define `training_step` in your subclass.",
-                FutureWarning,
-            )
-            return self._training_step(model, inputs, self.optimizer)
 
         model.train()
         inputs = self._prepare_inputs(inputs)
@@ -1140,18 +1097,6 @@ class Trainer:
         # We don't use .loss here since the model may return tuples instead of ModelOutput.
         return outputs[0]
 
-    def is_local_master(self) -> bool:
-        """
-        Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on several
-        machines) main process.
-
-        .. warning::
-
-            This method is deprecated, use :meth:`~transformers.Trainer.is_local_process_zero` instead.
-        """
-        warnings.warn("This method is deprecated, use `Trainer.is_local_process_zero()` instead.", FutureWarning)
-        return self.is_local_process_zero()
-
     def is_local_process_zero(self) -> bool:
         """
         Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on several
@@ -1161,18 +1106,6 @@ class Trainer:
             return xm.is_master_ordinal(local=True)
         else:
             return self.args.local_rank in [-1, 0]
-
-    def is_world_master(self) -> bool:
-        """
-        Whether or not this process is the global main process (when training in a distributed fashion on several
-        machines, this is only going to be :obj:`True` for one process).
-
-        .. warning::
-
-            This method is deprecated, use :meth:`~transformers.Trainer.is_world_process_zero` instead.
-        """
-        warnings.warn("This method is deprecated, use `Trainer.is_world_process_zero()` instead.", FutureWarning)
-        return self.is_world_process_zero()
 
     def is_world_process_zero(self) -> bool:
         """
@@ -1362,13 +1295,6 @@ class Trainer:
 
         Works both with or without labels.
         """
-        if hasattr(self, "_prediction_loop"):
-            warnings.warn(
-                "The `_prediction_loop` method is deprecated and won't be called in a future version, define `prediction_loop` in your subclass.",
-                FutureWarning,
-            )
-            return self._prediction_loop(dataloader, description, prediction_loss_only=prediction_loss_only)
-
         if not isinstance(dataloader.dataset, collections.abc.Sized):
             raise ValueError("dataset must implement __len__")
         prediction_loss_only = (
