@@ -18,7 +18,6 @@
 
 from dataclasses import dataclass
 from typing import Optional, Tuple
-import warnings
 
 import tensorflow as tf
 
@@ -784,7 +783,6 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
-
         outputs = self.albert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
