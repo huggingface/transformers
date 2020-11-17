@@ -54,13 +54,6 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
     expected_check_keys = ["sequence"]
 
     @require_torch
-    def test_torch_topk_deprecation(self):
-        # At pipeline initialization only it was not enabled at pipeline
-        # call site before
-        with pytest.warns(FutureWarning, match=r".*use `top_k`.*"):
-            pipeline(task="fill-mask", model=self.small_models[0], topk=1)
-
-    @require_torch
     def test_torch_fill_mask(self):
         valid_inputs = "My name is <mask>"
         nlp = pipeline(task="fill-mask", model=self.small_models[0])

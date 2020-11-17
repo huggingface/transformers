@@ -246,12 +246,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Returns:
             :obj:`List[str]`: The list of tokens.
         """
-        if "is_pretokenized" in kwargs:
-            warnings.warn(
-                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
-                FutureWarning,
-            )
-            kwargs["is_split_into_words"] = kwargs.pop("is_pretokenized")
         # Simple mapping string => AddedToken for special tokens with specific tokenization behaviors
         all_special_tokens_extended = dict(
             (str(t), t) for t in self.all_special_tokens_extended if isinstance(t, AddedToken)
@@ -448,12 +442,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 "https://github.com/huggingface/transformers/pull/2674"
             )
 
-        if "is_pretokenized" in kwargs:
-            warnings.warn(
-                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
-                FutureWarning,
-            )
-            is_split_into_words = kwargs.pop("is_pretokenized")
 
         first_ids = get_input_ids(text)
         second_ids = get_input_ids(text_pair) if text_pair is not None else None
@@ -529,13 +517,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 "To use this feature, change your tokenizer to one deriving from "
                 "transformers.PreTrainedTokenizerFast."
             )
-
-        if "is_pretokenized" in kwargs:
-            warnings.warn(
-                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
-                FutureWarning,
-            )
-            is_split_into_words = kwargs.pop("is_pretokenized")
 
         input_ids = []
         for ids_or_pair_ids in batch_text_or_text_pairs:

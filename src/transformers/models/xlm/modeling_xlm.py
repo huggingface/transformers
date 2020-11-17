@@ -1228,10 +1228,9 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
         )
 
         if lengths is not None:
-            warnings.warn(
+            logger.warn(
                 "The `lengths` parameter cannot be used with the XLM multiple choice models. Please use the "
-                "attention mask instead.",
-                FutureWarning,
+                "attention mask instead."
             )
             lengths = None
 
