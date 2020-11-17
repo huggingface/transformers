@@ -670,6 +670,13 @@ class TrainerIntegrationTest(unittest.TestCase):
         train_output = trainer.train()
         self.assertEqual(train_output.global_step, int(self.n_epochs))
 
+        # early stopping stops training early
+        trainer = get_regression_trainer(
+            train_len=512, per_device_train_batch_size=16, gradient_accumulation_steps=5, early_stopping_patience=1
+        )
+        train_output = trainer.train()
+        self.assertLess(train_output.global_step, int(self.n_epochs))
+
     def test_flos_extraction(self):
         trainer = get_regression_trainer(learning_rate=0.1)
 
