@@ -707,6 +707,7 @@ class FSMTDecoder(nn.Module):
 
         # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         if output_hidden_states:
+            all_hidden_states += (x,)
             all_hidden_states = tuple(hidden_state.transpose(0, 1) for hidden_state in all_hidden_states)
         x = x.transpose(0, 1)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
