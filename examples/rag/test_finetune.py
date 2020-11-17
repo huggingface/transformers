@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from transformers.file_utils import is_apex_available
-from transformers.testing_utils import TestCasePlus, require_torch_gpu, require_torch_multigpu
+from transformers.testing_utils import TestCasePlus, require_torch_gpu, require_torch_multi_gpu
 
 
 sys.path.append(str(Path(__file__).parent.resolve()))
@@ -72,7 +72,7 @@ class RagFinetuneExampleTests(TestCasePlus):
         result = self._run_finetune(gpus=1)
         self.assertGreaterEqual(result["test_em"], 0.2)
 
-    @require_torch_multigpu
+    @require_torch_multi_gpu
     def test_finetune_multigpu(self):
         result = self._run_finetune(gpus=2)
         self.assertGreaterEqual(result["test_em"], 0.2)
