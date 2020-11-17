@@ -9,7 +9,7 @@ from torch.utils.data.dataset import Dataset
 
 from filelock import FileLock
 
-from ...modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
+from ...models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 from ..processors.squad import SquadFeatures, SquadV1Processor, SquadV2Processor, squad_convert_examples_to_features

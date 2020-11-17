@@ -172,6 +172,28 @@ def top_k_top_p_filtering(*args, **kwargs):
     requires_pytorch(top_k_top_p_filtering)
 
 
+class Conv1D:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class PreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+def apply_chunking_to_forward(*args, **kwargs):
+    requires_pytorch(apply_chunking_to_forward)
+
+
+def prune_layer(*args, **kwargs):
+    requires_pytorch(prune_layer)
+
+
 ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -1747,28 +1769,6 @@ class TransfoXLPreTrainedModel:
 
 def load_tf_weights_in_transfo_xl(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_transfo_xl)
-
-
-class Conv1D:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
-class PreTrainedModel:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
-def apply_chunking_to_forward(*args, **kwargs):
-    requires_pytorch(apply_chunking_to_forward)
-
-
-def prune_layer(*args, **kwargs):
-    requires_pytorch(prune_layer)
 
 
 XLM_PRETRAINED_MODEL_ARCHIVE_LIST = None

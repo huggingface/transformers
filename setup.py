@@ -42,6 +42,8 @@ To create the package for pypi.
 8. Add the release version to docs/source/_static/js/custom.js and .circleci/deploy.sh
 
 9. Update README.md to redirect to correct documentation.
+
+10. Update the version in __init__.py, setup.py to the new version "-dev" and push to master.
 """
 
 import os
@@ -96,14 +98,15 @@ else:
     extras["retrieval"] = ["faiss-cpu", "datasets"]
     extras["flax"] = ["jaxlib==0.1.55", "jax>=0.2.0", "flax==0.2.2"]
 
-extras["tokenizers"] = ["tokenizers==0.9.2"]
+extras["tokenizers"] = ["tokenizers==0.9.4"]
 extras["onnxruntime"] = ["onnxruntime>=1.4.0", "onnxruntime-tools>=1.4.2"]
+extras["modelcreation"] = ["cookiecutter==1.7.2"]
 
 extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
 
-extras["sentencepiece"] = ["sentencepiece==0.1.91"]
+extras["sentencepiece"] = ["sentencepiece==0.1.91", "protobuf"]
 extras["retrieval"] = ["faiss-cpu", "datasets"]
-extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil"] + extras["retrieval"]
+extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil"] + extras["retrieval"] + extras["modelcreation"]
 # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
 extras["docs"] = ["recommonmark", "sphinx==3.2.1", "sphinx-markdown-tables", "sphinx-rtd-theme==0.4.3", "sphinx-copybutton"]
 extras["quality"] = ["black >= 20.8b1", "isort >= 5.5.4", "flake8 >= 3.8.3"]
@@ -111,12 +114,12 @@ extras["quality"] = ["black >= 20.8b1", "isort >= 5.5.4", "flake8 >= 3.8.3"]
 
 extras["all"] = extras["tf"] + extras["torch"] + extras["flax"] + extras["sentencepiece"] + extras["tokenizers"]
 
-extras["dev"] = extras["all"] + extras["testing"] + extras["quality"] + extras["ja"] + extras["docs"] + extras["sklearn"]
+extras["dev"] = extras["all"] + extras["testing"] + extras["quality"] + extras["ja"] + extras["docs"] + extras["sklearn"] + extras["modelcreation"]
 
 
 setup(
     name="transformers",
-    version="3.5.0",
+    version="4.0.0-dev",
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
@@ -129,7 +132,7 @@ setup(
     packages=find_packages("src"),
     install_requires=[
         "numpy",
-        "tokenizers == 0.9.3",
+        "tokenizers == 0.9.4",
         # dataclasses for Python versions that don't have it
         "dataclasses;python_version<'3.7'",
         # utilities from PyPA to e.g. compare versions
@@ -142,9 +145,6 @@ setup(
         "tqdm >= 4.27",
         # for OpenAI GPT
         "regex != 2019.12.17",
-        # for SentencePiece models
-        "sentencepiece == 0.1.91",
-        "protobuf",
         # for XLM
         "sacremoses",
     ],
