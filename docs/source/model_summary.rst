@@ -560,6 +560,7 @@ A framework for translation models, using the same models as BART
 
 The library provides a version of this model for conditional generation.
 
+
 T5
 -----------------------------------------------------------------------------------------------------------------------
 
@@ -591,6 +592,28 @@ For instance, if we have the sentence “My dog is very cute .”, and we decide
 "cute", the encoder input becomes “My <x> very <y> .” and the target input becomes “<x> dog is <y> cute .<z>”
 
 The library provides a version of this model for conditional generation.
+
+
+MT5
+-----------------------------------------------------------------------------------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=mt5">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-mt5-blueviolet">
+   </a>
+   <a href="model_doc/mt5.html">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-mt5-blueviolet">
+   </a>
+
+`mT5: A massively multilingual pre-trained text-to-text transformer <https://arxiv.org/abs/2010.11934>`_, Linting Xue
+et al.
+
+The model architecture is same as T5. mT5's pre-training objective includes T5's self-supervised training, but not T5's
+supervised training. mT5 is trained on 101 languages.
+
+The library provides a version of this model for conditional generation.
+
 
 MBart
 -----------------------------------------------------------------------------------------------------------------------
