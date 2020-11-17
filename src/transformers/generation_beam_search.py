@@ -95,6 +95,7 @@ class BeamScorer(ABC):
     def process(
         self,
         input_ids: torch.LongTensor,
+        group_size: int,
         next_scores: torch.FloatTensor,
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
@@ -141,6 +142,13 @@ class BeamSearchScorer(BeamScorer):
         num_beam_hyps_to_keep (:obj:`int`, `optional`, defaults to 1):
             The number of beam hypotheses that shall be returned upon calling
             :meth:`~transformer.BeamSearchScorer.finalize`.
+        beam_groups (:obj:`int`, `optional`, defaults to 1):
+            Number of groups to divide :obj:`num_beams` into in order to ensure diversity among different groups
+            of beams. See `this paper
+            <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
+        diversity_penalty (:obj:`float`, `optional`, defaults to 0.0):
+            This value is subtracted from a beam's score if it generates a token same as any beam from other group
+            at a particular time.
     """
 
     def __init__(
@@ -152,6 +160,8 @@ class BeamSearchScorer(BeamScorer):
         length_penalty: Optional[float] = 1.0,
         do_early_stopping: Optional[bool] = False,
         num_beam_hyps_to_keep: Optional[int] = 1,
+        beam_groups: Optional[int] = 1,
+        diversity_penalty: Optional[float] = 0.0
     ):
         self.max_length = max_length
         self.num_beams = num_beams
@@ -159,6 +169,8 @@ class BeamSearchScorer(BeamScorer):
         self.length_penalty = length_penalty
         self.do_early_stopping = do_early_stopping
         self.num_beam_hyps_to_keep = num_beam_hyps_to_keep
+        self.beam_groups = beam_groups  # when beam_groups=1 it is same as normal beam search
+        self.diversity_penalty = diversity_penalty
 
         self._is_init = False
         self._beam_hyps = [
@@ -184,6 +196,7 @@ class BeamSearchScorer(BeamScorer):
     def process(
         self,
         input_ids: torch.LongTensor,
+        group_size: int,
         next_scores: torch.FloatTensor,
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
@@ -192,12 +205,12 @@ class BeamSearchScorer(BeamScorer):
     ) -> Tuple[torch.Tensor]:
         cur_len = input_ids.shape[-1]
         batch_size = len(self._beam_hyps)
-        assert batch_size == (input_ids.shape[0] // self.num_beams)
+        assert batch_size == (input_ids.shape[0] // group_size)
 
         device = input_ids.device
-        next_beam_scores = torch.zeros((batch_size, self.num_beams), dtype=next_scores.dtype, device=device)
-        next_beam_tokens = torch.zeros((batch_size, self.num_beams), dtype=next_tokens.dtype, device=device)
-        next_beam_indices = torch.zeros((batch_size, self.num_beams), dtype=next_indices.dtype, device=device)
+        next_beam_scores = torch.zeros((batch_size, group_size), dtype=next_scores.dtype, device=device)
+        next_beam_tokens = torch.zeros((batch_size, group_size), dtype=next_tokens.dtype, device=device)
+        next_beam_indices = torch.zeros((batch_size, group_size), dtype=next_indices.dtype, device=device)
 
         for batch_idx, beam_hyp in enumerate(self._beam_hyps):
             if self._done[batch_idx]:
@@ -218,11 +231,11 @@ class BeamSearchScorer(BeamScorer):
             for beam_token_rank, (next_token, next_score, next_index) in enumerate(
                 zip(next_tokens[batch_idx], next_scores[batch_idx], next_indices[batch_idx])
             ):
-                batch_beam_idx = batch_idx * self.num_beams + next_index
+                batch_beam_idx = batch_idx * group_size + next_index
                 # add to generated hypotheses if end of sentence
                 if (eos_token_id is not None) and (next_token.item() == eos_token_id):
                     # if beam_token does not belong to top num_beams tokens, it should not be added
-                    is_beam_token_worse_than_top_num_beams = beam_token_rank >= self.num_beams
+                    is_beam_token_worse_than_top_num_beams = beam_token_rank >= group_size
                     if is_beam_token_worse_than_top_num_beams:
                         continue
                     beam_hyp.add(
@@ -237,12 +250,12 @@ class BeamSearchScorer(BeamScorer):
                     beam_idx += 1
 
                 # once the beam for next step is full, don't add more tokens to it.
-                if beam_idx == self.num_beams:
+                if beam_idx == group_size:
                     break
 
-            if beam_idx < self.num_beams:
+            if beam_idx < group_size:
                 raise ValueError(
-                    f"At most {self.num_beams} tokens in {next_tokens[batch_idx]} can be equal to `eos_token_id: {eos_token_id}`. Make sure {next_tokens[batch_idx]} are corrected."
+                    f"At most {group_size} tokens in {next_tokens[batch_idx]} can be equal to `eos_token_id: {eos_token_id}`. Make sure {next_tokens[batch_idx]} are corrected."
                 )
 
             # Check if we are done so that we can save a pad step if all(done)
@@ -268,16 +281,19 @@ class BeamSearchScorer(BeamScorer):
         eos_token_id: Optional[int] = None,
     ) -> torch.LongTensor:
         batch_size = len(self._beam_hyps)
+        final_beam_scores = final_beam_scores.view((batch_size, self.num_beams))
 
         # finalize all open beam hypotheses and add to generated hypotheses
         for batch_idx, beam_hyp in enumerate(self._beam_hyps):
             if self._done[batch_idx]:
                 continue
 
+            batch_beam_scores = final_beam_scores[batch_idx, :]
+            _, beam_ids = torch.sort(batch_beam_scores, descending=True)
             # need to add best num_beams hypotheses to generated hyps
-            for beam_id in range(self.num_beams):
-                batch_beam_idx = batch_idx * self.num_beams + beam_id
-                final_score = final_beam_scores[batch_beam_idx].item()
+            for beam_id in beam_ids:
+                batch_beam_idx = batch_idx * self.num_beams + beam_id.item()
+                final_score = batch_beam_scores[beam_id.item()].item()
                 final_tokens = input_ids[batch_beam_idx]
                 beam_hyp.add(final_tokens, final_score)
 
