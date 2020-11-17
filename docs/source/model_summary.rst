@@ -606,9 +606,11 @@ MT5
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-mt5-blueviolet">
    </a>
 
-`mT5: A massively multilingual pre-trained text-to-text transformer <https://arxiv.org/abs/2010.11934>`_, Linting Xue et al.
+`mT5: A massively multilingual pre-trained text-to-text transformer <https://arxiv.org/abs/2010.11934>`_, Linting Xue
+et al.
 
-The model architecture is same as T5. mT5's pre-training objective includes T5's self-supervised training, but not T5's supervised training. mT5 is trained on 101 languages.
+The model architecture is same as T5. mT5's pre-training objective includes T5's self-supervised training, but not T5's
+supervised training. mT5 is trained on 101 languages.
 
 The library provides a version of this model for conditional generation.
 
