@@ -1,10 +1,7 @@
 import logging
-import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
-
-import torch
 
 from transformers.file_utils import is_apex_available
 from transformers.testing_utils import TestCasePlus, require_torch_gpu, require_torch_multigpu

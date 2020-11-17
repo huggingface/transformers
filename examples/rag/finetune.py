@@ -1,7 +1,6 @@
 """Finetuning script for RAG models. Adapted from examples.seq2seq.finetune.py"""
 
 import argparse
-import glob
 import logging
 import os
 import sys
