@@ -256,7 +256,6 @@ def load_tf_weights(model, resolved_archive_file):
     with h5py.File(resolved_archive_file, "r") as f:
         # Retrieve the name of each layer from the H5 file
         saved_h5_model_layers_name = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
-        model_layers_name_value = {}
 
         # Retrieve the name of each layer from the instantiated model
         # make it a dict that looks like {"layer_name": Layer object}
