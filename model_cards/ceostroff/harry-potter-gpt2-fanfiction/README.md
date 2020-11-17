@@ -2,12 +2,7 @@
 language: 
 - en
 tags:
-- pytorch
-- gpt2
 - harry-potter
-- casual-lm
-- lm-head
-- pipeline:text-generation
 license: MIT
 ---
 
