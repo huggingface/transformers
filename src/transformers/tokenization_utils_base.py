@@ -1726,7 +1726,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 # Look for the tokenizer files
                 for file_id, file_name in {**cls.vocab_files_names, **additional_files_names}.items():
                     if os.path.isdir(pretrained_model_name_or_path):
-                        full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
+                        if subfolder is not None:
+                            full_file_name = os.path.join(pretrained_model_name_or_path, subfolder, file_name)
+                        else:
+                            full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
                         if not os.path.exists(full_file_name):
                             logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
                             full_file_name = None
