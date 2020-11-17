@@ -1809,7 +1809,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
             smooth_loss = -lprobs.sum(dim=-1, keepdim=True)
             non_masked_tokens = expend_targets.ne(-100).view(-1)
             smooth_loss = smooth_loss[non_masked_tokens]
-            smooth_loss = smooth_loss.sum()
+            smooth_loss = smooth_loss.mean()
 
             eps_i = self.config.eps / lprobs.size(-1)
             loss = (1.0 - self.config.eps) * loss + eps_i * smooth_loss
@@ -2026,7 +2026,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
             smooth_loss = -lprobs.sum(dim=-1, keepdim=True)
             non_masked_tokens = expend_targets.ne(-100).view(-1)
             smooth_loss = smooth_loss[non_masked_tokens]
-            smooth_loss = smooth_loss.sum()
+            smooth_loss = smooth_loss.mean()
 
             eps_i = self.config.eps / lprobs.size(-1)
             loss = (1.0 - self.config.eps) * loss + eps_i * smooth_loss
