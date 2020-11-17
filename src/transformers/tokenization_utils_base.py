@@ -1653,10 +1653,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         Examples::
 
             # We can't instantiate directly the base class `PreTrainedTokenizerBase` so let's show our examples on a derived class: BertTokenizer
-            # Download vocabulary from S3 and cache.
+            # Download vocabulary from huggingface.co and cache.
             tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
-            # Download vocabulary from S3 (user-uploaded) and cache.
+            # Download vocabulary from huggingface.co (user-uploaded) and cache.
             tokenizer = BertTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
 
             # If vocabulary files are in a directory (e.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`)

@@ -603,7 +603,7 @@ class AutoModel:
         Examples::
 
             >>> from transformers import AutoConfig, AutoModel
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
             >>> model = AutoModel.from_config(config)
         """
@@ -629,7 +629,7 @@ class AutoModel:
 
             >>> from transformers import AutoConfig, AutoModel
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = AutoModel.from_pretrained('bert-base-uncased')
 
             >>> # Update configuration during loading
@@ -697,7 +697,7 @@ class AutoModelForPreTraining:
         Examples::
 
             >>> from transformers import AutoConfig, AutoModelForPreTraining
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
             >>> model = AutoModelForPreTraining.from_config(config)
         """
@@ -723,7 +723,7 @@ class AutoModelForPreTraining:
 
             >>> from transformers import AutoConfig, AutoModelForPreTraining
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = AutoModelForPreTraining.from_pretrained('bert-base-uncased')
 
             >>> # Update configuration during loading
@@ -797,7 +797,7 @@ class AutoModelWithLMHead:
         Examples::
 
             >>> from transformers import AutoConfig, AutoModelWithLMHead
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
             >>> model = AutoModelWithLMHead.from_config(config)
         """
@@ -829,7 +829,7 @@ class AutoModelWithLMHead:
 
             >>> from transformers import AutoConfig, AutoModelWithLMHead
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = AutoModelWithLMHead.from_pretrained('bert-base-uncased')
 
             >>> # Update configuration during loading
@@ -903,7 +903,7 @@ class AutoModelForCausalLM:
         Examples::
 
             >>> from transformers import AutoConfig, AutoModelForCausalLM
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('gpt2')
             >>> model = AutoModelForCausalLM.from_config(config)
         """
@@ -929,7 +929,7 @@ class AutoModelForCausalLM:
 
             >>> from transformers import AutoConfig, AutoModelForCausalLM
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = AutoModelForCausalLM.from_pretrained('gpt2')
 
             >>> # Update configuration during loading
@@ -997,7 +997,7 @@ class AutoModelForMaskedLM:
         Examples::
 
             >>> from transformers import AutoConfig, AutoModelForMaskedLM
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
             >>> model = AutoModelForMaskedLM.from_config(config)
         """
@@ -1023,7 +1023,7 @@ class AutoModelForMaskedLM:
 
             >>> from transformers import AutoConfig, AutoModelForMaskedLM
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = AutoModelForMaskedLM.from_pretrained('bert-base-uncased')
 
             >>> # Update configuration during loading
@@ -1091,7 +1091,7 @@ class AutoModelForSeq2SeqLM:
         Examples::
 
             >>> from transformers import AutoConfig, AutoModelForSeq2SeqLM
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('t5')
             >>> model = AutoModelForSeq2SeqLM.from_config(config)
         """
@@ -1119,7 +1119,7 @@ class AutoModelForSeq2SeqLM:
 
             >>> from transformers import AutoConfig, AutoModelForSeq2SeqLM
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = AutoModelForSeq2SeqLM.from_pretrained('t5-base')
 
             >>> # Update configuration during loading
@@ -1189,7 +1189,7 @@ class AutoModelForSequenceClassification:
         Examples::
 
             >>> from transformers import AutoConfig, AutoModelForSequenceClassification
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
             >>> model = AutoModelForSequenceClassification.from_config(config)
         """
@@ -1217,7 +1217,7 @@ class AutoModelForSequenceClassification:
 
             >>> from transformers import AutoConfig, AutoModelForSequenceClassification
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = AutoModelForSequenceClassification.from_pretrained('bert-base-uncased')
 
             >>> # Update configuration during loading
@@ -1286,7 +1286,7 @@ class AutoModelForQuestionAnswering:
         Examples::
 
             >>> from transformers import AutoConfig, AutoModelForQuestionAnswering
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
             >>> model = AutoModelForQuestionAnswering.from_config(config)
         """
@@ -1315,7 +1315,7 @@ class AutoModelForQuestionAnswering:
 
             >>> from transformers import AutoConfig, AutoModelForQuestionAnswering
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = AutoModelForQuestionAnswering.from_pretrained('bert-base-uncased')
 
             >>> # Update configuration during loading
@@ -1385,7 +1385,7 @@ class AutoModelForTokenClassification:
         Examples::
 
             >>> from transformers import AutoConfig, AutoModelForTokenClassification
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
             >>> model = AutoModelForTokenClassification.from_config(config)
         """
@@ -1414,7 +1414,7 @@ class AutoModelForTokenClassification:
 
             >>> from transformers import AutoConfig, AutoModelForTokenClassification
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = AutoModelForTokenClassification.from_pretrained('bert-base-uncased')
 
             >>> # Update configuration during loading
@@ -1485,7 +1485,7 @@ class AutoModelForMultipleChoice:
         Examples::
 
             >>> from transformers import AutoConfig, AutoModelForMultipleChoice
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
             >>> model = AutoModelForMultipleChoice.from_config(config)
         """
@@ -1514,7 +1514,7 @@ class AutoModelForMultipleChoice:
 
             >>> from transformers import AutoConfig, AutoModelForMultipleChoice
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = AutoModelForMultipleChoice.from_pretrained('bert-base-uncased')
 
             >>> # Update configuration during loading
@@ -1585,7 +1585,7 @@ class AutoModelForNextSentencePrediction:
         Examples::
 
             >>> from transformers import AutoConfig, AutoModelForNextSentencePrediction
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
             >>> model = AutoModelForNextSentencePrediction.from_config(config)
         """
@@ -1614,7 +1614,7 @@ class AutoModelForNextSentencePrediction:
 
             >>> from transformers import AutoConfig, AutoModelForNextSentencePrediction
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = AutoModelForNextSentencePrediction.from_pretrained('bert-base-uncased')
 
             >>> # Update configuration during loading

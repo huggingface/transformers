@@ -332,7 +332,7 @@ class PretrainedConfig(object):
 
             # We can't instantiate directly the base class `PretrainedConfig` so let's show the examples on a
             # derived class: BertConfig
-            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
+            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from huggingface.co and cache.
             config = BertConfig.from_pretrained('./test/saved_model/')  # E.g. config (or model) was saved using `save_pretrained('./test/saved_model/')`
             config = BertConfig.from_pretrained('./test/saved_model/my_configuration.json')
             config = BertConfig.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)

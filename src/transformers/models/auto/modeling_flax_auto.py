@@ -75,7 +75,7 @@ class FlaxAutoModel(object):
         Examples::
 
             config = BertConfig.from_pretrained('bert-base-uncased')
-            # Download configuration from S3 and cache.
+            # Download configuration from huggingface.co and cache.
             model = FlaxAutoModel.from_config(config)
             # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
@@ -164,7 +164,7 @@ class FlaxAutoModel(object):
 
         Examples::
 
-            model = FlaxAutoModel.from_pretrained('bert-base-uncased')    # Download model and configuration from S3 and cache.
+            model = FlaxAutoModel.from_pretrained('bert-base-uncased')    # Download model and configuration from huggingface.co and cache.
             model = FlaxAutoModel.from_pretrained('./test/bert_model/')  # E.g. model was saved using `save_pretrained('./test/saved_model/')`
             assert model.config.output_attention == True
 

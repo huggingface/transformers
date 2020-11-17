@@ -313,10 +313,10 @@ class AutoConfig:
 
             >>> from transformers import AutoConfig
 
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
 
-            >>> # Download configuration from S3 (user-uploaded) and cache.
+            >>> # Download configuration from huggingface.co (user-uploaded) and cache.
             >>> config = AutoConfig.from_pretrained('dbmdz/bert-base-german-cased')
 
             >>> # If configuration file is in a directory (e.g., was saved using `save_pretrained('./test/saved_model/')`).

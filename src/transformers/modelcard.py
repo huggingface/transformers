@@ -123,7 +123,7 @@ class ModelCard:
 
         Examples::
 
-            modelcard = ModelCard.from_pretrained('bert-base-uncased')    # Download model card from S3 and cache.
+            modelcard = ModelCard.from_pretrained('bert-base-uncased')    # Download model card from huggingface.co and cache.
             modelcard = ModelCard.from_pretrained('./test/saved_model/')  # E.g. model card was saved using `save_pretrained('./test/saved_model/')`
             modelcard = ModelCard.from_pretrained('./test/saved_model/modelcard.json')
             modelcard = ModelCard.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
