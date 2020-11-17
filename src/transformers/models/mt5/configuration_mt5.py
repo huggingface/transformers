@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2010, The T5 Authors and HuggingFace Inc.
+# Copyright 2020, The T5 Authors and HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -59,8 +59,7 @@ class MT5Config(PretrainedConfig):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
         feed_forward_proj (:obj:`string`, `optional`, defaults to :obj:`"gated-gelu"`):
-            Type of feed forward layer to be used. Should be one of :obj:`"relu"` or :obj:`"gated-gelu"`. T5v1.1 and
-            mT5 use the :obj:`"gated-gelu"` feed forward projection. Original T5 uses :obj:`"relu"`.
+            Type of feed forward layer to be used. Should be one of :obj:`"relu"` or :obj:`"gated-gelu"`.
     """
     model_type = "mt5"
 

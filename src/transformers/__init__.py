@@ -499,6 +499,15 @@ if is_torch_available():
         load_tf_weights_in_mobilebert,
     )
     from .models.mt5 import MT5Config, MT5ForConditionalGeneration, MT5Model
+    from .models.openai import (
+        OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        OpenAIGPTDoubleHeadsModel,
+        OpenAIGPTForSequenceClassification,
+        OpenAIGPTLMHeadModel,
+        OpenAIGPTModel,
+        OpenAIGPTPreTrainedModel,
+        load_tf_weights_in_openai_gpt,
+    )
     from .models.pegasus import PegasusForConditionalGeneration
     from .models.prophetnet import (
         PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -783,6 +792,7 @@ if is_tf_available():
         TFMobileBertModel,
         TFMobileBertPreTrainedModel,
     )
+    from .models.mt5 import TFMT5ForConditionalGeneration, TFMT5Model
     from .models.openai import (
         TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFOpenAIGPTDoubleHeadsModel,

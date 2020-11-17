@@ -12,10 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch mT5 model. """
+""" Tensorflow mT5 model. """
 
 from ...utils import logging
-from ..t5.modeling_t5 import T5ForConditionalGeneration, T5Model
+from ..t5.modeling_tf_t5 import TFT5ForConditionalGeneration, TFT5Model
 from .configuration_mt5 import MT5Config
 
 
@@ -25,56 +25,37 @@ _CONFIG_FOR_DOC = "T5Config"
 _TOKENIZER_FOR_DOC = "T5Tokenizer"
 
 
-class MT5Model(T5Model):
+class TFMT5Model(TFT5Model):
     r"""
-    This class overrides :class:`~transformers.T5Model`. Please check the superclass for the appropriate documentation
-    alongside usage examples.
+    This class overrides :class:`~transformers.TFT5Model`. Please check the superclass for the appropriate
+    documentation alongside usage examples.
 
     Examples::
-        >>> from transformers import MT5Model, T5Tokenizer
-        >>> model = MT5Model.from_pretrained("google/mt5-base")
+        >>> from transformers import TFMT5Model, T5Tokenizer
+        >>> model = TFMT5Model.from_pretrained("google/mt5-base")
         >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
         >>> article = "UN Chief Says There Is No Military Solution in Syria"
         >>> batch = tokenizer.prepare_seq2seq_batch(src_texts=[article])
-        >>> outputs = model(**batch)
+        >>> outputs = model(batch)
         >>> last_hidden_states = outputs.last_hidden_states
     """
     model_type = "mt5"
     config_class = MT5Config
-    authorized_missing_keys = [
-        r"encoder\.embed_tokens\.weight",
-        r"decoder\.embed_tokens\.weight",
-        r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
-    ]
-    keys_to_never_save = [
-        r"encoder\.embed_tokens\.weight",
-        r"decoder\.embed_tokens\.weight",
-    ]
 
 
-class MT5ForConditionalGeneration(T5ForConditionalGeneration):
+class TFMT5ForConditionalGeneration(TFT5ForConditionalGeneration):
     r"""
-    This class overrides :class:`~transformers.T5ForConditionalGeneration`. Please check the superclass for the
+    This class overrides :class:`~transformers.TFT5ForConditionalGeneration`. Please check the superclass for the
     appropriate documentation alongside usage examples.
 
     Examples::
-        >>> from transformers import MT5ForConditionalGeneration, T5Tokenizer
-        >>> model = MT5ForConditionalGeneration.from_pretrained("google/mt5-base")
+        >>> from transformers import TFMT5ForConditionalGeneration, T5Tokenizer
+        >>> model = TFMT5ForConditionalGeneration.from_pretrained("google/mt5-base")
         >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
         >>> article = "UN Chief Says There Is No Military Solution in Syria"
         >>> batch = tokenizer.prepare_seq2seq_batch(src_texts=[article])
-        >>> generated_tokens = model.generate(**batch)
+        >>> generated_tokens = model.generate(batch)
     """
 
     model_type = "mt5"
     config_class = MT5Config
-    authorized_missing_keys = [
-        r"encoder\.embed_tokens\.weight",
-        r"decoder\.embed_tokens\.weight",
-        r"lm_head\.weight",
-        r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
-    ]
-    keys_to_never_save = [
-        r"encoder\.embed_tokens\.weight",
-        r"decoder\.embed_tokens\.weight",
-    ]
