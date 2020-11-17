@@ -16,7 +16,8 @@
 
 {%- if cookiecutter.tokenizer_type == "Based on BERT" %}
 from ...utils import logging
-from ..bert.tokenization_bert import BertTokenizer, BertTokenizerFast
+from ..bert.tokenization_bert import BertTokenizer
+from ..bert.tokenization_bert_fast import BertTokenizerFast
 
 
 logger = logging.get_logger(__name__)
