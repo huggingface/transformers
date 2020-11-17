@@ -83,7 +83,7 @@ from ..{{cookiecutter.lowercase_modelname}}.configuration_{{cookiecutter.lowerca
 # Below: "# Add modeling imports here"
 # Replace with:
 
-from .{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_modelname}} import (
+from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_modelname}} import (
     {{cookiecutter.camelcase_modelname}}ForMaskedLM,
     {{cookiecutter.camelcase_modelname}}ForMultipleChoice,
     {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
