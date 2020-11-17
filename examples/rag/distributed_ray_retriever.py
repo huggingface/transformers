@@ -57,6 +57,12 @@ class RagRayDistributedRetriever(RagRetriever):
 
     def __init__(self, config, question_encoder_tokenizer,
                  generator_tokenizer, retrieval_workers, index=None):
+        if index is not None and index.is_initialized() and len(
+                retrieval_workers) > 0:
+            raise ValueError("When using Ray for distributed fine-tuning, "
+                             "you'll need to provide the paths instead, "
+                             "as the dataset and the index are loaded "
+                             "separately. More info in examples/rag/use_own_knowledge_dataset.py ")
         super().__init__(
             config, question_encoder_tokenizer=question_encoder_tokenizer,
             generator_tokenizer=generator_tokenizer, index=index,

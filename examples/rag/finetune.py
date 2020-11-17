@@ -571,8 +571,9 @@ def main(args, model=None) -> GenerativeQAModule:
                 name="retrieval_worker_{}".format(i)).remote() for i in range(
                 args.num_retrieval_workers)]
         else:
-            logger.info("Getting named actors, for NODE_RANK {}, LOCAL_RANK {}"
-                        .format(os.environ["NODE_RANK"], os.environ["LOCAL_RANK"]))
+            logger.info("Getting named actors for NODE_RANK {}, LOCAL_RANK {}"
+                        .format(os.environ["NODE_RANK"], os.environ[
+                "LOCAL_RANK"]))
             named_actors = [ray.get_actor("retrieval_worker_{}".format(i))
                             for i in range(args.num_retrieval_workers)]
     args.actor_handles = named_actors

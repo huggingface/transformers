@@ -192,6 +192,14 @@ try:
 except ImportError:
     _tokenizers_available = False
 
+try:
+    import ray # noqa: F401
+
+    _ray_available = True
+
+except ImportError:
+    _ray_available = False
+
 
 default_cache_path = os.path.join(torch_cache_home, "transformers")
 
@@ -273,6 +281,9 @@ def is_tokenizers_available():
 
 def is_in_notebook():
     return _in_notebook
+
+def is_ray_available():
+    return _ray_available
 
 
 def torch_only_method(fn):
