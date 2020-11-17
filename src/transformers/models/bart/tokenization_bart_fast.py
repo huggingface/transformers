@@ -56,7 +56,7 @@ class BartTokenizerFast(RobertaTokenizerFast):
         max_length: Optional[int] = None,
         max_target_length: Optional[int] = None,
         padding: str = "longest",
-        return_tensors: str = "None",
+        return_tensors: str = None,
         truncation=True,
         **kwargs,
     ) -> BatchEncoding:
@@ -86,7 +86,7 @@ class BartTokenizerFast(RobertaTokenizerFast):
                   maximum acceptable input length for the model if that argument is not provided.
                 * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
                   different lengths).
-            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`, defaults to "pt"):
+            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
