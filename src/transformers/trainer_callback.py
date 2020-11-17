@@ -60,6 +60,10 @@ class TrainerState:
         best_model_checkpoint (:obj:`str`, `optional`):
             When tracking the best model, the value of the name of the checkpoint for the best model encountered so
             far.
+        early_stopping_patience (:obj:`int`, `optional`):
+            The early stopping patience when evaluating the model during training.
+        early_stopping_patience_counter (:obj:`int`, `optional`):
+            The number of times validation metrics failed to improve.
         is_local_process_zero (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on
             several machines) main process.
@@ -79,6 +83,8 @@ class TrainerState:
     log_history: List[Dict[str, float]] = None
     best_metric: Optional[float] = None
     best_model_checkpoint: Optional[str] = None
+    early_stopping_patience: Optional[int] = None
+    early_stopping_patience_counter: Optional[int] = None
     is_local_process_zero: bool = True
     is_world_process_zero: bool = True
     is_hyper_param_search: bool = False
@@ -412,6 +418,13 @@ class DefaultFlowCallback(TrainerCallback):
 
         # End training
         if state.global_step >= state.max_steps:
+            control.should_training_stop = True
+
+        # End training via early stopping
+        if (
+            state.early_stopping_patience is not None
+            and state.early_sotpping_patience_counter >= state.early_stopping_patience
+        ):
             control.should_training_stop = True
 
         return control

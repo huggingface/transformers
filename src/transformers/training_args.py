@@ -180,6 +180,12 @@ class TrainingArguments:
             - :obj:`True` if :obj:`metric_for_best_model` is set to a value that isn't :obj:`"loss"` or
               :obj:`"eval_loss"`.
             - :obj:`False` if :obj:`metric_for_best_model` is not set, or set to :obj:`"loss"` or :obj:`"eval_loss"`.
+        early_stopping_patience (:obj:`int`, `optional`):
+            Use with :obj:`metric_for_best_model` to stop training if the specified metric worsens for
+            :obj:`early_stopping_patience` evaluation calls.
+        early_stopping_threshold(:obj:`float`, `optional`):
+            Use with :obj:`metric_for_best_model` and :obj:`early_stopping_patience` to denote how much the specified
+            metric must improve to satisfy early stopping conditions.
     """
 
     output_dir: str = field(
@@ -335,6 +341,13 @@ class TrainingArguments:
     )
     greater_is_better: Optional[bool] = field(
         default=None, metadata={"help": "Whether the `metric_for_best_model` should be maximized or not."}
+    )
+    early_stopping_patience: Optional[int] = field(
+        default=None, metadata={"help": "Early stopping patience, uses `metric_for_best_model`."}
+    )
+    early_stopping_threshold: Optional[float] = field(
+        default=0.0,
+        metadata={"help": "The amount `metric_for_best_model` must improve to not increment early stopping condition"},
     )
 
     def __post_init__(self):

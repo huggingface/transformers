@@ -320,6 +320,7 @@ class Trainer:
 
         self.state = TrainerState()
         self.control = TrainerControl()
+        self.state.early_stopping_patience = args.early_stopping_patience
         # Internal variable for total_flos used to count as tensors (for distributed + TPU), will be sent in the
         # state at each call to self.log.
         self._total_flos = None
@@ -919,8 +920,17 @@ class Trainer:
                 or self.state.best_model_checkpoint is None
                 or operator(metric_value, self.state.best_metric)
             ):
+                if (
+                    self.state.best_metric is not None
+                    and abs(metric_value - self.state.best_metric) > self.args.early_stopping_threshold
+                ):
+                    self.state.early_stopping_patience_counter = 0
+                else:
+                    self.state.early_stopping_patience_counter += 1
                 self.state.best_metric = metric_value
                 self.state.best_model_checkpoint = output_dir
+            else:
+                self.state.early_stopping_patience_counter += 1
 
         # Save the Trainer state
         if self.is_world_process_zero():
