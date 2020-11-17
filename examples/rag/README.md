@@ -47,6 +47,32 @@ python examples/rag/consolidate_rag_checkpoint.py \
 ```
 You will then be able to pass `path/to/checkpoint` as `model_name_or_path` to the `finetune.py` script.
 
+## Document Retrieval
+When running distributed fine-tuning, each training worker needs to retrieve contextual documents
+for its input by querying a index loaded into memory. RAG provides two implementations for document retrieval, 
+one with [`torch.distributed`](https://pytorch.org/docs/stable/distributed.html) communication package and the other 
+with [`Ray`](https://docs.ray.io/en/master/).
+
+This option can be configured with the `--distributed_retriever` flag which can either be set to `pytorch` or `ray`.
+
+For the Pytorch implementation, only training worker 0 loads the index into CPU memory, and a gather/scatter pattern is used
+to collect the inputs from the other training workers and send back the corresponding document embeddings.
+
+For the Ray implementation, the index is loaded in *separate* process(es). The training workers randomly select which 
+retriever worker to query. To configure the number of retrieval workers, you can set the `num_retrieval_workers` flag.
+
+```bash
+python examples/rag/finetune.py \
+    --data_dir $DATA_DIR \
+    --output_dir $OUTPUT_DIR \
+    --model_name_or_path $MODEL_NAME_OR_PATH \
+    --model_type rag_sequence \
+    --fp16 \
+    --gpus 8
+    --distributed_retriever ray \
+    --num_retrieval_workers 4
+```
+
 
 # Evaluation
 Our evaluation script enables two modes of evaluation (controlled by the `eval_mode` argument): `e2e` - end2end evaluation, returns EM (exact match) and F1 scores calculated for the downstream task and `retrieval` - which returns precision@k of the documents retrieved for provided inputs.

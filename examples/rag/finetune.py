@@ -20,7 +20,12 @@ import torch
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 
-import ray
+from transformers.file_utils import is_ray_available
+
+if is_ray_available():
+    import ray
+    from distributed_ray_retriever import RagRayDistributedRetriever, \
+        RayRetriever
 
 from transformers import (
     AutoConfig,
@@ -54,7 +59,6 @@ from utils import (  # noqa: E402 # isort:skip
     set_extra_model_params,
     Seq2SeqDataset,
 )
-from distributed_ray_retriever import RagRayDistributedRetriever, RayRetriever
 
 # need the parent dir module
 sys.path.insert(2, str(Path(__file__).resolve().parents[1]))
@@ -548,6 +552,9 @@ def main(args, model=None) -> GenerativeQAModule:
 
     named_actors = []
     if args.distributed_retriever == "ray" and args.gpus > 1:
+        if not is_ray_available():
+            raise RuntimeError("Please install Ray to use the Ray "
+                               "distributed retriever.")
         # Connect to an existing Ray cluster.
         try:
             ray.init(address=args.ray_address)
