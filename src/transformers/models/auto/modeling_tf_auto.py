@@ -106,6 +106,7 @@ from ..mobilebert.modeling_tf_mobilebert import (
     TFMobileBertForTokenClassification,
     TFMobileBertModel,
 )
+from ..mt5.modeling_tf_mt5 import TFMT5ForConditionalGeneration, TFMT5Model
 from ..openai.modeling_tf_openai import TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
 from ..pegasus.modeling_tf_pegasus import TFPegasusForConditionalGeneration
 from ..roberta.modeling_tf_roberta import (
@@ -161,6 +162,7 @@ from .configuration_auto import (
     MarianConfig,
     MBartConfig,
     MobileBertConfig,
+    MT5Config,
     OpenAIGPTConfig,
     PegasusConfig,
     RobertaConfig,
@@ -182,6 +184,7 @@ TF_MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
         (LxmertConfig, TFLxmertModel),
+        (MT5Config, TFMT5Model),
         (T5Config, TFT5Model),
         (DistilBertConfig, TFDistilBertModel),
         (AlbertConfig, TFAlbertModel),
@@ -294,6 +297,7 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
 TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        (MT5Config, TFMT5ForConditionalGeneration),
         (T5Config, TFT5ForConditionalGeneration),
         (MarianConfig, TFMarianMTModel),
         (MBartConfig, TFMBartForConditionalGeneration),

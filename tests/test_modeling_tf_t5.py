@@ -258,6 +258,13 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_t5_model(*config_and_inputs)
 
+    def test_t5_model_v1_1(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config = config_and_inputs[0]
+        config.tie_word_embeddings = False
+        config.feed_forward_proj = "gated-gelu"
+        self.model_tester.create_and_check_t5_model(config, *config_and_inputs[1:])
+
     def test_with_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_t5_with_lm_head(*config_and_inputs)
@@ -295,6 +302,58 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
         return TFT5ForConditionalGeneration.from_pretrained("t5-base")
+
+    @slow
+    def test_small_integration_test(self):
+        """
+        For comparision run:
+        >>> import t5  # pip install t5==0.7.1
+        >>> from t5.data.sentencepiece_vocabulary import SentencePieceVocabulary
+
+        >>> path_to_mtf_small_t5_checkpoint = '<fill_in>'
+        >>> path_to_mtf_small_spm_model_path = '<fill_in>'
+        >>> t5_model = t5.models.MtfModel(model_dir=path_to_mtf_small_t5_checkpoint, batch_size=1, tpu=None)
+        >>> vocab = SentencePieceVocabulary(path_to_mtf_small_spm_model_path, extra_ids=100)
+        >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
+        """
+
+        model = TFT5ForConditionalGeneration.from_pretrained("t5-small")
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        input_ids = tokenizer("Hello there", return_tensors="tf").input_ids
+        labels = tokenizer("Hi I am", return_tensors="tf").input_ids
+
+        loss = model(input_ids, labels=labels).loss
+        mtf_score = -tf.math.reduce_sum(loss).numpy()
+
+        EXPECTED_SCORE = -19.0845
+        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+
+    @slow
+    def test_small_v1_1_integration_test(self):
+        """
+        For comparision run:
+        >>> import t5  # pip install t5==0.7.1
+        >>> from t5.data.sentencepiece_vocabulary import SentencePieceVocabulary
+
+        >>> path_to_mtf_small_t5_v1.1_checkpoint = '<fill_in>'
+        >>> path_to_mtf_small_spm_model_path = '<fill_in>'
+        >>> t5_model = t5.models.MtfModel(model_dir=path_to_mtf_small_t5_v1.1_checkpoint, batch_size=1, tpu=None)
+        >>> vocab = SentencePieceVocabulary(path_to_mtf_small_spm_model_path, extra_ids=100)
+        >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
+        """
+
+        model = TFT5ForConditionalGeneration.from_pretrained("google/t5-v1_1-small")
+        tokenizer = T5Tokenizer.from_pretrained("google/t5-v1_1-small")
+
+        input_ids = tokenizer("Hello there", return_tensors="tf").input_ids
+        labels = tokenizer("Hi I am", return_tensors="tf").input_ids
+
+        loss = model(input_ids, labels=labels).loss
+        mtf_score = -tf.math.reduce_sum(loss).numpy()
+
+        EXPECTED_SCORE = -59.0293
+        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
     def test_summarization(self):

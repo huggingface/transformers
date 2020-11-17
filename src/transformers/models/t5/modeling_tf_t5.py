@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 T5 Authors and The HuggingFace Inc. team.
+# Copyright 2020 T5 Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,6 +26,7 @@ import tensorflow as tf
 
 from transformers.modeling_tf_utils import TFWrappedEmbeddings
 
+from ...activations_tf import get_tf_activation
 from ...file_utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -103,10 +104,35 @@ class TFT5DenseReluDense(tf.keras.layers.Layer):
         return hidden_states
 
 
+class TFT5GatedGeluDense(tf.keras.layers.Layer):
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+        self.wi_0 = tf.keras.layers.Dense(config.d_ff, use_bias=False, name="wi_0")
+        self.wi_1 = tf.keras.layers.Dense(config.d_ff, use_bias=False, name="wi_1")
+        self.wo = tf.keras.layers.Dense(config.d_model, use_bias=False, name="wo")
+        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+        self.act = get_tf_activation("gelu_new")
+
+    def call(self, hidden_states, training=False):
+        hidden_gelu = self.act(self.wi_0(hidden_states))
+        hidden_linear = self.wi_1(hidden_states)
+        hidden_states = hidden_gelu * hidden_linear
+        hidden_states = self.dropout(hidden_states, training=training)
+        hidden_states = self.wo(hidden_states)
+        return hidden_states
+
+
 class TFT5LayerFF(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.DenseReluDense = TFT5DenseReluDense(config, name="DenseReluDense")
+        if config.feed_forward_proj == "relu":
+            self.DenseReluDense = TFT5DenseReluDense(config, name="DenseReluDense")
+        elif config.feed_forward_proj == "gated-gelu":
+            self.DenseReluDense = TFT5GatedGeluDense(config, name="DenseReluDense")
+        else:
+            raise ValueError(
+                f"{self.config.feed_forward_proj} is not supported. Choose between `relu` and `gated-gelu`"
+            )
         self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
 
@@ -547,9 +573,6 @@ class TFT5MainLayer(tf.keras.layers.Layer):
     def get_input_embeddings(self):
         return self.embed_tokens
 
-    def get_output_embeddings(self):
-        return self.embed_tokens
-
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
 
@@ -970,9 +993,6 @@ class TFT5Model(TFT5PreTrainedModel):
     def get_input_embeddings(self):
         return self.shared
 
-    def get_output_embeddings(self):
-        return self.shared
-
     def set_input_embeddings(self, new_embeddings):
         self.shared.weight = new_embeddings
         self.shared.vocab_size = self.shared.weight.shape[0]
@@ -1165,11 +1185,17 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         decoder_config.is_decoder = True
         self.decoder = TFT5MainLayer(decoder_config, embed_tokens, name="decoder")
 
+        if not config.tie_word_embeddings:
+            self.lm_head = tf.keras.layers.Dense(config.vocab_size, use_bias=False, name="lm_head")
+
     def get_input_embeddings(self):
         return self.shared
 
     def get_output_embeddings(self):
-        return self.shared
+        if self.config.tie_word_embeddings:
+            return self.shared
+        else:
+            return self.lm_head
 
     def set_input_embeddings(self, new_embeddings):
         self.shared.weight = new_embeddings
@@ -1331,9 +1357,14 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             training=training,
         )
 
-        sequence_output = decoder_outputs[0] * (self.model_dim ** -0.5)
-        embed_tokens = self.get_output_embeddings()
-        logits = embed_tokens(sequence_output, mode="linear")
+        sequence_output = decoder_outputs[0]
+
+        # T5v1.1 does not tie output word embeddings and thus does not require downscaling
+        if self.config.tie_word_embeddings:
+            sequence_output = sequence_output * (self.model_dim ** -0.5)
+            logits = self.get_output_embeddings()(sequence_output, mode="linear")
+        else:
+            logits = self.get_output_embeddings()(sequence_output)
 
         loss = None if labels is None else self.compute_loss(labels, logits)
 

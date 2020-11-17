@@ -25,6 +25,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ...activations import ACT2FN
 from ...file_utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -140,6 +141,9 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
                 continue
             elif scope_names[0] == "logits":
                 pointer = getattr(pointer, "lm_head")
+            elif scope_names[0] == "wi" and len(scope_names) > 1 and scope_names[1].isdigit():
+                pointer = getattr(pointer, f"wi_{scope_names[1]}")
+                continue
             else:
                 try:
                     pointer = getattr(pointer, scope_names[0])
@@ -211,10 +215,36 @@ class T5DenseReluDense(nn.Module):
         return hidden_states
 
 
+class T5DenseGatedGeluDense(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
+        self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
+        self.dropout = nn.Dropout(config.dropout_rate)
+        self.gelu_act = ACT2FN["gelu_new"]
+
+    def forward(self, hidden_states):
+        hidden_gelu = self.gelu_act(self.wi_0(hidden_states))
+        hidden_linear = self.wi_1(hidden_states)
+        hidden_states = hidden_gelu * hidden_linear
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.wo(hidden_states)
+        return hidden_states
+
+
 class T5LayerFF(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.DenseReluDense = T5DenseReluDense(config)
+        if config.feed_forward_proj == "relu":
+            self.DenseReluDense = T5DenseReluDense(config)
+        elif config.feed_forward_proj == "gated-gelu":
+            self.DenseReluDense = T5DenseGatedGeluDense(config)
+        else:
+            raise ValueError(
+                f"{self.config.feed_forward_proj} is not supported. Choose between `relu` and `gated-gelu`"
+            )
+
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -638,6 +668,16 @@ class T5PreTrainedModel(PreTrainedModel):
             module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi, "bias") and module.wi.bias is not None:
                 module.wi.bias.data.zero_()
+            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+            if hasattr(module.wo, "bias") and module.wo.bias is not None:
+                module.wo.bias.data.zero_()
+        elif isinstance(module, T5DenseGatedGeluDense):
+            module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
+                module.wi_0.bias.data.zero_()
+            module.wi_1.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
+                module.wi_1.bias.data.zero_()
             module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
                 module.wo.bias.data.zero_()
@@ -1099,8 +1139,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         r"encoder\.embed_tokens\.weight",
         r"decoder\.embed_tokens\.weight",
         r"lm_head\.weight",
-        r"encoder\.embed_tokens\.weight",
-        r"decoder\.embed_tokens\.weight",
         r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
     ]
 
@@ -1262,9 +1300,12 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         )
 
         sequence_output = decoder_outputs[0]
-        # Rescale output before projecting on vocab
-        # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
-        sequence_output = sequence_output * (self.model_dim ** -0.5)
+
+        if self.config.tie_word_embeddings:
+            # Rescale output before projecting on vocab
+            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
+            sequence_output = sequence_output * (self.model_dim ** -0.5)
+
         lm_logits = self.lm_head(sequence_output)
 
         loss = None
