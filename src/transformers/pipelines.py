@@ -30,13 +30,13 @@ from uuid import UUID
 
 import numpy as np
 
-from .configuration_auto import AutoConfig
 from .configuration_utils import PretrainedConfig
-from .data import SquadExample, squad_convert_examples_to_features
+from .data import SquadExample, SquadFeatures, squad_convert_examples_to_features
 from .file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from .modelcard import ModelCard
-from .tokenization_auto import AutoTokenizer
-from .tokenization_bert import BasicTokenizer
+from .models.auto.configuration_auto import AutoConfig
+from .models.auto.tokenization_auto import AutoTokenizer
+from .models.bert.tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import PaddingStrategy
 from .utils import logging
@@ -45,7 +45,7 @@ from .utils import logging
 if is_tf_available():
     import tensorflow as tf
 
-    from .modeling_tf_auto import (
+    from .models.auto.modeling_tf_auto import (
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -63,7 +63,7 @@ if is_tf_available():
 if is_torch_available():
     import torch
 
-    from .modeling_auto import (
+    from .models.auto.modeling_auto import (
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
@@ -86,7 +86,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def get_framework(model):
+def get_framework(model, revision: Optional[str] = None):
     """
     Select framework (TensorFlow or PyTorch) to use.
 
@@ -103,14 +103,14 @@ def get_framework(model):
         )
     if isinstance(model, str):
         if is_torch_available() and not is_tf_available():
-            model = AutoModel.from_pretrained(model)
+            model = AutoModel.from_pretrained(model, revision=revision)
         elif is_tf_available() and not is_torch_available():
-            model = TFAutoModel.from_pretrained(model)
+            model = TFAutoModel.from_pretrained(model, revision=revision)
         else:
             try:
-                model = AutoModel.from_pretrained(model)
+                model = AutoModel.from_pretrained(model, revision=revision)
             except OSError:
-                model = TFAutoModel.from_pretrained(model)
+                model = TFAutoModel.from_pretrained(model, revision=revision)
 
     framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
     return framework
@@ -1057,12 +1057,12 @@ class ZeroShotClassificationPipeline(Pipeline):
         return -1
 
     def _parse_and_tokenize(
-        self, sequences, candidal_labels, hypothesis_template, padding=True, add_special_tokens=True, **kwargs
+        self, sequences, candidate_labels, hypothesis_template, padding=True, add_special_tokens=True, **kwargs
     ):
         """
         Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
         """
-        sequence_pairs = self._args_parser(sequences, candidal_labels, hypothesis_template)
+        sequence_pairs = self._args_parser(sequences, candidate_labels, hypothesis_template)
         inputs = self.tokenizer(
             sequence_pairs,
             add_special_tokens=add_special_tokens,
@@ -1333,18 +1333,17 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
     def __call__(self, *args, **kwargs):
 
         if args is not None and len(args) > 0:
-            if isinstance(args, str):
-                inputs = [args]
-            else:
-                inputs = args
+            inputs = list(args)
             batch_size = len(inputs)
+        else:
+            raise ValueError("At least one input is required.")
 
-        offset_mapping = kwargs.get("offset_mapping", None)
+        offset_mapping = kwargs.get("offset_mapping")
         if offset_mapping:
             if isinstance(offset_mapping, list) and isinstance(offset_mapping[0], tuple):
                 offset_mapping = [offset_mapping]
             if len(offset_mapping) != batch_size:
-                raise ("offset_mapping should have the same batch size as the input")
+                raise ValueError("offset_mapping should have the same batch size as the input")
         return inputs, offset_mapping
 
 
@@ -1379,20 +1378,19 @@ class TokenClassificationPipeline(Pipeline):
         tokenizer: PreTrainedTokenizer,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
-        args_parser: ArgumentHandler = None,
+        args_parser: ArgumentHandler = TokenClassificationArgumentHandler(),
         device: int = -1,
         binary_output: bool = False,
         ignore_labels=["O"],
         task: str = "",
         grouped_entities: bool = False,
-        ignore_subwords: bool = True,
+        ignore_subwords: bool = False,
     ):
         super().__init__(
             model=model,
             tokenizer=tokenizer,
             modelcard=modelcard,
             framework=framework,
-            args_parser=TokenClassificationArgumentHandler(),
             device=device,
             binary_output=binary_output,
             task=task,
@@ -1405,9 +1403,16 @@ class TokenClassificationPipeline(Pipeline):
         )
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
+        self._args_parser = args_parser
         self.ignore_labels = ignore_labels
         self.grouped_entities = grouped_entities
         self.ignore_subwords = ignore_subwords
+
+        if self.ignore_subwords and not self.tokenizer.is_fast:
+            raise ValueError(
+                "Slow tokenizers cannot ignore subwords. Please set the `ignore_subwords` option"
+                "to `False` or use a fast tokenizer."
+            )
 
     def __call__(self, inputs: Union[str, List[str]], **kwargs):
         """
@@ -1429,10 +1434,7 @@ class TokenClassificationPipeline(Pipeline):
               corresponding token in the sentence.
         """
 
-        if isinstance(inputs, str):
-            inputs = [inputs]
-
-        offset_mappings = kwargs.get("offset_mappings")
+        inputs, offset_mappings = self._args_parser(inputs, **kwargs)
 
         answers = []
 
@@ -1450,14 +1452,13 @@ class TokenClassificationPipeline(Pipeline):
                     return_offsets_mapping=self.tokenizer.is_fast,
                 )
                 if self.tokenizer.is_fast:
-                    offset_mapping = tokens["offset_mapping"].cpu().numpy()[0]
-                    del tokens["offset_mapping"]
+                    offset_mapping = tokens.pop("offset_mapping").cpu().numpy()[0]
                 elif offset_mappings:
                     offset_mapping = offset_mappings[i]
                 else:
-                    raise Exception("To decode [UNK] tokens use a fast tokenizer or provide offset_mapping parameter")
-                special_tokens_mask = tokens["special_tokens_mask"].cpu().numpy()[0]
-                del tokens["special_tokens_mask"]
+                    offset_mapping = None
+
+                special_tokens_mask = tokens.pop("special_tokens_mask").cpu().numpy()[0]
 
                 # Forward
                 if self.framework == "tf":
@@ -1482,14 +1483,17 @@ class TokenClassificationPipeline(Pipeline):
             ]
 
             for idx, label_idx in filtered_labels_idx:
-                start_ind, end_ind = offset_mapping[idx]
-                word_ref = sentence[start_ind:end_ind]
-                word = self.tokenizer.convert_ids_to_tokens([int(input_ids[idx])])[0]
-                is_subword = len(word_ref) != len(word)
+                if offset_mapping is not None:
+                    start_ind, end_ind = offset_mapping[idx]
+                    word_ref = sentence[start_ind:end_ind]
+                    word = self.tokenizer.convert_ids_to_tokens([int(input_ids[idx])])[0]
+                    is_subword = len(word_ref) != len(word)
 
-                if int(input_ids[idx]) == self.tokenizer.unk_token_id:
-                    word = word_ref
-                    is_subword = False
+                    if int(input_ids[idx]) == self.tokenizer.unk_token_id:
+                        word = word_ref
+                        is_subword = False
+                else:
+                    word = self.tokenizer.convert_ids_to_tokens(int(input_ids[idx]))
 
                 entity = {
                     "word": word,
@@ -1754,6 +1758,7 @@ class QuestionAnsweringPipeline(Pipeline):
             - **answer** (:obj:`str`) -- The answer to the question.
         """
         # Set defaults values
+        kwargs.setdefault("padding", "longest")
         kwargs.setdefault("topk", 1)
         kwargs.setdefault("doc_stride", 128)
         kwargs.setdefault("max_answer_len", 15)
@@ -1769,19 +1774,87 @@ class QuestionAnsweringPipeline(Pipeline):
 
         # Convert inputs to features
         examples = self._args_parser(*args, **kwargs)
-        features_list = [
-            squad_convert_examples_to_features(
-                examples=[example],
-                tokenizer=self.tokenizer,
-                max_seq_length=kwargs["max_seq_len"],
-                doc_stride=kwargs["doc_stride"],
-                max_query_length=kwargs["max_question_len"],
-                padding_strategy=PaddingStrategy.MAX_LENGTH.value,
-                is_training=False,
-                tqdm_enabled=False,
-            )
-            for example in examples
-        ]
+        if not self.tokenizer.is_fast:
+            features_list = [
+                squad_convert_examples_to_features(
+                    examples=[example],
+                    tokenizer=self.tokenizer,
+                    max_seq_length=kwargs["max_seq_len"],
+                    doc_stride=kwargs["doc_stride"],
+                    max_query_length=kwargs["max_question_len"],
+                    padding_strategy=PaddingStrategy.MAX_LENGTH.value,
+                    is_training=False,
+                    tqdm_enabled=False,
+                )
+                for example in examples
+            ]
+        else:
+            features_list = []
+            for example in examples:
+                # Define the side we want to truncate / pad and the text/pair sorting
+                question_first = bool(self.tokenizer.padding_side == "right")
+
+                encoded_inputs = self.tokenizer(
+                    text=example.question_text if question_first else example.context_text,
+                    text_pair=example.context_text if question_first else example.question_text,
+                    padding=kwargs["padding"],
+                    truncation="only_second" if question_first else "only_first",
+                    max_length=kwargs["max_seq_len"],
+                    stride=kwargs["doc_stride"],
+                    return_tensors="np",
+                    return_token_type_ids=True,
+                    return_overflowing_tokens=True,
+                    return_offsets_mapping=True,
+                    return_special_tokens_mask=True,
+                )
+
+                # When the input is too long, it's converted in a batch of inputs with overflowing tokens
+                # and a stride of overlap between the inputs. If a batch of inputs is given, a special output
+                # "overflow_to_sample_mapping" indicate which member of the encoded batch belong to which original batch sample.
+                # Here we tokenize examples one-by-one so we don't need to use "overflow_to_sample_mapping".
+                # "num_span" is the number of output samples generated from the overflowing tokens.
+                num_spans = len(encoded_inputs["input_ids"])
+
+                # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
+                # We put 0 on the tokens from the context and 1 everywhere else (question and special tokens)
+                p_mask = np.asarray(
+                    [
+                        [tok != 1 if question_first else 0 for tok in encoded_inputs.sequence_ids(span_id)]
+                        for span_id in range(num_spans)
+                    ]
+                )
+
+                # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
+                if self.tokenizer.cls_token_id:
+                    cls_index = np.nonzero(encoded_inputs["input_ids"] == self.tokenizer.cls_token_id)
+                    p_mask[cls_index] = 0
+
+                features = []
+                for span_idx in range(num_spans):
+                    features.append(
+                        SquadFeatures(
+                            input_ids=encoded_inputs["input_ids"][span_idx],
+                            attention_mask=encoded_inputs["attention_mask"][span_idx],
+                            token_type_ids=encoded_inputs["token_type_ids"][span_idx],
+                            p_mask=p_mask[span_idx].tolist(),
+                            encoding=encoded_inputs[span_idx],
+                            # We don't use the rest of the values - and actually
+                            # for Fast tokenizer we could totally avoid using SquadFeatures and SquadExample
+                            cls_index=None,
+                            token_to_orig_map={},
+                            example_index=0,
+                            unique_id=0,
+                            paragraph_len=0,
+                            token_is_max_context=0,
+                            tokens=[],
+                            start_position=0,
+                            end_position=0,
+                            is_impossible=False,
+                            qas_id=None,
+                        )
+                    )
+                features_list.append(features)
+
         all_answers = []
         for features, example in zip(features_list, examples):
             model_input_names = self.tokenizer.model_input_names + ["input_ids"]
@@ -1824,20 +1897,56 @@ class QuestionAnsweringPipeline(Pipeline):
                 start_[0] = end_[0] = 0.0
 
                 starts, ends, scores = self.decode(start_, end_, kwargs["topk"], kwargs["max_answer_len"])
-                char_to_word = np.array(example.char_to_word_offset)
+                if not self.tokenizer.is_fast:
+                    char_to_word = np.array(example.char_to_word_offset)
 
-                # Convert the answer (tokens) back to the original text
-                answers += [
-                    {
-                        "score": score.item(),
-                        "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
-                        "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
-                        "answer": " ".join(
-                            example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
-                        ),
-                    }
-                    for s, e, score in zip(starts, ends, scores)
-                ]
+                    # Convert the answer (tokens) back to the original text
+                    # Score: score from the model
+                    # Start: Index of the first character of the answer in the context string
+                    # End: Index of the character following the last character of the answer in the context string
+                    # Answer: Plain text of the answer
+                    answers += [
+                        {
+                            "score": score.item(),
+                            "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
+                            "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
+                            "answer": " ".join(
+                                example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
+                            ),
+                        }
+                        for s, e, score in zip(starts, ends, scores)
+                    ]
+                else:
+                    # Convert the answer (tokens) back to the original text
+                    # Score: score from the model
+                    # Start: Index of the first character of the answer in the context string
+                    # End: Index of the character following the last character of the answer in the context string
+                    # Answer: Plain text of the answer
+                    question_first = bool(self.tokenizer.padding_side == "right")
+                    enc = feature.encoding
+
+                    # Sometimes the max probability token is in the middle of a word so:
+                    # - we start by finding the right word containing the token with `token_to_word`
+                    # - then we convert this word in a character span with `word_to_chars`
+                    answers += [
+                        {
+                            "score": score.item(),
+                            "start": enc.word_to_chars(
+                                enc.token_to_word(s), sequence_index=1 if question_first else 0
+                            )[0],
+                            "end": enc.word_to_chars(enc.token_to_word(e), sequence_index=1 if question_first else 0)[
+                                1
+                            ],
+                            "answer": example.context_text[
+                                enc.word_to_chars(enc.token_to_word(s), sequence_index=1 if question_first else 0)[
+                                    0
+                                ] : enc.word_to_chars(enc.token_to_word(e), sequence_index=1 if question_first else 0)[
+                                    1
+                                ]
+                            ],
+                        }
+                        for s, e, score in zip(starts, ends, scores)
+                    ]
 
             if kwargs["handle_impossible_answer"]:
                 answers.append({"score": min_null_score, "start": 0, "end": 0, "answer": ""})
@@ -2730,7 +2839,8 @@ def pipeline(
     config: Optional[Union[str, PretrainedConfig]] = None,
     tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
     framework: Optional[str] = None,
-    use_fast: bool = False,
+    revision: Optional[str] = None,
+    use_fast: bool = True,
     **kwargs
 ) -> Pipeline:
     """
@@ -2753,7 +2863,9 @@ def pipeline(
             - :obj:`"fill-mask"`: will return a :class:`~transformers.FillMaskPipeline`.
             - :obj:`"summarization"`: will return a :class:`~transformers.SummarizationPipeline`.
             - :obj:`"translation_xx_to_yy"`: will return a :class:`~transformers.TranslationPipeline`.
+            - :obj:`"text2text-generation"`: will return a :class:`~transformers.Text2TextGenerationPipeline`.
             - :obj:`"text-generation"`: will return a :class:`~transformers.TextGenerationPipeline`.
+            - :obj:`"zero-shot-classification:`: will return a :class:`~transformers.ZeroShotClassificationPipeline`.
             - :obj:`"conversation"`: will return a :class:`~transformers.ConversationalPipeline`.
         model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`):
             The model that will be used by the pipeline to make predictions. This can be a model identifier or an
@@ -2784,7 +2896,11 @@ def pipeline(
             If no framework is specified, will default to the one currently installed. If no framework is specified and
             both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if no model
             is provided.
-        use_fast (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+            When passing a task name or a string model identifier: The specific model version to use. It can be a
+            branch name, a tag name, or a commit id, since we use a git-based system for storing models and other
+            artifacts on huggingface.co, so ``revision`` can be any identifier allowed by git.
+        use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to use a Fast tokenizer if possible (a :class:`~transformers.PreTrainedTokenizerFast`).
         kwargs:
             Additional keyword arguments passed along to the specific pipeline init (see the documentation for the
@@ -2845,17 +2961,19 @@ def pipeline(
         if isinstance(tokenizer, tuple):
             # For tuple we have (tokenizer name, {kwargs})
             use_fast = tokenizer[1].pop("use_fast", use_fast)
-            tokenizer = AutoTokenizer.from_pretrained(tokenizer[0], use_fast=use_fast, **tokenizer[1])
+            tokenizer = AutoTokenizer.from_pretrained(
+                tokenizer[0], use_fast=use_fast, revision=revision, **tokenizer[1]
+            )
         else:
-            tokenizer = AutoTokenizer.from_pretrained(tokenizer, use_fast=use_fast)
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer, revision=revision, use_fast=use_fast)
 
     # Instantiate config if needed
     if isinstance(config, str):
-        config = AutoConfig.from_pretrained(config)
+        config = AutoConfig.from_pretrained(config, revision=revision)
 
     # Instantiate modelcard if needed
     if isinstance(modelcard, str):
-        modelcard = ModelCard.from_pretrained(modelcard)
+        modelcard = ModelCard.from_pretrained(modelcard, revision=revision)
 
     # Instantiate model if needed
     if isinstance(model, str):
@@ -2873,7 +2991,7 @@ def pipeline(
                 "Model might be a PyTorch model (ending with `.bin`) but PyTorch is not available. "
                 "Trying to load the model with Tensorflow."
             )
-        model = model_class.from_pretrained(model, config=config, **model_kwargs)
+        model = model_class.from_pretrained(model, config=config, revision=revision, **model_kwargs)
         if task == "translation" and model.config.task_specific_params:
             for key in model.config.task_specific_params:
                 if key.startswith("translation"):

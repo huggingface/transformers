@@ -33,6 +33,8 @@ IGNORE_NON_TESTED = [
     "DPRSpanPredictor",  # Building part of bigger (tested) model.
     "ReformerForMaskedLM",  # Needs to be setup as decoder.
     "T5Stack",  # Building part of bigger (tested) model.
+    "TFDPREncoder",  # Building part of bigger (tested) model.
+    "TFDPRSpanPredictor",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
     "TFRobertaForMultipleChoice",  # TODO: fix
 ]
@@ -57,6 +59,8 @@ IGNORE_NON_DOCUMENTED = [
     "DPREncoder",  # Building part of bigger (documented) model.
     "DPRSpanPredictor",  # Building part of bigger (documented) model.
     "T5Stack",  # Building part of bigger (tested) model.
+    "TFDPREncoder",  # Building part of bigger (documented) model.
+    "TFDPRSpanPredictor",  # Building part of bigger (documented) model.
     "TFElectraMainLayer",  # Building part of bigger (documented) model (should it be a TFPreTrainedModel ?)
 ]
 
@@ -69,6 +73,36 @@ MODEL_NAME_TO_DOC_FILE = {
     "bert_generation": "bertgeneration.rst",
     "marian": "marian.rst",
 }
+
+# Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
+# should **not** be the rule.
+IGNORE_NON_AUTO_CONFIGURED = [
+    "DPRContextEncoder",
+    "DPREncoder",
+    "DPRReader",
+    "DPRSpanPredictor",
+    "FlaubertForQuestionAnswering",
+    "FunnelBaseModel",
+    "GPT2DoubleHeadsModel",
+    "OpenAIGPTDoubleHeadsModel",
+    "ProphetNetDecoder",
+    "ProphetNetEncoder",
+    "RagModel",
+    "RagSequenceForGeneration",
+    "RagTokenForGeneration",
+    "T5Stack",
+    "TFDPRContextEncoder",
+    "TFDPREncoder",
+    "TFDPRReader",
+    "TFDPRSpanPredictor",
+    "TFFunnelBaseModel",
+    "TFGPT2DoubleHeadsModel",
+    "TFOpenAIGPTDoubleHeadsModel",
+    "XLMForQuestionAnswering",
+    "XLMProphetNetDecoder",
+    "XLMProphetNetEncoder",
+    "XLNetForQuestionAnswering",
+]
 
 # This is to make sure the transformers module imported is the one in the repo.
 spec = importlib.util.spec_from_file_location(
@@ -163,7 +197,7 @@ def get_model_doc_files():
 def find_tested_models(test_file):
     """ Parse the content of test_file to detect what's in all_model_classes"""
     # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the class
-    with open(os.path.join(PATH_TO_TESTS, test_file)) as f:
+    with open(os.path.join(PATH_TO_TESTS, test_file), "r", encoding="utf-8", newline="\n") as f:
         content = f.read()
     all_models = re.findall(r"all_model_classes\s+=\s+\(\s*\(([^\)]*)\)", content)
     # Check with one less parenthesis
@@ -221,7 +255,7 @@ def check_all_models_are_tested():
 
 def find_documented_classes(doc_file):
     """ Parse the content of doc_file to detect which classes it documents"""
-    with open(os.path.join(PATH_TO_DOC, doc_file)) as f:
+    with open(os.path.join(PATH_TO_DOC, doc_file), "r", encoding="utf-8", newline="\n") as f:
         content = f.read()
     return re.findall(r"autoclass:: transformers.(\S+)\s+", content)
 
@@ -245,20 +279,9 @@ def check_models_are_documented(module, doc_file):
 def _get_model_name(module):
     """ Get the model name for the module defining it."""
     splits = module.__name__.split("_")
+    splits = splits[(2 if splits[1] in ["flax", "tf"] else 1) :]
 
-    # Secial case for transfo_xl
-    if splits[-1] == "xl":
-        return "_".join(splits[-2:])
-    # Special case for xlm_prophetnet
-    if splits[-1] == "prophetnet" and splits[-2] == "xlm":
-        return "_".join(splits[-2:])
-    # Secial case for xlm_roberta
-    if splits[-1] == "roberta" and splits[-2] == "xlm":
-        return "_".join(splits[-2:])
-    # Special case for bert_generation
-    if splits[-1] == "generation" and splits[-2] == "bert":
-        return "_".join(splits[-2:])
-    return splits[-1]
+    return "_".join(splits)
 
 
 def check_all_models_are_documented():
@@ -282,12 +305,51 @@ def check_all_models_are_documented():
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
 
+def get_all_auto_configured_models():
+    """ Return the list of all models in at least one auto class."""
+    result = set()  # To avoid duplicates we concatenate all model classes in a set.
+    for attr_name in dir(transformers.models.auto.modeling_auto):
+        if attr_name.startswith("MODEL_") and attr_name.endswith("MAPPING"):
+            result = result | set(getattr(transformers.models.auto.modeling_auto, attr_name).values())
+    for attr_name in dir(transformers.models.auto.modeling_tf_auto):
+        if attr_name.startswith("TF_MODEL_") and attr_name.endswith("MAPPING"):
+            result = result | set(getattr(transformers.models.auto.modeling_tf_auto, attr_name).values())
+    return [cls.__name__ for cls in result]
+
+
+def check_models_are_auto_configured(module, all_auto_models):
+    """ Check models defined in module are each in an auto class."""
+    defined_models = get_models(module)
+    failures = []
+    for model_name, _ in defined_models:
+        if model_name not in all_auto_models and model_name not in IGNORE_NON_AUTO_CONFIGURED:
+            failures.append(
+                f"{model_name} is defined in {module.__name__} but is not present in any of the auto mapping. "
+                "If that is intended behavior, add its name to `IGNORE_NON_AUTO_CONFIGURED` in the file "
+                "`utils/check_repo.py`."
+            )
+    return failures
+
+
+def check_all_models_are_auto_configured():
+    """ Check all models are each in an auto class."""
+    modules = get_model_modules()
+    all_auto_models = get_all_auto_configured_models()
+    failures = []
+    for module in modules:
+        new_failures = check_models_are_auto_configured(module, all_auto_models)
+        if new_failures is not None:
+            failures += new_failures
+    if len(failures) > 0:
+        raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
+
+
 _re_decorator = re.compile(r"^\s*@(\S+)\s+$")
 
 
 def check_decorator_order(filename):
     """ Check that in the test file `filename` the slow decorator is always last."""
-    with open(filename, "r", encoding="utf-8") as f:
+    with open(filename, "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
     decorator_before = None
     errors = []
@@ -325,6 +387,8 @@ def check_repo_quality():
     check_all_models_are_tested()
     print("Checking all models are properly documented.")
     check_all_models_are_documented()
+    print("Checking all models are in at least one auto class.")
+    check_all_models_are_auto_configured()
 
 
 if __name__ == "__main__":

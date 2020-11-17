@@ -35,8 +35,7 @@ For more details, please, see [Deep Encoder, Shallow Decoder: Reevaluating the S
 #### How to use
 
 ```python
-from transformers.tokenization_fsmt import FSMTTokenizer
-from transformers.modeling_fsmt import FSMTForConditionalGeneration
+from transformers import FSMTForConditionalGeneration, FSMTTokenizer
 mname = "allenai/wmt19-de-en-6-6-base"
 tokenizer = FSMTTokenizer.from_pretrained(mname)
 model = FSMTForConditionalGeneration.from_pretrained(mname)
@@ -61,7 +60,7 @@ Pretrained weights were left identical to the original model released by allenai
 Here are the BLEU scores:
 
 model   |  transformers
--------|---------|----------
+-------|---------
 wmt19-de-en-6-6-base  |  38.37
 
 The score was calculated using this code:

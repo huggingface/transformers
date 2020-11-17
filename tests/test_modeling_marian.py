@@ -28,12 +28,12 @@ if is_torch_available():
     import torch
 
     from transformers import AutoModelWithLMHead, MarianMTModel
-    from transformers.convert_marian_to_pytorch import (
+    from transformers.models.bart.modeling_bart import shift_tokens_right
+    from transformers.models.marian.convert_marian_to_pytorch import (
         ORG_NAME,
         convert_hf_name_to_opus_name,
         convert_opus_name_to_hf_name,
     )
-    from transformers.modeling_bart import shift_tokens_right
     from transformers.pipelines import TranslationPipeline
 
 
@@ -50,7 +50,6 @@ class ModelTester:
             decoder_ffn_dim=32,
             max_position_embeddings=48,
             add_final_layer_norm=True,
-            return_dict=True,
         )
 
     def prepare_config_and_inputs_for_common(self):
