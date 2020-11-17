@@ -21,6 +21,8 @@ from collections import OrderedDict
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings
 from ...utils import logging
+
+# Add modeling imports here
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -227,8 +229,6 @@ from .configuration_auto import (
     replace_list_option_in_docstrings,
 )
 
-
-# Add modeling imports here
 
 logger = logging.get_logger(__name__)
 

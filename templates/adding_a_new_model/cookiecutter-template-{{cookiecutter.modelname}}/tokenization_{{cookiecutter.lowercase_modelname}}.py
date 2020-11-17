@@ -15,8 +15,9 @@
 """Tokenization classes for {{cookiecutter.modelname}}."""
 
 {%- if cookiecutter.tokenizer_type == "Based on BERT" %}
-from .tokenization_bert import BertTokenizer, BertTokenizerFast
-from .utils import logging
+from ...utils import logging
+from ..bert.tokenization_bert import BertTokenizer
+from ..bert.tokenization_bert_fast import BertTokenizerFast
 
 
 logger = logging.get_logger(__name__)
@@ -73,14 +74,14 @@ class {{cookiecutter.camelcase_modelname}}TokenizerFast(BertTokenizerFast):
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
 {%- elif cookiecutter.tokenizer_type == "Standalone" %}
 import warnings
+from typing import List, Optional
 
 from tokenizers import ByteLevelBPETokenizer
 
-from .tokenization_utils import AddedToken, PreTrainedTokenizer
-from .tokenization_utils_base import BatchEncoding
-from .tokenization_utils_fast import PreTrainedTokenizerFast
-from typing import List, Optional
-from .utils import logging
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_utils_base import BatchEncoding
+from ...tokenization_utils_fast import PreTrainedTokenizerFast
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)

@@ -17,15 +17,14 @@
 
 import tensorflow as tf
 
-from .activations_tf import get_tf_activation
-from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Config
-from .file_utils import (
+from ...activations_tf import get_tf_activation
+from ...file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
 )
-from .modeling_tf_outputs import (
+from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPooling,
     TFMaskedLMOutput,
@@ -34,7 +33,7 @@ from .modeling_tf_outputs import (
     TFSequenceClassifierOutput,
     TFTokenClassifierOutput,
 )
-from .modeling_tf_utils import (
+from ...modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
@@ -46,8 +45,9 @@ from .modeling_tf_utils import (
     keras_serializable,
     shape_list,
 )
-from .tokenization_utils import BatchEncoding
-from .utils import logging
+from ...tokenization_utils import BatchEncoding
+from ...utils import logging
+from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Config
 
 
 logger = logging.get_logger(__name__)
