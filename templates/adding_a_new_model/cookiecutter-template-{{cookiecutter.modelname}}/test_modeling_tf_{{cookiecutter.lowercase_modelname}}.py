@@ -26,7 +26,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.modeling_tf_{{cookiecutter.lowercase_modelname}} import (
+    from transformers import (
         TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
         TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
         TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
