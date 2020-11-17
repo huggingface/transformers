@@ -44,7 +44,7 @@ class PegasusForConditionalGeneration(BartForConditionalGeneration):
         >>> assert summary == "California's largest electricity provider has turned off power to tens of thousands of customers."
 
     """
-    # All the code is in src/transformers/modeling_bart.py
+    # All the code is in src/transformers/models/bart/modeling_bart.py
     config_class = PegasusConfig
     authorized_missing_keys = [
         r"final_logits_bias",

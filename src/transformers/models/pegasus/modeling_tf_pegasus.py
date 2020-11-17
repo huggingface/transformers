@@ -38,4 +38,4 @@ class TFPegasusForConditionalGeneration(TFBartForConditionalGeneration):
         r"model.decoder.embed_positions.weight",
     ]
     config_class = PegasusConfig
-    # All the code is in src/transformers/modeling_tf_bart.py
+    # All the code is in src/transformers/models/bart/modeling_tf_bart.py

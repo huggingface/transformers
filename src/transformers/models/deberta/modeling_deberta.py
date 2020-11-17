@@ -74,7 +74,7 @@ class XSoftmax(torch.autograd.Function):
 
     Example::
       import torch
-      from transformers.modeling_deroberta import XSoftmax
+      from transformers.models.deberta import XSoftmax
       # Make a tensor
       x = torch.randn([4,20,100])
       # Create a mask

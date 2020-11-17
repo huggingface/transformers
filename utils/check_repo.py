@@ -308,12 +308,12 @@ def check_all_models_are_documented():
 def get_all_auto_configured_models():
     """ Return the list of all models in at least one auto class."""
     result = set()  # To avoid duplicates we concatenate all model classes in a set.
-    for attr_name in dir(transformers.modeling_auto):
+    for attr_name in dir(transformers.models.auto.modeling_auto):
         if attr_name.startswith("MODEL_") and attr_name.endswith("MAPPING"):
-            result = result | set(getattr(transformers.modeling_auto, attr_name).values())
-    for attr_name in dir(transformers.modeling_tf_auto):
+            result = result | set(getattr(transformers.models.auto.modeling_auto, attr_name).values())
+    for attr_name in dir(transformers.models.auto.modeling_tf_auto):
         if attr_name.startswith("TF_MODEL_") and attr_name.endswith("MAPPING"):
-            result = result | set(getattr(transformers.modeling_tf_auto, attr_name).values())
+            result = result | set(getattr(transformers.models.auto.modeling_tf_auto, attr_name).values())
     return [cls.__name__ for cls in result]
 
 
