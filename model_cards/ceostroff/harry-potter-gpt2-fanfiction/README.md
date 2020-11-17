@@ -3,7 +3,7 @@ language:
 - en
 tags:
 - harry-potter
-license: MIT
+license: mit
 ---
 
 # Harry Potter Fanficition Generator
