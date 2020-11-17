@@ -12,7 +12,7 @@ model = PegasusForConditionalGeneration.from_pretrained(model_name).to(torch_dev
 
 def get_answer(question, context):
   input_text = "question: %s text: %s" % (question,context)
-  batch = tokenizer.prepare_seq2seq_batch([input_text], truncation=True, padding='longest').to(torch_device)
+  batch = tokenizer.prepare_seq2seq_batch([input_text], truncation=True, padding='longest', return_tensors="pt").to(torch_device)
   translated = model.generate(**batch)
   tgt_text = tokenizer.batch_decode(translated, skip_special_tokens=True)
   return tgt_text[0]

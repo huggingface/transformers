@@ -9,13 +9,14 @@ on:
   push:
     branches:
       - ci_*
+      - framework-agnostic-tokenizers
   repository_dispatch:
   schedule:
     - cron: "0 0 * * *"
 
 jobs:
   run_all_tests_torch_gpu:
-    runs-on: [self-hosted, single-gpu]
+    runs-on: [self-hosted, gpu, single-gpu]
     steps:
       - uses: actions/checkout@v2
 
@@ -109,7 +110,7 @@ jobs:
 
 
   run_all_tests_tf_gpu:
-    runs-on: [self-hosted, single-gpu]
+    runs-on: [self-hosted, gpu, single-gpu]
     steps:
       - uses: actions/checkout@v2
 
@@ -188,7 +189,7 @@ jobs:
           path: reports
           
   run_all_tests_torch_multi_gpu:
-    runs-on: [self-hosted, multi-gpu]
+    runs-on: [self-hosted, gpu, multi-gpu]
     steps:
       - uses: actions/checkout@v2
 
@@ -279,7 +280,7 @@ jobs:
           path: reports
 
   run_all_tests_tf_multi_gpu:
-    runs-on: [self-hosted, multi-gpu]
+    runs-on: [self-hosted, gpu, multi-gpu]
     steps:
       - uses: actions/checkout@v2
 

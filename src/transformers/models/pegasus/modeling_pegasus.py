@@ -38,7 +38,7 @@ class PegasusForConditionalGeneration(BartForConditionalGeneration):
 
         >>> model = PegasusForConditionalGeneration.from_pretrained(mname)
         >>> tok = PegasusTokenizer.from_pretrained(mname)
-        >>> batch = tok.prepare_seq2seq_batch(src_texts=[PGE_ARTICLE])  # don't need tgt_text for inference
+        >>> batch = tok.prepare_seq2seq_batch(src_texts=[PGE_ARTICLE], return_tensors="pt")  # don't need tgt_text for inference
         >>> gen = model.generate(**batch)  # for forward pass: model(**batch)
         >>> summary: List[str] = tok.batch_decode(gen, skip_special_tokens=True)
         >>> assert summary == "California's largest electricity provider has turned off power to tens of thousands of customers."

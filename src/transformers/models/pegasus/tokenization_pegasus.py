@@ -134,7 +134,7 @@ class PegasusTokenizer(ReformerTokenizer):
         tgt_texts: Optional[List[str]] = None,
         max_length: Optional[int] = None,
         max_target_length: Optional[int] = None,
-        return_tensors: str = "pt",
+        return_tensors: str = None,
         truncation=True,
         padding="longest",
         **unused,

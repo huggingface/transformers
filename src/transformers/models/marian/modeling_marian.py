@@ -41,7 +41,7 @@ class MarianMTModel(BartForConditionalGeneration):
 
         >>> model = MarianMTModel.from_pretrained(mname)
         >>> tok = MarianTokenizer.from_pretrained(mname)
-        >>> batch = tok.prepare_seq2seq_batch(src_texts=[sample_text])  # don't need tgt_text for inference
+        >>> batch = tok.prepare_seq2seq_batch(src_texts=[sample_text], return_tensors="pt")  # don't need tgt_text for inference
         >>> gen = model.generate(**batch)  # for forward pass: model(**batch)
         >>> words: List[str] = tok.batch_decode(gen, skip_special_tokens=True)  # returns "Where is the bus stop ?"
 
