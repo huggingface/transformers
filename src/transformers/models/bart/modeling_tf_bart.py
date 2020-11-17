@@ -1085,7 +1085,6 @@ class TFBartModel(TFPretrainedBartModel):
             return_dict=return_dict,
             training=training,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bart.return_dict
         outputs = self.bart(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1096,7 +1095,7 @@ class TFBartModel(TFPretrainedBartModel):
             use_cache=inputs["use_cache"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
 

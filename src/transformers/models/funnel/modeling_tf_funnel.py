@@ -1245,7 +1245,6 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
             return_dict=return_dict,
             training=training,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.funnel.return_dict
 
         return self.funnel(
             input_ids=inputs["input_ids"],
@@ -1254,7 +1253,7 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
 

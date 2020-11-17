@@ -249,7 +249,7 @@ def input_processing(func, input_ids, **kwargs):
     output = {}
 
     for k, v in kwargs.items():
-        if isinstance(v, (tf.Tensor, bool, TFBaseModelOutput, tuple, list)) or v is None:
+        if isinstance(v, (tf.Tensor, bool, TFBaseModelOutput, tuple, list, dict)) or v is None:
             output[k] = v
         else:
             raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted for %s." % (type(v), k))
@@ -268,13 +268,13 @@ def input_processing(func, input_ids, **kwargs):
                         "The tensor named %s does not belong to the authorized list of names %s "
                         % (input.name, parameter_names)
                     )
-            elif isinstance(input, (tf.Tensor, bool, TFBaseModelOutput, tuple, list)) or input is None:
+            elif isinstance(input, (tf.Tensor, bool, TFBaseModelOutput, tuple, list, dict)) or input is None:
                 output[parameter_names[i]] = input
             else:
                 raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted for %s." % (type(input), parameter_names[i]))
     elif isinstance(input_ids, (dict, BatchEncoding)):
         for k, v in dict(input_ids).items():
-            if not isinstance(v, (tf.Tensor, bool, TFBaseModelOutput, tuple, list)):
+            if not isinstance(v, (tf.Tensor, bool, TFBaseModelOutput, tuple, list, dict)):
                 raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted for %s." % (type(v), k))
             else:
                 output[k] = v

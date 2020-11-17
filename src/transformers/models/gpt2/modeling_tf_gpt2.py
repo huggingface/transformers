@@ -604,7 +604,6 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
             return_dict=return_dict,
             training=training,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
         outputs = self.transformer(
             input_ids=inputs["input_ids"],
             past=inputs["past"],
@@ -616,7 +615,7 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
             use_cache=inputs["use_cache"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
 
