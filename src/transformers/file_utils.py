@@ -855,7 +855,9 @@ def is_remote_url(url_or_filename):
     return parsed.scheme in ("http", "https")
 
 
-def hf_bucket_url(model_id: str, filename: str, revision: Optional[str] = None, mirror=None) -> str:
+def hf_bucket_url(
+    model_id: str, filename: str, subfolder: Optional[str] = None, revision: Optional[str] = None, mirror=None
+) -> str:
     """
     Resolve a model identifier, a file name, and an optional revision id, to a huggingface.co-hosted url, redirecting
     to Cloudfront (a Content Delivery Network, or CDN) for large files.
@@ -872,6 +874,9 @@ def hf_bucket_url(model_id: str, filename: str, revision: Optional[str] = None, 
     its sha1 if stored in git, or its sha256 if stored in git-lfs. Files cached locally from transformers before v3.5.0
     are not shared with those new files, because the cached file's name contains a hash of the url (which changed).
     """
+    if subfolder is not None:
+        filename = f"{subfolder}/{filename}"
+
     if mirror:
         endpoint = PRESET_MIRROR_DICT.get(mirror, mirror)
         legacy_format = "/" not in model_id

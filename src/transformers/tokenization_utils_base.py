@@ -1641,6 +1641,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
                 identifier allowed by git.
+            subfolder (:obj:`str`, `optional`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co (e.g. for
+                facebook/rag-token-base), specify it here.
             inputs (additional positional arguments, `optional`):
                 Will be passed along to the Tokenizer ``__init__`` method.
             kwargs (additional keyword arguments, `optional`):
@@ -1676,6 +1679,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         proxies = kwargs.pop("proxies", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
+        subfolder = kwargs.pop("subfolder", None)
 
         s3_models = list(cls.max_model_input_sizes.keys())
         vocab_files = {}
@@ -1728,7 +1732,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                             full_file_name = None
                     else:
                         full_file_name = hf_bucket_url(
-                            pretrained_model_name_or_path, filename=file_name, revision=revision, mirror=None
+                            pretrained_model_name_or_path,
+                            filename=file_name,
+                            subfolder=subfolder,
+                            revision=revision,
+                            mirror=None,
                         )
 
                     vocab_files[file_id] = full_file_name
