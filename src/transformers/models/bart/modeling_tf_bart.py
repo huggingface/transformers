@@ -43,7 +43,6 @@ from ...modeling_tf_utils import (
     shape_list,
     input_processing,
 )
-from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
 from .configuration_bart import BartConfig
 

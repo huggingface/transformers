@@ -52,7 +52,6 @@ from ...modeling_tf_utils import (
     shape_list,
     input_processing,
 )
-from ...tokenization_utils import BatchEncoding
 from ...utils import logging
 from .configuration_albert import AlbertConfig
 

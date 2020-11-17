@@ -23,7 +23,7 @@ import warnings
 
 import tensorflow as tf
 
-from .activations_tf import get_tf_activation
+from ...activations_tf import get_tf_activation
 
 from ...file_utils import (
     ModelOutput,
@@ -32,8 +32,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
 )
 from ...modeling_tf_outputs import TFBaseModelOutput
-from ...modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, get_initializer, keras_serializable, shape_list
-from ...tokenization_utils import BatchEncoding
+from ...modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, get_initializer, keras_serializable, shape_list, input_processing
 from ...utils import logging
 from ..xlm.modeling_tf_xlm import (
     TFXLMForMultipleChoice,
