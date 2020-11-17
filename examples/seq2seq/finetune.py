@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader
 
 from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
 from transformers import MBartTokenizer, T5ForConditionalGeneration
-from transformers.modeling_bart import shift_tokens_right
+from transformers.models.bart.modeling_bart import shift_tokens_right
 from utils import (
     ROUGE_KEYS,
     LegacySeq2SeqDataset,

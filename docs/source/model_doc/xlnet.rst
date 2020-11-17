@@ -53,43 +53,43 @@ XLNetTokenizer
 XLNet specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.modeling_xlnet.XLNetModelOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetModelOutput
     :members:
 
-.. autoclass:: transformers.modeling_xlnet.XLNetLMHeadModelOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetLMHeadModelOutput
     :members:
 
-.. autoclass:: transformers.modeling_xlnet.XLNetForSequenceClassificationOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetForSequenceClassificationOutput
     :members:
 
-.. autoclass:: transformers.modeling_xlnet.XLNetForMultipleChoiceOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetForMultipleChoiceOutput
     :members:
 
-.. autoclass:: transformers.modeling_xlnet.XLNetForTokenClassificationOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetForTokenClassificationOutput
     :members:
 
-.. autoclass:: transformers.modeling_xlnet.XLNetForQuestionAnsweringSimpleOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetForQuestionAnsweringSimpleOutput
     :members:
 
-.. autoclass:: transformers.modeling_xlnet.XLNetForQuestionAnsweringOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetForQuestionAnsweringOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetModelOutput
+.. autoclass:: transformers.models.xlnet.modeling_tf_xlnet.TFXLNetModelOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetLMHeadModelOutput
+.. autoclass:: transformers.models.xlnet.modeling_tf_xlnet.TFXLNetLMHeadModelOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForSequenceClassificationOutput
+.. autoclass:: transformers.models.xlnet.modeling_tf_xlnet.TFXLNetForSequenceClassificationOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForMultipleChoiceOutput
+.. autoclass:: transformers.models.xlnet.modeling_tf_xlnet.TFXLNetForMultipleChoiceOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForTokenClassificationOutput
+.. autoclass:: transformers.models.xlnet.modeling_tf_xlnet.TFXLNetForTokenClassificationOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForQuestionAnsweringSimpleOutput
+.. autoclass:: transformers.models.xlnet.modeling_tf_xlnet.TFXLNetForQuestionAnsweringSimpleOutput
     :members:
 
 

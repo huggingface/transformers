@@ -38,7 +38,7 @@ if is_torch_available():
         XLNetLMHeadModel,
         XLNetModel,
     )
-    from transformers.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.xlnet.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class XLNetModelTester:

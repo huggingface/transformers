@@ -35,8 +35,7 @@ For more details, please, see [Deep Encoder, Shallow Decoder: Reevaluating the S
 #### How to use
 
 ```python
-from transformers.tokenization_fsmt import FSMTTokenizer
-from transformers.modeling_fsmt import FSMTForConditionalGeneration
+from transformers import FSMTForConditionalGeneration, FSMTTokenizer
 mname = "allenai/wmt19-de-en-6-6-big"
 tokenizer = FSMTTokenizer.from_pretrained(mname)
 model = FSMTForConditionalGeneration.from_pretrained(mname)

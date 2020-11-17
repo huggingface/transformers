@@ -45,7 +45,7 @@ if is_torch_available():
         T5Config,
         T5ForConditionalGeneration,
     )
-    from transformers.modeling_auto import (
+    from transformers.models.auto.modeling_auto import (
         MODEL_FOR_CAUSAL_LM_MAPPING,
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_PRETRAINING_MAPPING,
@@ -56,9 +56,9 @@ if is_torch_available():
         MODEL_MAPPING,
         MODEL_WITH_LM_HEAD_MAPPING,
     )
-    from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.bert.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.gpt2.modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.t5.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch

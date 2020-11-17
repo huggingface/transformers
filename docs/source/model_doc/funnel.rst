@@ -65,10 +65,10 @@ FunnelTokenizerFast
 Funnel specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.modeling_funnel.FunnelForPreTrainingOutput
+.. autoclass:: transformers.models.funnel.modeling_funnel.FunnelForPreTrainingOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_funnel.TFFunnelForPreTrainingOutput
+.. autoclass:: transformers.models.funnel.modeling_tf_funnel.TFFunnelForPreTrainingOutput
     :members:
 
 

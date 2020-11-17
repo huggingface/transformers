@@ -1,7 +1,6 @@
 import torch
 
-from transformers.modeling_camembert import CamembertForMaskedLM
-from transformers.tokenization_camembert import CamembertTokenizer
+from transformers import CamembertForMaskedLM, CamembertTokenizer
 
 
 def fill_mask(masked_input, model, tokenizer, topk=5):

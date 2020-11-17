@@ -218,15 +218,6 @@ class T5TokenizerFast:
         requires_tokenizers(self)
 
 
-class PreTrainedTokenizerFast:
-    def __init__(self, *args, **kwargs):
-        requires_tokenizers(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_tokenizers(self)
-
-
 class XLMRobertaTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_tokenizers(self)
@@ -237,6 +228,15 @@ class XLMRobertaTokenizerFast:
 
 
 class XLNetTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+
+class PreTrainedTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_tokenizers(self)
 

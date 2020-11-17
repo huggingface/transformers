@@ -18,8 +18,8 @@ import re
 import unittest
 from typing import Tuple
 
+from transformers.models.deberta.tokenization_deberta import DebertaTokenizer
 from transformers.testing_utils import require_torch
-from transformers.tokenization_deberta import DebertaTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
 

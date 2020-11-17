@@ -16,6 +16,29 @@ def tf_top_k_top_p_filtering(*args, **kwargs):
     requires_tf(tf_top_k_top_p_filtering)
 
 
+class TFPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFSequenceSummary:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFSharedEmbeddings:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+
+def shape_list(*args, **kwargs):
+    requires_tf(shape_list)
+
+
 TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -1139,29 +1162,6 @@ class TFTransfoXLPreTrainedModel:
     @classmethod
     def from_pretrained(self, *args, **kwargs):
         requires_tf(self)
-
-
-class TFPreTrainedModel:
-    def __init__(self, *args, **kwargs):
-        requires_tf(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_tf(self)
-
-
-class TFSequenceSummary:
-    def __init__(self, *args, **kwargs):
-        requires_tf(self)
-
-
-class TFSharedEmbeddings:
-    def __init__(self, *args, **kwargs):
-        requires_tf(self)
-
-
-def shape_list(*args, **kwargs):
-    requires_tf(shape_list)
 
 
 TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST = None

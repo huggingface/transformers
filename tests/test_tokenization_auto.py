@@ -27,8 +27,9 @@ from transformers import (
     RobertaTokenizer,
     RobertaTokenizerFast,
 )
-from transformers.configuration_auto import AutoConfig
-from transformers.configuration_roberta import RobertaConfig
+from transformers.models.auto.configuration_auto import AutoConfig
+from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING
+from transformers.models.roberta.configuration_roberta import RobertaConfig
 from transformers.testing_utils import (
     DUMMY_DIFF_TOKENIZER_IDENTIFIER,
     DUMMY_UNKWOWN_IDENTIFIER,
@@ -36,7 +37,6 @@ from transformers.testing_utils import (
     require_tokenizers,
     slow,
 )
-from transformers.tokenization_auto import TOKENIZER_MAPPING
 
 
 class AutoTokenizerTest(unittest.TestCase):

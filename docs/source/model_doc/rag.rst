@@ -50,10 +50,10 @@ RagTokenizer
 Rag specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.modeling_rag.RetrievAugLMMarginOutput
+.. autoclass:: transformers.models.rag.modeling_rag.RetrievAugLMMarginOutput
     :members:
 
-.. autoclass:: transformers.modeling_rag.RetrievAugLMOutput
+.. autoclass:: transformers.models.rag.modeling_rag.RetrievAugLMOutput
     :members:
 
 RagRetriever

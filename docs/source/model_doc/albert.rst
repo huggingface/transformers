@@ -51,10 +51,10 @@ AlbertTokenizer
 Albert specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.modeling_albert.AlbertForPreTrainingOutput
+.. autoclass:: transformers.models.albert.modeling_albert.AlbertForPreTrainingOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_albert.TFAlbertForPreTrainingOutput
+.. autoclass:: transformers.models.albert.modeling_tf_albert.TFAlbertForPreTrainingOutput
     :members:
 
 

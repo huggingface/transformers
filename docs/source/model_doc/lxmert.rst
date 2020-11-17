@@ -67,19 +67,19 @@ LxmertTokenizerFast
 Lxmert specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.modeling_lxmert.LxmertModelOutput
+.. autoclass:: transformers.models.lxmert.modeling_lxmert.LxmertModelOutput
     :members:
 
-.. autoclass:: transformers.modeling_lxmert.LxmertForPreTrainingOutput
+.. autoclass:: transformers.models.lxmert.modeling_lxmert.LxmertForPreTrainingOutput
     :members:
 
-.. autoclass:: transformers.modeling_lxmert.LxmertForQuestionAnsweringOutput
+.. autoclass:: transformers.models.lxmert.modeling_lxmert.LxmertForQuestionAnsweringOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_lxmert.TFLxmertModelOutput
+.. autoclass:: transformers.models.lxmert.modeling_tf_lxmert.TFLxmertModelOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_lxmert.TFLxmertForPreTrainingOutput
+.. autoclass:: transformers.models.lxmert.modeling_tf_lxmert.TFLxmertForPreTrainingOutput
     :members:
 
 

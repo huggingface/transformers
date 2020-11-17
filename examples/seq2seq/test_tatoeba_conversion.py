@@ -2,8 +2,8 @@ import os
 import tempfile
 import unittest
 
-from transformers.convert_marian_tatoeba_to_pytorch import DEFAULT_REPO, TatoebaConverter
 from transformers.file_utils import cached_property
+from transformers.models.marian.convert_marian_tatoeba_to_pytorch import DEFAULT_REPO, TatoebaConverter
 from transformers.testing_utils import require_torch_non_multi_gpu_but_fix_me, slow
 
 

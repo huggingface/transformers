@@ -34,7 +34,7 @@ if is_torch_available():
         DebertaForSequenceClassification,
         DebertaModel,
     )
-    from transformers.modeling_deberta import DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.deberta.modeling_deberta import DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch

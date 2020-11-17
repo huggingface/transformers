@@ -35,7 +35,7 @@ if is_torch_available():
         LxmertForQuestionAnswering,
         LxmertModel,
     )
-    from transformers.modeling_lxmert import LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.lxmert.modeling_lxmert import LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class LxmertModelTester:

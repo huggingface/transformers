@@ -25,7 +25,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.modeling_tf_lxmert import TFLxmertForPreTraining, TFLxmertModel
+    from transformers.models.lxmert.modeling_tf_lxmert import TFLxmertForPreTraining, TFLxmertModel
 
 
 class TFLxmertModelTester(object):

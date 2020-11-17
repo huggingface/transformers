@@ -34,7 +34,7 @@ if is_torch_available():
         {{cookiecutter.camelcase_modelname}}ForTokenClassification,
         {{cookiecutter.camelcase_modelname}}Model,
     )
-    from transformers.modeling_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class {{cookiecutter.camelcase_modelname}}ModelTester:

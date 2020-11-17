@@ -37,7 +37,7 @@ if is_torch_available():
         ElectraForTokenClassification,
         ElectraModel,
     )
-    from transformers.modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.electra.modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class ElectraModelTester:

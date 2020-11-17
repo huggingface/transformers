@@ -26,7 +26,11 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.modeling_tf_ctrl import TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST, TFCTRLLMHeadModel, TFCTRLModel
+    from transformers.models.ctrl.modeling_tf_ctrl import (
+        TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFCTRLLMHeadModel,
+        TFCTRLModel,
+    )
 
 
 class TFCTRLModelTester(object):

@@ -48,7 +48,7 @@ if is_torch_available():
         PegasusConfig,
         pipeline,
     )
-    from transformers.modeling_bart import (
+    from transformers.models.bart.modeling_bart import (
         SinusoidalPositionalEmbedding,
         _prepare_bart_decoder_inputs,
         invert_mask,

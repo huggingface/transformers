@@ -19,8 +19,8 @@ from typing import Callable, Optional
 import numpy as np
 
 from transformers import BatchEncoding, BertTokenizer, BertTokenizerFast, PreTrainedTokenizer, TensorType, TokenSpan
+from transformers.models.gpt2.tokenization_gpt2 import GPT2Tokenizer
 from transformers.testing_utils import require_tf, require_tokenizers, require_torch, slow
-from transformers.tokenization_gpt2 import GPT2Tokenizer
 
 
 class TokenizerUtilsTest(unittest.TestCase):

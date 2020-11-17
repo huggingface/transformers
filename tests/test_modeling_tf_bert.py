@@ -27,7 +27,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TF_MODEL_FOR_PRETRAINING_MAPPING
-    from transformers.modeling_tf_bert import (
+    from transformers.models.bert.modeling_tf_bert import (
         TFBertForMaskedLM,
         TFBertForMultipleChoice,
         TFBertForNextSentencePrediction,

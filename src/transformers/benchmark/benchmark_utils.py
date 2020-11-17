@@ -327,7 +327,7 @@ def start_memory_tracing(
 
         - `modules_to_trace`: (None, string, list/tuple of string) if None, all events are recorded if string or list
           of strings: only events from the listed module/sub-module will be recorded (e.g. 'fairseq' or
-          'transformers.modeling_gpt2')
+          'transformers.models.gpt2.modeling_gpt2')
         - `modules_not_to_trace`: (None, string, list/tuple of string) if None, no module is avoided if string or list
           of strings: events from the listed module/sub-module will not be recorded (e.g. 'torch')
         - `events_to_trace`: string or list of string of events to be recorded (see official python doc for

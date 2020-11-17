@@ -53,8 +53,8 @@ from torch.utils.data.sampler import RandomSampler, SequentialSampler
 
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .file_utils import WEIGHTS_NAME, is_datasets_available, is_in_notebook, is_torch_tpu_available
-from .modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from .modeling_utils import PreTrainedModel
+from .models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from .optimization import AdamW, get_linear_schedule_with_warmup
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (

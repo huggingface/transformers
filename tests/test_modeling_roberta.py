@@ -37,7 +37,7 @@ if is_torch_available():
         RobertaForTokenClassification,
         RobertaModel,
     )
-    from transformers.modeling_roberta import (
+    from transformers.models.roberta.modeling_roberta import (
         ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         RobertaEmbeddings,
         create_position_ids_from_input_ids,
