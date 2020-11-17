@@ -19,6 +19,7 @@
 import itertools
 from dataclasses import dataclass
 from typing import Optional, Tuple
+import warnings
 
 import tensorflow as tf
 
@@ -251,6 +252,13 @@ class TFFlaubertModel(TFFlaubertPreTrainedModel):
         training=False,
         **kwargs,
     ):
+        if "inputs" in kwargs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            input_ids = kwargs.pop("inputs")
+
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -485,6 +493,13 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
         training=False,
         **kwargs,
     ):
+        if "inputs" in kwargs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            input_ids = kwargs.pop("inputs")
+
         # removed: src_enc=None, src_len=None
         inputs = input_processing(
             func=self.call,
@@ -808,6 +823,13 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
         training=False,
         **kwargs,
     ):
+        if "inputs" in kwargs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            input_ids = kwargs.pop("inputs")
+
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,

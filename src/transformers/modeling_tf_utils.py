@@ -366,8 +366,8 @@ def input_processing(func, inputs, **kwargs):
         else:
             raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted for %s." % (type(v), k))
 
-    if isinstance(inputs, (tuple, list)):
-        for i, input in enumerate(inputs):
+    if isinstance(input_ids, (tuple, list)):
+        for i, input in enumerate(input_ids):
             if type(input) == tf.Tensor:
                 # Tensor names have always the pattern name:device_id then we check only the
                 # name and not the device id
@@ -384,33 +384,29 @@ def input_processing(func, inputs, **kwargs):
                 output[parameter_names[i]] = input
             else:
                 raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted for %s." % (type(input), parameter_names[i]))
-    elif isinstance(inputs, (dict, BatchEncoding)):
-        for k, v in dict(inputs).items():
+    elif isinstance(input_ids, (dict, BatchEncoding)):
+        for k, v in dict(input_ids).items():
             if not isinstance(v, (tf.Tensor, bool, TFBaseModelOutput, tuple, list)):
                 raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted for %s." % (type(v), k))
             else:
                 output[k] = v
     else:
-        if isinstance(inputs, tf.Tensor) or inputs is None:
-            output[parameter_names[0]] = inputs
+        if isinstance(input_ids, tf.Tensor) or input_ids is None:
+            output[parameter_names[0]] = input_ids
         else:
-            raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted for %s." % (type(inputs), parameter_names[0]))
+            raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted for %s." % (type(input_ids), parameter_names[0]))
+
+    # When creating a SavedModel TF calls the method with LayerCall.__call__(args, **kwargs)
+    # So to respect the proper output we have to add this exception
+    if "args" in output:
+        tensor_name = output["args"].name.split(":")[0]
+        output[tensor_name] = output["args"]
+
+        del output["args"]
 
     for name in parameter_names:
         if name not in list(output.keys()):
-            # When creating a SavedModel TF calls method the method LayerCall.__call__(args, **kwargs)
-            # So to respect the proper output we have to add this exception
-            if name == "kwargs":
-                output.update(kwargs)
-
-                if "input_ids" not in list(output.keys()):
-                    output["input_ids"] = output["args"]
-                elif "input_embeds" not in list(output.keys()):
-                    output["input_embeds"] = output["args"]
-
-                del output["args"]
-            else:
-                output[name] = kwargs.pop(name, signature[name].default)
+            output[name] = kwargs.pop(name, signature[name].default)
 
     return output
 

@@ -266,6 +266,13 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         training=False,
         **kwargs,
     ):
+        if "inputs" in kwargs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            input_ids = kwargs.pop("inputs")
+
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -565,6 +572,13 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
         training=False,
         **kwargs,
     ):
+        if "inputs" in kwargs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            input_ids = kwargs.pop("inputs")
+
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -670,6 +684,13 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
             Labels for computing the cross entropy classification loss. Indices should be in ``[0, ...,
             config.vocab_size - 1]``.
         """
+        if "inputs" in kwargs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            input_ids = kwargs.pop("inputs")
+
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,

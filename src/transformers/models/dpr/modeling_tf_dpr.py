@@ -16,6 +16,7 @@
 
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
+import warnings
 
 import tensorflow as tf
 
@@ -710,6 +711,13 @@ class TFDPRReader(TFDPRPretrainedReader):
             >>> relevance_logits = outputs.relevance_logits
 
         """
+        if "inputs" in kwargs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            input_ids = kwargs.pop("inputs")
+
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,

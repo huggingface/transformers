@@ -878,7 +878,7 @@ class TFSinusoidalPositionalEmbedding(tf.keras.layers.Embedding):
 
 
 @keras_serializable
-class TFBartMainLayer(Layer):
+class TFBartMainLayer(tf.keras.layers.Layer):
     config_class = BartConfig
 
     def __init__(self, config, **kwargs):
@@ -1068,10 +1068,25 @@ class TFBartModel(TFPretrainedBartModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
+        **kwargs,
     ):
+        if "decoder_cached_states" in kwargs:
+            warnings.warn(
+                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                FutureWarning,
+            )
+            past_key_values = kwargs.pop("decoder_cached_states")
+        
+        if "inputs" in kwargs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            input_ids = kwargs.pop("inputs")
+
         inputs = input_processing(
             func=self.call,
-            inputs=input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
@@ -1159,6 +1174,20 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             probs = tf.nn.softmax(logits[0])
             # probs[5] is associated with the mask token
         """
+        if "decoder_cached_states" in kwargs:
+            warnings.warn(
+                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                FutureWarning,
+            )
+            past_key_values = kwargs.pop("decoder_cached_states")
+        
+        if "inputs" in kwargs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            input_ids = kwargs.pop("inputs")
+
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
