@@ -54,7 +54,7 @@ TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.modeling_tf_bert.TFBertSelfAttention
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention
 class TFElectraSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -126,7 +126,7 @@ class TFElectraSelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.modeling_tf_bert.TFBertSelfOutput
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput
 class TFElectraSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -166,7 +166,7 @@ class TFElectraAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.modeling_tf_bert.TFBertIntermediate
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate
 class TFElectraIntermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -187,7 +187,7 @@ class TFElectraIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.modeling_tf_bert.TFBertOutput
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput
 class TFElectraOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -206,7 +206,7 @@ class TFElectraOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.modeling_tf_bert.TFBertLayer with Bert->Electra
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with Bert->Electra
 class TFElectraLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -227,7 +227,7 @@ class TFElectraLayer(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.modeling_tf_bert.TFBertEncoder with Bert->Electra
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertEncoder with Bert->Electra
 class TFElectraEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -271,7 +271,7 @@ class TFElectraEncoder(tf.keras.layers.Layer):
         )
 
 
-# Copied from transformers.modeling_tf_bert.TFBertPooler
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler
 class TFElectraPooler(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -332,7 +332,7 @@ class TFElectraEmbeddings(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
-    # Copied from transformers.modeling_tf_bert.TFBertEmbeddings.call
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings.call
     def call(
         self,
         input_ids=None,
@@ -367,7 +367,7 @@ class TFElectraEmbeddings(tf.keras.layers.Layer):
         else:
             raise ValueError("mode {} is not valid.".format(mode))
 
-    # Copied from transformers.modeling_tf_bert.TFBertEmbeddings._embedding
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings._embedding
     def _embedding(self, input_ids, position_ids, token_type_ids, inputs_embeds, training=False):
         """Applies embedding based on inputs tensor."""
         assert not (input_ids is None and inputs_embeds is None)

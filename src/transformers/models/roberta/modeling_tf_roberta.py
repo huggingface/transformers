@@ -223,7 +223,7 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
         return tf.reshape(logits, [batch_size, length, self.vocab_size])
 
 
-# Copied from transformers.modeling_tf_bert.TFBertPooler
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler
 class TFRobertaPooler(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -244,7 +244,7 @@ class TFRobertaPooler(tf.keras.layers.Layer):
         return pooled_output
 
 
-# Copied from transformers.modeling_tf_bert.TFBertSelfAttention
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention
 class TFRobertaSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -316,7 +316,7 @@ class TFRobertaSelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.modeling_tf_bert.TFBertSelfOutput
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput
 class TFRobertaSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -335,7 +335,7 @@ class TFRobertaSelfOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.modeling_tf_bert.TFBertAttention with Bert->Roberta
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->Roberta
 class TFRobertaAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -356,7 +356,7 @@ class TFRobertaAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.modeling_tf_bert.TFBertIntermediate
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate
 class TFRobertaIntermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -377,7 +377,7 @@ class TFRobertaIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.modeling_tf_bert.TFBertOutput
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput
 class TFRobertaOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -396,7 +396,7 @@ class TFRobertaOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.modeling_tf_bert.TFBertLayer with Bert->Roberta
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with Bert->Roberta
 class TFRobertaLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -417,7 +417,7 @@ class TFRobertaLayer(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.modeling_tf_bert.TFBertEncoder with Bert->Roberta
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertEncoder with Bert->Roberta
 class TFRobertaEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -478,16 +478,16 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
         # The embeddings must be the last declaration in order to follow the weights order
         self.embeddings = TFRobertaEmbeddings(config, name="embeddings")
 
-    # Copied from transformers.modeling_tf_bert.TFBertMainLayer.get_input_embeddings
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.get_input_embeddings
     def get_input_embeddings(self):
         return self.embeddings
 
-    # Copied from transformers.modeling_tf_bert.TFBertMainLayer.set_input_embeddings
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.set_input_embeddings
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
         self.embeddings.vocab_size = value.shape[0]
 
-    # Copied from transformers.modeling_tf_bert.TFBertMainLayer._prune_heads
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer._prune_heads
     def _prune_heads(self, heads_to_prune):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
@@ -495,7 +495,7 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
-    # Copied from transformers.modeling_tf_bert.TFBertMainLayer.call
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.call
     def call(
         self,
         inputs,

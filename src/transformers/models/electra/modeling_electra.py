@@ -167,7 +167,7 @@ class ElectraEmbeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
-    # Copied from transformers.modeling_bert.BertEmbeddings.forward
+    # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.forward
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -193,7 +193,7 @@ class ElectraEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.modeling_bert.BertSelfAttention with Bert->Electra
+# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Electra
 class ElectraSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -272,7 +272,7 @@ class ElectraSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.modeling_bert.BertSelfOutput
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
 class ElectraSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -287,7 +287,7 @@ class ElectraSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.modeling_bert.BertAttention with Bert->Electra
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Electra
 class ElectraAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -335,7 +335,7 @@ class ElectraAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.modeling_bert.BertIntermediate
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate
 class ElectraIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -351,7 +351,7 @@ class ElectraIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.modeling_bert.BertOutput
+# Copied from transformers.models.bert.modeling_bert.BertOutput
 class ElectraOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -366,7 +366,7 @@ class ElectraOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.modeling_bert.BertLayer with Bert->Electra
+# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Electra
 class ElectraLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -426,7 +426,7 @@ class ElectraLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.modeling_bert.BertEncoder with Bert->Electra
+# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Electra
 class ElectraEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -548,7 +548,7 @@ class ElectraPreTrainedModel(PreTrainedModel):
     authorized_missing_keys = [r"position_ids"]
     authorized_unexpected_keys = [r"electra\.embeddings_project\.weight", r"electra\.embeddings_project\.bias"]
 
-    # Copied from transformers.modeling_bert.BertPreTrainedModel._init_weights
+    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
         """ Initialize the weights """
         if isinstance(module, (nn.Linear, nn.Embedding)):

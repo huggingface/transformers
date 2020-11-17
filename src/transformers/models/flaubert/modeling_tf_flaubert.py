@@ -234,7 +234,7 @@ class TFFlaubertModel(TFFlaubertPreTrainedModel):
         return outputs
 
 
-# Copied from transformers.modeling_tf_xlm.TFXLMMultiHeadAttention with XLM->Flaubert
+# Copied from transformers.models.xlm.modeling_tf_xlm.TFXLMMultiHeadAttention with XLM->Flaubert
 class TFFlaubertMultiHeadAttention(tf.keras.layers.Layer):
     NEW_ID = itertools.count()
 
@@ -328,7 +328,7 @@ class TFFlaubertMultiHeadAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.modeling_tf_xlm.TFXLMTransformerFFN
+# Copied from transformers.models.xlm.modeling_tf_xlm.TFXLMTransformerFFN
 class TFFlaubertTransformerFFN(tf.keras.layers.Layer):
     def __init__(self, in_dim, dim_hidden, out_dim, config, **kwargs):
         super().__init__(**kwargs)
@@ -632,7 +632,7 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
         return TFBaseModelOutput(last_hidden_state=tensor, hidden_states=hidden_states, attentions=attentions)
 
 
-# Copied from transformers.modeling_tf_xlm.TFXLMPredLayer
+# Copied from transformers.models.xlm.modeling_tf_xlm.TFXLMPredLayer
 class TFFlaubertPredLayer(tf.keras.layers.Layer):
     """
     Prediction layer (cross_entropy or adaptive_softmax).

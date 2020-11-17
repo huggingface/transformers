@@ -70,7 +70,7 @@ class RobertaEmbeddings(nn.Module):
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
 
-    # Copied from transformers.modeling_bert.BertEmbeddings.__init__
+    # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.__init__
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
@@ -99,7 +99,7 @@ class RobertaEmbeddings(nn.Module):
             else:
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
-        # Copied from transformers.modeling_bert.BertEmbeddings.forward
+        # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.forward
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -141,7 +141,7 @@ class RobertaEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-# Copied from transformers.modeling_bert.BertSelfAttention with Bert->Roberta
+# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Roberta
 class RobertaSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -220,7 +220,7 @@ class RobertaSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.modeling_bert.BertSelfOutput
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
 class RobertaSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -235,7 +235,7 @@ class RobertaSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.modeling_bert.BertAttention with Bert->Roberta
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Roberta
 class RobertaAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -283,7 +283,7 @@ class RobertaAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.modeling_bert.BertIntermediate
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate
 class RobertaIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -299,7 +299,7 @@ class RobertaIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.modeling_bert.BertOutput
+# Copied from transformers.models.bert.modeling_bert.BertOutput
 class RobertaOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -314,7 +314,7 @@ class RobertaOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.modeling_bert.BertLayer with Bert->Roberta
+# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Roberta
 class RobertaLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -374,7 +374,7 @@ class RobertaLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.modeling_bert.BertEncoder with Bert->Roberta
+# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Roberta
 class RobertaEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -449,7 +449,7 @@ class RobertaEncoder(nn.Module):
         )
 
 
-# Copied from transformers.modeling_bert.BertPooler
+# Copied from transformers.models.bert.modeling_bert.BertPooler
 class RobertaPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -474,7 +474,7 @@ class RobertaPreTrainedModel(PreTrainedModel):
     config_class = RobertaConfig
     base_model_prefix = "roberta"
 
-    # Copied from transformers.modeling_bert.BertPreTrainedModel._init_weights
+    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
         """ Initialize the weights """
         if isinstance(module, (nn.Linear, nn.Embedding)):
@@ -579,7 +579,7 @@ class RobertaModel(RobertaPreTrainedModel):
 
     authorized_missing_keys = [r"position_ids"]
 
-    # Copied from transformers.modeling_bert.BertModel.__init__ with Bert->Roberta
+    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Roberta
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -612,7 +612,7 @@ class RobertaModel(RobertaPreTrainedModel):
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
-    # Copied from transformers.modeling_bert.BertModel.forward
+    # Copied from transformers.models.bert.modeling_bert.BertModel.forward
     def forward(
         self,
         input_ids=None,

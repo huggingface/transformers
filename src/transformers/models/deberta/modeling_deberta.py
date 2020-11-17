@@ -278,7 +278,7 @@ class DebertaAttention(nn.Module):
             return attention_output
 
 
-# Copied from transformers.modeling_bert.BertIntermediate with Bert->Deberta
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->Deberta
 class DebertaIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
