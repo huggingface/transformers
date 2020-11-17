@@ -845,6 +845,8 @@ class Trainer:
             self.log({"total_flos": self.state.total_flos})
 
         self.control = self.callback_handler.on_train_end(self.args, self.state, self.control)
+        # add remaining tr_loss
+        self._total_loss_scalar += tr_loss.item()
 
         return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step)
 
