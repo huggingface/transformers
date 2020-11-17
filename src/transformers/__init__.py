@@ -205,6 +205,7 @@ from .tokenization_utils_base import (
 
 if is_sentencepiece_available():
     from .models.albert import AlbertTokenizer
+    from .models.barthez import BarthezTokenizer
     from .models.bert_generation import BertGenerationTokenizer
     from .models.camembert import CamembertTokenizer
     from .models.marian import MarianTokenizer
@@ -215,7 +216,6 @@ if is_sentencepiece_available():
     from .models.xlm_prophetnet import XLMProphetNetTokenizer
     from .models.xlm_roberta import XLMRobertaTokenizer
     from .models.xlnet import XLNetTokenizer
-    from .models.barthez import BarthezTokenizer
 else:
     from .utils.dummy_sentencepiece_objects import *
 
