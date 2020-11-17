@@ -403,10 +403,9 @@ TF_AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
             pretrained_model_name_or_path:
                 Can be either:
 
-                    - A string with the `shortcut name` of a pretrained model to load from cache or download, e.g.,
-                      ``bert-base-uncased``.
-                    - A string with the `identifier name` of a pretrained model that was user-uploaded to our S3, e.g.,
-                      ``dbmdz/bert-base-german-cased``.
+                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
+                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing model weights saved using
                       :func:`~transformers.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
                     - A path or url to a `PyTorch state_dict save file` (e.g, ``./pt_model/pytorch_model.bin``). In
@@ -420,8 +419,8 @@ TF_AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
                 Configuration for the model to use instead of an automatically loaded configuration. Configuration can
                 be automatically loaded when:
 
-                    - The model is a model provided by the library (loaded with the `shortcut name` string of a
-                      pretrained model).
+                    - The model is a model provided by the library (loaded with the `model id` string of a pretrained
+                      model).
                     - The model was saved using :meth:`~transformers.PreTrainedModel.save_pretrained` and is reloaded
                       by suppyling the save directory.
                     - The model is loaded by suppyling a local directory as ``pretrained_model_name_or_path`` and a
@@ -507,7 +506,7 @@ class TFAutoModel(object):
         Examples::
 
             >>> from transformers import AutoConfig, TFAutoModel
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = TFAutoConfig.from_pretrained('bert-base-uncased')
             >>> model = TFAutoModel.from_config(config)
         """
@@ -533,7 +532,7 @@ class TFAutoModel(object):
 
             >>> from transformers import AutoConfig, AutoModel
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = TFAutoModel.from_pretrained('bert-base-uncased')
 
             >>> # Update configuration during loading
@@ -601,7 +600,7 @@ class TFAutoModelForPreTraining(object):
         Examples::
 
             >>> from transformers import AutoConfig, TFAutoModelForPreTraining
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
             >>> model = TFAutoModelForPreTraining.from_config(config)
         """
@@ -627,7 +626,7 @@ class TFAutoModelForPreTraining(object):
 
             >>> from transformers import AutoConfig, TFAutoModelForPreTraining
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = TFAutoModelForPreTraining.from_pretrained('bert-base-uncased')
 
             >>> # Update configuration during loading
@@ -701,7 +700,7 @@ class TFAutoModelWithLMHead(object):
         Examples::
 
             >>> from transformers import AutoConfig, TFAutoModelWithLMHead
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
             >>> model = TFAutoModelWithLMHead.from_config(config)
         """
@@ -733,7 +732,7 @@ class TFAutoModelWithLMHead(object):
 
             >>> from transformers import AutoConfig, TFAutoModelWithLMHead
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = TFAutoModelWithLMHead.from_pretrained('bert-base-uncased')
 
             >>> # Update configuration during loading
@@ -808,7 +807,7 @@ class TFAutoModelForCausalLM:
         Examples::
 
             >>> from transformers import AutoConfig, TFAutoModelForCausalLM
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('gpt2')
             >>> model = TFAutoModelForCausalLM.from_config(config)
         """
@@ -834,7 +833,7 @@ class TFAutoModelForCausalLM:
 
             >>> from transformers import AutoConfig, TFAutoModelForCausalLM
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = TFAutoModelForCausalLM.from_pretrained('gpt2')
 
             >>> # Update configuration during loading
@@ -902,7 +901,7 @@ class TFAutoModelForMaskedLM:
         Examples::
 
             >>> from transformers import AutoConfig, TFAutoModelForMaskedLM
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
             >>> model = TFAutoModelForMaskedLM.from_config(config)
         """
@@ -928,7 +927,7 @@ class TFAutoModelForMaskedLM:
 
             >>> from transformers import AutoConfig, TFAutoModelForMaskedLM
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = TFAutoModelForMaskedLM.from_pretrained('bert-base-uncased')
 
             >>> # Update configuration during loading
@@ -996,7 +995,7 @@ class TFAutoModelForSeq2SeqLM:
         Examples::
 
             >>> from transformers import AutoConfig, TFAutoModelForSeq2SeqLM
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('t5')
             >>> model = TFAutoModelForSeq2SeqLM.from_config(config)
         """
@@ -1024,7 +1023,7 @@ class TFAutoModelForSeq2SeqLM:
 
             >>> from transformers import AutoConfig, TFAutoModelForSeq2SeqLM
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = TFAutoModelForSeq2SeqLM.from_pretrained('t5-base')
 
             >>> # Update configuration during loading
@@ -1094,7 +1093,7 @@ class TFAutoModelForSequenceClassification(object):
         Examples::
 
             >>> from transformers import AutoConfig, TFAutoModelForSequenceClassification
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
             >>> model = TFAutoModelForSequenceClassification.from_config(config)
         """
@@ -1122,7 +1121,7 @@ class TFAutoModelForSequenceClassification(object):
 
             >>> from transformers import AutoConfig, TFAutoModelForSequenceClassification
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = TFAutoModelForSequenceClassification.from_pretrained('bert-base-uncased')
 
             >>> # Update configuration during loading
@@ -1191,7 +1190,7 @@ class TFAutoModelForQuestionAnswering(object):
         Examples::
 
             >>> from transformers import AutoConfig, TFAutoModelForQuestionAnswering
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
             >>> model = TFAutoModelForQuestionAnswering.from_config(config)
         """
@@ -1219,7 +1218,7 @@ class TFAutoModelForQuestionAnswering(object):
 
             >>> from transformers import AutoConfig, TFAutoModelForQuestionAnswering
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = TFAutoModelForQuestionAnswering.from_pretrained('bert-base-uncased')
 
             >>> # Update configuration during loading
@@ -1288,7 +1287,7 @@ class TFAutoModelForTokenClassification:
         Examples::
 
             >>> from transformers import AutoConfig, TFAutoModelForTokenClassification
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
             >>> model = TFAutoModelForTokenClassification.from_config(config)
         """
@@ -1316,7 +1315,7 @@ class TFAutoModelForTokenClassification:
 
             >>> from transformers import AutoConfig, TFAutoModelForTokenClassification
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = TFAutoModelForTokenClassification.from_pretrained('bert-base-uncased')
 
             >>> # Update configuration during loading
@@ -1386,7 +1385,7 @@ class TFAutoModelForMultipleChoice:
         Examples::
 
             >>> from transformers import AutoConfig, TFAutoModelForMultipleChoice
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
             >>> model = TFAutoModelForMultipleChoice.from_config(config)
         """
@@ -1414,7 +1413,7 @@ class TFAutoModelForMultipleChoice:
 
             >>> from transformers import AutoConfig, TFAutoModelForMultipleChoice
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = TFAutoModelForMultipleChoice.from_pretrained('bert-base-uncased')
 
             >>> # Update configuration during loading
@@ -1484,7 +1483,7 @@ class TFAutoModelForNextSentencePrediction:
         Examples::
 
             >>> from transformers import AutoConfig, TFAutoModelForNextSentencePrediction
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
             >>> model = TFAutoModelForNextSentencePrediction.from_config(config)
         """
@@ -1512,7 +1511,7 @@ class TFAutoModelForNextSentencePrediction:
 
             >>> from transformers import AutoConfig, TFAutoModelForNextSentencePrediction
 
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = TFAutoModelForNextSentencePrediction.from_pretrained('bert-base-uncased')
 
             >>> # Update configuration during loading

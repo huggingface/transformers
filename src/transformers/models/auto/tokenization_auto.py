@@ -250,10 +250,9 @@ class AutoTokenizer:
             pretrained_model_name_or_path (:obj:`str`):
                 Can be either:
 
-                    - A string with the `shortcut name` of a predefined tokenizer to load from cache or download, e.g.,
-                      ``bert-base-uncased``.
-                    - A string with the `identifier name` of a predefined tokenizer that was user-uploaded to our S3,
-                      e.g., ``dbmdz/bert-base-german-cased``.
+                    - A string, the `model id` of a predefined tokenizer hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
+                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing vocabulary files required by the tokenizer, for instance saved
                       using the :func:`~transformers.PreTrainedTokenizer.save_pretrained` method, e.g.,
                       ``./my_model_directory/``.
@@ -280,6 +279,9 @@ class AutoTokenizer:
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
                 identifier allowed by git.
+            subfolder (:obj:`str`, `optional`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co (e.g. for
+                facebook/rag-token-base), specify it here.
             use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to try to load the fast version of the tokenizer.
             kwargs (additional keyword arguments, `optional`):
@@ -291,10 +293,10 @@ class AutoTokenizer:
 
             >>> from transformers import AutoTokenizer
 
-            >>> # Download vocabulary from S3 and cache.
+            >>> # Download vocabulary from huggingface.co and cache.
             >>> tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
 
-            >>> # Download vocabulary from S3 (user-uploaded) and cache.
+            >>> # Download vocabulary from huggingface.co (user-uploaded) and cache.
             >>> tokenizer = AutoTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
 
             >>> # If vocabulary files are in a directory (e.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`)

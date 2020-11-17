@@ -7,7 +7,7 @@ export PYTHONPATH="../":"${PYTHONPATH}"
 python examples/rag/finetune.py \
     --data_dir $DATA_DIR \
     --output_dir $OUTPUT_DIR \
-    --model_name_or_path $MODLE_NAME_OR_PATH \
+    --model_name_or_path $MODEL_NAME_OR_PATH \
     --model_type rag_sequence \
     --fp16 \
     --gpus 8 \

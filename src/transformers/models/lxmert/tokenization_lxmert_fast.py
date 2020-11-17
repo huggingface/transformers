@@ -25,7 +25,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 ####################################################
 # Mapping from the keyword arguments names of Tokenizer `__init__`
-# to pretrained vocabulary URL for all the model shortcut names.
+# to pretrained vocabulary URL for all the model ids.
 ####################################################
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
@@ -37,13 +37,13 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 ####################################################
-# Mapping from model shortcut names to max length of inputs
+# Mapping from model ids to max length of inputs
 ####################################################
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "unc-nlp/lxmert-base-uncased": 512,
 }
 ####################################################
-# Mapping from model shortcut names to a dictionary of additional
+# Mapping from model ids to a dictionary of additional
 # keyword arguments for Tokenizer `__init__`.
 # To be used for checkpoint specific configurations.
 ####################################################

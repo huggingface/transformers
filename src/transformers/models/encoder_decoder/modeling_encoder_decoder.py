@@ -214,10 +214,9 @@ class EncoderDecoderModel(PreTrainedModel):
             encoder_pretrained_model_name_or_path (:obj: `str`, `optional`):
                 Information necessary to initiate the encoder. Can be either:
 
-                    - A string with the `shortcut name` of a pretrained model to load from cache or download, e.g.,
-                      ``bert-base-uncased``.
-                    - A string with the `identifier name` of a pretrained model that was user-uploaded to our S3, e.g.,
-                      ``dbmdz/bert-base-german-cased``.
+                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
+                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing model weights saved using
                       :func:`~transformers.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
                     - A path or url to a `tensorflow index checkpoint file` (e.g, ``./tf_model/model.ckpt.index``). In
@@ -228,10 +227,9 @@ class EncoderDecoderModel(PreTrainedModel):
             decoder_pretrained_model_name_or_path (:obj: `str`, `optional`, defaults to `None`):
                 Information necessary to initiate the decoder. Can be either:
 
-                    - A string with the `shortcut name` of a pretrained model to load from cache or download, e.g.,
-                      ``bert-base-uncased``.
-                    - A string with the `identifier name` of a pretrained model that was user-uploaded to our S3, e.g.,
-                      ``dbmdz/bert-base-german-cased``.
+                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
+                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing model weights saved using
                       :func:`~transformers.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
                     - A path or url to a `tensorflow index checkpoint file` (e.g, ``./tf_model/model.ckpt.index``). In

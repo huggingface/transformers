@@ -1615,10 +1615,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             pretrained_model_name_or_path (:obj:`str`):
                 Can be either:
 
-                - A string with the `shortcut name` of a predefined tokenizer to load from cache or download, e.g.,
-                  ``bert-base-uncased``.
-                - A string with the `identifier name` of a predefined tokenizer that was user-uploaded to our S3, e.g.,
-                  ``dbmdz/bert-base-german-cased``.
+                - A string, the `model id` of a predefined tokenizer hosted inside a model repo on huggingface.co.
+                  Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under a
+                  user or organization name, like ``dbmdz/bert-base-german-cased``.
                 - A path to a `directory` containing vocabulary files required by the tokenizer, for instance saved
                   using the :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.save_pretrained`
                   method, e.g., ``./my_model_directory/``.
@@ -1641,6 +1640,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
                 identifier allowed by git.
+            subfolder (:obj:`str`, `optional`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co (e.g. for
+                facebook/rag-token-base), specify it here.
             inputs (additional positional arguments, `optional`):
                 Will be passed along to the Tokenizer ``__init__`` method.
             kwargs (additional keyword arguments, `optional`):
@@ -1651,10 +1653,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         Examples::
 
             # We can't instantiate directly the base class `PreTrainedTokenizerBase` so let's show our examples on a derived class: BertTokenizer
-            # Download vocabulary from S3 and cache.
+            # Download vocabulary from huggingface.co and cache.
             tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
-            # Download vocabulary from S3 (user-uploaded) and cache.
+            # Download vocabulary from huggingface.co (user-uploaded) and cache.
             tokenizer = BertTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
 
             # If vocabulary files are in a directory (e.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`)
@@ -1676,6 +1678,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         proxies = kwargs.pop("proxies", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
+        subfolder = kwargs.pop("subfolder", None)
 
         s3_models = list(cls.max_model_input_sizes.keys())
         vocab_files = {}
@@ -1722,13 +1725,20 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 # Look for the tokenizer files
                 for file_id, file_name in {**cls.vocab_files_names, **additional_files_names}.items():
                     if os.path.isdir(pretrained_model_name_or_path):
-                        full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
+                        if subfolder is not None:
+                            full_file_name = os.path.join(pretrained_model_name_or_path, subfolder, file_name)
+                        else:
+                            full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
                         if not os.path.exists(full_file_name):
                             logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
                             full_file_name = None
                     else:
                         full_file_name = hf_bucket_url(
-                            pretrained_model_name_or_path, filename=file_name, revision=revision, mirror=None
+                            pretrained_model_name_or_path,
+                            filename=file_name,
+                            subfolder=subfolder,
+                            revision=revision,
+                            mirror=None,
                         )
 
                     vocab_files[file_id] = full_file_name

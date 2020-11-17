@@ -277,10 +277,9 @@ class AutoConfig:
             pretrained_model_name_or_path (:obj:`str`):
                 Can be either:
 
-                    - A string with the `shortcut name` of a pretrained model configuration to load from cache or
-                      download, e.g., ``bert-base-uncased``.
-                    - A string with the `identifier name` of a pretrained model configuration that was user-uploaded to
-                      our S3, e.g., ``dbmdz/bert-base-german-cased``.
+                    - A string, the `model id` of a pretrained model configuration hosted inside a model repo on
+                      huggingface.co. Valid model ids can be located at the root-level, like ``bert-base-uncased``, or
+                      namespaced under a user or organization name, like ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing a configuration file saved using the
                       :meth:`~transformers.PretrainedConfig.save_pretrained` method, or the
                       :meth:`~transformers.PreTrainedModel.save_pretrained` method, e.g., ``./my_model_directory/``.
@@ -317,10 +316,10 @@ class AutoConfig:
 
             >>> from transformers import AutoConfig
 
-            >>> # Download configuration from S3 and cache.
+            >>> # Download configuration from huggingface.co and cache.
             >>> config = AutoConfig.from_pretrained('bert-base-uncased')
 
-            >>> # Download configuration from S3 (user-uploaded) and cache.
+            >>> # Download configuration from huggingface.co (user-uploaded) and cache.
             >>> config = AutoConfig.from_pretrained('dbmdz/bert-base-german-cased')
 
             >>> # If configuration file is in a directory (e.g., was saved using `save_pretrained('./test/saved_model/')`).

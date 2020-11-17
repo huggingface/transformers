@@ -291,10 +291,9 @@ class PretrainedConfig(object):
             pretrained_model_name_or_path (:obj:`str`):
                 This can be either:
 
-                - the `shortcut name` of a pretrained model configuration to load from cache or download, e.g.,
-                  ``bert-base-uncased``.
-                - the `identifier name` of a pretrained model configuration that was uploaded to our S3 by any user,
-                  e.g., ``dbmdz/bert-base-german-cased``.
+                - a string, the `model id` of a pretrained model configuration hosted inside a model repo on
+                  huggingface.co. Valid model ids can be located at the root-level, like ``bert-base-uncased``, or
+                  namespaced under a user or organization name, like ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing a configuration file saved using the
                   :func:`~transformers.PretrainedConfig.save_pretrained` method, e.g., ``./my_model_directory/``.
                 - a path or url to a saved configuration JSON `file`, e.g.,
@@ -333,7 +332,7 @@ class PretrainedConfig(object):
 
             # We can't instantiate directly the base class `PretrainedConfig` so let's show the examples on a
             # derived class: BertConfig
-            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
+            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from huggingface.co and cache.
             config = BertConfig.from_pretrained('./test/saved_model/')  # E.g. config (or model) was saved using `save_pretrained('./test/saved_model/')`
             config = BertConfig.from_pretrained('./test/saved_model/my_configuration.json')
             config = BertConfig.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
