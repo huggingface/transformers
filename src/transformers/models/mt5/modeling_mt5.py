@@ -32,8 +32,8 @@ class MT5Model(T5Model):
 
     Examples::
         >>> from transformers import MT5Model, T5Tokenizer
-        >>> model = MT5Model.from_pretrained("google/mt5-base")
-        >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
+        >>> model = MT5Model.from_pretrained("google/mt5-small")
+        >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
         >>> article = "UN Chief Says There Is No Military Solution in Syria"
         >>> batch = tokenizer.prepare_seq2seq_batch(src_texts=[article])
         >>> outputs = model(**batch)
@@ -59,8 +59,8 @@ class MT5ForConditionalGeneration(T5ForConditionalGeneration):
 
     Examples::
         >>> from transformers import MT5ForConditionalGeneration, T5Tokenizer
-        >>> model = MT5ForConditionalGeneration.from_pretrained("google/mt5-base")
-        >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
+        >>> model = MT5ForConditionalGeneration.from_pretrained("google/mt5-small")
+        >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
         >>> article = "UN Chief Says There Is No Military Solution in Syria"
         >>> batch = tokenizer.prepare_seq2seq_batch(src_texts=[article])
         >>> generated_tokens = model.generate(**batch)

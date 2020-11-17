@@ -22,7 +22,7 @@ from transformers.testing_utils import require_sentencepiece, require_tf, requir
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import T5Tokenizer, TFMT5ForConditionalGeneration
+    from transformers import AutoTokenizer, TFAutoModelForSeq2SeqLM
 
 
 @require_tf
@@ -43,8 +43,8 @@ class TFMT5ModelIntegrationTest(unittest.TestCase):
         >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = TFMT5ForConditionalGeneration.from_pretrained("google/mt5-small")
-        tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
+        model = TFAutoModelForSeq2SeqLM.from_pretrained("google/mt5-small")
+        tokenizer = AutoTokenizer.from_pretrained("google/mt5-small")
 
         input_ids = tokenizer("Hello there", return_tensors="tf").input_ids
         labels = tokenizer("Hi I am", return_tensors="tf").input_ids
