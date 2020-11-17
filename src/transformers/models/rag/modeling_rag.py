@@ -316,10 +316,10 @@ class RagPreTrainedModel(PreTrainedModel):
             assert (
                 question_encoder_pretrained_model_name_or_path is not None
             ), "If `model` is not defined as an argument, a `question_encoder_pretrained_model_name_or_path` has to be defined"
-            from .modeling_auto import AutoModel
+            from ..auto.modeling_auto import AutoModel
 
             if "config" not in kwargs_question_encoder:
-                from .configuration_auto import AutoConfig
+                from ..auto.configuration_auto import AutoConfig
 
                 question_encoder_config = AutoConfig.from_pretrained(question_encoder_pretrained_model_name_or_path)
                 kwargs_question_encoder["config"] = question_encoder_config
@@ -333,10 +333,10 @@ class RagPreTrainedModel(PreTrainedModel):
             assert (
                 generator_pretrained_model_name_or_path is not None
             ), "If `generator_model` is not defined as an argument, a `generator_pretrained_model_name_or_path` has to be defined"
-            from .modeling_auto import AutoModelForSeq2SeqLM
+            from ..auto.modeling_auto import AutoModelForSeq2SeqLM
 
             if "config" not in kwargs_generator:
-                from .configuration_auto import AutoConfig
+                from ..auto.configuration_auto import AutoConfig
 
                 generator_config = AutoConfig.from_pretrained(generator_pretrained_model_name_or_path)
                 kwargs_generator["config"] = generator_config
@@ -484,12 +484,12 @@ class RagModel(RagPreTrainedModel):
             )
         super().__init__(config)
         if question_encoder is None:
-            from .modeling_auto import AutoModel
+            from ..auto.modeling_auto import AutoModel
 
             question_encoder = AutoModel.from_config(config.question_encoder)
 
         if generator is None:
-            from .modeling_auto import AutoModelForSeq2SeqLM
+            from ..auto.modeling_auto import AutoModelForSeq2SeqLM
 
             generator = AutoModelForSeq2SeqLM.from_config(config.generator)
 

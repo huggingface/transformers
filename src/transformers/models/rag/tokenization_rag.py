@@ -42,7 +42,7 @@ class RagTokenizer:
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         # dynamically import AutoTokenizer
-        from .tokenization_auto import AutoTokenizer
+        from ..auto.tokenization_auto import AutoTokenizer
 
         config = kwargs.pop("config", None)
 

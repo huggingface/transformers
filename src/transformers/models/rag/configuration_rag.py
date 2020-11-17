@@ -127,7 +127,7 @@ class RagConfig(PretrainedConfig):
         decoder_config = kwargs.pop("generator")
         decoder_model_type = decoder_config.pop("model_type")
 
-        from .configuration_auto import AutoConfig
+        from ..auto.configuration_auto import AutoConfig
 
         self.question_encoder = AutoConfig.for_model(question_encoder_model_type, **question_encoder_config)
         self.generator = AutoConfig.for_model(decoder_model_type, **decoder_config)
