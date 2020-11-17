@@ -129,7 +129,7 @@ TapasTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TapasTokenizer
-    :members: convert_logits_to_predictions, save_vocabulary
+    :members: __call__, convert_logits_to_predictions, save_vocabulary
 
 
 TapasModel
