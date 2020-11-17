@@ -46,7 +46,6 @@ from ...modeling_tf_utils import (
     input_processing,
     keras_serializable,
     shape_list,
-    input_processing,
 )
 from ...utils import logging
 from .configuration_bart import BartConfig
@@ -262,9 +261,8 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         x, self_attn_weights = self.self_attn(query=x, key=x, key_padding_mask=encoder_padding_mask)
         # TODO (JP): This assert is not graph compliant, create a TF assert instead
         """
-        assert shape_list(x) == shape_list(
-            residual
-        ), f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(x)}"
+        assert shape_list(x) == shape_list( residual ), f"Self attn modified the shape of query {shape_list(residual)}
+        to {shape_list(x)}"
         """
         x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
@@ -645,11 +643,9 @@ class TFBartDecoder(tf.keras.layers.Layer):
         encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))  # could maybe be avoided.
 
         next_cache = (encoder_hidden_states, next_decoder_cache) if use_cache else None
-        
+
         if not return_dict:
-            return tuple(
-                v for v in [x, next_cache, all_hidden_states, all_self_attns] if v is not None
-            )
+            return tuple(v for v in [x, next_cache, all_hidden_states, all_self_attns] if v is not None)
 
         return TFBaseModelOutputWithPast(
             last_hidden_state=x,
@@ -657,7 +653,6 @@ class TFBartDecoder(tf.keras.layers.Layer):
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
-
 
 
 def _reorder_buffer(attn_cache, new_order):
@@ -1047,7 +1042,7 @@ class TFBartModel(TFPretrainedBartModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.bart = TFBartMainLayer(config, name="bart")
-    
+
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -1076,7 +1071,7 @@ class TFBartModel(TFPretrainedBartModel):
                 FutureWarning,
             )
             past_key_values = kwargs.pop("decoder_cached_states")
-        
+
         if "inputs" in kwargs:
             warnings.warn(
                 "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
@@ -1179,7 +1174,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
                 FutureWarning,
             )
             past_key_values = kwargs.pop("decoder_cached_states")
-        
+
         if "inputs" in kwargs:
             warnings.warn(
                 "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",

@@ -14,9 +14,9 @@
 # limitations under the License.
 """ TensorFlow DPR model for Open Domain Question Answering."""
 
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
-import warnings
 
 import tensorflow as tf
 
@@ -277,7 +277,9 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
             return_dict=return_dict,
             training=inputs["training"],
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.encoder.bert_model.return_dict
+        return_dict = (
+            inputs["return_dict"] if inputs["return_dict"] is not None else self.encoder.bert_model.return_dict
+        )
         outputs = self.encoder(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],

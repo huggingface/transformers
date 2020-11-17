@@ -18,7 +18,6 @@
 
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
-import warnings
 
 import tensorflow as tf
 
@@ -31,10 +30,14 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 <<<<<<< HEAD
+<<<<<<< HEAD
 from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, input_processing, keras_serializable, shape_list
 =======
 from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list, input_processing
 >>>>>>> 3e0c864a0... Add input processing to TF Lxmert
+=======
+from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, input_processing, keras_serializable, shape_list
+>>>>>>> 26a5e3bae... Apply style
 from ...utils import logging
 from .configuration_lxmert import LxmertConfig
 
@@ -732,16 +735,6 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
         training=False,
         **kwargs,
     ):
-<<<<<<< HEAD
-=======
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
->>>>>>> 3e0c864a0... Add input processing to TF Lxmert
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -755,7 +748,6 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-<<<<<<< HEAD
             kwargs_call=kwargs,
         )
         output_attentions = (
@@ -764,12 +756,6 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
         output_hidden_states = (
             inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
         )
-=======
-        )
-
-        output_attentions = inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        output_hidden_states = inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
->>>>>>> 3e0c864a0... Add input processing to TF Lxmert
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
@@ -780,11 +766,7 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
             input_shape = shape_list(inputs["inputs_embeds"])[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
-<<<<<<< HEAD
 
-=======
-        
->>>>>>> 3e0c864a0... Add input processing to TF Lxmert
         if inputs["visual_pos"] is None or inputs["visual_feats"] is None:
             raise ValueError("visual_feats and visual_pos cannot be `None` in LXMERT's `call` method.")
 
@@ -819,13 +801,9 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
             extended_visual_attention_mask = None
 
         # Positional Word Embeddings
-<<<<<<< HEAD
         embedding_output = self.embeddings(
             [inputs["input_ids"], inputs["token_type_ids"], inputs["inputs_embeds"]], training=inputs["training"]
         )
-=======
-        embedding_output = self.embeddings([inputs["input_ids"], inputs["token_type_ids"], inputs["inputs_embeds"]], training=inputs["training"])
->>>>>>> 3e0c864a0... Add input processing to TF Lxmert
 
         # Run Lxmert encoder
         encoder_outputs = self.encoder(
@@ -1017,16 +995,6 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
         training=False,
         **kwargs,
     ):
-<<<<<<< HEAD
-=======
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
->>>>>>> 3e0c864a0... Add input processing to TF Lxmert
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -1040,10 +1008,7 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-<<<<<<< HEAD
             kwargs_call=kwargs,
-=======
->>>>>>> 3e0c864a0... Add input processing to TF Lxmert
         )
         outputs = self.lxmert(
             input_ids=inputs["input_ids"],
@@ -1345,16 +1310,6 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
 
         Returns:
         """
-<<<<<<< HEAD
-=======
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
->>>>>>> 3e0c864a0... Add input processing to TF Lxmert
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -1372,10 +1327,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-<<<<<<< HEAD
             kwargs_call=kwargs,
-=======
->>>>>>> 3e0c864a0... Add input processing to TF Lxmert
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.lxmert.return_dict
         lxmert_output = self.lxmert(
@@ -1405,16 +1357,12 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
 
         total_loss = (
             None
-<<<<<<< HEAD
             if (
                 inputs["masked_lm_labels"] is None
                 and inputs["matched_label"] is None
                 and inputs["obj_labels"] is None
                 and inputs["ans"] is None
             )
-=======
-            if (inputs["masked_lm_labels"] is None and inputs["matched_label"] is None and inputs["obj_labels"] is None and inputs["ans"] is None)
->>>>>>> 3e0c864a0... Add input processing to TF Lxmert
             else tf.constant(0.0)
         )
         losses = ()
