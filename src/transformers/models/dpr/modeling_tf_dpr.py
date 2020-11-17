@@ -14,13 +14,11 @@
 # limitations under the License.
 """ TensorFlow DPR model for Open Domain Question Answering."""
 
-
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
+import warnings
 
 import tensorflow as tf
-from tensorflow import Tensor
-from tensorflow.keras.layers import Dense
 
 from ...file_utils import (
     ModelOutput,
@@ -161,25 +159,25 @@ class TFDPREncoder(TFPreTrainedModel):
         assert self.bert_model.config.hidden_size > 0, "Encoder hidden_size can't be zero"
         self.projection_dim = config.projection_dim
         if self.projection_dim > 0:
-            self.encode_proj = Dense(
+            self.encode_proj = tf.keras.layers.Dense(
                 config.projection_dim, kernel_initializer=get_initializer(config.initializer_range), name="encode_proj"
             )
 
     def call(
         self,
-        input_ids: Tensor=None,
-        attention_mask: Optional[Tensor] = None,
-        token_type_ids: Optional[Tensor] = None,
-        inputs_embeds: Optional[Tensor] = None,
+        input_ids: tf.Tensor=None,
+        attention_mask: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         output_attentions: bool = None,
         output_hidden_states: bool = None,
         return_dict: bool = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[Tensor, ...]]:
+    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor, ...]]:
 
         inputs = input_processing(
             func=self.call,
-            inputs=input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
@@ -230,28 +228,28 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
         super().__init__(config, *args, **kwargs)
         self.encoder = TFDPREncoder(config, name="encoder")
 
-        self.qa_outputs = Dense(2, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs")
-        self.qa_classifier = Dense(
+        self.qa_outputs = tf.keras.layers.Dense(2, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs")
+        self.qa_classifier = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="qa_classifier"
         )
 
     def call(
         self,
-        input_ids: Tensor = None,
-        attention_mask: Tensor = None,
-        inputs_embeds: Optional[Tensor] = None,
+        input_ids: tf.Tensor = None,
+        attention_mask: tf.Tensor = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         output_attentions: bool = None,
         output_hidden_states: bool = None,
         return_dict: bool = None,
         training: bool = False,
-    ) -> Union[TFDPRReaderOutput, Tuple[Tensor, ...]]:
+    ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
         n_passages, sequence_length = shape_list(input_ids) if input_ids is not None else shape_list(inputs_embeds)[:2]
         # feed encoder
 
         inputs = input_processing(
             func=self.call,
-            inputs=input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -472,14 +470,15 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
     def call(
         self,
         input_ids=None,
-        attention_mask: Optional[Tensor] = None,
-        token_type_ids: Optional[Tensor] = None,
-        inputs_embeds: Optional[Tensor] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
         training: bool = False,
-    ) -> Union[TFDPRContextEncoderOutput, Tuple[Tensor, ...]]:
+        **kwargs,
+    ) -> Union[TFDPRContextEncoderOutput, Tuple[tf.Tensor, ...]]:
         r"""
         Return:
 
@@ -491,10 +490,16 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
             >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='tf')["input_ids"]
             >>> embeddings = model(input_ids).pooler_output
         """
+        if "inputs" in kwargs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            input_ids = kwargs.pop("inputs")
 
         inputs = input_processing(
             func=self.call,
-            inputs=input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
@@ -562,14 +567,15 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
     def call(
         self,
         input_ids=None,
-        attention_mask: Optional[Tensor] = None,
-        token_type_ids: Optional[Tensor] = None,
-        inputs_embeds: Optional[Tensor] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
         training: bool = False,
-    ) -> Union[TFDPRQuestionEncoderOutput, Tuple[Tensor, ...]]:
+        **kwargs,
+    ) -> Union[TFDPRQuestionEncoderOutput, Tuple[tf.Tensor, ...]]:
         r"""
         Return:
 
@@ -581,10 +587,16 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
             >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='tf')["input_ids"]
             >>> embeddings = model(input_ids).pooler_output
         """
+        if "inputs" in kwargs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            input_ids = kwargs.pop("inputs")
 
         inputs = input_processing(
             func=self.call,
-            inputs=input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
@@ -652,13 +664,14 @@ class TFDPRReader(TFDPRPretrainedReader):
     def call(
         self,
         input_ids=None,
-        attention_mask: Optional[Tensor] = None,
-        inputs_embeds: Optional[Tensor] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         output_attentions: bool = None,
         output_hidden_states: bool = None,
         return_dict=None,
         training: bool = False,
-    ) -> Union[TFDPRReaderOutput, Tuple[Tensor, ...]]:
+        **kwargs,
+    ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
         r"""
         Return:
 
@@ -679,9 +692,16 @@ class TFDPRReader(TFDPRPretrainedReader):
             >>> relevance_logits = outputs.relevance_logits
 
         """
+        if "inputs" in kwargs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            input_ids = kwargs.pop("inputs")
+
         inputs = input_processing(
             func=self.call,
-            inputs=input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,

@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ TF 2.0 CTRL model."""
-
+import warnings
 
 import numpy as np
 import tensorflow as tf
@@ -265,10 +265,18 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
+        **kwargs,
     ):
+        if "inputs" in kwargs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            input_ids = kwargs.pop("inputs")
+
         inputs = input_processing(
             func=self.call,
-            inputs=input_ids,
+            input_ids=input_ids,
             past=past,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -555,10 +563,18 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
+        **kwargs,
     ):
+        if "inputs" in kwargs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            input_ids = kwargs.pop("inputs")
+
         inputs = input_processing(
             func=self.call,
-            inputs=input_ids,
+            input_ids=input_ids,
             past=past,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -654,15 +670,23 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
         return_dict=None,
         labels=None,
         training=False,
+        **kwargs,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the cross entropy classification loss. Indices should be in ``[0, ...,
             config.vocab_size - 1]``.
         """
+        if "inputs" in kwargs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            input_ids = kwargs.pop("inputs")
+
         inputs = input_processing(
             func=self.call,
-            inputs=input_ids,
+            input_ids=input_ids,
             past=past,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
