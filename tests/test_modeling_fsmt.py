@@ -32,7 +32,7 @@ if is_torch_available():
     import torch
 
     from transformers import FSMTConfig, FSMTForConditionalGeneration, FSMTModel, FSMTTokenizer
-    from transformers.modeling_fsmt import (
+    from transformers.models.fsmt.modeling_fsmt import (
         SinusoidalPositionalEmbedding,
         _prepare_fsmt_decoder_inputs,
         invert_mask,

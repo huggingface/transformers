@@ -24,7 +24,7 @@ if _sentencepiece_available:
 
 
 if is_torch_available():
-    from transformers.modeling_bart import shift_tokens_right
+    from transformers.models.bart.modeling_bart import shift_tokens_right
 
 EN_CODE = 250004
 RO_CODE = 250020

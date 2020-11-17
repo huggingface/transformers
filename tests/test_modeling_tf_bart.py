@@ -31,7 +31,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFBartForConditionalGeneration, TFBartModel
-    from transformers.modeling_tf_bart import TFSinusoidalPositionalEmbedding
+    from transformers.models.bart.modeling_tf_bart import TFSinusoidalPositionalEmbedding
 
 
 @require_tf

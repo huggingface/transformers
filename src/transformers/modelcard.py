@@ -19,7 +19,6 @@ import copy
 import json
 import os
 
-from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .file_utils import (
     CONFIG_NAME,
     MODEL_CARD_NAME,
@@ -29,6 +28,7 @@ from .file_utils import (
     hf_bucket_url,
     is_remote_url,
 )
+from .models.auto.configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .utils import logging
 
 

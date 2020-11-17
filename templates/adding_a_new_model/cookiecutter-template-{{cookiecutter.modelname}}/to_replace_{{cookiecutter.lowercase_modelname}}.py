@@ -74,7 +74,7 @@ from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.u
 
 
 
-# To replace in: "src/transformers/modeling_auto.py" if generating PyTorch
+# To replace in: "src/transformers/models/auto/modeling_auto.py" if generating PyTorch
 # Below: "from .configuration_auto import ("
 # Replace with:
     {{cookiecutter.camelcase_modelname}}Config,
@@ -129,7 +129,7 @@ from .modeling_{{cookiecutter.lowercase_modelname}} import (
 # End.
 
 
-# To replace in: "src/transformers/modeling_tf_auto.py" if generating TensorFlow
+# To replace in: "src/transformers/models/auto/modeling_tf_auto.py" if generating TensorFlow
 # Below: "from .configuration_auto import ("
 # Replace with:
     {{cookiecutter.camelcase_modelname}}Config,
