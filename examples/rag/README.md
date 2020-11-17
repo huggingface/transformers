@@ -60,8 +60,12 @@ to collect the inputs from the other training workers and send back the correspo
 
 For the Ray implementation, the index is loaded in *separate* process(es). The training workers randomly select which 
 retriever worker to query. To configure the number of retrieval workers, you can set the `num_retrieval_workers` flag.
+Also make sure to start the Ray cluster before running fine-tuning.
 
 ```bash
+# Start a single-node Ray cluster.
+ray start --head
+
 python examples/rag/finetune.py \
     --data_dir $DATA_DIR \
     --output_dir $OUTPUT_DIR \
@@ -71,6 +75,9 @@ python examples/rag/finetune.py \
     --gpus 8
     --distributed_retriever ray \
     --num_retrieval_workers 4
+
+# Stop the ray cluster once fine-tuning has finished.
+ray stop
 ```
 
 
