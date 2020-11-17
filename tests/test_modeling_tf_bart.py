@@ -14,7 +14,6 @@
 # limitations under the License.
 
 
-import tempfile
 import unittest
 
 import numpy as np

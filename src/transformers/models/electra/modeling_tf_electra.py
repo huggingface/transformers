@@ -46,9 +46,9 @@ from ...modeling_tf_utils import (
     TFSequenceSummary,
     TFTokenClassificationLoss,
     get_initializer,
+    input_processing,
     keras_serializable,
     shape_list,
-    input_processing,
 )
 from ...utils import logging
 from .configuration_electra import ElectraConfig
@@ -567,8 +567,14 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
             training=training,
         )
 
-        output_attentions = inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
-        output_hidden_states = inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.config.output_hidden_states
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"]
+            if inputs["output_hidden_states"] is not None
+            else self.config.output_hidden_states
+        )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
@@ -586,8 +592,16 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
         if inputs["token_type_ids"] is None:
             inputs["token_type_ids"] = tf.fill(input_shape, 0)
 
-        hidden_states = self.embeddings(inputs["input_ids"], inputs["position_ids"], inputs["token_type_ids"], inputs["inputs_embeds"], training=inputs["training"])
-        extended_attention_mask = self.get_extended_attention_mask(inputs["attention_mask"], input_shape, hidden_states.dtype)
+        hidden_states = self.embeddings(
+            inputs["input_ids"],
+            inputs["position_ids"],
+            inputs["token_type_ids"],
+            inputs["inputs_embeds"],
+            training=inputs["training"],
+        )
+        extended_attention_mask = self.get_extended_attention_mask(
+            inputs["attention_mask"], input_shape, hidden_states.dtype
+        )
         inputs["head_mask"] = self.get_head_mask(inputs["head_mask"])
 
         if hasattr(self, "embeddings_project"):
@@ -854,7 +868,9 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
             return_dict=return_dict,
             training=training,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
+        return_dict = (
+            inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
+        )
         discriminator_hidden_states = self.electra(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -975,7 +991,9 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
             labels=labels,
             training=training,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
+        return_dict = (
+            inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
+        )
         generator_hidden_states = self.electra(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1094,7 +1112,9 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
             labels=labels,
             training=training,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
+        return_dict = (
+            inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
+        )
         outputs = self.electra(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1202,7 +1222,9 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
             training=training,
         )
 
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
+        return_dict = (
+            inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
+        )
 
         if inputs["input_ids"] is not None:
             num_choices = shape_list(inputs["input_ids"])[1]
@@ -1212,9 +1234,15 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
             seq_length = shape_list(inputs["inputs_embeds"])[2]
 
         flat_input_ids = tf.reshape(inputs["input_ids"], (-1, seq_length)) if inputs["input_ids"] is not None else None
-        flat_attention_mask = tf.reshape(inputs["attention_mask"], (-1, seq_length)) if inputs["attention_mask"] is not None else None
-        flat_token_type_ids = tf.reshape(inputs["token_type_ids"], (-1, seq_length)) if inputs["token_type_ids"] is not None else None
-        flat_position_ids = tf.reshape(inputs["position_ids"], (-1, seq_length)) if inputs["position_ids"] is not None else None
+        flat_attention_mask = (
+            tf.reshape(inputs["attention_mask"], (-1, seq_length)) if inputs["attention_mask"] is not None else None
+        )
+        flat_token_type_ids = (
+            tf.reshape(inputs["token_type_ids"], (-1, seq_length)) if inputs["token_type_ids"] is not None else None
+        )
+        flat_position_ids = (
+            tf.reshape(inputs["position_ids"], (-1, seq_length)) if inputs["position_ids"] is not None else None
+        )
         flat_inputs_embeds = (
             tf.reshape(inputs["inputs_embeds"], (-1, seq_length, shape_list(inputs["inputs_embeds"])[3]))
             if inputs["inputs_embeds"] is not None
@@ -1316,7 +1344,9 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
             labels=labels,
             training=training,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
+        return_dict = (
+            inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
+        )
         discriminator_hidden_states = self.electra(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1419,7 +1449,9 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
             end_positions=end_positions,
             training=training,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
+        return_dict = (
+            inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
+        )
         discriminator_hidden_states = self.electra(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],

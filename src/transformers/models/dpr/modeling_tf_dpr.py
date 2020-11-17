@@ -14,9 +14,9 @@
 # limitations under the License.
 """ TensorFlow DPR model for Open Domain Question Answering."""
 
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
-import warnings
 
 import tensorflow as tf
 
@@ -27,7 +27,7 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_tf_outputs import TFBaseModelOutputWithPooling
-from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list, input_processing
+from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, input_processing, shape_list
 from ...utils import logging
 from ..bert.modeling_tf_bert import TFBertMainLayer
 from .configuration_dpr import DPRConfig
@@ -165,7 +165,7 @@ class TFDPREncoder(TFPreTrainedModel):
 
     def call(
         self,
-        input_ids: tf.Tensor=None,
+        input_ids: tf.Tensor = None,
         attention_mask: Optional[tf.Tensor] = None,
         token_type_ids: Optional[tf.Tensor] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
@@ -228,7 +228,9 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
         super().__init__(config, *args, **kwargs)
         self.encoder = TFDPREncoder(config, name="encoder")
 
-        self.qa_outputs = tf.keras.layers.Dense(2, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs")
+        self.qa_outputs = tf.keras.layers.Dense(
+            2, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
+        )
         self.qa_classifier = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="qa_classifier"
         )
@@ -257,7 +259,9 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
             return_dict=return_dict,
             training=training,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.encoder.bert_model.return_dict
+        return_dict = (
+            inputs["return_dict"] if inputs["return_dict"] is not None else self.encoder.bert_model.return_dict
+        )
         outputs = self.encoder(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -509,8 +513,14 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
             training=training,
         )
 
-        output_attentions = inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
-        output_hidden_states = inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.config.output_hidden_states
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"]
+            if inputs["output_hidden_states"] is not None
+            else self.config.output_hidden_states
+        )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
@@ -606,8 +616,14 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
             training=training,
         )
 
-        output_attentions = inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
-        output_hidden_states = inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.config.output_hidden_states
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"]
+            if inputs["output_hidden_states"] is not None
+            else self.config.output_hidden_states
+        )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
@@ -710,8 +726,14 @@ class TFDPRReader(TFDPRPretrainedReader):
             training=training,
         )
 
-        output_attentions = inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
-        output_hidden_states = inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.config.output_hidden_states
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"]
+            if inputs["output_hidden_states"] is not None
+            else self.config.output_hidden_states
+        )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:

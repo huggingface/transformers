@@ -30,11 +30,10 @@ from tensorflow.python.keras.saving import hdf5_format
 
 from transformers.modeling_tf_outputs import TFBaseModelOutput
 
-from .tokenization_utils_base import BatchEncoding
-
 from .configuration_utils import PretrainedConfig
 from .file_utils import DUMMY_INPUTS, TF2_WEIGHTS_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_remote_url
 from .generation_tf_utils import TFGenerationMixin
+from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
 
@@ -271,7 +270,10 @@ def input_processing(func, input_ids, **kwargs):
             elif isinstance(input, (tf.Tensor, bool, TFBaseModelOutput, tuple, list, dict)) or input is None:
                 output[parameter_names[i]] = input
             else:
-                raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted for %s." % (type(input), parameter_names[i]))
+                raise ValueError(
+                    "Data of type %s is not allowed only tf.Tensor is accepted for %s."
+                    % (type(input), parameter_names[i])
+                )
     elif isinstance(input_ids, (dict, BatchEncoding)):
         for k, v in dict(input_ids).items():
             if not isinstance(v, (tf.Tensor, bool, TFBaseModelOutput, tuple, list, dict)):
@@ -282,7 +284,10 @@ def input_processing(func, input_ids, **kwargs):
         if isinstance(input_ids, tf.Tensor) or input_ids is None:
             output[parameter_names[0]] = input_ids
         else:
-            raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted for %s." % (type(input_ids), parameter_names[0]))
+            raise ValueError(
+                "Data of type %s is not allowed only tf.Tensor is accepted for %s."
+                % (type(input_ids), parameter_names[0])
+            )
 
     # When creating a SavedModel TF calls the method with LayerCall.__call__(args, **kwargs)
     # So to respect the proper output we have to add this exception
@@ -1113,7 +1118,7 @@ def shape_list(x: tf.Tensor) -> List[int]:
         return dynamic.as_list()
 
     static = x.shape.as_list()
-    
+
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 

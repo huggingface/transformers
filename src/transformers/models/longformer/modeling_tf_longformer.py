@@ -14,9 +14,9 @@
 # limitations under the License.
 """Tensorflow Longformer model. """
 
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
-import warnings
 
 import tensorflow as tf
 
@@ -34,9 +34,9 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     get_initializer,
+    input_processing,
     keras_serializable,
     shape_list,
-    input_processing,
 )
 from ...utils import logging
 from .configuration_longformer import LongformerConfig
@@ -1447,8 +1447,12 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
             training=training,
         )
 
-        output_attentions = inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        output_hidden_states = inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
+        )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
@@ -1468,7 +1472,9 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
 
         # merge `global_attention_mask` and `attention_mask`
         if inputs["global_attention_mask"] is not None:
-            inputs["attention_mask"] = self._merge_to_attention_mask(inputs["attention_mask"], inputs["global_attention_mask"])
+            inputs["attention_mask"] = self._merge_to_attention_mask(
+                inputs["attention_mask"], inputs["global_attention_mask"]
+            )
 
         (
             padding_len,
@@ -1504,7 +1510,13 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
         extended_attention_mask = tf.cast(tf.math.abs(1 - extended_attention_mask), tf.dtypes.float32) * -10000.0
-        embedding_output = self.embeddings(inputs["input_ids"], inputs["position_ids"], inputs["token_type_ids"], inputs["inputs_embeds"], training=inputs["training"])
+        embedding_output = self.embeddings(
+            inputs["input_ids"],
+            inputs["position_ids"],
+            inputs["token_type_ids"],
+            inputs["inputs_embeds"],
+            training=inputs["training"],
+        )
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
@@ -1986,7 +1998,9 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
                 logger.warning(
                     "It is not possible to automatically generate the `global_attention_mask`. Please make sure that it is correctly set."
                 )
-            elif tf.where(inputs["input_ids"] == self.config.sep_token_id).shape[0] != 3 * inputs["input_ids"].shape[0]:
+            elif (
+                tf.where(inputs["input_ids"] == self.config.sep_token_id).shape[0] != 3 * inputs["input_ids"].shape[0]
+            ):
                 logger.warning(
                     f"There should be exactly three separator tokens: {self.config.sep_token_id} in every sample for questions answering. You might also consider to set `global_attention_mask` manually in the forward function to avoid this. This is most likely an error."
                 )
@@ -1994,7 +2008,9 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
                 logger.info("Initializing global attention on question tokens...")
                 # put global attention on all tokens until `config.sep_token_id` is reached
                 sep_token_indices = tf.where(inputs["input_ids"] == self.config.sep_token_id)
-                inputs["global_attention_mask"] = _compute_global_attention_mask(shape_list(inputs["input_ids"]), sep_token_indices)
+                inputs["global_attention_mask"] = _compute_global_attention_mask(
+                    shape_list(inputs["input_ids"]), sep_token_indices
+                )
 
         outputs = self.longformer(
             input_ids=inputs["input_ids"],

@@ -17,14 +17,13 @@
 """
 
 import itertools
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
-import warnings
 
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -32,7 +31,14 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
 )
 from ...modeling_tf_outputs import TFBaseModelOutput
-from ...modeling_tf_utils import TFPreTrainedModel, TFSharedEmbeddings, get_initializer, keras_serializable, shape_list, input_processing
+from ...modeling_tf_utils import (
+    TFPreTrainedModel,
+    TFSharedEmbeddings,
+    get_initializer,
+    input_processing,
+    keras_serializable,
+    shape_list,
+)
 from ...utils import logging
 from ..xlm.modeling_tf_xlm import (
     TFXLMForMultipleChoice,
@@ -510,8 +516,12 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
             return_dict=return_dict,
             training=training,
         )
-        output_attentions = inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        output_hidden_states = inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
+        )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
@@ -525,7 +535,9 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
 
         if inputs["lengths"] is None:
             if inputs["input_ids"] is not None:
-                inputs["lengths"] = tf.reduce_sum(tf.cast(tf.not_equal(inputs["input_ids"], self.pad_index), dtype=tf.int32), axis=1)
+                inputs["lengths"] = tf.reduce_sum(
+                    tf.cast(tf.not_equal(inputs["input_ids"], self.pad_index), dtype=tf.int32), axis=1
+                )
             else:
                 inputs["lengths"] = tf.convert_to_tensor([slen] * bs, tf.int32)
         # mask = input_ids != self.pad_index
@@ -618,7 +630,13 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
             # self attention
             if not self.pre_norm:
                 attn_outputs = self.attentions[i](
-                    tensor, attn_mask, None, inputs["cache"], inputs["head_mask"][i], output_attentions, training=inputs["training"]
+                    tensor,
+                    attn_mask,
+                    None,
+                    inputs["cache"],
+                    inputs["head_mask"][i],
+                    output_attentions,
+                    training=inputs["training"],
                 )
                 attn = attn_outputs[0]
 
@@ -631,7 +649,13 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
             else:
                 tensor_normalized = self.layer_norm1[i](tensor)
                 attn_outputs = self.attentions[i](
-                    tensor_normalized, attn_mask, None, inputs["cache"], inputs["head_mask"][i], output_attentions, training=inputs["training"]
+                    tensor_normalized,
+                    attn_mask,
+                    None,
+                    inputs["cache"],
+                    inputs["head_mask"][i],
+                    output_attentions,
+                    training=inputs["training"],
                 )
                 attn = attn_outputs[0]
 

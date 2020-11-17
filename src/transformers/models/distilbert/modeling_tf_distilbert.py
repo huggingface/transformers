@@ -43,9 +43,9 @@ from ...modeling_tf_utils import (
     TFSharedEmbeddings,
     TFTokenClassificationLoss,
     get_initializer,
+    input_processing,
     keras_serializable,
     shape_list,
-    input_processing,
 )
 from ...utils import logging
 from .configuration_distilbert import DistilBertConfig
@@ -438,8 +438,12 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
             training=training,
         )
 
-        output_attentions = inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        output_hidden_states = inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
+        )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
@@ -466,7 +470,9 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         else:
             inputs["head_mask"] = [None] * self.num_hidden_layers
 
-        embedding_output = self.embeddings(inputs["input_ids"], inputs_embeds=inputs["inputs_embeds"])  # (bs, seq_length, dim)
+        embedding_output = self.embeddings(
+            inputs["input_ids"], inputs_embeds=inputs["inputs_embeds"]
+        )  # (bs, seq_length, dim)
         tfmr_output = self.transformer(
             embedding_output,
             inputs["attention_mask"],
@@ -1027,7 +1033,9 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
             seq_length = shape_list(inputs["inputs_embeds"])[2]
 
         flat_input_ids = tf.reshape(inputs["input_ids"], (-1, seq_length)) if inputs["input_ids"] is not None else None
-        flat_attention_mask = tf.reshape(inputs["attention_mask"], (-1, seq_length)) if inputs["attention_mask"] is not None else None
+        flat_attention_mask = (
+            tf.reshape(inputs["attention_mask"], (-1, seq_length)) if inputs["attention_mask"] is not None else None
+        )
         flat_inputs_embeds = (
             tf.reshape(inputs["inputs_embeds"], (-1, seq_length, shape_list(inputs["inputs_embeds"])[3]))
             if inputs["inputs_embeds"] is not None

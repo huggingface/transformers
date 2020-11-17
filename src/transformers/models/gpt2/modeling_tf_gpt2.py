@@ -16,9 +16,9 @@
 """ TF 2.0 OpenAI GPT-2 model. """
 
 
+import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
-import warnings
 
 import tensorflow as tf
 
@@ -38,9 +38,9 @@ from ...modeling_tf_utils import (
     TFSequenceSummary,
     TFSharedEmbeddings,
     get_initializer,
+    input_processing,
     keras_serializable,
     shape_list,
-    input_processing,
 )
 from ...utils import logging
 from .configuration_gpt2 import GPT2Config
@@ -285,8 +285,12 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             training=training,
         )
 
-        output_attentions = inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        output_hidden_states = inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
+        )
         use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.use_cache
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
@@ -307,7 +311,9 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             past_length = shape_list(inputs["past"][0][0])[-2]
 
         if inputs["position_ids"] is None:
-            inputs["position_ids"] = tf.range(past_length, input_shape[-1] + past_length, dtype=tf.int32)[tf.newaxis, :]
+            inputs["position_ids"] = tf.range(past_length, input_shape[-1] + past_length, dtype=tf.int32)[
+                tf.newaxis, :
+            ]
 
         if inputs["attention_mask"] is not None:
             # We create a 3D attention mask from a 2D tensor mask.
@@ -347,7 +353,9 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         position_embeds = self.wpe(inputs["position_ids"])
 
         if inputs["token_type_ids"] is not None:
-            inputs["token_type_ids"] = tf.reshape(inputs["token_type_ids"], [-1, shape_list(inputs["token_type_ids"])[-1]])
+            inputs["token_type_ids"] = tf.reshape(
+                inputs["token_type_ids"], [-1, shape_list(inputs["token_type_ids"])[-1]]
+            )
             token_type_embeds = self.wte(inputs["token_type_ids"], mode="embedding")
         else:
             token_type_embeds = 0
@@ -837,9 +845,15 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
 
         seq_length = input_shapes[-1]
         flat_input_ids = tf.reshape(inputs["input_ids"], (-1, seq_length)) if inputs["input_ids"] is not None else None
-        flat_attention_mask = tf.reshape(inputs["attention_mask"], (-1, seq_length)) if inputs["attention_mask"] is not None else None
-        flat_token_type_ids = tf.reshape(inputs["token_type_ids"], (-1, seq_length)) if inputs["token_type_ids"] is not None else None
-        flat_position_ids = tf.reshape(inputs["position_ids"], (-1, seq_length)) if inputs["position_ids"] is not None else None
+        flat_attention_mask = (
+            tf.reshape(inputs["attention_mask"], (-1, seq_length)) if inputs["attention_mask"] is not None else None
+        )
+        flat_token_type_ids = (
+            tf.reshape(inputs["token_type_ids"], (-1, seq_length)) if inputs["token_type_ids"] is not None else None
+        )
+        flat_position_ids = (
+            tf.reshape(inputs["position_ids"], (-1, seq_length)) if inputs["position_ids"] is not None else None
+        )
         transformer_outputs = self.transformer(
             flat_input_ids,
             inputs["past"],

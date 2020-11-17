@@ -25,9 +25,9 @@ from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
     TFSharedEmbeddings,
+    input_processing,
     keras_serializable,
     shape_list,
-    input_processing,
 )
 from ...utils import logging
 from .configuration_ctrl import CTRLConfig
@@ -289,8 +289,12 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             training=training,
         )
 
-        output_attentions = inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        output_hidden_states = inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
+        )
         use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.use_cache
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
@@ -320,7 +324,9 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         else:
             past_length = shape_list(inputs["past"][0][0])[-2]
         if inputs["position_ids"] is None:
-            inputs["position_ids"] = tf.range(past_length, input_shape[-1] + past_length, dtype=tf.int32)[tf.newaxis, :]
+            inputs["position_ids"] = tf.range(past_length, input_shape[-1] + past_length, dtype=tf.int32)[
+                tf.newaxis, :
+            ]
             inputs["position_ids"] = tf.tile(inputs["position_ids"], [input_shape[0], 1])
 
         # Attention mask.
@@ -353,7 +359,9 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             inputs["head_mask"] = [None] * self.num_layers
 
         if inputs["token_type_ids"] is not None:
-            inputs["token_type_ids"] = tf.reshape(inputs["token_type_ids"], [-1, shape_list(inputs["token_type_ids"])[-1]])
+            inputs["token_type_ids"] = tf.reshape(
+                inputs["token_type_ids"], [-1, shape_list(inputs["token_type_ids"])[-1]]
+            )
             token_type_embeds = self.w(inputs["token_type_ids"], mode="embedding")
             token_type_embeds *= tf.math.sqrt(tf.cast(self.d_model_size, tf.float32))
         else:
