@@ -307,9 +307,18 @@ def main():
 
     # Training
     if training_args.do_train:
+{%- if cookiecutter.can_train_from_scratch == "False" %}
         trainer.train(
             model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
         )
+{%- elif cookiecutter.can_train_from_scratch == "True" %}
+        model_path = (
+            model_args.model_name_or_path
+            if (model_args.model_name_or_path is not None and os.path.isdir(model_args.model_name_or_path))
+            else None
+        )
+        trainer.train(model_path=model_path)
+{% endif %}
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
     # Evaluation
