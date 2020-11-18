@@ -52,20 +52,20 @@ Models are pre-trained by [UER-py](https://github.com/dbiir/UER-py/) on [Tencent
 
 ```
 python3 preprocess.py --corpus_path corpora/couplet.txt \
-					  --vocab_path models/google_zh_vocab.txt \  
-					  --dataset_path couplet.pt --processes_num 16 \
-					  --seq_length 64 --target lm 
+		      --vocab_path models/google_zh_vocab.txt \  
+		      --dataset_path couplet.pt --processes_num 16 \
+	              --seq_length 64 --target lm 
 ```
 
 ```
 python3 pretrain.py --dataset_path couplet.pt \
-				    --vocab_path models/google_zh_vocab.txt \
-					--output_model_path models/couplet_gpt_base_model.bin \  
-					--config_path models/bert_base_config.json --learning_rate 5e-4 \
-					--tie_weight --world_size 8 --gpu_ranks 0 1 2 3 4 5 6 7 \
-					--batch_size 64 --report_steps 1000 \
-					--save_checkpoint_steps 5000 --total_steps 25000 \
-					--embedding gpt --encoder gpt2 --target lm
+	            --vocab_path models/google_zh_vocab.txt \
+		    --output_model_path models/couplet_gpt_base_model.bin \  
+	       	    --config_path models/bert_base_config.json --learning_rate 5e-4 \
+		    --tie_weight --world_size 8 --gpu_ranks 0 1 2 3 4 5 6 7 \
+		    --batch_size 64 --report_steps 1000 \
+		    --save_checkpoint_steps 5000 --total_steps 25000 \
+		    --embedding gpt --encoder gpt2 --target lm
 
 ```
 
