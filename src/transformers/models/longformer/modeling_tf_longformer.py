@@ -437,15 +437,15 @@ class TFLongformerLMHead(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
-    def call(self, features):
-        x = self.dense(features)
-        x = self.act(x)
-        x = self.layer_norm(x)
+    def call(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
 
         # project back to size of vocabulary with bias
-        x = self.decoder(x, mode="linear") + self.bias
+        hidden_states = self.decoder(hidden_states, mode="linear") + self.bias
 
-        return x
+        return hidden_states
 
 
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaEmbeddings
@@ -492,7 +492,7 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
-    def create_position_ids_from_input_ids(self, x):
+    def create_position_ids_from_input_ids(self, input_ids):
         """
         Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
         symbols are ignored. This is modified from fairseq's `utils.make_positions`.
@@ -502,7 +502,13 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
 
         Returns: tf.Tensor
         """
-        mask = tf.cast(tf.math.not_equal(x, self.padding_idx), dtype=tf.int32)
+        input_ids_shape = shape_list(input_ids)
+
+        # multiple choice has 3 dimensions
+        if len(input_ids_shape) == 3:
+            input_ids = tf.reshape(input_ids, (input_ids_shape[0] * input_ids_shape[1], input_ids_shape[2]))
+
+        mask = tf.cast(tf.math.not_equal(input_ids, self.padding_idx), dtype=tf.int32)
         incremental_indices = tf.math.cumsum(mask, axis=1) * mask
 
         return incremental_indices + self.padding_idx
