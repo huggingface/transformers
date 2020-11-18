@@ -171,7 +171,9 @@ class SummarizationDistiller(SummarizationModule):
         def zero_tensor():
             return torch.tensor(0.0).type_as(student_lm_loss)
 
-        teacher_enc_outputs = student_outputs["encoder_last_hidden_state"]  # use this unless self.different_base_models
+        teacher_enc_outputs = student_outputs[
+            "encoder_last_hidden_state"
+        ]  # use this unless self.different_base_models
         hid_loss_enc, hid_loss_dec = zero_tensor(), zero_tensor()
         if self.different_encoder:  # compute encoder hidden state loss
             all_teacher_encoder_outputs = self.teacher.get_encoder()(
