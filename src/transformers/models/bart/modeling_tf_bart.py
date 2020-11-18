@@ -267,7 +267,7 @@ class TFEncoderLayer(Layer):
         if self.normalize_before:
             x = self.final_layer_norm(x)
         x = self.activation_fn(self.fc1(x))
-        x = tf.nn.dropout(x, rate=self.self.activation_dropout if training else 0)
+        x = tf.nn.dropout(x, rate=self.activation_dropout if training else 0)
         x = self.fc2(x)
         x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
