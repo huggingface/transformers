@@ -785,6 +785,14 @@ class TFElectraModel(TFElectraPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         outputs = self.electra(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -883,6 +891,14 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
             return_dict=return_dict,
             training=inputs["training"],
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = (
             inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
         )
@@ -1022,6 +1038,14 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
             return_dict=return_dict,
             training=inputs["training"],
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = (
             inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
         )
@@ -1159,6 +1183,14 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
             return_dict=return_dict,
             training=inputs["training"],
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = (
             inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
         )
@@ -1407,6 +1439,14 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
             return_dict=return_dict,
             training=inputs["training"],
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = (
             inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
         )
@@ -1528,6 +1568,14 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
             return_dict=return_dict,
             training=inputs["training"],
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+            
         return_dict = (
             inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
         )

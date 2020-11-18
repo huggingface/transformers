@@ -750,6 +750,7 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
             training=training,
             kwargs_call=kwargs,
         )
+
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
         )
@@ -1010,6 +1011,14 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         outputs = self.lxmert(
             input_ids=inputs["input_ids"],
             visual_feats=inputs["visual_feats"],
@@ -1329,6 +1338,14 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+            
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.lxmert.return_dict
         lxmert_output = self.lxmert(
             input_ids=inputs["input_ids"],

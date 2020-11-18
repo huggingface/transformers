@@ -1093,6 +1093,21 @@ class TFBartModel(TFPretrainedBartModel):
             return_dict=return_dict,
             training=training,
         )
+
+        if "decoder_cached_states" in inputs:
+            warnings.warn(
+                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                FutureWarning,
+            )
+            inputs["past_key_values"] = inputs.pop("decoder_cached_states")
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         outputs = self.bart(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
