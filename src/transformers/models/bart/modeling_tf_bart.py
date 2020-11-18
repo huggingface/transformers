@@ -21,6 +21,8 @@ from typing import Dict, Optional, Tuple, Union
 import numpy as np
 import tensorflow as tf
 
+from transformers.tokenization_utils_base import BatchEncoding
+
 from ...activations_tf import ACT2FN
 from ...file_utils import (
     add_code_sample_docstrings,
@@ -173,7 +175,7 @@ def invert_mask(attention_mask: tf.Tensor):
 
 class TFPretrainedBartModel(TFPreTrainedModel):
     config_class = BartConfig
-    base_model_prefix = "bart"
+    base_model_prefix = "model"
 
     @property
     def dummy_inputs(self):
@@ -259,11 +261,9 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         if self.normalize_before:
             x = self.self_attn_layer_norm(x)
         x, self_attn_weights = self.self_attn(query=x, key=x, key_padding_mask=encoder_padding_mask)
-        # TODO (JP): This assert is not graph compliant, create a TF assert instead
-        """
-        assert shape_list(x) == shape_list( residual ), f"Self attn modified the shape of query {shape_list(residual)}
-        to {shape_list(x)}"
-        """
+        assert shape_list(x) == shape_list(
+            residual
+        ), f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(x)}"
         x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
         if not self.normalize_before:
@@ -322,15 +322,9 @@ class TFBartEncoder(tf.keras.layers.Layer):
             )
         self.layers = [TFEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layernorm_embedding = (
-            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
-            if config.normalize_embedding
-            else tf.keras.layers.Layer()
+            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding") if config.normalize_embedding else tf.keras.layers.Layer()
         )
-        self.layer_norm = (
-            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
-            if config.add_final_layer_norm
-            else None
-        )
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm") if config.add_final_layer_norm else None
         self.return_dict = config.return_dict
 
     def call(
@@ -538,15 +532,9 @@ class TFBartDecoder(tf.keras.layers.Layer):
             )
         self.layers = [TFDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
         self.layernorm_embedding = (
-            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
-            if config.normalize_embedding
-            else tf.keras.layers.Layer()
+            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding") if config.normalize_embedding else tf.keras.layers.Layer()
         )
-        self.layer_norm = (
-            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
-            if config.add_final_layer_norm
-            else None
-        )
+        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm") if config.add_final_layer_norm else None
 
         self.dropout = config.dropout
         self.output_hidden_states = config.output_hidden_states
@@ -643,16 +631,15 @@ class TFBartDecoder(tf.keras.layers.Layer):
         encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))  # could maybe be avoided.
 
         next_cache = (encoder_hidden_states, next_decoder_cache) if use_cache else None
-
         if not return_dict:
-            return tuple(v for v in [x, next_cache, all_hidden_states, all_self_attns] if v is not None)
-
-        return TFBaseModelOutputWithPast(
-            last_hidden_state=x,
-            past_key_values=next_cache,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-        )
+            return x, next_cache, all_hidden_states, all_self_attns
+        else:
+            return TFBaseModelOutputWithPast(
+                last_hidden_state=x,
+                past_key_values=next_cache,
+                hidden_states=all_hidden_states,
+                attentions=all_self_attns,
+            )
 
 
 def _reorder_buffer(attn_cache, new_order):
@@ -768,8 +755,7 @@ class TFAttention(tf.keras.layers.Layer):
             attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
 
         if key_padding_mask is not None:  # don't attend to padding symbols
-            attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
-
+            attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
             if key_padding_mask.dtype == tf.bool:
                 key_padding_mask = tf.cast(key_padding_mask, attn_weights.dtype) * -1e9
             extended_mask = tf.expand_dims(tf.expand_dims(key_padding_mask, 1), 2)
@@ -783,7 +769,7 @@ class TFAttention(tf.keras.layers.Layer):
         attn_output = tf.transpose(attn_output, perm=(1, 0, 2))
         attn_output = tf.reshape(attn_output, (tgt_len, bsz, embed_dim))
         attn_output = self.out_proj(attn_output)
-        attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
+        attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
         return attn_output, attn_weights
 
     def _concat_saved_state(self, k, v, saved_state, static_kv, bsz) -> Tuple[tf.Tensor]:
@@ -872,12 +858,17 @@ class TFSinusoidalPositionalEmbedding(tf.keras.layers.Embedding):
         return super().call(positions)
 
 
-@keras_serializable
-class TFBartMainLayer(tf.keras.layers.Layer):
-    config_class = BartConfig
+# Public API
 
-    def __init__(self, config, **kwargs):
-        super().__init__(**kwargs)
+
+@add_start_docstrings(
+    "The bare BART Model outputting raw hidden-states without any specific head on top.",
+    BART_START_DOCSTRING,
+)
+@keras_serializable
+class TFBartModel(TFPretrainedBartModel):
+    def __init__(self, config: BartConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, config.pad_token_id, name="model.shared")
 
         with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
@@ -887,11 +878,6 @@ class TFBartMainLayer(tf.keras.layers.Layer):
         embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
         embed_tokens.vocab_size = self.shared.vocab_size
         embed_tokens.hidden_size = self.shared.hidden_size
-        self.use_cache = config.use_cache
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
-        self.return_dict = config.use_return_dict
-        self.pad_token_id = config.pad_token_id
 
         self.encoder = TFBartEncoder(config, embed_tokens, name="encoder")
         self.decoder = TFBartDecoder(config, embed_tokens, name="decoder")
@@ -907,11 +893,12 @@ class TFBartMainLayer(tf.keras.layers.Layer):
         Prepare masks that ignore padding tokens decoder and a causal lm mask for the decoder if none are provided.
         This mimics the default behavior in fairseq. To override it pass in masks.
         """
+        pad_token_id = self.config.pad_token_id
         if decoder_input_ids is None:
             decoder_input_ids = self._shift_right(inputs)
         bsz, tgt_len = shape_list(decoder_input_ids)[:2]
         if decoder_attn_mask is None:
-            decoder_padding_mask = make_padding_mask(decoder_input_ids, self.pad_token_id)
+            decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
         else:
             decoder_padding_mask = invert_mask(decoder_attn_mask)
 
@@ -1175,7 +1162,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel, TFCausalLanguageMode
             if inputs["decoder_input_ids"] is None:
                 inputs["decoder_input_ids"] = self._shift_right(inputs["labels"])
 
-        outputs = self.bart(
+        outputs = self.model(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             decoder_input_ids=inputs["decoder_input_ids"],
@@ -1260,7 +1247,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel, TFCausalLanguageMode
             return logits
 
     def get_output_embeddings(self):
-        return self.bart.shared
+        return self.model.shared
 
     def get_encoder(self):
-        return self.bart.encoder
+        return self.model.encoder
