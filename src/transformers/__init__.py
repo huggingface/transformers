@@ -883,7 +883,7 @@ else:
 
 if not is_tf_available() and not is_torch_available():
     logger.warning(
-        "Neither PyTorch nor TensorFlow >= 2.0 have been found."
-        "Models won't be available and only tokenizers, configuration"
+        "Neither PyTorch nor TensorFlow >= 2.0 have been found. "
+        "Models won't be available and only tokenizers, configuration "
         "and file/data utilities can be used."
     )
