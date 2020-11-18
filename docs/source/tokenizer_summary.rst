@@ -31,10 +31,10 @@ account, tokenizing our exemplary text would give:
 
 .. code-block::
 
-    ["Don", """, "t", "you", "love", "🤗", "Transformers", "?", "We", "sure", "do", "."]
+    ["Don", "'", "t", "you", "love", "🤗", "Transformers", "?", "We", "sure", "do", "."]
 
 Better. However, it is disadvantageous, how the tokenization dealt with the word "Don't". "Don't" stands for "do not",
-so it would be better tokenized as ``["Do", "n"t"]``. This is where things start getting complicated, and part of the
+so it would be better tokenized as ``["Do", "n't"]``. This is where things start getting complicated, and part of the
 reason each model has its own tokenizer type. Depending on the rules we apply for tokenizing a text, a different
 tokenized output is generated for the same text. A pre-trained model only performs properly if you feed it an input
 that was tokenized with the same rules that were used to tokenize its training data.
@@ -44,7 +44,7 @@ rule-based tokenizers. Applying them on our example, *spaCy* and *Moses* would o
 
 .. code-block::
 
-    ["Do", "n"t", "you", "love", "🤗", "Transformers", "?", "We", "sure", "do", "."]
+    ["Do", "n't", "you", "love", "🤗", "Transformers", "?", "We", "sure", "do", "."]
 
 As can be seen Space -and punctuation tokenization, as well as rule-based tokenization, is used here. Space- and
 punctuation tokenization and rule-based tokenization are both examples of word tokenization, which is loosely defined
@@ -98,9 +98,9 @@ As another example, :class:`~transformers.XLNetTokenizer` tokenizes our previous
     >>> from transformers import XLNetTokenizer
     >>> tokenizer = XLNetTokenizer.from_pretrained("xlnet-base-cased")
     >>> tokenizer.tokenize("Don't you love 🤗 Transformers? We sure do.")
-    ["▁Don", """, "t", "▁you", "▁love", "▁", "🤗", "▁", "Transform", "ers", "?", "▁We", "▁sure", "▁do", "."]
+    ["▁Don", "'", "t", "▁you", "▁love", "▁", "🤗", "▁", "Transform", "ers", "?", "▁We", "▁sure", "▁do", "."]
 
-We"ll get back to the meaning of those "▁" when we look at :ref:`SentencePiece <sentencepiece>`. As one can see, the
+We'll get back to the meaning of those "▁" when we look at :ref:`SentencePiece <sentencepiece>`. As one can see, the
 rare word "Transformers" has been split into the more frequent subwords "Transform" and "ers".
 
 Let's now look at how the different subword tokenization algorithms work. Note that all of those tokenization
@@ -125,7 +125,7 @@ of unique words and learns merge rules to form a new symbol from two symbols of 
 the vocabulary has attained the desired vocabulary size. Note that the desired vocabulary size is a hyperparameter to
 define before training the tokenizer.
 
-As an example, let"s assume that after pre-tokenization, the following set of words including their frequency has been
+As an example, let's assume that after pre-tokenization, the following set of words including their frequency has been
 determined:
 
 .. code-block::
@@ -149,7 +149,7 @@ symbol together. Next, "ug" is added to the vocabulary. The set of words then be
 
     ("h" "ug", 10), ("p" "ug", 5), ("p" "u" "n", 12), ("b" "u" "n", 4), ("h" "ug" "s", 5)
 
-BPE then identifies the next most common symbol pair. It"s "u" followed by "n", which occurs 16 times. "u", "n" is
+BPE then identifies the next most common symbol pair. It's "u" followed by "n", which occurs 16 times. "u", "n" is
 merged to "un" and added to the vocabulary. The next most frequent symbol pair is "h" followed by "ug", occurring 15
 times. Again the pair is merged and "hug" can be added to the vocabulary.
 
