@@ -2,6 +2,7 @@
 language: en
 datasets:
 - quartz
+pipeline_tag: question-answering
 ---
 
 # T5-base fine-tuned on QuaRTz  
