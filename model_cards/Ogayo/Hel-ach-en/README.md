@@ -4,8 +4,7 @@ language:
 - en
 tags:
 - translation
-- Pytorch
-license: CC By 4.0
+license: cc-by-4.0
 datasets:
 - JW300
 metrics:
