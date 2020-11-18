@@ -1487,7 +1487,7 @@ class TapasTokenizer(PreTrainedTokenizer):
     def _get_numeric_values(self, table, column_ids, row_ids):
         """Returns numeric values for computation of answer loss."""
 
-        numeric_values = [float("nan")] * self.model_max_length
+        numeric_values = [float("nan")] * len(column_ids)
 
         if table is not None:
             num_rows = table.shape[0]
@@ -1510,7 +1510,7 @@ class TapasTokenizer(PreTrainedTokenizer):
     def _get_numeric_values_scale(self, table, column_ids, row_ids):
         """Returns a scale to each token to down weigh the value of long words."""
 
-        numeric_values_scale = [1.0] * self.model_max_length
+        numeric_values_scale = [1.0] * len(column_ids)
 
         if table is None:
             return numeric_values_scale
@@ -1713,6 +1713,12 @@ class TapasTokenizer(PreTrainedTokenizer):
                     encoded_inputs["token_type_ids"] = (
                         encoded_inputs["token_type_ids"] + [[self.pad_token_type_id] * 7] * difference
                     )
+                if "label_ids" in encoded_inputs:
+                    encoded_inputs["label_ids"] = encoded_inputs["label_ids"] + [0] * difference
+                if "numeric_values" in encoded_inputs:
+                    encoded_inputs["numeric_values"] = encoded_inputs["numeric_values"] + [float("nan")] * difference
+                if "numeric_values_scale" in encoded_inputs:
+                    encoded_inputs["numeric_values_scale"] = encoded_inputs["numeric_values_scale"] + [1.0] * difference
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
                 encoded_inputs["input_ids"] = encoded_inputs["input_ids"] + [self.pad_token_id] * difference
@@ -1723,6 +1729,12 @@ class TapasTokenizer(PreTrainedTokenizer):
                     encoded_inputs["token_type_ids"] = [[self.pad_token_type_id] * 7] * difference + encoded_inputs[
                         "token_type_ids"
                     ]
+                if "label_ids" in encoded_inputs:
+                    encoded_inputs["label_ids"] = [0] * difference + encoded_inputs["label_ids"] 
+                if "numeric_values" in encoded_inputs:
+                    encoded_inputs["numeric_values"] = [float("nan")] * difference + encoded_inputs["numeric_values"] 
+                if "numeric_values_scale" in encoded_inputs:
+                    encoded_inputs["numeric_values_scale"] = [1.0] * difference + encoded_inputs["numeric_values_scale"] 
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
                 encoded_inputs["input_ids"] = [self.pad_token_id] * difference + encoded_inputs["input_ids"]
