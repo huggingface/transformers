@@ -291,7 +291,7 @@ def input_processing(func, input_ids, **kwargs):
 
     # When creating a SavedModel TF calls the method with LayerCall.__call__(args, **kwargs)
     # So to respect the proper output we have to add this exception
-    if "args" in output:
+    if "args" in output and output["args"] is not None:
         tensor_name = output["args"].name.split(":")[0]
         output[tensor_name] = output["args"]
 
