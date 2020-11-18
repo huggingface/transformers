@@ -358,6 +358,21 @@ def input_processing(func, inputs, **kwargs):
     parameter_names = list(signature.keys())
     output = {}
 
+    if "inputs" in kwargs:
+        warnings.warn(
+            "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+            FutureWarning,
+        )
+
+        output["input_ids"] = kwargs.pop("inputs")
+    
+    if "decoder_cached_states" in kwargs:
+        warnings.warn(
+            "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+            FutureWarning,
+        )
+        output["past_key_values"] = kwargs.pop("decoder_cached_states")
+
     for k, v in kwargs.items():
         if isinstance(v, (tf.Tensor, bool, TFBaseModelOutput, tuple, list, dict)) or v is None:
             output[k] = v
@@ -386,6 +401,21 @@ def input_processing(func, inputs, **kwargs):
                     % (type(input), parameter_names[i])
                 )
     elif isinstance(input_ids, (dict, BatchEncoding)):
+        if "inputs" in input_ids:
+            warnings.warn(
+                    "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                    FutureWarning,
+                )
+
+            output["input_ids"] = input_ids.pop("inputs")
+        
+        if "decoder_cached_states" in input_ids:
+            warnings.warn(
+                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                FutureWarning,
+            )
+            output["past_key_values"] = input_ids.pop("decoder_cached_states")
+
         for k, v in dict(input_ids).items():
             if not isinstance(v, (tf.Tensor, bool, TFBaseModelOutput, tuple, list, dict)):
                 raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted for %s." % (type(v), k))
