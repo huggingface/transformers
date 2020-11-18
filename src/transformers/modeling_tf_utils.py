@@ -28,10 +28,16 @@ import tensorflow as tf
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.saving import hdf5_format
 
-from transformers.modeling_tf_outputs import TFBaseModelOutput
-
 from .configuration_utils import PretrainedConfig
-from .file_utils import DUMMY_INPUTS, TF2_WEIGHTS_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_remote_url
+from .file_utils import (
+    DUMMY_INPUTS,
+    TF2_WEIGHTS_NAME,
+    WEIGHTS_NAME,
+    ModelOutput,
+    cached_path,
+    hf_bucket_url,
+    is_remote_url,
+)
 from .generation_tf_utils import TFGenerationMixin
 from .tokenization_utils_base import BatchEncoding
 from .utils import logging
@@ -261,12 +267,14 @@ def input_processing(func, input_ids, **kwargs):
             FutureWarning,
         )
         output["past_key_values"] = kwargs["kwargs_call"].pop("decoder_cached_states")
-    
+
     if len(kwargs["kwargs_call"]) > 0:
-        raise ValueError(f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}.")
+        raise ValueError(
+            f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
+        )
 
     for k, v in kwargs.items():
-        if isinstance(v, (tf.Tensor, bool, TFBaseModelOutput, tuple, list, dict)) or v is None:
+        if isinstance(v, (tf.Tensor, bool, ModelOutput, tuple, list, dict)) or v is None:
             output[k] = v
         else:
             raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
@@ -281,11 +289,15 @@ def input_processing(func, input_ids, **kwargs):
                 if tensor_name in parameter_names:
                     output[tensor_name] = input
                 else:
-                    raise ValueError(f"The tensor named {input.name} does not belong to the authorized list of names {parameter_names}.")
-            elif isinstance(input, (tf.Tensor, bool, TFBaseModelOutput, tuple, list, dict)) or input is None:
+                    raise ValueError(
+                        f"The tensor named {input.name} does not belong to the authorized list of names {parameter_names}."
+                    )
+            elif isinstance(input, (tf.Tensor, bool, ModelOutput, tuple, list, dict)) or input is None:
                 output[parameter_names[i]] = input
             else:
-                raise ValueError(f"Data of type {type(input)} is not allowed only tf.Tensor is accepted for {parameter_names[i]}.")
+                raise ValueError(
+                    f"Data of type {type(input)} is not allowed only tf.Tensor is accepted for {parameter_names[i]}."
+                )
     elif isinstance(input_ids, (dict, BatchEncoding)):
         if "inputs" in input_ids:
             warnings.warn(
@@ -303,7 +315,7 @@ def input_processing(func, input_ids, **kwargs):
             output["past_key_values"] = input_ids.pop("decoder_cached_states")
 
         for k, v in dict(input_ids).items():
-            if not isinstance(v, (tf.Tensor, bool, TFBaseModelOutput, tuple, list, dict)):
+            if not isinstance(v, (tf.Tensor, bool, ModelOutput, tuple, list, dict)):
                 raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
             else:
                 output[k] = v
@@ -311,7 +323,9 @@ def input_processing(func, input_ids, **kwargs):
         if isinstance(input_ids, tf.Tensor) or input_ids is None:
             output[parameter_names[0]] = input_ids
         else:
-            raise ValueError(f"Data of type {type(input_ids)} is not allowed only tf.Tensor is accepted for {parameter_names[0]}.")
+            raise ValueError(
+                f"Data of type {type(input_ids)} is not allowed only tf.Tensor is accepted for {parameter_names[0]}."
+            )
 
     for name in parameter_names:
         if name not in list(output.keys()) and name != "args":
