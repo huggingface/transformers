@@ -1351,6 +1351,31 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
             return_dict=return_dict,
             training=inputs["training"],
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
+        transformer_outputs = self.transformer(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            mems=inputs["mems"],
+            perm_mask=inputs["perm_mask"],
+            target_mapping=inputs["target_mapping"],
+            token_type_ids=inputs["token_type_ids"],
+            input_mask=inputs["input_mask"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            use_cache=inputs["use_cache"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
+        )
         hidden_state = transformer_outputs[0]
         logits = self.lm_loss(hidden_state, training=inputs["training"])
 
@@ -1707,6 +1732,31 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
             training=inputs["training"],
         )
 
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
+        transformer_outputs = self.transformer(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            mems=inputs["mems"],
+            perm_mask=inputs["perm_mask"],
+            target_mapping=inputs["target_mapping"],
+            token_type_ids=inputs["token_type_ids"],
+            input_mask=inputs["input_mask"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            use_cache=inputs["use_cache"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
+        )
+
         output = transformer_outputs[0]
         logits = self.classifier(output)
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
@@ -1808,6 +1858,31 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
             use_mems=inputs["use_mems"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
+        )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
+        transformer_outputs = self.transformer(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            mems=inputs["mems"],
+            perm_mask=inputs["perm_mask"],
+            target_mapping=inputs["target_mapping"],
+            token_type_ids=inputs["token_type_ids"],
+            input_mask=inputs["input_mask"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            use_cache=inputs["use_cache"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=return_dict,
