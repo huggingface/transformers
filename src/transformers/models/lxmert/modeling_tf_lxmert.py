@@ -29,15 +29,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-<<<<<<< HEAD
-<<<<<<< HEAD
 from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, input_processing, keras_serializable, shape_list
-=======
-from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list, input_processing
->>>>>>> 3e0c864a0... Add input processing to TF Lxmert
-=======
-from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, input_processing, keras_serializable, shape_list
->>>>>>> 26a5e3bae... Apply style
 from ...utils import logging
 from .configuration_lxmert import LxmertConfig
 
@@ -1008,11 +1000,7 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-<<<<<<< HEAD
             kwargs_call=kwargs,
-=======
-            **kwargs,
->>>>>>> fa4f2f6f4... Put the deprecated warnings in the input processing function
         )
         outputs = self.lxmert(
             input_ids=inputs["input_ids"],

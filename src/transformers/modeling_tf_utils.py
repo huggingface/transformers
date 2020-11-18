@@ -358,26 +358,29 @@ def input_processing(func, inputs, **kwargs):
     parameter_names = list(signature.keys())
     output = {}
 
-    if "inputs" in kwargs:
+    if "inputs" in kwargs["kwargs_call"]:
         warnings.warn(
             "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
             FutureWarning,
         )
 
-        output["input_ids"] = kwargs.pop("inputs")
+        output["input_ids"] = kwargs["kwargs_call"].pop("inputs")
 
-    if "decoder_cached_states" in kwargs:
+    if "decoder_cached_states" in kwargs["kwargs_call"]:
         warnings.warn(
             "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
             FutureWarning,
         )
-        output["past_key_values"] = kwargs.pop("decoder_cached_states")
+        output["past_key_values"] = kwargs["kwargs_call"].pop("decoder_cached_states")
+    
+    if len(kwargs["kwargs_call"]) > 0:
+        raise ValueError(f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}.")
 
     for k, v in kwargs.items():
         if isinstance(v, (tf.Tensor, bool, TFBaseModelOutput, tuple, list, dict)) or v is None:
             output[k] = v
         else:
-            raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted for %s." % (type(v), k))
+            raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
 
     if isinstance(input_ids, (tuple, list)):
         for i, input in enumerate(input_ids):
@@ -389,17 +392,11 @@ def input_processing(func, inputs, **kwargs):
                 if tensor_name in parameter_names:
                     output[tensor_name] = input
                 else:
-                    raise ValueError(
-                        "The tensor named %s does not belong to the authorized list of names %s "
-                        % (input.name, parameter_names)
-                    )
+                    raise ValueError(f"The tensor named {input.name} does not belong to the authorized list of names {parameter_names}.")
             elif isinstance(input, (tf.Tensor, bool, TFBaseModelOutput, tuple, list, dict)) or input is None:
                 output[parameter_names[i]] = input
             else:
-                raise ValueError(
-                    "Data of type %s is not allowed only tf.Tensor is accepted for %s."
-                    % (type(input), parameter_names[i])
-                )
+                raise ValueError(f"Data of type {type(input)} is not allowed only tf.Tensor is accepted for {parameter_names[i]}.")
     elif isinstance(input_ids, (dict, BatchEncoding)):
         if "inputs" in input_ids:
             warnings.warn(
@@ -418,17 +415,14 @@ def input_processing(func, inputs, **kwargs):
 
         for k, v in dict(input_ids).items():
             if not isinstance(v, (tf.Tensor, bool, TFBaseModelOutput, tuple, list, dict)):
-                raise ValueError("Data of type %s is not allowed only tf.Tensor is accepted for %s." % (type(v), k))
+                raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
             else:
                 output[k] = v
     else:
         if isinstance(input_ids, tf.Tensor) or input_ids is None:
             output[parameter_names[0]] = input_ids
         else:
-            raise ValueError(
-                "Data of type %s is not allowed only tf.Tensor is accepted for %s."
-                % (type(input_ids), parameter_names[0])
-            )
+            raise ValueError(f"Data of type {type(input_ids)} is not allowed only tf.Tensor is accepted for {parameter_names[0]}.")
 
     for name in parameter_names:
         if name not in list(output.keys()) and name != "args":
@@ -441,7 +435,7 @@ def input_processing(func, inputs, **kwargs):
             tensor_name = output["args"].name.split(":")[0]
             output[tensor_name] = output["args"]
         else:
-            "Args in this case is always the first parameter, then input_ids"
+            # `args` in this case is always the first parameter, then `input_ids`
             output["input_ids"] = output["args"]
 
         del output["args"]
