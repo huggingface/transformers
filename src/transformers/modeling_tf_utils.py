@@ -292,7 +292,7 @@ def input_processing(func, input_ids, **kwargs):
     for name in parameter_names:
         if name not in list(output.keys()):
             output[name] = kwargs.pop(name, signature[name].default)
-    
+
     # When creating a SavedModel TF calls the method with LayerCall.__call__(args, **kwargs)
     # So to respect the proper output we have to add this exception
     if "args" in output:
@@ -304,7 +304,7 @@ def input_processing(func, input_ids, **kwargs):
             output["input_ids"] = output["args"]
 
         del output["args"]
-    
+
     if "kwargs" in output:
         del output["kwargs"]
 
