@@ -359,13 +359,6 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         training=False,
         **kwargs,
     ):
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         # removed: src_enc=None, src_len=None
         inputs = input_processing(
             func=self.call,
@@ -382,8 +375,8 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            **kwargs,
         )
-
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
         )
@@ -726,13 +719,6 @@ class TFXLMModel(TFXLMPreTrainedModel):
         training=False,
         **kwargs,
     ):
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -748,6 +734,7 @@ class TFXLMModel(TFXLMPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            **kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
         outputs = self.transformer(
@@ -860,13 +847,6 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         training=False,
         **kwargs,
     ):
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -882,6 +862,7 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            **kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
         transformer_outputs = self.transformer(
@@ -957,13 +938,6 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
             config.num_labels - 1]``. If ``config.num_labels == 1`` a regression loss is computed (Mean-Square loss),
             If ``config.num_labels > 1`` a classification loss is computed (Cross-Entropy).
         """
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -980,6 +954,7 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
             return_dict=return_dict,
             labels=labels,
             training=training,
+            **kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
         transformer_outputs = self.transformer(
@@ -1070,13 +1045,6 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         training=False,
         **kwargs,
     ):
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -1093,6 +1061,7 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
             return_dict=return_dict,
             labels=labels,
             training=training,
+            **kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
 
@@ -1209,13 +1178,6 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
             Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
             1]``.
         """
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -1232,6 +1194,7 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
             return_dict=return_dict,
             labels=labels,
             training=training,
+            **kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
         transformer_outputs = self.transformer(
@@ -1320,13 +1283,6 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
             Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
         """
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -1344,6 +1300,7 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
             start_positions=start_positions,
             end_positions=end_positions,
             training=training,
+            **kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
         transformer_outputs = self.transformer(

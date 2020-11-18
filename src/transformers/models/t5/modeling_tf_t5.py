@@ -597,13 +597,6 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         training=False,
         **kwargs,
     ) -> Tuple:
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -617,15 +610,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             training=training,
+            **kwargs,
         )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
         )
@@ -1045,13 +1031,6 @@ class TFT5Model(TFT5PreTrainedModel):
 
 
         """
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -1068,15 +1047,8 @@ class TFT5Model(TFT5PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            **kwargs,
         )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
         use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.config.use_cache
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
@@ -1247,13 +1219,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             >>> result = model.generate(inputs)
 
         """
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -1271,15 +1236,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            **kwargs,
         )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
         use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.config.use_cache
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] else self.config.output_attentions

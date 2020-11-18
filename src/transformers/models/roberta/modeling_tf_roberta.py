@@ -511,13 +511,6 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
         training=False,
         **kwargs,
     ):
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -530,15 +523,8 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            **kwargs,
         )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
         )
@@ -753,13 +739,6 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
         training=False,
         **kwargs,
     ):
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -772,15 +751,8 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            **kwargs,
         )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
         outputs = self.roberta(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -872,13 +844,6 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
             config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
         """
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -892,15 +857,8 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
             return_dict=return_dict,
             labels=labels,
             training=training,
+            **kwargs,
         )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.roberta.return_dict
         outputs = self.roberta(
             inputs["input_ids"],
@@ -1003,13 +961,6 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -1023,15 +974,8 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
             return_dict=return_dict,
             labels=labels,
             training=training,
+            **kwargs,
         )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.roberta.return_dict
         outputs = self.roberta(
             inputs["input_ids"],
@@ -1118,13 +1062,6 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
             num_choices]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
             :obj:`input_ids` above)
         """
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -1138,15 +1075,8 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
             return_dict=return_dict,
             labels=labels,
             training=training,
+            **kwargs,
         )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.roberta.return_dict
 
         if inputs["input_ids"] is not None:
@@ -1245,13 +1175,6 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
             Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
             1]``.
         """
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -1265,15 +1188,8 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
             return_dict=return_dict,
             labels=labels,
             training=training,
+            **kwargs,
         )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.roberta.return_dict
         outputs = self.roberta(
             inputs["input_ids"],
@@ -1360,13 +1276,6 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
             Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
         """
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -1381,15 +1290,8 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
             start_positions=start_positions,
             end_positions=end_positions,
             training=training,
+            **kwargs,
         )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.roberta.return_dict
         outputs = self.roberta(
             inputs["input_ids"],

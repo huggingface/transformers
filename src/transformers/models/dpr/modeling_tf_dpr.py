@@ -173,8 +173,8 @@ class TFDPREncoder(TFPreTrainedModel):
         output_hidden_states: bool = None,
         return_dict: bool = None,
         training: bool = False,
+        **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor, ...]]:
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -185,6 +185,7 @@ class TFDPREncoder(TFPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            **kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert_model.return_dict
         outputs = self.bert_model(
@@ -244,6 +245,7 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
         output_hidden_states: bool = None,
         return_dict: bool = None,
         training: bool = False,
+        **kwargs,
     ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
         n_passages, sequence_length = shape_list(input_ids) if input_ids is not None else shape_list(inputs_embeds)[:2]
@@ -258,6 +260,7 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            **kwargs,
         )
         return_dict = (
             inputs["return_dict"] if inputs["return_dict"] is not None else self.encoder.bert_model.return_dict
@@ -494,13 +497,6 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
             >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='tf')["input_ids"]
             >>> embeddings = model(input_ids).pooler_output
         """
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -511,8 +507,8 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            **kwargs,
         )
-
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
         )
@@ -597,13 +593,6 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
             >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='tf')["input_ids"]
             >>> embeddings = model(input_ids).pooler_output
         """
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -614,8 +603,8 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            **kwargs,
         )
-
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
         )
@@ -708,13 +697,6 @@ class TFDPRReader(TFDPRPretrainedReader):
             >>> relevance_logits = outputs.relevance_logits
 
         """
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -724,8 +706,8 @@ class TFDPRReader(TFDPRPretrainedReader):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            **kwargs,
         )
-
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
         )

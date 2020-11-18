@@ -938,20 +938,6 @@ class TFBartModel(TFPretrainedBartModel):
         training=False,
         **kwargs
     ):
-        if "decoder_cached_states" in kwargs:
-            warnings.warn(
-                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = kwargs.pop("decoder_cached_states")
-
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -965,22 +951,8 @@ class TFBartModel(TFPretrainedBartModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            **kwargs,
         )
-
-        if "decoder_cached_states" in inputs:
-            warnings.warn(
-                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            inputs["past_key_values"] = inputs.pop("decoder_cached_states")
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
         use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.config.use_cache
         if inputs["decoder_input_ids"] is None:  # Classification
             use_cache = False
@@ -1120,20 +1092,6 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel, TFCausalLanguageMode
             probs = tf.nn.softmax(logits[0])
             # probs[5] is associated with the mask token
         """
-        if "decoder_cached_states" in kwargs:
-            warnings.warn(
-                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = kwargs.pop("decoder_cached_states")
-
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -1148,22 +1106,8 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel, TFCausalLanguageMode
             return_dict=return_dict,
             labels=labels,
             training=training,
+            **kwargs,
         )
-
-        if "decoder_cached_states" in inputs:
-            warnings.warn(
-                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            inputs["past_key_values"] = inputs.pop("decoder_cached_states")
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.return_dict
         use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.config.use_cache
         if inputs["labels"] is not None:
