@@ -377,14 +377,16 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
 
 class PrefixConstrainedLogitsProcessor(LogitsProcessor):
     r"""
-    :class:`transformers.LogitsProcessor` that enforces that only specified sequences can be generated.
+    :class:`transformers.LogitsProcessor` that enforces contrained generation and is useful for prefix-conditioned
+    constrained generation. See `Autoregressive Entity Retrieval <https://arxiv.org/abs/2010.00904>`__ for more
+    information.
 
     Args:
-        prefix_allowed_tokens_fn (:obj:`Callable[[int, torch.Tensor], List[int]]`):
-                a function that has as arguments :obj:`batch_id` and :obj:`inputs_ids`. This function has to return a
-                list with the allowed tokens for the next generation step conditioning on the previously generated
-                tokens :obj:`inputs_ids` and the batch ID :obj:`batch_id`.
-
+        prefix_allowed_tokens_fn: (:obj:`Callable[[int, torch.Tensor], List[int]]`):
+            This function constraints the beam search to allowed tokens only at each step. This function takes 2
+            arguments :obj:`inputs_ids` and the batch ID :obj:`batch_id`. It has to return a list with the allowed
+            tokens for the next generation step conditioned on the previously generated tokens :obj:`inputs_ids` and
+            the batch ID :obj:`batch_id`.
     """
 
     def __init__(self, prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]], num_beams: int):
