@@ -62,6 +62,7 @@ class MT5Config(PretrainedConfig):
             Type of feed forward layer to be used. Should be one of :obj:`"relu"` or :obj:`"gated-gelu"`.
     """
     model_type = "mt5"
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,

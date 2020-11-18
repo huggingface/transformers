@@ -136,6 +136,20 @@ if is_torch_available():
             loss = torch.nn.functional.mse_loss(y, labels)
             return (loss, y, y) if self.double_output else (loss, y)
 
+    class RegressionDictModel(torch.nn.Module):
+        def __init__(self, a=0, b=0):
+            super().__init__()
+            self.a = torch.nn.Parameter(torch.tensor(a).float())
+            self.b = torch.nn.Parameter(torch.tensor(b).float())
+            self.config = None
+
+        def forward(self, input_x=None, labels=None, **kwargs):
+            y = input_x * self.a + self.b
+            result = {"output": y}
+            if labels is not None:
+                result["loss"] = torch.nn.functional.mse_loss(y, labels)
+            return result
+
     class RegressionPreTrainedModel(PreTrainedModel):
         config_class = RegressionModelConfig
         base_model_prefix = "regression"
@@ -235,6 +249,18 @@ class TrainerIntegrationTest(unittest.TestCase):
 
         metrics = trainer.evaluate()
         self.assertEqual(metrics[metric], best_value)
+
+    def test_trainer_works_with_dict(self):
+        # Edge case because Apex with mode O2 will change our models to return dicts. This test checks it doesn't break
+        # anything.
+        train_dataset = RegressionDataset()
+        eval_dataset = RegressionDataset()
+        model = RegressionDictModel()
+        args = TrainingArguments("./regression")
+        trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+        trainer.train()
+        _ = trainer.evaluate()
+        _ = trainer.predict(eval_dataset)
 
     def test_training_arguments_are_left_untouched(self):
         trainer = get_regression_trainer()
