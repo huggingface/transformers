@@ -22,8 +22,6 @@ from typing import Dict, Optional, Tuple, Union
 import numpy as np
 import tensorflow as tf
 
-from transformers.tokenization_utils_base import BatchEncoding
-
 from ...activations_tf import ACT2FN
 from ...file_utils import (
     add_code_sample_docstrings,
@@ -323,9 +321,15 @@ class TFBartEncoder(tf.keras.layers.Layer):
             )
         self.layers = [TFEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layernorm_embedding = (
-            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding") if config.normalize_embedding else tf.keras.layers.Layer()
+            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
+            if config.normalize_embedding
+            else tf.keras.layers.Layer()
         )
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm") if config.add_final_layer_norm else None
+        self.layer_norm = (
+            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
+            if config.add_final_layer_norm
+            else None
+        )
         self.return_dict = config.return_dict
 
     def call(
@@ -533,9 +537,15 @@ class TFBartDecoder(tf.keras.layers.Layer):
             )
         self.layers = [TFDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
         self.layernorm_embedding = (
-            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding") if config.normalize_embedding else tf.keras.layers.Layer()
+            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
+            if config.normalize_embedding
+            else tf.keras.layers.Layer()
         )
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm") if config.add_final_layer_norm else None
+        self.layer_norm = (
+            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
+            if config.add_final_layer_norm
+            else None
+        )
 
         self.dropout = config.dropout
         self.output_hidden_states = config.output_hidden_states
@@ -978,7 +988,9 @@ class TFBartModel(TFPretrainedBartModel):
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
         )
         output_hidden_states = (
-            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.config.output_hidden_states
+            inputs["output_hidden_states"]
+            if inputs["output_hidden_states"] is not None
+            else self.config.output_hidden_states
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.return_dict
         if not use_cache:

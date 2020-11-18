@@ -1124,7 +1124,7 @@ def shape_list(tensor: tf.Tensor) -> List[int]:
         :obj:`List[int]`: The shape of the tensor as a list.
     """
     dynamic = tf.shape(tensor)
-    
+
     if tensor.shape == tf.TensorShape(None):
         return dynamic.as_list()
 
