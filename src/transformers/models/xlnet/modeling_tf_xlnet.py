@@ -1703,7 +1703,6 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
         output = transformer_outputs[0]
         logits = self.classifier(output)
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
