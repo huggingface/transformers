@@ -438,7 +438,8 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         Args:
             table (:obj:`pd.DataFrame`):
-                Table containing tabular data. 
+                Table containing tabular data. Note that all cell values must be text. Use `.astype(str)` on a Pandas dataframe to
+                convert it to string. 
             queries (:obj:`str`, :obj:`List[str]`):
                 Question or batch of questions related to a table to be encoded. Each query can be a string or a list 
                 of strings (pretokenized string). If the queries are provided as list of strings (pretokenized), you 

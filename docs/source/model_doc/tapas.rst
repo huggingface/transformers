@@ -35,7 +35,7 @@ of millions of automatically created training examples which are learned in an i
 The authors of TAPAS call this further pre-training intermediate pre-training (since TAPAS is first pre-trained on MLM,
 and then on another dataset). They found that intermediate pre-training further improves performance on SQA, achieving
 a new state-of-the-art as well as state-of-the-art on TabFact, a large-scale dataset with 16k Wikipedia tables for
-table entailment (a binary classification task). For more details, see their new paper: `Understanding tables with
+table entailment (a binary classification task). For more details, see their follow-up paper: `Understanding tables with
 intermediate pre-training <https://arxiv.org/abs/2010.00571>`__ by Julian Martin Eisenschlos, Syrine Krichene and
 Thomas Müller.
 
@@ -57,11 +57,218 @@ Tips:
   with a causal language modeling (CLM) objective are better in that regard.
 
 
-Usage
+Usage: fine-tuning
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you just want to perform inference (i.e. making predictions) in a non-conversational setup, you can do the
-following:
+Here we explain how you can fine-tune :class:`~transformers.TapasForQuestionAnswering` on your own dataset. 
+
+===========================================================================
+STEP 1: Choose one of the 3 ways in which you can use TAPAS - or experiment
+===========================================================================
+
+Basically, there are 2 options: either you start from an already-finetuned checkpoint, or you start with a pre-trained base 
+model and randomly initialized classification heads. In case your dataset is rather small (hundreds of training examples), 
+it's advised to start from an already fine-tuned checkpoint. Both pre-trained and fine-tuned checkpoints are available in the
+HuggingFace `model hub`_.
+
+.. _model hub: https://huggingface.co/models?search=tapas
+
+There are 3 different ways in which one can fine-tune an already fine-tuned :class:`~transformers.TapasForQuestionAnswering` 
+checkpoint, corresponding to the different datasets on which Tapas was fine-tuned:
+
+1. SQA: if you're interested in asking follow-up questions related to a table, in a conversational set-up. For example if you 
+   first ask "what's the name of the first actor?" then you can ask a follow-up question such as "how old is he?". Here, questions 
+   do not involve any aggregation (all questions are cell selection questions).
+2. WTQ/WikiSQL: if you're not interested in asking questions in a conversational set-up, but rather just asking questions related 
+   to a table, which might involve aggregation, such as counting a number of rows, summing up cell values or averaging cell values. 
+   You can then for example ask "what's the total number of goals Cristiano Ronaldo made in his career?". This case is also called **weak 
+   supervision**, since the model itself must learn the appropriate aggregation operator (SUM/COUNT/AVERAGE/NONE) given only the answer 
+   to the question as supervision.
+3. WikiSQL-supervised: this dataset is actually the same dataset as WikiSQL, but here the model is given the ground truth aggregation 
+   operator during training. This is also called **strong supervision**. Here, learning the appropriate aggregation operator is much easier.
+
+To summarize:
+
++------------------------------------+----------------------+-------------------------------------------------------------------------------------------------------------------+
+| **Task**                           | **Example datasets** | **Description**                                                                                                   |
++------------------------------------+----------------------+-------------------------------------------------------------------------------------------------------------------+
+| Conversational                     | SQA                  | Conversational, only cell selection questions                                                                     |
++------------------------------------+----------------------+-------------------------------------------------------------------------------------------------------------------+
+| Weak supervision for aggregation   | WTQ, WikiSQL         | Questions might involve aggregation, and the model must learn this given only the answer as supervision           |
++------------------------------------+----------------------+-------------------------------------------------------------------------------------------------------------------+
+| Strong supervision for aggregation | WikiSQL-supervised   | Questions might involve aggregation, and the model must learn this given the gold aggregation operator            |
++------------------------------------+----------------------+-------------------------------------------------------------------------------------------------------------------+
+
+Initializing an already fine-tuned model from the model hub is as easy as:
+
+.. code-block::
+
+        >>> from transformers import TapasForQuestionAnswering
+
+        >>> # for example, the base sized model fine-tuned on WTQ
+        >>> model = TapasForQuestionAnswering.from_pretrained('tapas-base-finetuned-wtq')
+
+
+If you want to train the classification heads of :class:`~transformers.TapasForQuestionAnswering` from scratch, then you can actually 
+experiment, and you don't have to choose between one of these 3 options. You can define any hyperparameters you want when initializing 
+:class:`~transformers.TapasConfig`, and then create a :class:`~transformers.TapasForQuestionAnswering` based on that configuration. For 
+example, if you have a dataset that has both conversational questions and questions that might involve aggregation, then you can do it 
+this way. Here's an example:
+
+.. code-block::
+
+        >>> from transformers import TapasConfig, TapasForQuestionAnswering
+
+        >>> # you can initialize the classification heads any way you want (see docs of TapasConfig)
+        >>> config = TapasConfig(num_aggregation_labels=3, average_logits_per_cell=True, select_one_column=False)
+        >>> # initializing the pre-trained base sized model with our custom classification heads
+        >>> model = TapasForQuestionAnswering.from_pretrained('tapas-base', config=config)
+
+
+===========================================
+STEP 2: Prepare your data in the SQA format
+===========================================
+
+Second, no matter what you picked above, you should prepare your dataset in the `SQA format`_. This format is a TSV/CSV file with the following 
+columns:
+
+.. _SQA format: https://www.microsoft.com/en-us/download/details.aspx?id=54253
+
+- id: optional, id of the table-question pair, for bookkeeping purposes. 
+- annotator: optional, id of the person who annotated the table-question pair, for bookkeeping purposes. 
+- position: integer indicating if the question is the first, second, third,... related to the table. Only required in case of conversational setup (SQA). 
+  You don't need this column in case you're going for WTQ/WikiSQL/WikiSQL-supervised.
+- question: string
+- table_file: string, name of a csv file containing the tabular data
+- answer_coordinates: list of one or more tuples (each tuple being a cell coordinate, i.e. row, column pair that is part of the answer)
+- answer_text: list of one or more strings (each string being a cell value that is part of the answer)
+- aggregation_label: index of the aggregation operator. Only required in case of strong supervision for aggregation (the WikiSQL-supervised case)
+- float_answer: the float answer to the question, if there is one (np.nan if there isn't). Only required in case of weak supervision for aggregation (such as WTQ and WikiSQL)
+
+The tables themselves should be present in a folder, each table being a separate csv file. Note that the authors of the TAPAS algorithm used conversion 
+scripts with some automated logic to convert the other datasets (WTQ and WikiSQL) into the SQA format. The author explains this `here`_. This is 
+actually interesting, because these conversion scripts are not perfect (the answer_coordinates and float_answer fields are populated based on the answer_text), 
+meaning that WTQ and WikiSQL results could actually be improved.
+
+.. _here: https://github.com/google-research/tapas/issues/50#issuecomment-705465960
+
+==========================================================================================
+STEP 3: Convert your data into PyTorch tensors using :class:`~transformers.TapasTokenizer`
+==========================================================================================
+
+Third, given that you've prepared your data in this TSV/CSV format (and corresponding CSV files containing the tabular data), you can then 
+use :class:`~transformers.TapasTokenizer` to convert table-question pairs into input_ids, attention_mask, token_type_ids and so on. Again, 
+based on which of the three cases you picked above, :class:`~transformers.TapasForQuestionAnswering` needs different things to be fine-tuned:
+
++------------------------------------+----------------------------------------------------------------------------------------------+
+| **Task**                           | **Required inputs**                                                                          |
++------------------------------------+----------------------------------------------------------------------------------------------+
+| Conversational                     | ``input_ids``, ``attention_mask``, ``token_type_ids``, ``label_ids``                         |
++------------------------------------+----------------------------------------------------------------------------------------------+
+| Weak supervision for aggregation   | ``input_ids``, ``attention_mask``, ``token_type_ids``, ``label_ids``, ``numeric_values``,    |
+|                                    | ``numeric_values_scale``, ``float_answer``                                                   |
++------------------------------------+----------------------------------------------------------------------------------------------+
+| Strong supervision for aggregation | ``input ids``, ``attention mask``, ``token type ids``, ``label ids``, ``aggregation_labels`` |
++------------------------------------+----------------------------------------------------------------------------------------------+
+
+:class:`~transformers.TapasTokenizer` creates the ``label_ids``, ``numeric_values`` and ``numeric_values_scale`` based on the 
+``answer_coordinates`` and ``answer_text`` columns of the TSV file. The ``float_answer`` and ``aggregation_labels`` are already in the
+TSV file of step 2. and Here's an example:
+
+.. code-block::
+
+        >>> from transformers import TapasTokenizer
+        >>> import pandas as pd
+
+        >>> model_name = 'tapas-base-finetuned-wtq'
+        >>> tokenizer = TapasTokenizer.from_pretrained(model_name)
+
+        >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Number of movies': ["87", "53", "69"]}
+        >>> queries = ["What is the name of the first actor?", "How many movies has George Clooney played in?", "What is the total number of movies?"]
+        >>> answer_coordinates = [[(0, 0)], [(1, 0)], [(0, 2), (1, 2), (2, 2)]]
+        >>> answer_text = [["Brad Pitt"], ["69"], ["209"]]
+        >>> table = pd.Dataframe(data)
+        >>> inputs = tokenizer(table=table, queries=queries, answer_coordinates=answer_coordinates, answer_text=answer_text, return_tensors='pt')
+        >>> inputs
+        {'input_ids': tensor([[ ... ]]), 'attention_mask': tensor([[...]]), 'token_type_ids': tensor([[[...]]]),
+        'numeric_values': tensor([[ ... ]]), 'numeric_values_scale: tensor([[ ... ]]), label_ids: tensor([[ ... ]])}
+
+Note that :class:`~transformers.TapasTokenizer` expects the data of the table to be text-only. You can use ``.astype(str)`` on a dataframe to turn it into
+text-only data. Of course, this only shows how to encode a single training example. In reality, you should create a PyTorch dataset and a corresponding dataloader:
+
+.. code-block::
+
+        >>> import torch
+        >>> import pandas as pd
+
+        >>> tsv_path = "your_path_to_the_tsv_file"
+        >>> table_csv_path = "your_path_to_a_directory_containing_all_csv_files"
+
+        >>> class TableDataset(torch.utils.data.Dataset):
+        ...     def __init__(self, data, tokenizer):
+        ...         self.data = data
+        ...         self.tokenizer = tokenizer
+        ...
+        ...     def __getitem__(self, idx):
+        ...         item = data.iloc[idx]
+        ...         table = pd.read_csv(table_csv_path + item.table_file).astype(str)
+        ...         encoding = self.tokenizer(table=table, 
+        ...                                 queries=item.question, 
+        ...                                 answer_coordinates=item.answer_coordinates, 
+        ...                                 answer_text=item.answer_text,
+        ...                                 padding="max_length",
+        ...                                 return_tensors="pt"
+        ...         )
+        ...         # we add the float_answer which is also required (weak supervision for aggregation)
+        ...         encoding["float_answer"] = torch.tensor(item.float_answer) 
+        ...         return encoding
+        ...
+        ...     def __len__(self):
+        ...        return len(self.data)
+
+        >>> data = pd.read_csv(tsv_path, sep='\t')
+        >>> train_dataset = TableDataset(data, tokenizer)
+        >>> train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=32)
+
+Note that here, we encode table-question pairs independently. This is fine as long as your dataset is **not conversational**. In case your 
+dataset involves conversational questions (such as in SQA), then you should first group together the ``queries``, ``answer_coordinates`` and 
+``answer_text`` per table (in the order of their ``position`` index) and batch encode each table with its questions. This will make sure that 
+the ``prev_label_ids`` token types (see docs of :class:`~transformers.TapasTokenizer`) are set correctly. 
+
+===================================================
+STEP 4: Train (fine-tune) TapasForQuestionAnswering
+===================================================
+
+You can then fine-tune :class:`~transformers.TapasForQuestionAnswering` using native PyTorch as follows:
+
+.. code-block::
+
+        >>> from transformers import TapasForQuestionAnswering
+
+        >>> model = TapasForQuestionAnswering.from_pretrained("tapas-base-finetuned-wtq", return_dict=True)
+
+        >>> for epoch in range(2):  # loop over the dataset multiple times
+        ...    for idx, batch in enumerate(train_dataloader):
+        ...         # get the inputs; 
+        ...         input_ids, attention_mask, token_type_ids, label_ids, numeric_values, numeric_values_scale, float_answer = batch
+
+        ...         # zero the parameter gradients
+        ...         optimizer.zero_grad()
+
+        ...         # forward + backward + optimize
+        ...         outputs = model(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, 
+        ...                        label_ids=label_ids, numeric_values=numeric_values, numeric_values_scale=numeric_values_scale, 
+        ...                        float_answer=float_answer)
+        ...         loss = outputs.loss
+        ...         loss.backward()
+        ...         optimizer.step()
+
+Usage: inference
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Here we explain how you can perform inference (i.e. making predictions on new data) with :class:`~transformers.TapasForQuestionAnswering`.
+
+If you just want to perform inference in a non-conversational setup, you can do the following:
 
 .. code-block::
 
@@ -158,5 +365,3 @@ TapasForQuestionAnswering
 
 .. autoclass:: transformers.TapasForQuestionAnswering
     :members:
-
-
