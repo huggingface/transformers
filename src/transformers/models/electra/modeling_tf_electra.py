@@ -14,7 +14,6 @@
 # limitations under the License.
 """ TF Elextra model. """
 
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 

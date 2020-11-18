@@ -15,7 +15,6 @@
 """
  TF 2.0 DistilBERT model
 """
-import warnings
 
 import tensorflow as tf
 

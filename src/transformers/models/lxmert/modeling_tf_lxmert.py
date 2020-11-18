@@ -16,8 +16,6 @@
 # limitations under the License.
 """ TF 2.0 LXMERT model. """
 
-
-import warnings
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 

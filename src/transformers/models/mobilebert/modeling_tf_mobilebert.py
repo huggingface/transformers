@@ -15,8 +15,6 @@
 # limitations under the License.
 """ TF 2.0 MobileBERT model. """
 
-
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 

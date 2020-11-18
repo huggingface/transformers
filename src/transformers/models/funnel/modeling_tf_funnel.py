@@ -1241,7 +1241,7 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
             training=training,
             **kwargs,
         )
-        
+
         return self.funnel(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],

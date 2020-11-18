@@ -15,11 +15,9 @@
 # limitations under the License.
 """ TF 2.0 T5 model. """
 
-
 import copy
 import itertools
 import math
-import warnings
 from typing import Tuple
 
 import tensorflow as tf

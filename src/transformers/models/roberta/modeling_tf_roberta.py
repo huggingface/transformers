@@ -15,8 +15,6 @@
 # limitations under the License.
 """ TF 2.0 RoBERTa model. """
 
-import warnings
-
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation

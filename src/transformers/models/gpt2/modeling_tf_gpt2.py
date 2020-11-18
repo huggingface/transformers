@@ -15,8 +15,6 @@
 # limitations under the License.
 """ TF 2.0 OpenAI GPT-2 model. """
 
-
-import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
