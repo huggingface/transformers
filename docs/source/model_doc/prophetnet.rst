@@ -47,16 +47,16 @@ ProphetNetTokenizer
 ProphetNet specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.modeling_prophetnet.ProphetNetSeq2SeqLMOutput
+.. autoclass:: transformers.models.prophetnet.modeling_prophetnet.ProphetNetSeq2SeqLMOutput
     :members:
 
-.. autoclass:: transformers.modeling_prophetnet.ProphetNetSeq2SeqModelOutput
+.. autoclass:: transformers.models.prophetnet.modeling_prophetnet.ProphetNetSeq2SeqModelOutput
     :members:
 
-.. autoclass:: transformers.modeling_prophetnet.ProphetNetDecoderModelOutput
+.. autoclass:: transformers.models.prophetnet.modeling_prophetnet.ProphetNetDecoderModelOutput
     :members:
 
-.. autoclass:: transformers.modeling_prophetnet.ProphetNetDecoderLMOutput
+.. autoclass:: transformers.models.prophetnet.modeling_prophetnet.ProphetNetDecoderLMOutput
     :members:
 
 ProphetNetModel

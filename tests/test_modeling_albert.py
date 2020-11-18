@@ -37,7 +37,7 @@ if is_torch_available():
         AlbertForTokenClassification,
         AlbertModel,
     )
-    from transformers.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.albert.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class AlbertModelTester:
@@ -102,7 +102,6 @@ class AlbertModelTester:
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
             num_hidden_groups=self.num_hidden_groups,
-            return_dict=True,
         )
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels

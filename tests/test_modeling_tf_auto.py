@@ -43,7 +43,7 @@ if is_tf_available():
         TFRobertaForMaskedLM,
         TFT5ForConditionalGeneration,
     )
-    from transformers.modeling_tf_auto import (
+    from transformers.models.auto.modeling_tf_auto import (
         TF_MODEL_FOR_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_MASKED_LM_MAPPING,
         TF_MODEL_FOR_PRETRAINING_MAPPING,
@@ -54,9 +54,9 @@ if is_tf_available():
         TF_MODEL_MAPPING,
         TF_MODEL_WITH_LM_HEAD_MAPPING,
     )
-    from transformers.modeling_tf_bert import TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.modeling_tf_gpt2 import TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.modeling_tf_t5 import TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.bert.modeling_tf_bert import TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.gpt2.modeling_tf_gpt2 import TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.t5.modeling_tf_t5 import TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_tf

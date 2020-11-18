@@ -27,7 +27,7 @@ if is_torch_available():
     import torch
 
     from transformers import BertConfig, DPRConfig, DPRContextEncoder, DPRQuestionEncoder, DPRReader
-    from transformers.modeling_dpr import (
+    from transformers.models.dpr.modeling_dpr import (
         DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
         DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
         DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -117,7 +117,6 @@ class DPRModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            return_dict=True,
         )
         config = DPRConfig(projection_dim=self.projection_dim, **config.to_dict())
 
