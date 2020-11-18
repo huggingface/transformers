@@ -1469,8 +1469,8 @@ class Trainer:
                 outputs = model(**inputs)
             if has_labels:
                 if isinstance(outputs, dict):
-                    loss = outputs.pop("loss").mean().detach()
-                    logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)
+                    loss = outputs["loss"].mean().detach()
+                    logits = tuple(v for k, v in outputs.items() if k not in ignore_keys + ["loss"])
                 else:
                     loss = outputs[0].mean().detach()
                     logits = outputs[1:]
