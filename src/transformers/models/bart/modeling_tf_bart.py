@@ -1039,7 +1039,7 @@ class TFBartMainLayer(tf.keras.layers.Layer):
 class TFBartModel(TFPretrainedBartModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.bart = TFBartMainLayer(config, name="bart")
+        self.bart = TFBartMainLayer(config, name="model")
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
