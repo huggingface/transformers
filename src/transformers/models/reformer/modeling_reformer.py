@@ -1883,7 +1883,7 @@ class ReformerModelWithLMHeadOutput(ModelOutput):
 
 
 REFORMER_START_DOCSTRING = r"""
-    Reformer was proposed in `Reformer: The Efficient Transformer <https://arxiv.org/abs/2001.0445>`__ by Nikita
+    Reformer was proposed in `Reformer: The Efficient Transformer <https://arxiv.org/abs/2001.04451>`__ by Nikita
     Kitaev, Łukasz Kaiser, Anselm Levskaya.
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
