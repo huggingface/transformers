@@ -60,7 +60,7 @@ python3 preprocess.py --corpus_path corpora/poem.txt \
 
 ```
 python3 pretrain.py --dataset_path poem.pt \
-				    --vocab_path models/google_zh_vocab.txt \
+				        --vocab_path models/google_zh_vocab.txt \
 					--output_model_path models/poem_gpt_base_model.bin \  
 					--config_path models/bert_base_config.json --learning_rate 5e-4 \
 					--tie_weight --world_size 8 --gpu_ranks 0 1 2 3 4 5 6 7 \
