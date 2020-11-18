@@ -1248,7 +1248,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel, TFCausalLanguageMode
                 FutureWarning,
             )
             inputs["input_ids"] = inputs.pop("inputs")
-            
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bart.return_dict
         use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.bart.use_cache
         if inputs["labels"] is not None:

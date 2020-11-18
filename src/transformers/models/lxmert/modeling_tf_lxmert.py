@@ -1364,7 +1364,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
                 FutureWarning,
             )
             inputs["input_ids"] = inputs.pop("inputs")
-            
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.lxmert.return_dict
         lxmert_output = self.lxmert(
             input_ids=inputs["input_ids"],

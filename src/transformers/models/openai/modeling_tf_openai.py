@@ -16,9 +16,9 @@
 """ TF 2.0 OpenAI GPT model."""
 
 
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
-import warnings
 
 import tensorflow as tf
 
@@ -38,9 +38,9 @@ from ...modeling_tf_utils import (
     TFSequenceSummary,
     TFSharedEmbeddings,
     get_initializer,
+    input_processing,
     keras_serializable,
     shape_list,
-    input_processing,
 )
 from ...utils import logging
 from .configuration_openai import OpenAIGPTConfig
@@ -325,7 +325,9 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             inputs["inputs_embeds"] = self.tokens_embed(inputs["input_ids"], mode="embedding")
         position_embeds = self.positions_embed(inputs["position_ids"])
         if inputs["token_type_ids"] is not None:
-            inputs["token_type_ids"] = tf.reshape(inputs["token_type_ids"], [-1, shape_list(inputs["token_type_ids"])[-1]])
+            inputs["token_type_ids"] = tf.reshape(
+                inputs["token_type_ids"], [-1, shape_list(inputs["token_type_ids"])[-1]]
+            )
             token_type_embeds = self.tokens_embed(inputs["token_type_ids"], mode="embedding")
         else:
             token_type_embeds = 0
@@ -340,7 +342,13 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
 
-            outputs = block(hidden_states, inputs["attention_mask"], inputs["head_mask"][i], output_attentions, training=inputs["training"])
+            outputs = block(
+                hidden_states,
+                inputs["attention_mask"],
+                inputs["head_mask"][i],
+                output_attentions,
+                training=inputs["training"],
+            )
             hidden_states = outputs[0]
             if output_attentions:
                 all_attentions = all_attentions + (outputs[1],)
@@ -563,7 +571,7 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
-            training=inputs["training"]
+            training=inputs["training"],
         )
         return outputs
 
@@ -650,7 +658,7 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
-            training=inputs["training"]
+            training=inputs["training"],
         )
         hidden_states = transformer_outputs[0]
 
@@ -769,7 +777,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
                 FutureWarning,
             )
             inputs["input_ids"] = inputs.pop("inputs")
-            
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
 
         if inputs["input_ids"] is not None:
@@ -779,9 +787,15 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
 
         seq_length = input_shapes[-1]
         flat_input_ids = tf.reshape(inputs["input_ids"], (-1, seq_length)) if inputs["input_ids"] is not None else None
-        flat_attention_mask = tf.reshape(inputs["attention_mask"], (-1, seq_length)) if inputs["attention_mask"] is not None else None
-        flat_token_type_ids = tf.reshape(inputs["token_type_ids"], (-1, seq_length)) if inputs["token_type_ids"] is not None else None
-        flat_position_ids = tf.reshape(inputs["position_ids"], (-1, seq_length)) if inputs["position_ids"] is not None else None
+        flat_attention_mask = (
+            tf.reshape(inputs["attention_mask"], (-1, seq_length)) if inputs["attention_mask"] is not None else None
+        )
+        flat_token_type_ids = (
+            tf.reshape(inputs["token_type_ids"], (-1, seq_length)) if inputs["token_type_ids"] is not None else None
+        )
+        flat_position_ids = (
+            tf.reshape(inputs["position_ids"], (-1, seq_length)) if inputs["position_ids"] is not None else None
+        )
         transformer_outputs = self.transformer(
             flat_input_ids,
             flat_attention_mask,

@@ -40,9 +40,9 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSharedEmbeddings,
     cast_bool_to_primitive,
+    input_processing,
     keras_serializable,
     shape_list,
-    input_processing,
 )
 from ...utils import logging
 from .configuration_t5 import T5Config
@@ -638,10 +638,13 @@ class TFT5MainLayer(tf.keras.layers.Layer):
                 FutureWarning,
             )
             inputs["past_key_values"] = inputs.pop("decoder_past_key_value_states")
-            
 
-        output_attentions = inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        output_hidden_states = inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
+        )
         use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.use_cache
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
@@ -666,12 +669,18 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
         # required mask seq length can be calculated via length of past
         mask_seq_length = (
-            shape_list(inputs["past_key_values"][0][0])[2] + seq_length if inputs["past_key_values"] is not None else seq_length
+            shape_list(inputs["past_key_values"][0][0])[2] + seq_length
+            if inputs["past_key_values"] is not None
+            else seq_length
         )
 
         if inputs["attention_mask"] is None:
             inputs["attention_mask"] = tf.fill((batch_size, mask_seq_length), 1)
-        if self.is_decoder and inputs["encoder_attention_mask"] is None and inputs["encoder_hidden_states"] is not None:
+        if (
+            self.is_decoder
+            and inputs["encoder_attention_mask"] is None
+            and inputs["encoder_hidden_states"] is not None
+        ):
             encoder_seq_length = shape_list(inputs["encoder_hidden_states"])[1]
             inputs["encoder_attention_mask"] = tf.fill((batch_size, encoder_seq_length), 1)
 
@@ -1100,7 +1109,9 @@ class TFT5Model(TFT5PreTrainedModel):
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
         )
         output_hidden_states = (
-            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.config.output_hidden_states
+            inputs["output_hidden_states"]
+            if inputs["output_hidden_states"] is not None
+            else self.config.output_hidden_states
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.return_dict
 
@@ -1311,8 +1322,12 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             inputs["past_key_values"] = inputs.pop("decoder_past_key_value_states")
 
         use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.config.use_cache
-        output_attentions = inputs["output_attentions"] if inputs["output_attentions"] else self.config.output_attentions
-        output_hidden_states = inputs["output_hidden_states"] if inputs["output_hidden_states"] else self.config.output_hidden_states
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] else self.config.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"] if inputs["output_hidden_states"] else self.config.output_hidden_states
+        )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.return_dict
 
         # Encode if needed (training, first prediction pass)
@@ -1329,7 +1344,11 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         hidden_states = encoder_outputs[0]
 
-        if inputs["labels"] is not None and inputs["decoder_input_ids"] is None and inputs["decoder_inputs_embeds"] is None:
+        if (
+            inputs["labels"] is not None
+            and inputs["decoder_input_ids"] is None
+            and inputs["decoder_inputs_embeds"] is None
+        ):
             # get decoder inputs from shifting lm labels to the right
             inputs["decoder_input_ids"] = self._shift_right(inputs["labels"])
 

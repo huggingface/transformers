@@ -16,9 +16,9 @@
 """ TF 2.0 MobileBERT model. """
 
 
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
-import warnings
 
 import tensorflow as tf
 
@@ -50,9 +50,9 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
+    input_processing,
     keras_serializable,
     shape_list,
-    input_processing,
 )
 from ...utils import logging
 from .configuration_mobilebert import MobileBertConfig
@@ -1816,7 +1816,7 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
                 FutureWarning,
             )
             inputs["input_ids"] = inputs.pop("inputs")
-            
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(
             inputs["input_ids"],
