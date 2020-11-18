@@ -69,7 +69,7 @@ Subword tokenization
 
 Subword tokenization algorithms rely on the principle that frequently used words should not be split into smaller
 subwords, but rare words should be decomposed into meaningful subwords. For instance ``"annoyingly"`` might be
-considered a rare word and could be decomposed into ``"annoying"`` and ``"ly". Both ``"annoying"`` and ``"ly"`` as
+considered a rare word and could be decomposed into ``"annoying"`` and ``"ly"``. Both ``"annoying"`` and ``"ly"`` as
 stand-alone subwords would appear more frequently while at the same time the meaning of ``"annoyingly"`` is kept by the
 composite meaning of ``"annoying"`` and ``"ly"``. This is especially useful in agglutinative languages such as Turkish,
 where you can form (almost) arbitrarily long complex words by stringing together subwords.
