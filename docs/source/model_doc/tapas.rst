@@ -45,13 +45,14 @@ Tips:
 
 - TAPAS is a model that uses relative position embeddings by default (restarting the position embeddings at every cell
   of the table). According to the authors, this usually results in a slightly better performance, and allows you to
-  encode longer sequences without running out of embeddings. If you don't want this, you can set the
-  `reset_position_index_per_cell` parameter of :class:`~transformers.TapasConfig` to False.
+  encode longer sequences without running out of embeddings. This is reflected in the hyperparameter
+  ``reset_position_index_per_cell`` parameter of :class:`~transformers.TapasConfig`, which is set to ``True`` by default.  
+  There are both pre-trained models in the model hub with absolute and relative position embeddings. 
 - TAPAS has checkpoints fine-tuned on SQA, which are capable of answering questions related to a table in a
   conversational set-up. This means that you can ask follow-up questions such as "what is his age?" related to the
   previous question. Note that the forward pass of TAPAS is a bit different in case of a conversational set-up: in that
   case, you have to feed every training example one by one to the model, such that the `prev_label_ids` token type ids
-  can be overwritten by the predicted `label_ids` of the model to the previous question.
+  can be overwritten by the predicted `label_ids` of the model to the previous question. See "Usage" section for more info.
 - TAPAS is similar to BERT and therefore relies on the masked language modeling (MLM) objective. It is therefore
   efficient at predicting masked tokens and at NLU in general, but is not optimal for text generation. Models trained
   with a causal language modeling (CLM) objective are better in that regard.
@@ -134,20 +135,20 @@ columns:
 
 .. _SQA format: https://www.microsoft.com/en-us/download/details.aspx?id=54253
 
-- id: optional, id of the table-question pair, for bookkeeping purposes. 
-- annotator: optional, id of the person who annotated the table-question pair, for bookkeeping purposes. 
-- position: integer indicating if the question is the first, second, third,... related to the table. Only required in case of conversational setup (SQA). 
+- ``id``: optional, id of the table-question pair, for bookkeeping purposes. 
+- ``annotator``: optional, id of the person who annotated the table-question pair, for bookkeeping purposes. 
+- ``position``: integer indicating if the question is the first, second, third,... related to the table. Only required in case of conversational setup (SQA). 
   You don't need this column in case you're going for WTQ/WikiSQL/WikiSQL-supervised.
-- question: string
-- table_file: string, name of a csv file containing the tabular data
-- answer_coordinates: list of one or more tuples (each tuple being a cell coordinate, i.e. row, column pair that is part of the answer)
-- answer_text: list of one or more strings (each string being a cell value that is part of the answer)
-- aggregation_label: index of the aggregation operator. Only required in case of strong supervision for aggregation (the WikiSQL-supervised case)
-- float_answer: the float answer to the question, if there is one (np.nan if there isn't). Only required in case of weak supervision for aggregation (such as WTQ and WikiSQL)
+- ``question``: string
+- ``table_file``: string, name of a csv file containing the tabular data
+- ``answer_coordinates``: list of one or more tuples (each tuple being a cell coordinate, i.e. row, column pair that is part of the answer)
+- ``answer_text``: list of one or more strings (each string being a cell value that is part of the answer)
+- ``aggregation_label``: index of the aggregation operator. Only required in case of strong supervision for aggregation (the WikiSQL-supervised case)
+- ``float_answer``: the float answer to the question, if there is one (np.nan if there isn't). Only required in case of weak supervision for aggregation (such as WTQ and WikiSQL)
 
 The tables themselves should be present in a folder, each table being a separate csv file. Note that the authors of the TAPAS algorithm used conversion 
 scripts with some automated logic to convert the other datasets (WTQ and WikiSQL) into the SQA format. The author explains this `here`_. This is 
-actually interesting, because these conversion scripts are not perfect (the answer_coordinates and float_answer fields are populated based on the answer_text), 
+actually interesting, because these conversion scripts are not perfect (the ``answer_coordinates`` and ``float_answer`` fields are populated based on the ``answer_text``), 
 meaning that WTQ and WikiSQL results could actually be improved.
 
 .. _here: https://github.com/google-research/tapas/issues/50#issuecomment-705465960
@@ -172,8 +173,8 @@ based on which of the three cases you picked above, :class:`~transformers.TapasF
 +------------------------------------+----------------------------------------------------------------------------------------------+
 
 :class:`~transformers.TapasTokenizer` creates the ``label_ids``, ``numeric_values`` and ``numeric_values_scale`` based on the 
-``answer_coordinates`` and ``answer_text`` columns of the TSV file. The ``float_answer`` and ``aggregation_labels`` are already in the
-TSV file of step 2. and Here's an example:
+``answer_coordinates`` and ``answer_text`` columns of the TSV file. The ``float_answer`` and ``aggregation_labels`` are already in the TSV file of step 2. 
+Here's an example:
 
 .. code-block::
 
@@ -267,8 +268,12 @@ Usage: inference
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Here we explain how you can perform inference (i.e. making predictions on new data) with :class:`~transformers.TapasForQuestionAnswering`.
+Basically, for inference, you only need to provide ``input_ids``, ``attention_mask`` and ``token_type_ids`` (which you can obtain using 
+:class:`~transformers.TapasTokenizer`) to the model to obtain the logits. Next, you can use the handy ``convert_logits_to_predictions`` method
+of :class:`~transformers.TapasTokenizer` to convert these into actual predicted coordinates and aggregation indices. 
 
-If you just want to perform inference in a non-conversational setup, you can do the following:
+However, note that inference is **different** depending on whether or not the setup is conversational. In a non-conversational set-up, inference 
+can be done in parallel on all table-question pairs of a batch. Here's an example of that:
 
 .. code-block::
 
@@ -284,14 +289,14 @@ If you just want to perform inference in a non-conversational setup, you can do 
         >>> table = pd.Dataframe(data)
         >>> inputs = tokenizer(table, queries, return_tensors='pt')
         >>> logits, logits_agg = model(**inputs)
-        >>> answer_coordinates_batch, aggregation_predictions = tokenizer.convert_logits_to_predictions(inputs, logits, logits_agg)
+        >>> predicted_answer_coordinates, predicted_aggregation_indices = tokenizer.convert_logits_to_predictions(inputs, logits, logits_agg)
 
         >>> # let's print out the results:
         >>> id2aggregation = {0: "NONE", 1: "SUM", 2: "AVERAGE", 3:"COUNT"}
-        >>> aggregation_predictions_string = [id2aggregation[x] for x in aggregation_predictions]
+        >>> aggregation_predictions_string = [id2aggregation[x] for x in predicted_aggregation_indices]
 
         >>> answers = []
-        >>> for coordinates in answer_coordinates_batch:
+        >>> for coordinates in predicted_answer_coordinates:
         ...   if len(coordinates) == 1:
         ...     # only a single cell:
         ...     answers.append(df.iat[coordinates[0]])
@@ -316,6 +321,9 @@ If you just want to perform inference in a non-conversational setup, you can do 
         Predicted answer: Leonardo Di Caprio
         What is the average number of movies?
         Predicted answer: AVERAGE > 87, 53, 69
+
+In case of a conversational set-up, then each table-question pair must be provided **sequentially** to the model, such that
+the ``prev_label_ids`` token types can be overwritten by the predicted ``label_ids`` of the previous table-question pair. 
 
 
 Tapas specific outputs

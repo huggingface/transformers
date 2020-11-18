@@ -1039,7 +1039,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         table_mask=None,
         label_ids=None,
         aggregation_labels=None,
-        answer=None,
+        float_answer=None,
         numeric_values=None,
         numeric_values_scale=None,
         output_attentions=None,
@@ -1058,8 +1058,8 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             Aggregation function index for every example in the batch for computing the aggregation loss. Indices
             should be in :obj:`[0, ..., config.num_aggregation_labels - 1]`. Only required in case of strong
             supervision for aggregation (WikiSQL-SUPERVISED).
-        answer (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, )`, `optional`):
-            Answer for every example in the batch. NaN if there is no scalar answer. Only required in case of weak
+        float_answer (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, )`, `optional`):
+            Float answer for every example in the batch (NaN if there is no scalar answer). Only required in case of weak
             supervision (WTQ, WikiSQL) to calculate the aggregate mask and regression loss.
         numeric_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
             Numeric values of every token, NaN for tokens which are not numeric values. Can be obtained using
@@ -1199,18 +1199,18 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             if is_supervised:
                 aggregate_mask = None
             else:
-                if answer is not None:
-                    assert label_ids.shape[0] == answer.shape[0]
+                if float_answer is not None:
+                    assert label_ids.shape[0] == float_answer.shape[0]
                     # <float32>[batch_size]
                     aggregate_mask = _calculate_aggregate_mask(
-                        answer,
+                        float_answer,
                         pooled_output,
                         self.config.cell_selection_preference,
                         label_ids,
                         self.aggregation_classifier,
                     )
                 else:
-                    raise ValueError("You have to specify answers in order to calculate the aggregate mask")
+                    raise ValueError("You have to specify float answers in order to calculate the aggregate mask")
 
             ### Cell selection log-likelihood
             #################################
@@ -1276,7 +1276,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                         assert numeric_values.shape == numeric_values_scale.shape
                         # Add regression loss for numeric answers which require aggregation.
                         answer_loss, large_answer_loss_mask = _calculate_regression_loss(
-                            answer,
+                            float_answer,
                             aggregate_mask,
                             dist_per_token,
                             numeric_values,

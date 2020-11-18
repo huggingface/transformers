@@ -1766,10 +1766,11 @@ class TapasTokenizer(PreTrainedTokenizer):
         return {coords: torch.as_tensor(cell_probs).mean() for coords, cell_probs in coords_to_probs.items()}
 
     def convert_logits_to_predictions(
-        self, data, logits, logits_agg=None, logits_cls=None, cell_classification_threshold=0.5
+        self, data, logits, logits_agg=None, cell_classification_threshold=0.5
     ):
         """
-        Converts logits to actual predictions.
+        Converts logits of :class:`~transformers.TapasForQuestionAnswering` to actual predicted answer coordinates
+        and optional aggregation indices.
 
         Args:
             data (:obj:`dict`):
@@ -1779,21 +1780,17 @@ class TapasTokenizer(PreTrainedTokenizer):
                 Tensor containing the logits at the token level.
             logits_agg (:obj:`torch.FloatTensor` of shape ``(batch_size, num_aggregation_labels)``, `optional`):
                 Tensor containing the aggregation logits.
-            logits_cls (:obj:`torch.FloatTensor` of shape ``(batch_size, num_classification_labels)``, `optional`):
-                Tensor containing the classification logits.
             cell_classification_threshold (:obj:`float`, `optional`, defaults to 0.5):
                 Threshold to be used for cell selection. All table cells for which their probability is larger than
                 this threshold will be selected
 
         Returns:
             :obj:`tuple` comprising various elements depending on the inputs: 
-            answer_coordinates_batch (``List[List[[tuple]]`` of length ``batch_size``): 
-                Answer coordinates as a list of lists of tuples. Each element in the list contains the predicted answer coordinates 
-                of a single example in the batch, as a list of tuples. Each tuple is a cell (row, column pair). 
-            aggregation_predictions (`optional`, returned when ``logits_aggregation`` is provided) ``List[int]`` of length ``batch_size``: 
-                Prediction indices of the aggregation head. 
-            classification_predictions (`optional`, returned when ``logits_cls`` is provided) ``List[int]`` of length ``batch_size``: 
-                Prediction indices of the classification head.
+            predicted_answer_coordinates (``List[List[[tuple]]`` of length ``batch_size``): 
+                Predicted answer coordinates as a list of lists of tuples. Each element in the list contains the predicted answer coordinates 
+                of a single example in the batch, as a list of tuples. Each tuple is a cell, i.e. (row index, column index). 
+            predicted_aggregation_indices (`optional`, returned when ``logits_aggregation`` is provided) ``List[int]`` of length ``batch_size``: 
+                Predicted aggregation operator indices of the aggregation head. 
         """
         # compute probabilities from token logits
         dist_per_token = torch.distributions.Bernoulli(logits=logits)
@@ -1819,7 +1816,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         # next, get answer coordinates for every example in the batch
         num_batch = input_ids.shape[0]
-        answer_coordinates_batch = []
+        predicted_answer_coordinates = []
         for i in range(num_batch):
             probabilities_example = probabilities[i].tolist()
             segment_ids_example = segment_ids[i]
@@ -1848,17 +1845,13 @@ class TapasTokenizer(PreTrainedTokenizer):
                         if cell_prob > cell_classification_threshold:
                             answer_coordinates.append((row, col))
             answer_coordinates = sorted(answer_coordinates)
-            answer_coordinates_batch.append(answer_coordinates)
+            predicted_answer_coordinates.append(answer_coordinates)
 
-        output = answer_coordinates_batch
+        output = predicted_answer_coordinates
 
         if logits_agg is not None:
-            aggregation_predictions = logits_agg.argmax(dim=-1)
-            output = (output, aggregation_predictions.tolist())
-
-        if logits_cls is not None:
-            classification_predictions = logits_cls.argmax(dim=-1)
-            output = output + (classification_predictions.tolist())
+            predicted_aggregation_indices = logits_agg.argmax(dim=-1)
+            output = (output, predicted_aggregation_indices.tolist())
 
         return output
 
