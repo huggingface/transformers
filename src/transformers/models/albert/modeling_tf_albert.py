@@ -16,7 +16,6 @@
 """ TF 2.0 ALBERT model. """
 
 
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 

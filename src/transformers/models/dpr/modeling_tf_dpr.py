@@ -14,7 +14,6 @@
 # limitations under the License.
 """ TensorFlow DPR model for Open Domain Question Answering."""
 
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 

@@ -365,7 +365,7 @@ def input_processing(func, inputs, **kwargs):
         )
 
         output["input_ids"] = kwargs.pop("inputs")
-    
+
     if "decoder_cached_states" in kwargs:
         warnings.warn(
             "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
@@ -403,12 +403,12 @@ def input_processing(func, inputs, **kwargs):
     elif isinstance(input_ids, (dict, BatchEncoding)):
         if "inputs" in input_ids:
             warnings.warn(
-                    "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                    FutureWarning,
-                )
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
 
             output["input_ids"] = input_ids.pop("inputs")
-        
+
         if "decoder_cached_states" in input_ids:
             warnings.warn(
                 "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
