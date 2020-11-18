@@ -401,7 +401,7 @@ def input_processing(func, inputs, **kwargs):
             )
 
     for name in parameter_names:
-        if name not in list(output.keys()):
+        if name not in list(output.keys()) and name != "args":
             output[name] = kwargs.pop(name, signature[name].default)
 
     # When creating a SavedModel TF calls the method with LayerCall.__call__(args, **kwargs)
