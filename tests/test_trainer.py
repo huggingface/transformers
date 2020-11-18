@@ -44,6 +44,8 @@ if is_torch_available():
         DataCollatorForLanguageModeling,
         GlueDataset,
         GlueDataTrainingArguments,
+        GPT2Config,
+        GPT2LMHeadModel,
         LineByLineTextDataset,
         PreTrainedModel,
         TextDataset,
@@ -71,6 +73,18 @@ class RegressionDataset:
         result = {name: y[i] for name, y in zip(self.label_names, self.ys)}
         result["input_x"] = self.x[i]
         return result
+
+
+class RepeatDataset:
+    def __init__(self, x, length=64):
+        self.x = x
+        self.length = length
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, i):
+        return {"input_ids": self.x, "labels": self.x}
 
 
 class DynamicShapesDataset:
@@ -261,6 +275,21 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer.train()
         _ = trainer.evaluate()
         _ = trainer.predict(eval_dataset)
+
+    def test_evaluation_with_keys_to_drop(self):
+        config = GPT2Config(vocab_size=100, n_positions=128, n_ctx=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        x = torch.randint(0, 100, (128,))
+        eval_dataset = RepeatDataset(x)
+        args = TrainingArguments("./test")
+        trainer = Trainer(tiny_gpt2, args, eval_dataset=eval_dataset)
+        # By default the past_key_values are removed
+        result = trainer.predict(eval_dataset)
+        self.assertTrue(isinstance(result.predictions, np.ndarray))
+        # We can still get them by setting ignore_keys to []
+        result = trainer.predict(eval_dataset, ignore_keys=[])
+        self.assertTrue(isinstance(result.predictions, tuple))
+        self.assertEqual(len(result.predictions), 2)
 
     def test_training_arguments_are_left_untouched(self):
         trainer = get_regression_trainer()
