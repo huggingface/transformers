@@ -676,11 +676,12 @@ class Trainer:
             self.state = TrainerState.load_from_json(os.path.join(model_path, "trainer_state.json"))
             epochs_trained = self.state.global_step // num_update_steps_per_epoch
             steps_trained_in_current_epoch = self.state.global_step % (num_update_steps_per_epoch)
+            steps_trained_in_current_epoch *= self.args.gradient_accumulation_steps
 
             logger.info("  Continuing training from checkpoint, will skip to saved global_step")
             logger.info("  Continuing training from epoch %d", epochs_trained)
             logger.info("  Continuing training from global step %d", self.state.global_step)
-            logger.info("  Will skip the first %d steps in the first epoch", steps_trained_in_current_epoch)
+            logger.info("  Will skip the first %d batches in the first epoch", steps_trained_in_current_epoch)
 
         # Update the references
         self.callback_handler.model = self.model
@@ -696,8 +697,10 @@ class Trainer:
         self.state.is_local_process_zero = self.is_local_process_zero()
         self.state.is_world_process_zero = self.is_world_process_zero()
 
+        # tr_loss is a tensor to avoid synchronization of TPUs through .item()
         tr_loss = torch.tensor(0.0).to(self.args.device)
-        self._logging_loss_scalar = 0
+        # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
+        self._total_loss_scalar = 0.0
         self._globalstep_last_logged = 0
         self._total_flos = self.state.total_flos
         model.zero_grad()
@@ -812,23 +815,26 @@ class Trainer:
             self.log({"total_flos": self.state.total_flos})
 
         self.control = self.callback_handler.on_train_end(self.args, self.state, self.control)
+        # add remaining tr_loss
+        self._total_loss_scalar += tr_loss.item()
 
-        return TrainOutput(self.state.global_step, tr_loss.item() / self.state.global_step)
+        return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step)
 
     def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch):
         if self.control.should_log:
             logs: Dict[str, float] = {}
             tr_loss_scalar = tr_loss.item()
-            logs["loss"] = (tr_loss_scalar - self._logging_loss_scalar) / (
-                self.state.global_step - self._globalstep_last_logged
-            )
+            # reset tr_loss to zero
+            tr_loss -= tr_loss
+
+            logs["loss"] = tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged)
             # backward compatibility for pytorch schedulers
             logs["learning_rate"] = (
                 self.lr_scheduler.get_last_lr()[0]
                 if version.parse(torch.__version__) >= version.parse("1.4")
                 else self.lr_scheduler.get_lr()[0]
             )
-            self._logging_loss_scalar = tr_loss_scalar
+            self._total_loss_scalar += tr_loss_scalar
             self._globalstep_last_logged = self.state.global_step
 
             self.log(logs)
