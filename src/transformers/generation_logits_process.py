@@ -146,17 +146,9 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         self.penalty = penalty
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        score_range = torch.arange(scores.shape[0])
-
-        score = scores[score_range[:, None], input_ids]
-
         # if score < 0 then repetition penalty has to be multiplied to reduce the previous token probability
-        score[score < 0] = score[score < 0] * self.penalty
-        score[score >= 0] = score[score >= 0] / self.penalty
 
-        scores[score_range[:, None], input_ids] = score
-
-        return scores
+        return torch.where(scores < 0, scores * self.penalty, scores / self.penalty)
 
 
 class TopPLogitsWarper(LogitsWarper):
