@@ -27,7 +27,7 @@ from ...file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
 )
-from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list, input_processing
+from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, input_processing, keras_serializable, shape_list
 from ...utils import logging
 from .configuration_transfo_xl import TransfoXLConfig
 from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
