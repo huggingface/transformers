@@ -1977,14 +1977,6 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
         outputs = self.longformer(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -2074,14 +2066,6 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.longformer.return_dict
         outputs = self.longformer(
             input_ids=inputs["input_ids"],

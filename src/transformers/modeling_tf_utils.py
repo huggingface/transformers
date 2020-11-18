@@ -350,6 +350,21 @@ def input_processing(func, config, input_ids, **kwargs):
             f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
         )
 
+    if "inputs" in kwargs:
+        warnings.warn(
+            "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+            FutureWarning,
+        )
+
+        output["input_ids"] = kwargs.pop("inputs")
+    
+    if "decoder_cached_states" in kwargs:
+        warnings.warn(
+            "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+            FutureWarning,
+        )
+        output["past_key_values"] = kwargs.pop("decoder_cached_states")
+
     for k, v in kwargs.items():
         if isinstance(v, allowed_types) or v is None:
             output[k] = v

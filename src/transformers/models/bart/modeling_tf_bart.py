@@ -1148,7 +1148,6 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel, TFCausalLanguageMode
             probs = tf.nn.softmax(logits[0])
             # probs[5] is associated with the mask token
         """
-
         inputs = input_processing(
             func=self.call,
             config=self.config,

@@ -1054,7 +1054,6 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1156,7 +1155,6 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
             num_choices]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
             :obj:`input_ids` above)
         """
-
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1271,7 +1269,6 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
             Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
             1]``.
         """
-
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1368,7 +1365,6 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
             Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
         """
-
         inputs = input_processing(
             func=self.call,
             config=self.config,
