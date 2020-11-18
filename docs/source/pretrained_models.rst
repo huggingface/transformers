@@ -3,11 +3,11 @@ Pretrained models
 
 Here is the full list of the currently provided pretrained models together with a short presentation of each model.
 
-For a list that includes community-uploaded models, refer to `https://huggingface.co/models
+For a list that includes all community-uploaded models, refer to `https://huggingface.co/models
 <https://huggingface.co/models>`__.
 
 +--------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| Architecture       | Shortcut name                                              | Details of the model                                                                                                                  |
+| Architecture       | Model id                                                   | Details of the model                                                                                                                  |
 +====================+============================================================+=======================================================================================================================================+
 | BERT               | ``bert-base-uncased``                                      | | 12-layer, 768-hidden, 12-heads, 110M parameters.                                                                                    |
 |                    |                                                            | | Trained on lower-cased English text.                                                                                                |

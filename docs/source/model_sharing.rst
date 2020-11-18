@@ -37,7 +37,7 @@ For instance:
 
 .. code-block::
 
-    >>> tokenizer = AutoTokenizer.from_pretrained(
+    >>> model = AutoModel.from_pretrained(
     >>>   "julien-c/EsperBERTo-small",
     >>>   revision="v2.0.1" # tag name, or branch name, or commit hash
     >>> )
@@ -46,31 +46,42 @@ Basic steps
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 In order to upload a model, you'll need to first create a git repo. This repo will live on the model hub, allowing
-users to clone it and you (and your organization members) to push to it. First, you should ensure you are logged in the
-``transformers-cli``:
+users to clone it and you (and your organization members) to push to it.
 
-Go in a terminal and run the following command. It should be in the virtual environment where you installed 🤗
+You can create a model repo directly from the website, `here <https://huggingface.co/new>`.
+
+Alternatively, you can use the ``transformers-cli``. The next steps describe that process:
+
+Go to a terminal and run the following command. It should be in the virtual environment where you installed 🤗
 Transformers, since that command :obj:`transformers-cli` comes from the library.
 
-.. code-block::
+.. code-block:: bash
 
     transformers-cli login
 
 
 Once you are logged in with your model hub credentials, you can start building your repositories. To create a repo:
 
-.. code-block::
+.. code-block:: bash
 
     transformers-cli repo create your-model-name
 
-This creates a repo on the model hub, which can be cloned. You can then add/remove from that repo as you would with any
-other git repo.
+This creates a repo on the model hub, which can be cloned.
 
-.. code-block::
+.. code-block:: bash
 
     git clone https://huggingface.co/username/your-model-name
 
-    # Then commit as usual
+    # Make sure you have git-lfs installed
+    # (https://git-lfs.github.com/)
+    git lfs install
+
+When you have your local clone of your repo and lfs installed, you can then add/remove from that clone as you would
+with any other git repo.
+
+.. code-block:: bash
+
+    # Commit as usual
     cd your-model-name
     echo "hello" >> README.md
     git add . && git commit -m "Update from $USER"
@@ -159,24 +170,25 @@ Or, if you're using the Trainer API
 .. code-block::
 
     >>> trainer.save_model("path/to/awesome-name-you-picked")
+    >>> tokenizer.save_pretrained("path/to/repo/clone/your-model-name")
 
 You can then add these files to the staging environment and verify that they have been correctly staged with the ``git
 status`` command:
 
-.. code-block::
+.. code-block:: bash
 
     git add --all
     git status
 
 Finally, the files should be comitted:
 
-.. code-block::
+.. code-block:: bash
 
     git commit -m "First version of the your-model-name model and tokenizer."
 
 And pushed to the remote:
 
-.. code-block::
+.. code-block:: bash
 
     git push
 
@@ -199,7 +211,7 @@ don't forget to link to its model card so that people can fully trace how your m
 If you have never made a pull request to the 🤗 Transformers repo, look at the :doc:`contributing guide <contributing>`
 to see the steps to follow.
 
-.. Note::
+.. note::
 
     You can also send your model card in the folder you uploaded with the CLI by placing it in a `README.md` file
     inside `path/to/awesome-name-you-picked/`.
@@ -225,3 +237,47 @@ You may specify a revision by using the ``revision`` flag in the ``from_pretrain
     >>>   "julien-c/EsperBERTo-small",
     >>>   revision="v2.0.1" # tag name, or branch name, or commit hash
     >>> )
+
+Workflow in a Colab notebook
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you're in a Colab notebook (or similar) with no direct access to a terminal, here is the workflow you can use to
+upload your model. You can execute each one of them in a cell by adding a ! at the beginning.
+
+First you need to install `git-lfs` in the environment used by the notebook:
+
+.. code-block:: bash
+
+    sudo apt-get install git-lfs
+
+Then you can use the :obj:`transformers-cli` to create your new repo:
+
+
+.. code-block:: bash
+
+    transformers-cli login
+    transformers-cli repo create your-model-name
+
+Once it's created, you can clone it and configure it (replace username by your username on huggingface.co):
+
+.. code-block:: bash
+
+    git clone https://username:password@huggingface.co/username/your-model-name
+    # Alternatively if you have a token,
+    # you can use it instead of your password
+    git clone https://username:token@huggingface.co/username/your-model-name
+
+    cd your-model-name
+    git lfs install
+    git config --global user.email "email@example.com"
+    # Tip: using the same email than for your huggingface.co account will link your commits to your profile
+    git config --global user.name "Your name"
+
+Once you've saved your model inside, and your clone is setup with the right remote URL, you can add it and push it with
+usual git commands.
+
+.. code-block:: bash
+
+    git add .
+    git commit -m "Initial commit"
+    git push

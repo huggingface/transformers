@@ -544,10 +544,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             pretrained_model_name_or_path (:obj:`str`, `optional`):
                 Can be either:
 
-                    - A string with the `shortcut name` of a pretrained model to load from cache or download, e.g.,
-                      ``bert-base-uncased``.
-                    - A string with the `identifier name` of a pretrained model that was user-uploaded to our S3, e.g.,
-                      ``dbmdz/bert-base-german-cased``.
+                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
+                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing model weights saved using
                       :func:`~transformersTF.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
                     - A path or url to a `PyTorch state_dict save file` (e.g, ``./pt_model/pytorch_model.bin``). In
@@ -568,8 +567,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 Configuration for the model to use instead of an automatically loaded configuation. Configuration can
                 be automatically loaded when:
 
-                    - The model is a model provided by the library (loaded with the `shortcut name` string of a
-                      pretrained model).
+                    - The model is a model provided by the library (loaded with the `model id` string of a pretrained
+                      model).
                     - The model was saved using :func:`~transformers.TFPreTrainedModel.save_pretrained` and is reloaded
                       by supplying the save directory.
                     - The model is loaded by supplying a local directory as ``pretrained_model_name_or_path`` and a
@@ -618,7 +617,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         Examples::
 
             >>> from transformers import BertConfig, TFBertModel
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = TFBertModel.from_pretrained('bert-base-uncased')
             >>> # Model was saved using `save_pretrained('./test/saved_model/')` (for example purposes, not runnable).
             >>> model = TFBertModel.from_pretrained('./test/saved_model/')
