@@ -257,33 +257,24 @@ def load_tf_weights(model, resolved_archive_file):
         # Retrieve the name of each layer from the H5 file
         saved_h5_model_layers_name = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
 
-        # Retrieve the name of each layer from the instantiated model
-        # make it a dict that looks like {"layer_name": Layer object}
-        model_layers_name_value = {layer.name: layer for layer in model.layers}
-
-        # Create a set of unique names of the layers that come from the instantiated model
-        model_layers_name = set(model_layers_name_value.keys())
-
         # Find the missing layers from the high level list of layers
-        missing_layers = list(model_layers_name - saved_h5_model_layers_name)
+        missing_layers = list(set([layer.name for layer in model.layers]) - saved_h5_model_layers_name)
 
         # Find the unexpected layers from the high level list of layers
-        unexpected_layers = list(saved_h5_model_layers_name - model_layers_name)
+        unexpected_layers = list(saved_h5_model_layers_name - set([layer.name for layer in model.layers]))
         saved_weight_names_set = set()
         symbolic_weights_names = set()
         weight_value_tuples = []
 
         # Compute missing and unexpected sub layers
         # Store the weights in list of tuples that looks like [(weight_object, value_of_weight),...]
-        for layer_name in saved_h5_model_layers_name:
+        for layer in model.layers:
             # if layer_name from the H5 file belongs to the layers from the instanciated model
-            if layer_name in model_layers_name:
+            if layer.name in saved_h5_model_layers_name:
                 # Get the H5 layer object from its name
-                h5_layer_object = f[layer_name]
+                h5_layer_object = f[layer.name]
                 # Get all the weights that are attach to layer_name
                 saved_weight_names = hdf5_format.load_attributes_from_hdf5_group(h5_layer_object, "weight_names")
-                # Get the layer object from the layer_name in the dict that represents the instanciated model
-                layer = model_layers_name_value[layer_name]
                 # Get all the weights as a list from the layer object
                 symbolic_weights = layer.trainable_weights + layer.non_trainable_weights
                 saved_weights = {}
