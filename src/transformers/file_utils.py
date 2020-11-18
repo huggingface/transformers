@@ -674,6 +674,28 @@ PT_CAUSAL_LM_SAMPLE = r"""
         >>> logits = outputs.logits
 """
 
+PT_SPAN_CLASSIFICATION_SAMPLE = r"""
+    Example::
+
+        >>> from transformers import {tokenizer_class}, {model_class}
+        >>> import torch
+
+        >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
+
+        >>> word = "class"
+        >>> sentence0 = "An emerging professional class."
+        >>> sentence1 = "Apologizing for losing your temper, even though you were badly provoked, showed real class."
+        >>> labels = torch.tensor(0).unsqueeze(0)  # The word is used differently in two sentences, batch size 1
+
+        >>> encoding = tokenizer([sentence0, sentence1], return_tensors='pt', padding=True)
+        >>> outputs = model(**{{k: v.unsqueeze(0) for k,v in encoding.items()}}, labels=labels)  # batch size is 1
+
+        >>> # the linear classifier still needs to be trained
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+"""
+
 TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
     Example::
 
@@ -819,6 +841,10 @@ def add_code_sample_docstrings(
             code_sample = TF_CAUSAL_LM_SAMPLE if is_tf_class else PT_CAUSAL_LM_SAMPLE
         elif "Model" in model_class or "Encoder" in model_class:
             code_sample = TF_BASE_MODEL_SAMPLE if is_tf_class else PT_BASE_MODEL_SAMPLE
+        elif "SpanClassification" in model_class:
+            if is_tf_class:
+                raise ValueError(f"Docstring can't be built for model {model_class}")
+            code_sample = PT_SPAN_CLASSIFICATION_SAMPLE
         else:
             raise ValueError(f"Docstring can't be built for model {model_class}")
 

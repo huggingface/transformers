@@ -19,6 +19,7 @@ if is_torch_available():
         RobertaForQuestionAnswering,
         RobertaForSequenceClassification,
         RobertaForTokenClassification,
+        RobertaForSpanClassification,
         RobertaModel,
     )
 

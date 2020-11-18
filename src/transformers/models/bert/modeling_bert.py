@@ -45,6 +45,7 @@ from ...modeling_outputs import (
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
+    SpanClassifierOutput,
 )
 from ...modeling_utils import (
     PreTrainedModel,
@@ -207,14 +208,10 @@ class BertEmbeddings(nn.Module):
 class BertSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
-            )
 
         self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        # Use attention head size instead of int(config.hidden_size / config.num_attention_heads)
+        self.attention_head_size = config.attention_head_size
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
@@ -285,7 +282,7 @@ class BertSelfAttention(nn.Module):
 class BertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.dense = nn.Linear(config.num_attention_heads * config.attention_head_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -1648,6 +1645,154 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             loss=total_loss,
             start_logits=start_logits,
             end_logits=end_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+@add_start_docstrings(
+    """
+    Bert Model transformer with a span classification head on top (a linear layer on top of the pooled
+    output) e.g. for SuperGLUE WiC task.
+    """,
+    BERT_START_DOCSTRING,
+)
+class BertForSpanClassification(BertPreTrainedModel):
+    def __init__(self, config):
+        super.__init__(config)
+        self.num_labels = config.num_labels
+        self.num_spans = config.num_spans  # number of spans per input
+
+        self.bert = BertModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.num_spans * config.hidden_size, config.num_labels)
+
+        self.init_weights()
+
+    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="bert-base-uncased",
+        output_type=SequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids=None,
+        spans=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        spans (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_spans, 2)`):
+            Labels for position (index) of the start and end of the labelled span.
+            We assume a fixed number of spans per input and max pool over the span
+            to get a span representation.
+
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`, defaults to :obj:`None`):
+            Labels for computing the sequence classification/regression loss.
+            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
+            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+    Returns:
+        :obj:`tuple(torch.FloatTensor)` comprising various elements depending on the configuration (:class:`~transformers.BertConfig`) and inputs:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
+            Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
+        start_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):
+            Span-start scores (before SoftMax).
+        end_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length,)`):
+            Span-end scores (before SoftMax).
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape
+            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+
+    Examples::
+
+        from transformers import BertTokenizer, BertForQuestionAnswering
+        import torch
+
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+        model = BertForQuestionAnswering.from_pretrained('bert-large-uncased-whole-word-masking-finetuned-squad')
+
+        question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
+        input_ids = tokenizer.encode(question, text)
+        token_type_ids = [0 if i <= input_ids.index(102) else 1 for i in range(len(input_ids))]
+        start_scores, end_scores = model(torch.tensor([input_ids]), token_type_ids=torch.tensor([token_type_ids]))
+
+        all_tokens = tokenizer.convert_ids_to_tokens(input_ids)
+        answer = ' '.join(all_tokens[torch.argmax(start_scores) : torch.argmax(end_scores)+1])
+
+        assert answer == "a nice puppet"
+
+        """
+
+        outputs = self.bert(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        sequence_output = outputs[0]
+
+        # extract representations correponding to the spans
+        span_reps = []
+        for batch_spans in spans.transpose(0, 1):
+            # spans: n_spans x bz x 2 (start, end)
+
+            span_mask = torch.zeros_like(sequence_output)
+            for batch_idx, (start, end) in enumerate(batch_spans):
+                span_mask[batch_idx, start : end + 1] = 1
+
+            # pool within spans
+            masked_output = sequence_output * span_mask
+            span_rep, _ = masked_output.max(dim=1)
+            span_reps.append(span_rep)
+
+        # combine multiple spans
+        span_reps = torch.cat(span_reps, dim=1)
+        # feed to ff classifier
+        span_reps = self.dropout(span_reps)
+        logits = self.classifier(span_reps)
+        # outputs = (logits,) + outputs[2:]  # add hidden states and attention if they are here
+
+        loss = None
+        if labels is not None:
+            if self.num_labels == 1:
+                #  We are doing regression
+                loss_fct = MSELoss()
+                loss = loss_fct(logits.view(-1), labels.view(-1))
+            else:
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output  # (loss), logits, (hidden_states), (attentions)
+
+        return SpanClassifierOutput(
+            loss=loss,
+            logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

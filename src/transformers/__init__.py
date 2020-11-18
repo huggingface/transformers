@@ -50,6 +50,8 @@ from .data import (
     xnli_output_modes,
     xnli_processors,
     xnli_tasks_num_labels,
+    SpanClassificationExample,
+    SpanClassificationFeatures
 )
 
 # Files and general utilities
@@ -362,6 +364,7 @@ if is_torch_available():
         BertForQuestionAnswering,
         BertForSequenceClassification,
         BertForTokenClassification,
+        BertForSpanClassification,
         BertLayer,
         BertLMHeadModel,
         BertModel,
@@ -539,6 +542,7 @@ if is_torch_available():
         RobertaForQuestionAnswering,
         RobertaForSequenceClassification,
         RobertaForTokenClassification,
+        RobertaForSpanClassification,
         RobertaModel,
     )
     from .models.squeezebert import (

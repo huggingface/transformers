@@ -20,6 +20,7 @@ if is_torch_available():
         BertForQuestionAnswering,
         BertForSequenceClassification,
         BertForTokenClassification,
+        BertForSpanClassification,
         BertLayer,
         BertLMHeadModel,
         BertModel,
