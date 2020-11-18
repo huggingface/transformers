@@ -204,9 +204,9 @@ class TFLongformerModelTester:
     ):
         config.num_labels = self.num_labels
         model = TFLongformerForSequenceClassification(config=config)
-        loss, output = model(
+        output = model(
             input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
-        )
+        ).logits
         self.parent.assertListEqual(shape_list(output), [self.batch_size, self.num_labels])
 
     def create_and_check_longformer_for_token_classification(
@@ -214,7 +214,7 @@ class TFLongformerModelTester:
     ):
         config.num_labels = self.num_labels
         model = TFLongformerForTokenClassification(config=config)
-        loss, output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        output = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels).logits
         self.parent.assertListEqual(shape_list(output), [self.batch_size, self.seq_length, self.num_labels])
 
     def create_and_check_longformer_for_multiple_choice(
@@ -225,13 +225,13 @@ class TFLongformerModelTester:
         multiple_choice_inputs_ids = tf.tile(tf.expand_dims(input_ids, 1), (1, self.num_choices, 1))
         multiple_choice_token_type_ids = tf.tile(tf.expand_dims(token_type_ids, 1), (1, self.num_choices, 1))
         multiple_choice_input_mask = tf.tile(tf.expand_dims(input_mask, 1), (1, self.num_choices, 1))
-        loss, output = model(
+        output = model(
             multiple_choice_inputs_ids,
             attention_mask=multiple_choice_input_mask,
             global_attention_mask=multiple_choice_input_mask,
             token_type_ids=multiple_choice_token_type_ids,
             labels=choice_labels,
-        )
+        ).logits
         self.parent.assertListEqual(list(output.shape), [self.batch_size, self.num_choices])
 
     def prepare_config_and_inputs_for_common(self):
@@ -647,7 +647,9 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         # 'Hello world! ' repeated 1000 times
         input_ids = tf.convert_to_tensor([[0] + [20920, 232, 328, 1437] * 1000 + [2]], dtype=tf.dtypes.int32)
 
-        loss, prediction_scores = model(input_ids, labels=input_ids)
+        output = model(input_ids, labels=input_ids)
+        loss = output.loss
+        prediction_scores = output.logits
 
         expected_loss = tf.constant(0.0073798)
         expected_prediction_scores_sum = tf.constant(-610476600.0)
