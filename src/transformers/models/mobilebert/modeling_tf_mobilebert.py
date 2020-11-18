@@ -736,7 +736,7 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
@@ -994,7 +994,7 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         outputs = self.mobilebert(
             input_ids=inputs["input_ids"],
@@ -1072,7 +1072,7 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(
@@ -1158,7 +1158,7 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
             return_dict=return_dict,
             labels=labels,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(
@@ -1259,7 +1259,7 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
             return_dict=return_dict,
             next_sentence_label=next_sentence_label,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(
@@ -1355,7 +1355,7 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
             return_dict=return_dict,
             labels=labels,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(
@@ -1457,7 +1457,7 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
             start_positions=start_positions,
             end_positions=end_positions,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(
@@ -1569,7 +1569,7 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
             return_dict=return_dict,
             labels=labels,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
 
@@ -1687,7 +1687,7 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
             return_dict=return_dict,
             labels=labels,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(

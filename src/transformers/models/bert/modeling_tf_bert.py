@@ -589,13 +589,6 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         training=False,
         **kwargs,
     ):
-        if "inputs" in kwargs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            input_ids = kwargs.pop("inputs")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -608,15 +601,8 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            kwargs_call=kwargs,
         )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
         )
@@ -874,7 +860,7 @@ class TFBertModel(TFBertPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         outputs = self.bert(
             input_ids=inputs["input_ids"],
@@ -957,7 +943,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
             labels=labels,
             next_sentence_label=next_sentence_label,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
@@ -1056,7 +1042,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             return_dict=return_dict,
             labels=labels,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
@@ -1143,7 +1129,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             return_dict=return_dict,
             labels=labels,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
@@ -1239,7 +1225,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             return_dict=return_dict,
             next_sentence_label=next_sentence_label,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
@@ -1333,7 +1319,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             return_dict=return_dict,
             labels=labels,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
@@ -1433,7 +1419,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             return_dict=return_dict,
             labels=labels,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
 
@@ -1551,7 +1537,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             return_dict=return_dict,
             labels=labels,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
@@ -1651,7 +1637,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             start_positions=start_positions,
             end_positions=end_positions,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(

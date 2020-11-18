@@ -1437,7 +1437,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
@@ -1785,7 +1785,7 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         outputs = self.longformer(
             input_ids=inputs["input_ids"],
@@ -1861,7 +1861,7 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
             return_dict=return_dict,
             labels=labels,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.longformer.return_dict
         outputs = self.longformer(
@@ -1962,7 +1962,7 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
             start_positions=start_positions,
             end_positions=end_positions,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.longformer.return_dict
 

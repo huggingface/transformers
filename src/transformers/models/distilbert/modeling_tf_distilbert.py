@@ -428,7 +428,7 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
@@ -604,7 +604,7 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         outputs = self.distilbert(
             input_ids=inputs["input_ids"],
@@ -695,7 +695,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
             return_dict=return_dict,
             labels=labels,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
         distilbert_output = self.distilbert(
@@ -790,7 +790,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
             return_dict=return_dict,
             labels=labels,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
         distilbert_output = self.distilbert(
@@ -878,7 +878,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
             return_dict=return_dict,
             labels=labels,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
         outputs = self.distilbert(
@@ -983,7 +983,7 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
             return_dict=return_dict,
             labels=labels,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
 
@@ -1095,7 +1095,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
             start_positions=start_positions,
             end_positions=end_positions,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
         distilbert_output = self.distilbert(

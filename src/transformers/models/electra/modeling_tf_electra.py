@@ -557,7 +557,7 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
@@ -769,7 +769,7 @@ class TFElectraModel(TFElectraPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         outputs = self.electra(
             input_ids=inputs["input_ids"],
@@ -846,7 +846,7 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = (
             inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
@@ -963,7 +963,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
             return_dict=return_dict,
             labels=labels,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = (
             inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
@@ -1078,7 +1078,7 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
             return_dict=return_dict,
             labels=labels,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = (
             inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
@@ -1181,7 +1181,7 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
             return_dict=return_dict,
             labels=labels,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = (
             inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
@@ -1297,7 +1297,7 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
             return_dict=return_dict,
             labels=labels,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = (
             inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
@@ -1396,7 +1396,7 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
             start_positions=start_positions,
             end_positions=end_positions,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = (
             inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict

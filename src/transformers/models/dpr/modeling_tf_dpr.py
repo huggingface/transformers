@@ -184,7 +184,7 @@ class TFDPREncoder(TFPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert_model.return_dict
         outputs = self.bert_model(
@@ -259,7 +259,7 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = (
             inputs["return_dict"] if inputs["return_dict"] is not None else self.encoder.bert_model.return_dict
@@ -506,7 +506,7 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
@@ -602,7 +602,7 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
@@ -705,7 +705,7 @@ class TFDPRReader(TFDPRPretrainedReader):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions

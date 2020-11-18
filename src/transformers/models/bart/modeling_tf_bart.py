@@ -950,7 +950,7 @@ class TFBartModel(TFPretrainedBartModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.config.use_cache
         if inputs["decoder_input_ids"] is None:  # Classification
@@ -1105,7 +1105,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel, TFCausalLanguageMode
             return_dict=return_dict,
             labels=labels,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.return_dict
         use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.config.use_cache

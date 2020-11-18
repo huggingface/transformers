@@ -608,7 +608,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
@@ -1045,7 +1045,7 @@ class TFT5Model(TFT5PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.config.use_cache
         output_attentions = (
@@ -1234,7 +1234,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
-            **kwargs,
+            kwargs_call=kwargs,
         )
         use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.config.use_cache
         output_attentions = (
