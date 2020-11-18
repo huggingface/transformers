@@ -1,4 +1,4 @@
-Tokenizer summary
+Summary of the tokenizers
 -----------------------------------------------------------------------------------------------------------------------
 
 On this page, we will have a closer look at tokenization. As we saw in :doc:`the preprocessing tutorial
@@ -11,7 +11,7 @@ uses :ref:`WordPiece <wordpiece>`.
 Introduction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Splitting a text into smaller chunks is a task that"s harder than it looks, and there are multiple ways of doing so. For instance, let"s look at the sentence "Don't you love 🤗 Transformers? We sure do." A simple way of tokenizing this
+Splitting a text into smaller chunks is a task that is harder than it looks, and there are multiple ways of doing so. For instance, let's look at the sentence "Don't you love 🤗 Transformers? We sure do." A simple way of tokenizing this
 text is to split it by spaces, which would give:
 
 .. code-block::
@@ -37,7 +37,7 @@ rule-based tokenizers. Applying them on our example, *spaCy* and *Moses* would o
 
 As can be seen Space -and punctuation tokenization, as well as rule-based tokenization, is used here.
 Space- and punctuation tokenization and rule-based tokenization are both examples of word tokenization, which is loosely defined as splitting
-sentences into words. While it"s the most intuitive way to split texts into smaller chunks, this tokenization method can lead to problems for massive text corpora. In this case, space- and punctuation tokenization usually generates a very big vocabulary (the set of all unique words and tokens used). *E.g.*, :doc:`Transformer
+sentences into words. While it's the most intuitive way to split texts into smaller chunks, this tokenization method can lead to problems for massive text corpora. In this case, space- and punctuation tokenization usually generates a very big vocabulary (the set of all unique words and tokens used). *E.g.*, :doc:`Transformer
 XL <model_doc/transformerxl>` uses space- and punctuation-tokenization, resulting in a vocabulary size of 267,735!
 
 Such a big vocabulary size forces the model to have an enormous embedding matrix as the input- and output layer, which causes both an increased memory- and time complexity.
@@ -95,7 +95,7 @@ As an example, let"s assume that after pre-tokenization, the following set of wo
 
     ("hug", 10), ("pug", 5), ("pun", 12), ("bun", 4), ("hugs", 5)
 
-Consequently, the base vocabulary is ["b", "g", "h", "n", "p", "s", "u"]. Splitting all words into symbols of the base vocabulary, we obtain:
+Consequently, the base vocabulary is ``["b", "g", "h", "n", "p", "s", "u"]``. Splitting all words into symbols of the base vocabulary, we obtain:
 
 .. code-block::
 
@@ -130,7 +130,7 @@ Byte-level BPE
 
 A base vocabulary that includes all possible base characters can be quite large if *e.g.* all unicode characters are considered as base characters. To have a better base vocabulary, `GPT-2
 <https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf>`__ uses bytes as the base vocabulary, which is a clever trick to force the base vocabulary to be of size 256 while ensuring that every base character is included in the vocabulary. With some additional rules to
-deal with punctuation, the GPT2"s tokenizer can tokenize every text without the need for the <unk> symbol. :doc:`GPT-2 <model_doc/gpt>` has a vocabulary size of 50,257, which corresponds to the 256 bytes base tokens,
+deal with punctuation, the GPT2's tokenizer can tokenize every text without the need for the <unk> symbol. :doc:`GPT-2 <model_doc/gpt>` has a vocabulary size of 50,257, which corresponds to the 256 bytes base tokens,
 a special end-of-text token and the symbols learned with 50,000 merges.
 
 .. _wordpiece:
@@ -144,14 +144,14 @@ given number of merge rules. In contrast to BPE, WordPiece does not choose the m
 that maximizes the likelihood of the training data once added to the vocabulary.
 
 So what does this mean exactly? Referring to the previous example, maximizing the likelihood of the training data is equivalent to finding the symbol pair, whose probability divided by the probabilities of its first symbol followed by its second symbol is the greatest among all symbol pairs. *E.g.* "u", followed by "g" would have only been merged if the probability of "ug" divided by "u", "g" would have been greater than for any other symbol pair. Intuitively, WordPiece is slightly different to BPE in that it evaluates what it "loses" by merging two symbols to make
-ensure it"s "worth it".
+ensure it's "worth it".
 
 .. _unigram:
 
 Unigram
 =======================================================================================================================
 
-Unigram is a subword tokenization algorithm introduced in `Subword Regularization: Improving Neural Network Translation Models with Multiple Subword Candidates (Kudo, 2018) <https://arxiv.org/pdf/1804.10959.pdf>`__. In contrast to BPE or WordPiece, Unigram initializes its base vocabulary to a large number of symbols and progressively trims down each symbol to obtain a smaller vocabulary.  The base vocabulary could for instance correspond to all pre-tokenized words and the most common substrings. Unigram is not used directly for any of the models in the transformers, but it"s used in conjunction
+Unigram is a subword tokenization algorithm introduced in `Subword Regularization: Improving Neural Network Translation Models with Multiple Subword Candidates (Kudo, 2018) <https://arxiv.org/pdf/1804.10959.pdf>`__. In contrast to BPE or WordPiece, Unigram initializes its base vocabulary to a large number of symbols and progressively trims down each symbol to obtain a smaller vocabulary.  The base vocabulary could for instance correspond to all pre-tokenized words and the most common substrings. Unigram is not used directly for any of the models in the transformers, but it's used in conjunction
 with :ref:`SentencePiece <sentencepiece>`.
 
 At each training step, the Unigram algorithm defines a loss (often defined as the log-likelihood) over the training data given the current vocabulary and a unigram language model. Then, for each symbol in the vocabulary, the algorithm computes how much the overall loss would increase if the symbol was to be removed from the vocabulary. Unigram then removes p (with p usually being 10% or 20%) percent of the symbols whose loss increase is the lowest, *i.e.* those symbols that least affect the overall loss over the training data. This process is repeated until the vocabulary has reached the desired size. The Unigram algorithm always keeps the base characters so that any word can be tokenized.

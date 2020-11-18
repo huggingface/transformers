@@ -181,10 +181,10 @@ conversion utilities for the following models:
 
     task_summary
     model_summary
+    tokenizer_summary
     preprocessing
     training
     model_sharing
-    tokenizer_summary
     multilingual
 
 .. toctree::
