@@ -595,6 +595,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         output_attentions=None,
         output_hidden_states=None,
         training=False,
+        **kwargs,
     ) -> Tuple:
         if "inputs" in kwargs:
             warnings.warn(
@@ -602,13 +603,6 @@ class TFT5MainLayer(tf.keras.layers.Layer):
                 FutureWarning,
             )
             input_ids = kwargs.pop("inputs")
-
-        if "decoder_past_key_value_states" in kwargs:
-            warnings.warn(
-                "The `decoder_past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = kwargs.pop("decoder_past_key_value_states")
 
         inputs = input_processing(
             func=self.call,
@@ -631,13 +625,6 @@ class TFT5MainLayer(tf.keras.layers.Layer):
                 FutureWarning,
             )
             inputs["input_ids"] = inputs.pop("inputs")
-
-        if "decoder_past_key_value_states" in inputs:
-            warnings.warn(
-                "The `decoder_past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            inputs["past_key_values"] = inputs.pop("decoder_past_key_value_states")
 
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
@@ -1065,13 +1052,6 @@ class TFT5Model(TFT5PreTrainedModel):
             )
             input_ids = kwargs.pop("inputs")
 
-        if "decoder_past_key_value_states" in kwargs:
-            warnings.warn(
-                "The `decoder_past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = kwargs.pop("decoder_past_key_value_states")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -1096,13 +1076,6 @@ class TFT5Model(TFT5PreTrainedModel):
                 FutureWarning,
             )
             inputs["input_ids"] = inputs.pop("inputs")
-
-        if "decoder_past_key_value_states" in inputs:
-            warnings.warn(
-                "The `decoder_past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            inputs["past_key_values"] = inputs.pop("decoder_past_key_value_states")
 
         use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.config.use_cache
         output_attentions = (
@@ -1281,13 +1254,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             )
             input_ids = kwargs.pop("inputs")
 
-        if "decoder_past_key_value_states" in kwargs:
-            warnings.warn(
-                "The `decoder_past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = kwargs.pop("decoder_past_key_value_states")
-
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -1313,13 +1279,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
                 FutureWarning,
             )
             inputs["input_ids"] = inputs.pop("inputs")
-
-        if "decoder_past_key_value_states" in inputs:
-            warnings.warn(
-                "The `decoder_past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            inputs["past_key_values"] = inputs.pop("decoder_past_key_value_states")
 
         use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.config.use_cache
         output_attentions = (
