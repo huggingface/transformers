@@ -273,15 +273,13 @@ def load_tf_weights(model, resolved_archive_file):
             if layer.name in saved_h5_model_layers_name:
                 # Get the H5 layer object from its name
                 h5_layer_object = f[layer.name]
-                # Get all the weights that are attach to layer_name
-                saved_weight_names = hdf5_format.load_attributes_from_hdf5_group(h5_layer_object, "weight_names")
                 # Get all the weights as a list from the layer object
                 symbolic_weights = layer.trainable_weights + layer.non_trainable_weights
                 saved_weights = {}
 
                 # Create a dict from the H5 saved model that looks like {"weight_name": weight_value}
                 # And a set with only the names
-                for weight_name in saved_weight_names:
+                for weight_name in hdf5_format.load_attributes_from_hdf5_group(h5_layer_object, "weight_names"):
                     # TF names always start with the model name so we ignore it
                     name = "/".join(weight_name.split("/")[1:])
                     saved_weights[name] = np.asarray(h5_layer_object[weight_name])
