@@ -964,8 +964,8 @@ class GenerationMixin:
             num_beams * batch_size == batch_beam_size
         ), "Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
 
-        beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
-        beam_scores[:, 1:] = -1e9
+        beam_scores = torch.full((batch_size, num_beams), -1e9, dtype=torch.float, device=input_ids.device)
+        beam_scores[:, ::num_sub_beams] = 0
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
         while cur_len < max_length:
