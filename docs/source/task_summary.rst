@@ -231,7 +231,9 @@ Here is an example of question answering using a model and a tokenizer. The proc
     ...     input_ids = inputs["input_ids"].tolist()[0]
     ...
     ...     text_tokens = tokenizer.convert_ids_to_tokens(input_ids)
-    ...     answer_start_scores, answer_end_scores = model(**inputs)
+    ...     outputs = model(**inputs)
+    ...     answer_start_scores = outputs.start_logits
+    ...     answer_end_scores = outputs.end_logits
     ...
     ...     answer_start = torch.argmax(
     ...         answer_start_scores
@@ -273,7 +275,9 @@ Here is an example of question answering using a model and a tokenizer. The proc
     ...     input_ids = inputs["input_ids"].numpy()[0]
     ...
     ...     text_tokens = tokenizer.convert_ids_to_tokens(input_ids)
-    ...     answer_start_scores, answer_end_scores = model(inputs)
+    ...     outputs = model(inputs)
+    ...     answer_start_scores = outputs.start_logits
+    ...     answer_end_scores = outputs.end_logits
     ...
     ...     answer_start = tf.argmax(
     ...         answer_start_scores, axis=1
