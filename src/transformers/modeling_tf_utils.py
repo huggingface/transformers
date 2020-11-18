@@ -400,6 +400,10 @@ def input_processing(func, inputs, **kwargs):
                 % (type(input_ids), parameter_names[0])
             )
 
+    for name in parameter_names:
+        if name not in list(output.keys()):
+            output[name] = kwargs.pop(name, signature[name].default)
+    
     # When creating a SavedModel TF calls the method with LayerCall.__call__(args, **kwargs)
     # So to respect the proper output we have to add this exception
     if "args" in output:
@@ -407,13 +411,13 @@ def input_processing(func, inputs, **kwargs):
             tensor_name = output["args"].name.split(":")[0]
             output[tensor_name] = output["args"]
         else:
-            output[parameter_names[0]] = output["args"]
+            "Args in this case is always the first parameter, then input_ids"
+            output["input_ids"] = output["args"]
 
         del output["args"]
-
-    for name in parameter_names:
-        if name not in list(output.keys()):
-            output[name] = kwargs.pop(name, signature[name].default)
+    
+    if "kwargs" in output:
+        del output["kwargs"]
 
     return output
 
