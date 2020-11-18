@@ -437,15 +437,15 @@ class TFLongformerLMHead(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
-    def call(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.layer_norm(hidden_states)
+    def call(self, features):
+        x = self.dense(features)
+        x = self.act(x)
+        x = self.layer_norm(x)
 
         # project back to size of vocabulary with bias
-        hidden_states = self.decoder(hidden_states, mode="linear") + self.bias
+        x = self.decoder(x, mode="linear") + self.bias
 
-        return hidden_states
+        return x
 
 
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaEmbeddings
@@ -492,7 +492,7 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
-    def create_position_ids_from_input_ids(self, input_ids):
+    def create_position_ids_from_input_ids(self, x):
         """
         Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
         symbols are ignored. This is modified from fairseq's `utils.make_positions`.
@@ -502,13 +502,7 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
 
         Returns: tf.Tensor
         """
-        input_ids_shape = shape_list(input_ids)
-
-        # multiple choice has 3 dimensions
-        if len(input_ids_shape) == 3:
-            input_ids = tf.reshape(input_ids, (input_ids_shape[0] * input_ids_shape[1], input_ids_shape[2]))
-
-        mask = tf.cast(tf.math.not_equal(input_ids, self.padding_idx), dtype=tf.int32)
+        mask = tf.cast(tf.math.not_equal(x, self.padding_idx), dtype=tf.int32)
         incremental_indices = tf.math.cumsum(mask, axis=1) * mask
 
         return incremental_indices + self.padding_idx
@@ -2387,21 +2381,6 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         else:
             num_choices = shape_list(inputs_embeds)[1]
             seq_length = shape_list(inputs_embeds)[2]
-
-        if global_attention_mask is None and input_ids is not None:
-            logger.info("Initializing global attention on multiple choice...")
-            # put global attention on all tokens after `config.sep_token_id`
-            global_attention_mask = tf.stack(
-                [
-                    _compute_global_attention_mask(
-                        shape_list(input_ids[:, i]),
-                        tf.where(input_ids[:, i] == self.config.sep_token_id),
-                        before_sep_token=False,
-                    )
-                    for i in range(num_choices)
-                ],
-                axis=0,
-            )
 
         flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
         flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
