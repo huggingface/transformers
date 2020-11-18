@@ -14,7 +14,6 @@
 # limitations under the License.
 """Tensorflow Longformer model. """
 
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 

@@ -357,7 +357,7 @@ def input_processing(func, config, input_ids, **kwargs):
         )
 
         output["input_ids"] = kwargs.pop("inputs")
-    
+
     if "decoder_cached_states" in kwargs:
         warnings.warn(
             "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
