@@ -91,6 +91,7 @@ to that word). This technique has been refined for Chinese in [this paper](https
 
 To fine-tune a model using whole word masking, use the following script:
 
+```bash
 python run_mlm_wwm.py \
     --model_name_or_path roberta-base \
     --dataset_name wikitext \
