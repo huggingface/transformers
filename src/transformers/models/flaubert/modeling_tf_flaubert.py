@@ -269,14 +269,6 @@ class TFFlaubertModel(TFFlaubertPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
         outputs = self.transformer(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],

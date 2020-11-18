@@ -765,14 +765,6 @@ class TFElectraModel(TFElectraPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
         outputs = self.electra(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -860,29 +852,6 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
-            training=inputs["training"],
-        )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
-        return_dict = (
-            inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
-        )
-        discriminator_hidden_states = self.electra(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
             training=inputs["training"],
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
@@ -1000,29 +969,6 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
-        return_dict = (
-            inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
-        )
-        generator_hidden_states = self.electra(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
-            training=inputs["training"],
-        )
         generator_sequence_output = generator_hidden_states[0]
         prediction_scores = self.generator_predictions(generator_sequence_output, training=inputs["training"])
         prediction_scores = self.generator_lm_head(prediction_scores, training=inputs["training"])
@@ -1135,29 +1081,6 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
-            training=inputs["training"],
-        )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
-        return_dict = (
-            inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
-        )
-        outputs = self.electra(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
             training=inputs["training"],
         )
         logits = self.classifier(outputs[0])
@@ -1377,29 +1300,6 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
-        return_dict = (
-            inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
-        )
-        discriminator_hidden_states = self.electra(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
-            training=inputs["training"],
-        )
         discriminator_sequence_output = discriminator_hidden_states[0]
         discriminator_sequence_output = self.dropout(discriminator_sequence_output)
         logits = self.classifier(discriminator_sequence_output)
@@ -1496,29 +1396,6 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
-            training=inputs["training"],
-        )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-            
-        return_dict = (
-            inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
-        )
-        discriminator_hidden_states = self.electra(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
             training=inputs["training"],
         )
         discriminator_sequence_output = discriminator_hidden_states[0]

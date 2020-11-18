@@ -17,7 +17,6 @@
 
 from dataclasses import dataclass
 from typing import Optional, Tuple
-import warnings
 
 import tensorflow as tf
 
@@ -40,7 +39,6 @@ from ...modeling_tf_utils import (
     input_processing,
     keras_serializable,
     shape_list,
-    input_processing,
 )
 from ...utils import logging
 from .configuration_openai import OpenAIGPTConfig
@@ -614,27 +612,6 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
-        )
-
-        if "inputs" in inputs:
-            warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-                FutureWarning,
-            )
-            inputs["input_ids"] = inputs.pop("inputs")
-
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
-        transformer_outputs = self.transformer(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"]
         )
         hidden_states = transformer_outputs[0]
 
