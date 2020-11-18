@@ -9,35 +9,35 @@ tokenizers used in 🤗 Transformers: :ref:`Byte-Pair Encoding (BPE) <byte-pair-
 and :ref:`SentencePiece <sentencepiece>`, and show exemplary which tokenizer type is used by which model.
 
 Note that on each model page, you can look at the documentation of the associated tokenizer to know which tokenizer
-type was used by the pre-trained model. For instance, if we look at :class:`~transformers.BertTokenizer`, we can see
+type was used by the pretrained model. For instance, if we look at :class:`~transformers.BertTokenizer`, we can see
 that the model uses :ref:`WordPiece <wordpiece>`.
 
 Introduction
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Splitting a text into smaller chunks is a task that is harder than it looks, and there are multiple ways of doing so.
-For instance, let's look at the sentence "Don't you love 🤗 Transformers? We sure do." A simple way of tokenizing this
-text is to split it by spaces, which would give:
+For instance, let's look at the sentence ``"Don't you love 🤗 Transformers? We sure do."`` A simple way of tokenizing
+this text is to split it by spaces, which would give:
 
 .. code-block::
 
     ["Don't", "you", "love", "🤗", "Transformers?", "We", "sure", "do."]
 
-This is a sensible first step, but if we look at the tokens "Transformers?" and "do.", we notice that the punctuation
-is attached to the words "Transformer" and "do", which is suboptimal. We should take the punctuation into account so
-that a model does not have to learn a different representation of a word and every possible punctuation symbol that
-could follow it, which would explode the number of representations the model has to learn. Taking punctuation into
-account, tokenizing our exemplary text would give:
+This is a sensible first step, but if we look at the tokens ``"Transformers?"`` and ``"do."``, we notice that the
+punctuation is attached to the words ``"Transformer"`` and ``"do"``, which is suboptimal. We should take the
+punctuation into account so that a model does not have to learn a different representation of a word and every possible
+punctuation symbol that could follow it, which would explode the number of representations the model has to learn.
+Taking punctuation into account, tokenizing our exemplary text would give:
 
 .. code-block::
 
     ["Don", "'", "t", "you", "love", "🤗", "Transformers", "?", "We", "sure", "do", "."]
 
-Better. However, it is disadvantageous, how the tokenization dealt with the word "Don't". "Don't" stands for "do not",
-so it would be better tokenized as ``["Do", "n't"]``. This is where things start getting complicated, and part of the
-reason each model has its own tokenizer type. Depending on the rules we apply for tokenizing a text, a different
-tokenized output is generated for the same text. A pre-trained model only performs properly if you feed it an input
-that was tokenized with the same rules that were used to tokenize its training data.
+Better. However, it is disadvantageous, how the tokenization dealt with the word ``"Don't"``. ``"Don't"`` stands for
+``"do not"``, so it would be better tokenized as ``["Do", "n't"]``. This is where things start getting complicated, and
+part of the reason each model has its own tokenizer type. Depending on the rules we apply for tokenizing a text, a
+different tokenized output is generated for the same text. A pretrained model only performs properly if you feed it an
+input that was tokenized with the same rules that were used to tokenize its training data.
 
 `spaCy <https://spacy.io/>`__ and `Moses <http://www.statmt.org/moses/?n=Development.GetStarted>`__ are two popular
 rule-based tokenizers. Applying them on our example, *spaCy* and *Moses* would output something like:
@@ -46,38 +46,38 @@ rule-based tokenizers. Applying them on our example, *spaCy* and *Moses* would o
 
     ["Do", "n't", "you", "love", "🤗", "Transformers", "?", "We", "sure", "do", "."]
 
-As can be seen Space -and punctuation tokenization, as well as rule-based tokenization, is used here. Space- and
+As can be seen space and punctuation tokenization, as well as rule-based tokenization, is used here. Space and
 punctuation tokenization and rule-based tokenization are both examples of word tokenization, which is loosely defined
 as splitting sentences into words. While it's the most intuitive way to split texts into smaller chunks, this
-tokenization method can lead to problems for massive text corpora. In this case, space- and punctuation tokenization
+tokenization method can lead to problems for massive text corpora. In this case, space and punctuation tokenization
 usually generates a very big vocabulary (the set of all unique words and tokens used). *E.g.*, :doc:`Transformer XL
-<model_doc/transformerxl>` uses space- and punctuation-tokenization, resulting in a vocabulary size of 267,735!
+<model_doc/transformerxl>` uses space and punctuation tokenization, resulting in a vocabulary size of 267,735!
 
-Such a big vocabulary size forces the model to have an enormous embedding matrix as the input- and output layer, which
-causes both an increased memory- and time complexity. In general, transformers models rarely have a vocabulary size
-greater than 50,000, especially if they are pre-trained only on a single language.
+Such a big vocabulary size forces the model to have an enormous embedding matrix as the input and output layer, which
+causes both an increased memory and time complexity. In general, transformers models rarely have a vocabulary size
+greater than 50,000, especially if they are pretrained only on a single language.
 
-So if simple space- and punctuation-tokenization is unsatisfactory, why not simply tokenize on characters? While
-character tokenization is very simple and would greatly reduce memory- and time complexity it makes it much harder for
+So if simple space and punctuation tokenization is unsatisfactory, why not simply tokenize on characters? While
+character tokenization is very simple and would greatly reduce memory and time complexity it makes it much harder for
 the model to learn meaningful input representations. *E.g.* learning a meaningful context-independent representation
-for the letter "t" is much harder as learning a context-independent representation for the word "today". Therefore,
-character tokenization is often accompanied by a loss of performance. So to get the best of both worlds, transformers
-models use a hybrid between word-level and character-level tokenization called **subword** tokenization.
+for the letter ``"t"`` is much harder as learning a context-independent representation for the word ``"today"``.
+Therefore, character tokenization is often accompanied by a loss of performance. So to get the best of both worlds,
+transformers models use a hybrid between word-level and character-level tokenization called **subword** tokenization.
 
 Subword tokenization
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Subword tokenization algorithms rely on the principle that frequently used words should not be split into smaller
-subwords, but rare words should be decomposed into meaningful subwords. For instance "annoyingly" might be considered a
-rare word and could be decomposed into "annoying" and "ly". Both "annoying" and "ly" as stand-alone sub-words would
-appear more frequently while at the same time the meaning of "annoyingly" is kept by the composite meaning of
-"annoying" and "ly". This is especially useful in agglutinative languages such as Turkish, where you can form (almost)
-arbitrarily long complex words by stringing together subwords.
+subwords, but rare words should be decomposed into meaningful subwords. For instance ``"annoyingly"`` might be
+considered a rare word and could be decomposed into ``"annoying"`` and ``"ly". Both ``"annoying"`` and ``"ly"`` as
+stand-alone subwords would appear more frequently while at the same time the meaning of ``"annoyingly"`` is kept by the
+composite meaning of ``"annoying"`` and ``"ly"``. This is especially useful in agglutinative languages such as Turkish,
+where you can form (almost) arbitrarily long complex words by stringing together subwords.
 
 Subword tokenization allows the model to have a reasonable vocabulary size while being able to learn meaningful
 context-independent representations. In addition, subword tokenization enables the model to process words it has never
 seen before, by decomposing them into known subwords. For instance, the :class:`~transformers.BertTokenizer` tokenizes
-"I have a new GPU!" as follows:
+``"I have a new GPU!"`` as follows:
 
 .. code-block::
 
@@ -87,9 +87,9 @@ seen before, by decomposing them into known subwords. For instance, the :class:`
     ["i", "have", "a", "new", "gp", "##u", "!"]
 
 Because we are considering the uncased model, the sentence was lowercased first. We can see that the words ``["i",
-"have", "a", "new"]`` are present in the tokenizer"s vocabulary, but the word "gpu" is not. Consequently, the tokenizer
-splits "gpu" into known subwords: ``["gp" and "##u"]``. "##" means that the rest of the token should be attached to the
-previous one, without space (for decoding or reversal of the tokenization).
+"have", "a", "new"]`` are present in the tokenizer's vocabulary, but the word ``"gpu"`` is not. Consequently, the
+tokenizer splits ``"gpu"`` into known subwords: ``["gp" and "##u"]``. ``"##"`` means that the rest of the token should
+be attached to the previous one, without space (for decoding or reversal of the tokenization).
 
 As another example, :class:`~transformers.XLNetTokenizer` tokenizes our previously exemplary text as follows:
 
@@ -100,8 +100,8 @@ As another example, :class:`~transformers.XLNetTokenizer` tokenizes our previous
     >>> tokenizer.tokenize("Don't you love 🤗 Transformers? We sure do.")
     ["▁Don", "'", "t", "▁you", "▁love", "▁", "🤗", "▁", "Transform", "ers", "?", "▁We", "▁sure", "▁do", "."]
 
-We'll get back to the meaning of those "▁" when we look at :ref:`SentencePiece <sentencepiece>`. As one can see, the
-rare word "Transformers" has been split into the more frequent subwords "Transform" and "ers".
+We'll get back to the meaning of those ``"▁"`` when we look at :ref:`SentencePiece <sentencepiece>`. As one can see,
+the rare word ``"Transformers"`` has been split into the more frequent subwords ``"Transform"`` and ``"ers"``.
 
 Let's now look at how the different subword tokenization algorithms work. Note that all of those tokenization
 algorithms rely on some form of training which is usually done on the corpus the corresponding model will be trained
@@ -140,18 +140,18 @@ base vocabulary, we obtain:
     ("h" "u" "g", 10), ("p" "u" "g", 5), ("p" "u" "n", 12), ("b" "u" "n", 4), ("h" "u" "g" "s", 5)
 
 BPE then counts the frequency of each possible symbol pair and picks the symbol pair that occurs most frequently. In
-the example above "h" followed by "u" is present `10 + 5 = 15` times (10 times in the 10 occurrences of "hug", 5 times
-in the 5 occurrences of "hugs"). However, the most frequent symbol pair is "u" followed by "g", occurring `10 + 5 + 5 =
-20` times in total. Thus, the first merge rule the tokenizer learns is to group all "u" symbols followed by a "g"
-symbol together. Next, "ug" is added to the vocabulary. The set of words then becomes
+the example above ``"h"`` followed by ``"u"`` is present `10 + 5 = 15` times (10 times in the 10 occurrences of
+``"hug"``, 5 times in the 5 occurrences of "hugs"). However, the most frequent symbol pair is ``"u"`` followed by "g",
+occurring `10 + 5 + 5 = 20` times in total. Thus, the first merge rule the tokenizer learns is to group all ``"u"``
+symbols followed by a ``"g"`` symbol together. Next, "ug" is added to the vocabulary. The set of words then becomes
 
 .. code-block::
 
     ("h" "ug", 10), ("p" "ug", 5), ("p" "u" "n", 12), ("b" "u" "n", 4), ("h" "ug" "s", 5)
 
-BPE then identifies the next most common symbol pair. It's "u" followed by "n", which occurs 16 times. "u", "n" is
-merged to "un" and added to the vocabulary. The next most frequent symbol pair is "h" followed by "ug", occurring 15
-times. Again the pair is merged and "hug" can be added to the vocabulary.
+BPE then identifies the next most common symbol pair. It's ``"u"`` followed by ``"n"``, which occurs 16 times. ``"u"``,
+``"n"`` is merged to ``"un"`` and added to the vocabulary. The next most frequent symbol pair is ``"h"`` followed by
+``"ug"``, occurring 15 times. Again the pair is merged and ``"hug"`` can be added to the vocabulary.
 
 At this stage, the vocabulary is ``["b", "g", "h", "n", "p", "s", "u", "ug", "un", "hug"]`` and our set of unique words
 is represented as
@@ -162,10 +162,10 @@ is represented as
 
 Assuming, that the Byte-Pair Encoding training would stop at this point, the learned merge rules would then be applied
 to new words (as long as those new words do not include symbols that were not in the base vocabulary). For instance,
-the word "bug" would be tokenized to ``["b", "ug"]`` but "mug" would be tokenized as ``["<unk>", "ug"]`` since the
-symbol "m" is not in the base vocabulary. In general, single letters such as "m" are not replaced by the "<unk>" symbol
-because the training data usually includes at least one occurrence of each letter, but it is likely to happen for very
-special characters like emojis.
+the word ``"bug"`` would be tokenized to ``["b", "ug"]`` but ``"mug"`` would be tokenized as ``["<unk>", "ug"]`` since
+the symbol ``"m"`` is not in the base vocabulary. In general, single letters such as ``"m"`` are not replaced by the
+``"<unk>"`` symbol because the training data usually includes at least one occurrence of each letter, but it is likely
+to happen for very special characters like emojis.
 
 As mentioned earlier, the vocabulary size, *i.e.* the base vocabulary size + the number of merges, is a hyperparameter
 to choose. For instance :doc:`GPT <model_doc/gpt>` has a vocabulary size of 40,478 since they have 478 base characters
@@ -198,10 +198,10 @@ symbol pair, but the one that maximizes the likelihood of the training data once
 
 So what does this mean exactly? Referring to the previous example, maximizing the likelihood of the training data is
 equivalent to finding the symbol pair, whose probability divided by the probabilities of its first symbol followed by
-its second symbol is the greatest among all symbol pairs. *E.g.* "u", followed by "g" would have only been merged if
-the probability of "ug" divided by "u", "g" would have been greater than for any other symbol pair. Intuitively,
-WordPiece is slightly different to BPE in that it evaluates what it "loses" by merging two symbols to make ensure it's
-"worth it".
+its second symbol is the greatest among all symbol pairs. *E.g.* ``"u"``, followed by ``"g"`` would have only been
+merged if the probability of ``"ug"`` divided by ``"u"``, ``"g"`` would have been greater than for any other symbol
+pair. Intuitively, WordPiece is slightly different to BPE in that it evaluates what it `loses` by merging two symbols
+to make ensure it's `worth it`.
 
 .. _unigram:
 
@@ -229,10 +229,10 @@ tokenizing new text after training. As an example, if a trained Unigram tokenize
 
     ["b", "g", "h", "n", "p", "s", "u", "ug", "un", "hug"],
 
-"hugs" could be tokenized both as ``["hug", "s"]``, ``["h", "ug", "s"]`` or ``["h", "u", "g", "s"]``. So which one to
-choose? Unigram saves the probability of each token in the training corpus on top of saving the vocabulary so that the
-probability of each possible tokenization can be computed after training. The algorithm simply picks the most likely
-tokenization in practice, but also offers the possibility to sample a possible tokenization according to their
+``"hugs"`` could be tokenized both as ``["hug", "s"]``, ``["h", "ug", "s"]`` or ``["h", "u", "g", "s"]``. So which one
+to choose? Unigram saves the probability of each token in the training corpus on top of saving the vocabulary so that
+the probability of each possible tokenization can be computed after training. The algorithm simply picks the most
+likely tokenization in practice, but also offers the possibility to sample a possible tokenization according to their
 probabilities.
 
 Those probabilities are defined by the loss the tokenizer is trained on. Assuming that the training data consists of
@@ -256,8 +256,8 @@ as a raw input stream, thus including the space in the set of characters to use.
 algorithm to construct the appropriate vocabulary.
 
 The :class:`~transformers.XLNetTokenizer` uses SentencePiece for example, which is also why in the example earlier the
-"▁" character was included in the vocabulary. Decoding with SentencePiece is very easy since all tokens can just be
-concatenated and "▁" is replaced by a space.
+``"▁"`` character was included in the vocabulary. Decoding with SentencePiece is very easy since all tokens can just be
+concatenated and ``"▁"`` is replaced by a space.
 
 All transformers models in the library that use SentencePiece use it in combination with unigram. Examples of models
 using SentencePiece are :doc:`ALBERT <model_doc/albert>`, :doc:`XLNet <model_doc/xlnet>`, :doc:`Marian
