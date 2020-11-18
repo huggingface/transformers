@@ -963,6 +963,20 @@ class TFBartMainLayer(tf.keras.layers.Layer):
             training=training,
         )
 
+        if "decoder_cached_states" in inputs:
+            warnings.warn(
+                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                FutureWarning,
+            )
+            inputs["past_key_values"] = inputs.pop("decoder_cached_states")
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.use_cache
         if decoder_input_ids is None:  # Classification
             use_cache = False
@@ -1102,6 +1116,21 @@ class TFBartModel(TFPretrainedBartModel):
             return_dict=return_dict,
             training=training,
         )
+
+        if "decoder_cached_states" in inputs:
+            warnings.warn(
+                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                FutureWarning,
+            )
+            inputs["past_key_values"] = inputs.pop("decoder_cached_states")
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         outputs = self.bart(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1206,6 +1235,20 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel, TFCausalLanguageMode
             training=training,
         )
 
+        if "decoder_cached_states" in inputs:
+            warnings.warn(
+                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                FutureWarning,
+            )
+            inputs["past_key_values"] = inputs.pop("decoder_cached_states")
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+            
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bart.return_dict
         use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.bart.use_cache
         if inputs["labels"] is not None:

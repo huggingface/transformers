@@ -438,6 +438,13 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
             training=training,
         )
 
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
         )
@@ -620,6 +627,14 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
             return_dict=return_dict,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         outputs = self.distilbert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -717,6 +732,14 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
             labels=labels,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
         distilbert_output = self.distilbert(
             input_ids=inputs["input_ids"],
@@ -818,6 +841,14 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
             labels=labels,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
         distilbert_output = self.distilbert(
             input_ids=inputs["input_ids"],
@@ -912,6 +943,14 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
             labels=labels,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
         outputs = self.distilbert(
             input_ids=inputs["input_ids"],
@@ -1023,6 +1062,14 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
             labels=labels,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
 
         if inputs["input_ids"] is not None:
@@ -1141,6 +1188,14 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
             end_positions=end_positions,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+            
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
         distilbert_output = self.distilbert(
             input_ids=inputs["input_ids"],

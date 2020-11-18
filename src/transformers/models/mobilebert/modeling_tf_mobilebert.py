@@ -747,6 +747,13 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
             training=training,
         )
 
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
         )
@@ -1011,6 +1018,14 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
             return_dict=return_dict,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         outputs = self.mobilebert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1095,6 +1110,14 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
             return_dict=return_dict,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(
             inputs["input_ids"],
@@ -1187,6 +1210,14 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
             labels=labels,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(
             inputs["input_ids"],
@@ -1294,6 +1325,14 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
             next_sentence_label=next_sentence_label,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(
             inputs["input_ids"],
@@ -1396,6 +1435,14 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
             labels=labels,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(
             inputs["input_ids"],
@@ -1504,6 +1551,14 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
             end_positions=end_positions,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(
             inputs["input_ids"],
@@ -1622,6 +1677,14 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
             labels=labels,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
 
         if inputs["input_ids"] is not None:
@@ -1746,6 +1809,14 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
             labels=labels,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+            
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(
             inputs["input_ids"],

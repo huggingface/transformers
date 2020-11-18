@@ -532,6 +532,13 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
             training=training,
         )
 
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
         )
@@ -766,6 +773,14 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
             return_dict=return_dict,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         outputs = self.roberta(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -878,6 +893,14 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
             labels=labels,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.roberta.return_dict
         outputs = self.roberta(
             inputs["input_ids"],
@@ -1001,6 +1024,14 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
             labels=labels,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.roberta.return_dict
         outputs = self.roberta(
             inputs["input_ids"],
@@ -1108,6 +1139,14 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
             labels=labels,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.roberta.return_dict
 
         if inputs["input_ids"] is not None:
@@ -1221,6 +1260,14 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
             labels=labels,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.roberta.return_dict
         outputs = self.roberta(
             inputs["input_ids"],
@@ -1329,6 +1376,14 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
             end_positions=end_positions,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+            
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.roberta.return_dict
         outputs = self.roberta(
             inputs["input_ids"],

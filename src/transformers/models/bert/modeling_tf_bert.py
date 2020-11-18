@@ -610,6 +610,13 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             training=training,
         )
 
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         output_attentions = (
             inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
         )
@@ -875,6 +882,14 @@ class TFBertModel(TFBertPreTrainedModel):
             return_dict=return_dict,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         outputs = self.bert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -964,6 +979,14 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
             next_sentence_label=next_sentence_label,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
             inputs["input_ids"],
@@ -1069,6 +1092,14 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             labels=labels,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
             inputs["input_ids"],
@@ -1162,6 +1193,14 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             labels=labels,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
             inputs["input_ids"],
@@ -1264,6 +1303,14 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             next_sentence_label=next_sentence_label,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
             inputs["input_ids"],
@@ -1364,6 +1411,14 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             labels=labels,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
             inputs["input_ids"],
@@ -1470,6 +1525,14 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             labels=labels,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
 
         if inputs["input_ids"] is not None:
@@ -1594,6 +1657,14 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             labels=labels,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
             inputs["input_ids"],
@@ -1700,6 +1771,14 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             end_positions=end_positions,
             training=training,
         )
+
+        if "inputs" in inputs:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+            inputs["input_ids"] = inputs.pop("inputs")
+            
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
             inputs["input_ids"],
