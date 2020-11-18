@@ -44,7 +44,6 @@ from ...modeling_tf_utils import (
     input_processing,
     keras_serializable,
     shape_list,
-    input_processing,
 )
 from ...utils import logging
 from .configuration_roberta import RobertaConfig
@@ -1377,7 +1376,7 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
                 FutureWarning,
             )
             inputs["input_ids"] = inputs.pop("inputs")
-            
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.roberta.return_dict
         outputs = self.roberta(
             inputs["input_ids"],

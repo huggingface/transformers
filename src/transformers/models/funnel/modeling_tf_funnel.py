@@ -1845,7 +1845,7 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
                 FutureWarning,
             )
             inputs["input_ids"] = inputs.pop("inputs")
-            
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.funnel.return_dict
         outputs = self.funnel(
             inputs["input_ids"],

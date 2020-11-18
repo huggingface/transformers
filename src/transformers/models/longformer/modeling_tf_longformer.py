@@ -2195,7 +2195,7 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
                 FutureWarning,
             )
             inputs["input_ids"] = inputs.pop("inputs")
-            
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.longformer.return_dict
 
         # set global attention on question tokens

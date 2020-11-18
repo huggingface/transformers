@@ -1575,7 +1575,7 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
                 FutureWarning,
             )
             inputs["input_ids"] = inputs.pop("inputs")
-            
+
         return_dict = (
             inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
         )

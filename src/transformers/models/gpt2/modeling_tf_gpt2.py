@@ -832,7 +832,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
                 FutureWarning,
             )
             inputs["input_ids"] = inputs.pop("inputs")
-            
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
 
         if inputs["input_ids"] is not None:

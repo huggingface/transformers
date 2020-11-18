@@ -17,7 +17,6 @@
 
 from dataclasses import dataclass
 from typing import Optional, Tuple
-import warnings
 
 import tensorflow as tf
 
@@ -40,7 +39,6 @@ from ...modeling_tf_utils import (
     input_processing,
     keras_serializable,
     shape_list,
-    input_processing,
 )
 from ...utils import logging
 from .configuration_openai import OpenAIGPTConfig
@@ -637,7 +635,7 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
-            training=inputs["training"]
+            training=inputs["training"],
         )
         hidden_states = transformer_outputs[0]
 
@@ -750,7 +748,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
                 FutureWarning,
             )
             inputs["input_ids"] = inputs.pop("inputs")
-            
+
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
 
         if inputs["input_ids"] is not None:
