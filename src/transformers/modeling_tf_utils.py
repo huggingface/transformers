@@ -28,8 +28,6 @@ import tensorflow as tf
 from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.saving import hdf5_format
 
-from transformers.modeling_tf_outputs import TFBaseModelOutput
-
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
     DUMMY_INPUTS,
@@ -364,9 +362,11 @@ def input_processing(func, config, input_ids, **kwargs):
             FutureWarning,
         )
         output["past_key_values"] = kwargs["kwargs_call"].pop("decoder_cached_states")
-    
+
     if len(kwargs["kwargs_call"]) > 0:
-        raise ValueError(f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}.")
+        raise ValueError(
+            f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
+        )
 
     for k, v in kwargs.items():
         if isinstance(v, allowed_types) or v is None:
