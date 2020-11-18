@@ -969,6 +969,7 @@ class GenerationMixin:
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
         while cur_len < max_length:
+            # predicted tokens in cur_len step
             recent_tokens = torch.zeros(batch_size * num_beams, dtype=input_ids.dtype)
 
             # do one decoder step on all beams of all sentences in batch
@@ -1034,6 +1035,7 @@ class GenerationMixin:
                 beam_next_tokens = beam_outputs["next_beam_tokens"]
                 beam_idx = beam_outputs["next_beam_indices"]
 
+                input_ids[batch_group_indices] = group_input_ids[beam_idx]
                 group_input_ids = torch.cat([group_input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
                 recent_tokens[batch_group_indices] = group_input_ids[:, -1]
 
