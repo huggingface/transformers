@@ -17,20 +17,11 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import (
-    require_torch,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
-from .test_modeling_common import (
-    ModelTesterMixin,
-    floats_tensor,
-    ids_tensor,
-    random_attention_mask,
-)
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -100,9 +91,6 @@ class GPT2ModelTester:
         self.bos_token_id = vocab_size - 1
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
-
-    def get_large_model_config(self):
-        return GPT2Config.from_pretrained("gpt2")
 
     def prepare_config_and_inputs(self, gradient_checkpointing=False):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -401,9 +389,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
-    all_parallelizable_model_classes = (GPT2LMHeadModel,) if is_torch_available() else ()
     test_missing_keys = False
-    test_model_parallel = True
 
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
