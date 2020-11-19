@@ -226,7 +226,7 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         **kwargs,
     ) -> BatchEncoding:
         if max_length is None:
-            max_length = self.max_len
+            max_length = self.model_max_length
         self.prefix_tokens = []
         model_inputs = self(
             src_texts,
