@@ -43,6 +43,8 @@ class PretrainedConfig(object):
         - **is_composition** (:obj:`bool`): Whether the config class is composed of multiple sub-configs. In this case
           the config has to be initialized from two or more configs of type :class:`~transformers.PretrainedConfig`
           like: :class:`~transformers.EncoderDecoderConfig` or :class:`~RagConfig`.
+        - **keys_to_ignore_at_inference** (:obj:`List[str]`): A list of keys to ignore by default when looking at
+          dictionary outputs of the model during inference.
 
     Args:
         name_or_path (:obj:`str`, `optional`, defaults to :obj:`""`):

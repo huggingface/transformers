@@ -71,6 +71,7 @@ class T5Config(PretrainedConfig):
             the :obj:`"gated-gelu"` feed forward projection. Original T5 uses :obj:`"relu"`.
     """
     model_type = "t5"
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,

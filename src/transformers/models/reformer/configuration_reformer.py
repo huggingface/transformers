@@ -153,6 +153,7 @@ class ReformerConfig(PretrainedConfig):
         >>> configuration = model.config
     """
     model_type = "reformer"
+    keys_to_ignore_at_inference = ["past_buckets_states"]
 
     def __init__(
         self,

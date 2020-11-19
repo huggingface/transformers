@@ -102,3 +102,4 @@ class MBartConfig(BartConfig):
     """
 
     model_type = "mbart"
+    keys_to_ignore_at_inference = ["past_key_values"]

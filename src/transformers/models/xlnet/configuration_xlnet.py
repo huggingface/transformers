@@ -128,6 +128,7 @@ class XLNetConfig(PretrainedConfig):
     """
 
     model_type = "xlnet"
+    keys_to_ignore_at_inference = ["mems"]
 
     def __init__(
         self,
