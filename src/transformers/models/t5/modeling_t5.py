@@ -18,10 +18,12 @@
 import copy
 import math
 import os
+
 import torch
 import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
+
 from ...activations import ACT2FN
 from ...file_utils import (
     DUMMY_INPUTS,
@@ -36,10 +38,17 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...modeling_utils import (
+    PreTrainedModel,
+    find_pruneable_heads_and_indices,
+    prune_linear_layer,
+)
 from ...utils import logging
+from ...utils.model_parallel_utils import (
+    assert_device_map,
+    get_device_map,
+)
 from .configuration_t5 import T5Config
-from ...utils.model_parallel_utils import assert_device_map, get_device_map
 
 
 logger = logging.get_logger(__name__)
@@ -177,23 +186,27 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
 # - PreTrainedModel for the models (it-self a sub-class of torch.nn.Module)
 ####################################################
 PARALLELIZE_DOCSTRING = r"""
-    Uses a device map to distribute attention modules of the model across several devices. If no device map is given, it
-    will evenly distribute blocks across all devices.
+    Uses a device map to distribute attention modules of the model across several devices. If no device map is given,
+    it will evenly distribute blocks across all devices.
+
     Args:
         device_map (:obj:`Dict[int, list]`, optional, defaults to None):
-            A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are
-            always automatically mapped to the first device (for esoteric reasons). That means that the first
-            device should have fewer attention modules mapped to it than other devices.
-            For reference, the t5 models have the following number of attention modules:
+            A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
+            automatically mapped to the first device (for esoteric reasons). That means that the first device should
+            have fewer attention modules mapped to it than other devices. For reference, the t5 models have the
+            following number of attention modules:
+
                 - t5-small: 6
                 - t5-base: 12
                 - t5-large: 24
                 - t5-3b: 24
                 - t5-11b: 24
+
     Example::
         Here is an example of a device map on a machine with 4 GPUs using t5-3b, which has a total of 24 attention modules:
             model = T5ForConditionalGeneration.from_pretrained('t5-3b')
             device_map = {0: [0, 1, 2],
+
                          1: [3, 4, 5, 6, 7, 8, 9],
                          2: [10, 11, 12, 13, 14, 15, 16],
                          3: [17, 18, 19, 20, 21, 22, 23]}
@@ -201,16 +214,19 @@ PARALLELIZE_DOCSTRING = r"""
 """
 DEPARALLELIZE_DOCSTRING = r"""
     Moves the model to cpu from a model parallel state.
+
     Example::
         On a 4 GPU machine with t5-3b:
         model = T5ForConditionalGeneration.from_pretrained('t5-3b')
         device_map = {0: [0, 1, 2],
+
                      1: [3, 4, 5, 6, 7, 8, 9],
                      2: [10, 11, 12, 13, 14, 15, 16],
                      3: [17, 18, 19, 20, 21, 22, 23]}
         model.parallelize(device_map) # Splits the model across several devices
         model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
 """
+
 
 class T5LayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
@@ -246,6 +262,7 @@ class T5DenseReluDense(nn.Module):
         hidden_states = self.wo(hidden_states)
         return hidden_states
 
+
 class T5DenseGatedGeluDense(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -254,6 +271,7 @@ class T5DenseGatedGeluDense(nn.Module):
         self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
         self.dropout = nn.Dropout(config.dropout_rate)
         self.gelu_act = ACT2FN["gelu_new"]
+
     def forward(self, hidden_states):
         hidden_gelu = self.gelu_act(self.wi_0(hidden_states))
         hidden_linear = self.wi_1(hidden_states)
@@ -335,11 +353,13 @@ class T5Attention(nn.Module):
         small absolute relative_position and larger buckets for larger absolute relative_positions. All relative
         positions >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket.
         This should allow for more graceful generalization to longer sequences than the model has been trained on
+
         Args:
             relative_position: an int32 Tensor
             bidirectional: a boolean - whether the attention is bidirectional
             num_buckets: an integer
             max_distance: an integer
+
         Returns:
             a Tensor with the same shape as relative_position, containing int32 values in the range [0, num_buckets)
         """
@@ -757,14 +777,16 @@ class T5Stack(T5PreTrainedModel):
         self.dropout = nn.Dropout(config.dropout_rate)
 
         self.init_weights()
-            # Model parallel
+        # Model parallel
         self.model_parallel = False
         self.device_map = None
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
         # Check validity of device_map
-        self.device_map = get_device_map(len(self.block), torch.cuda.device_count()) if device_map is None else device_map
+        self.device_map = (
+            get_device_map(len(self.block), torch.cuda.device_count()) if device_map is None else device_map
+        )
         assert_device_map(self.device_map, len(self.block))
         self.model_parallel = True
         self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
@@ -774,11 +796,12 @@ class T5Stack(T5PreTrainedModel):
             for layer in v:
                 cuda_device = "cuda:" + str(k)
                 self.block[layer] = self.block[layer].to(cuda_device)
-        
+
         # Set embed_tokens to first layer
         self.embed_tokens = self.embed_tokens.to(self.first_device)
         # Set final layer norm to last device
         self.final_layer_norm = self.final_layer_norm.to(self.last_device)
+
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def deparallelize(self):
         self.model_parallel = False
@@ -788,9 +811,8 @@ class T5Stack(T5PreTrainedModel):
         for i in range(len(self.block)):
             self.block[i] = self.block[i].to("cpu")
         self.embed_tokens = self.embed_tokens.to("cpu")
-        self.final_layer_norm  = self.final_layer_norm.to("cpu")
+        self.final_layer_norm = self.final_layer_norm.to("cpu")
         torch.cuda.empty_cache()
-
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -972,13 +994,12 @@ T5_START_DOCSTRING = r"""
     The T5 model was proposed in `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer
     <https://arxiv.org/abs/1910.10683>`__ by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang,
     Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a text-to-text
-    denoising generative setting.
-    This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
-    pruning heads etc.)
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    denoising generative setting. This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass
+    documentation for the generic methods the library implements for all its model (such as downloading or saving,
+    resizing the input embeddings, pruning heads etc.) This model is also a PyTorch `torch.nn.Module
+    <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass. Use it as a regular PyTorch Module and refer
+    to the PyTorch documentation for all matter related to general usage and behavior.
+
     Parameters:
         config (:class:`~transformers.T5Config`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
@@ -987,27 +1008,25 @@ T5_START_DOCSTRING = r"""
 """
 
 T5_INPUTS_DOCSTRING = r"""
+
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
-            should be able to pad the inputs on both the right and the left.
-            Indices can be obtained using :class:`~transformers.T5Tokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            detail.
-            To know more on how to prepare :obj:`input_ids` for pretraining take a look a `T5 Training
-            <./t5.html#training>`__.
+            should be able to pad the inputs on both the right and the left. Indices can be obtained using
+            :class:`~transformers.T5Tokenizer`. See :meth:`transformers.PreTrainedTokenizer.encode` and
+            :meth:`transformers.PreTrainedTokenizer.__call__` for detail. To know more on how to prepare
+            :obj:`input_ids` for pretraining take a look a `T5 Training <./t5.html#training>`__.
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-            `What are attention masks? <../glossary.html#attention-mask>`__
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``: - 1 for
+            tokens that are **not masked**, - 0 for tokens that are **masked**. `What are attention masks?
+            <../glossary.html#attention-mask>`__
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Provide for sequence to sequence training. T5 uses the :obj:`pad_token_id` as the starting token for
             :obj:`decoder_input_ids` generation. If :obj:`past_key_values` is used, optionally only the last
-            :obj:`decoder_input_ids` have to be input (see :obj:`past_key_values`).
-            To know more on how to prepare :obj:`decoder_input_ids` for pretraining take a look at `T5 Training
-            <./t5.html#training>`__. If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both unset,
-            :obj:`decoder_input_ids` takes the value of :obj:`input_ids`.
+            :obj:`decoder_input_ids` have to be input (see :obj:`past_key_values`). To know more on how to prepare
+            :obj:`decoder_input_ids` for pretraining take a look at `T5 Training <./t5.html#training>`__. If
+            :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both unset, :obj:`decoder_input_ids` takes
+            the value of :obj:`input_ids`.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
@@ -1022,9 +1041,8 @@ T5_INPUTS_DOCSTRING = r"""
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
             instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``: - 1
+            indicates the head is **not masked**, - 0 indicates the head is **masked**.
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
@@ -1082,10 +1100,12 @@ class T5Model(T5PreTrainedModel):
         self.model_parallel = False
         self.device_map = None
 
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)    
+    @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
         self.device_map = (
-            get_device_map(len(self.encoder.block), range(torch.cuda.device_count())) if device_map is None else device_map
+            get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
+            if device_map is None
+            else device_map
         )
         assert_device_map(self.device_map, len(self.encoder.block))
         self.encoder.parallelize(self.device_map)
@@ -1143,15 +1163,14 @@ class T5Model(T5PreTrainedModel):
         return_dict=None,
     ):
         r"""
+
         Returns:
-        Example::
-            >>> from transformers import T5Tokenizer, T5Model
-            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-            >>> model = T5Model.from_pretrained('t5-small')
-            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
-            >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
-            >>> last_hidden_states = outputs.last_hidden_state
+        Example:: >>> from transformers import T5Tokenizer, T5Model >>> tokenizer =
+        T5Tokenizer.from_pretrained('t5-small') >>> model = T5Model.from_pretrained('t5-small') >>> input_ids =
+        tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids # Batch
+        size 1 >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids # Batch size 1 >>>
+        outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids) >>> last_hidden_states =
+        outputs.last_hidden_state
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1255,7 +1274,9 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
         self.device_map = (
-            get_device_map(len(self.encoder.block), range(torch.cuda.device_count())) if device_map is None else device_map
+            get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
+            if device_map is None
+            else device_map
         )
         assert_device_map(self.device_map, len(self.encoder.block))
         self.encoder.parallelize(self.device_map)
@@ -1311,22 +1332,18 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[-100, 0, ...,
-            config.vocab_size - 1]`. All labels set to ``-100`` are ignored (masked), the loss is only computed for
-            labels in ``[0, ..., config.vocab_size]``
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`): Labels for computing the sequence
+        classification/regression loss. Indices should be in :obj:`[-100, 0, ..., config.vocab_size - 1]`. All labels
+        set to ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size]``
+
         Returns:
-        Examples::
-            >>> from transformers import T5Tokenizer, T5ForConditionalGeneration
-            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-            >>> model = T5ForConditionalGeneration.from_pretrained('t5-small')
-            >>> input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids
-            >>> labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2> </s>', return_tensors='pt').input_ids
-            >>> outputs = model(input_ids=input_ids, labels=labels)
-            >>> loss = outputs.loss
-            >>> logits = outputs.logits
-            >>> input_ids = tokenizer("summarize: studies have shown that owning a dog is good for you ", return_tensors="pt").input_ids  # Batch size 1
-            >>> outputs = model.generate(input_ids)
+        Examples:: >>> from transformers import T5Tokenizer, T5ForConditionalGeneration >>> tokenizer =
+        T5Tokenizer.from_pretrained('t5-small') >>> model = T5ForConditionalGeneration.from_pretrained('t5-small') >>>
+        input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids >>> labels
+        = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2> </s>', return_tensors='pt').input_ids >>>
+        outputs = model(input_ids=input_ids, labels=labels) >>> loss = outputs.loss >>> logits = outputs.logits >>>
+        input_ids = tokenizer("summarize: studies have shown that owning a dog is good for you ",
+        return_tensors="pt").input_ids # Batch size 1 >>> outputs = model.generate(input_ids)
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1351,7 +1368,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             )
 
         hidden_states = encoder_outputs[0]
-        
+
         if self.model_parallel:
             torch.cuda.set_device(self.decoder.first_device)
 
@@ -1395,7 +1412,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         )
 
         sequence_output = decoder_outputs[0]
-        
+
         # Set device for model parallelism
         if self.model_parallel:
             torch.cuda.set_device(self.encoder.first_device)
