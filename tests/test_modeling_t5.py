@@ -20,20 +20,11 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import (
-    require_sentencepiece,
-    require_tokenizers,
-    require_torch,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
-from .test_modeling_common import (
-    ModelTesterMixin,
-    ids_tensor,
-)
+from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
@@ -93,9 +84,6 @@ class T5ModelTester:
         self.decoder_start_token_id = decoder_start_token_id
         self.scope = None
         self.decoder_layers = decoder_layers
-
-    def get_large_model_config(self):
-        return T5Config.from_pretrained("t5-base")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -482,18 +470,9 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (T5ForConditionalGeneration,) if is_torch_available() else ()
-    all_parallelizable_model_classes = (
-        (
-            T5Model,
-            T5ForConditionalGeneration,
-        )
-        if is_torch_available()
-        else ()
-    )
     test_pruning = False
     test_torchscript = True
     test_resize_embeddings = False
-    test_model_parallel = True
     is_encoder_decoder = True
 
     def setUp(self):
