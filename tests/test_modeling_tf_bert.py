@@ -340,6 +340,7 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertTrue(layer.split("_")[0] in ["dropout", "classifier"])
 
 
+@require_tf
 class TFBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):

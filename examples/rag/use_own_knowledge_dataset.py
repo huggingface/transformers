@@ -47,7 +47,7 @@ def embed(documents: dict, ctx_encoder: DPRContextEncoder, ctx_tokenizer: DPRCon
     input_ids = ctx_tokenizer(
         documents["title"], documents["text"], truncation=True, padding="longest", return_tensors="pt"
     )["input_ids"]
-    embeddings = ctx_encoder(input_ids.to(device=device)).pooler_output
+    embeddings = ctx_encoder(input_ids.to(device=device), return_dict=True).pooler_output
     return {"embeddings": embeddings.detach().cpu().numpy()}
 
 

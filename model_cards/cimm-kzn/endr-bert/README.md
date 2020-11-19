@@ -1,6 +1,12 @@
-## RuDR-BERT
+---
+language:
+- ru
+- en
+---
 
-  EnDR-BERT - Multilingual, Cased, which pretrained on the collecting of consumer comments on drug administration from [2]. Pre-training was based on the [original BERT code](https://github.com/google-research/bert) provided by Google. In particular, Multi-BERT was for used for initialization; vocabulary of Russian subtokens and parameters are the same as in Multi-BERT. Training details are described in our paper. \
+## EnDR-BERT
+
+  EnDR-BERT - Multilingual, Cased, which pretrained on the english collection of consumer comments on drug administration from [2]. Pre-training was based on the [original BERT code](https://github.com/google-research/bert) provided by Google. In particular, Multi-BERT was for used for initialization and all the parameters are the same as in Multi-BERT. Training details are described in our paper. \
     link: https://yadi.sk/d/-PTn0xhk1PqvgQ
 
  
