@@ -249,7 +249,7 @@ class TFNextSentencePredictionLoss:
 
 def input_processing(func, input_ids, **kwargs):
     signature = dict(inspect.signature(func).parameters)
-    _ = signature.pop("kwargs", None)
+    signature.pop("kwargs", None)
     parameter_names = list(signature.keys())
     output = {}
 
@@ -274,13 +274,14 @@ def input_processing(func, input_ids, **kwargs):
         )
 
     for k, v in kwargs.items():
-        if isinstance(v, (tf.Tensor, bool, ModelOutput, tuple, list, dict)) or v is None:
+        if isinstance(v, (tf.Tensor, bool, int, ModelOutput, tuple, list, dict)) or v is None:
             output[k] = v
         else:
             raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
 
     if isinstance(input_ids, (tuple, list)):
         for i, input in enumerate(input_ids):
+            # EagerTensors don't allow to use the .name property so we check for a real Tensor
             if type(input) == tf.Tensor:
                 # Tensor names have always the pattern name:device_id then we check only the
                 # name and not the device id
@@ -292,7 +293,7 @@ def input_processing(func, input_ids, **kwargs):
                     raise ValueError(
                         f"The tensor named {input.name} does not belong to the authorized list of names {parameter_names}."
                     )
-            elif isinstance(input, (tf.Tensor, bool, ModelOutput, tuple, list, dict)) or input is None:
+            elif isinstance(input, (tf.Tensor, bool, int, ModelOutput, tuple, list, dict)) or input is None:
                 output[parameter_names[i]] = input
             else:
                 raise ValueError(
@@ -315,7 +316,7 @@ def input_processing(func, input_ids, **kwargs):
             output["past_key_values"] = input_ids.pop("decoder_cached_states")
 
         for k, v in dict(input_ids).items():
-            if not isinstance(v, (tf.Tensor, bool, ModelOutput, tuple, list, dict)):
+            if not isinstance(v, (tf.Tensor, bool, int, ModelOutput, tuple, list, dict)):
                 raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
             else:
                 output[k] = v
