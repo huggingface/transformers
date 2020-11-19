@@ -523,8 +523,6 @@ class BertModelIntegrationTest(unittest.TestCase):
         output = model(input_ids)[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = torch.tensor(
-            [[[1.1677, 0.5129, 0.9524], [0.6659, 0.5958, 0.6688], [1.1714, 0.1764, 0.6266]]]
-        )
+        expected_slice = torch.tensor([[[1.1677, 0.5129, 0.9524], [0.6659, 0.5958, 0.6688], [1.1714, 0.1764, 0.6266]]])
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
