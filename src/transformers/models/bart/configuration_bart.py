@@ -110,6 +110,7 @@ class BartConfig(PretrainedConfig):
             :obj:`True` for `bart-large-cnn`.
     """
     model_type = "bart"
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
