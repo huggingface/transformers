@@ -225,7 +225,6 @@ SLOW_TOKENIZER_MAPPING = {
     for k, v in TOKENIZER_MAPPING.items()
     if (v[0] is not None or v[1] is not None)
 }
-SLOW_TOKENIZER_MAPPING[HerbertTokenizer] = HerbertTokenizerFast
 
 
 def tokenizer_class_from_name(class_name: str):
