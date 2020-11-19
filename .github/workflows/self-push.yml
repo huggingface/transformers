@@ -48,7 +48,7 @@ jobs:
         run: |
           source .env/bin/activate
           pip install --upgrade pip
-          pip install .[torch,sklearn,testing,onnxruntime]
+          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
           pip install git+https://github.com/huggingface/datasets
 
       - name: Are GPUs recognized by our DL frameworks
@@ -117,7 +117,7 @@ jobs:
         run: |
           source .env/bin/activate
           pip install --upgrade pip
-          pip install .[tf,sklearn,testing,onnxruntime]
+          pip install .[tf,sklearn,testing,onnxruntime,sentencepiece]
           pip install git+https://github.com/huggingface/datasets
 
       - name: Are GPUs recognized by our DL frameworks
@@ -185,7 +185,7 @@ jobs:
         run: |
           source .env/bin/activate
           pip install --upgrade pip
-          pip install .[torch,sklearn,testing,onnxruntime]
+          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
           pip install git+https://github.com/huggingface/datasets
 
       - name: Are GPUs recognized by our DL frameworks
@@ -244,7 +244,7 @@ jobs:
         run: |
           source .env/bin/activate
           pip install --upgrade pip
-          pip install .[tf,sklearn,testing,onnxruntime]
+          pip install .[tf,sklearn,testing,onnxruntime,sentencepiece]
           pip install git+https://github.com/huggingface/datasets
 
       - name: Are GPUs recognized by our DL frameworks
