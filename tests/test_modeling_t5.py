@@ -20,18 +20,18 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
+from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
     import torch
 
-    from transformers import T5Config, T5ForConditionalGeneration, T5Model
+    from transformers import T5Config, T5ForConditionalGeneration, T5Model, T5Tokenizer
     from transformers.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.tokenization_t5 import T5Tokenizer
 
 
 class T5ModelTester:
@@ -44,7 +44,6 @@ class T5ModelTester:
         encoder_seq_length=7,
         decoder_seq_length=9,
         # For common tests
-        seq_length=7,
         is_training=True,
         use_attention_mask=True,
         use_labels=True,
@@ -85,9 +84,6 @@ class T5ModelTester:
         self.decoder_start_token_id = decoder_start_token_id
         self.scope = None
         self.decoder_layers = decoder_layers
-
-    def get_large_model_config(self):
-        return T5Config.from_pretrained("t5-base")
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -471,15 +467,13 @@ class T5ModelTester:
 
 
 @require_torch
-class T5ModelTest(ModelTesterMixin, unittest.TestCase):
+class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (T5ForConditionalGeneration,) if is_torch_available() else ()
-    all_parallelizable_model_classes = (T5Model, T5ForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_torchscript = True
     test_resize_embeddings = False
-    test_model_parallel = True
     is_encoder_decoder = True
 
     def setUp(self):
@@ -551,6 +545,8 @@ def use_task_specific_params(model, task):
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class T5ModelIntegrationTests(unittest.TestCase):
     @cached_property
     def model(self):
@@ -559,6 +555,32 @@ class T5ModelIntegrationTests(unittest.TestCase):
     @cached_property
     def tokenizer(self):
         return T5Tokenizer.from_pretrained("t5-base")
+
+    @slow
+    def test_small_integration_test(self):
+        """
+        For comparision run:
+        >>> import t5  # pip install t5==0.7.1
+        >>> from t5.data.sentencepiece_vocabulary import SentencePieceVocabulary
+
+        >>> path_to_mtf_small_t5_checkpoint = '<fill_in>'
+        >>> path_to_mtf_small_spm_model_path = '<fill_in>'
+        >>> t5_model = t5.models.MtfModel(model_dir=path_to_mtf_small_t5_checkpoint, batch_size=1, tpu=None)
+        >>> vocab = SentencePieceVocabulary(path_to_mtf_small_spm_model_path, extra_ids=100)
+        >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
+        """
+
+        model = T5ForConditionalGeneration.from_pretrained("t5-small", return_dict=True).to(torch_device)
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
+        labels = tokenizer("Hi I am", return_tensors="pt").input_ids
+
+        loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
+        mtf_score = -(labels.shape[-1] * loss.item())
+
+        EXPECTED_SCORE = -19.0845
+        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
     def test_summarization(self):
@@ -571,8 +593,8 @@ class T5ModelIntegrationTests(unittest.TestCase):
         ARTICLE_SUBWAY = 'New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York. A year later, she got married again in Westchester County, but to a different man and without divorcing her first husband.  Only 18 days after that marriage, she got hitched yet again. Then, Barrientos declared "I do" five more times, sometimes only within two weeks of each other. In 2010, she married once more, this time in the Bronx. In an application for a marriage license, she stated it was her "first and only" marriage. Barrientos, now 39, is facing two criminal counts of "offering a false instrument for filing in the first degree," referring to her false statements on the 2010 marriage license application, according to court documents. Prosecutors said the marriages were part of an immigration scam. On Friday, she pleaded not guilty at State Supreme Court in the Bronx, according to her attorney, Christopher Wright, who declined to comment further. After leaving court, Barrientos was arrested and charged with theft of service and criminal trespass for allegedly sneaking into the New York subway through an emergency exit, said Detective Annette Markowski, a police spokeswoman. In total, Barrientos has been married 10 times, with nine of her marriages occurring between 1999 and 2002.  All occurred either in Westchester County, Long Island, New Jersey or the Bronx. She is believed to still be married to four men, and at one time, she was married to eight men at once, prosecutors say. Prosecutors said the immigration scam involved some of her husbands, who filed for permanent residence status shortly after the marriages.  Any divorces happened only after such filings were approved. It was unclear whether any of the men will be prosecuted. The case was referred to the Bronx District Attorney\'s Office by Immigration and Customs Enforcement and the Department of Homeland Security\'s Investigation Division. Seven of the men are from so-called "red-flagged" countries, including Egypt, Turkey, Georgia, Pakistan and Mali. Her eighth husband, Rashid Rajput, was deported in 2006 to his native Pakistan after an investigation by the Joint Terrorism Task Force. If convicted, Barrientos faces up to four years in prison.  Her next court appearance is scheduled for May 18.'
 
         expected_summaries = [
-            'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found a cell phone video at the crash site . "one can hear cries of \'My God\' in several languages," one magazine says .',
-            "the Palestinians become the 123rd member of the international criminal court . the accession was marked by a ceremony at the Hague, where the court is based . as members of the court, Palestinians may be subject to counter-charges as well .",
+            'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found a cell phone video of the final seconds . "one can hear cries of \'My God\' in several languages," one magazine says .',
+            "the formal accession was marked by a ceremony at The Hague, in the Netherlands . the ICC opened a preliminary examination into the situation in the occupied Palestinian territory . as members of the court, Palestinians may be subject to counter-charges as well .",
             "the u.s. and its negotiating partners reached a very strong framework agreement with Iran . aaron miller: the debate that has already begun since the announcement of the new framework will likely result in more heat than light . the deal would reduce Iran's low-enriched uranium stockpile, cut centrifuges and implement a rigorous inspection regime .",
             'prosecutors say the marriages were part of an immigration scam . if convicted, barrientos faces two criminal counts of "offering a false instrument for filing in the first degree" she has been married 10 times, with nine of her marriages occurring between 1999 and 2002 .',
         ]
@@ -597,6 +619,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
             do_sample=False,
             early_stopping=True,
         )
+
         decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         self.assertListEqual(
             expected_summaries,

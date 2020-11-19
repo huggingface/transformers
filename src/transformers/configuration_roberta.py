@@ -22,12 +22,12 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "roberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-config.json",
-    "roberta-large": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-config.json",
-    "roberta-large-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-mnli-config.json",
-    "distilroberta-base": "https://s3.amazonaws.com/models.huggingface.co/bert/distilroberta-base-config.json",
-    "roberta-base-openai-detector": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-base-openai-detector-config.json",
-    "roberta-large-openai-detector": "https://s3.amazonaws.com/models.huggingface.co/bert/roberta-large-openai-detector-config.json",
+    "roberta-base": "https://huggingface.co/roberta-base/resolve/main/config.json",
+    "roberta-large": "https://huggingface.co/roberta-large/resolve/main/config.json",
+    "roberta-large-mnli": "https://huggingface.co/roberta-large-mnli/resolve/main/config.json",
+    "distilroberta-base": "https://huggingface.co/distilroberta-base/resolve/main/config.json",
+    "roberta-base-openai-detector": "https://huggingface.co/roberta-base-openai-detector/resolve/main/config.json",
+    "roberta-large-openai-detector": "https://huggingface.co/roberta-large-openai-detector/resolve/main/config.json",
 }
 
 
@@ -38,12 +38,11 @@ class RobertaConfig(BertConfig):
     arguments, defining the model architecture.
 
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
-    The :class:`~transformers.RobertaConfig` class directly inherits :class:`~transformers.BertConfig`.
-    It reuses the same defaults. Please check the parent class for more information.
+    The :class:`~transformers.RobertaConfig` class directly inherits :class:`~transformers.BertConfig`. It reuses the
+    same defaults. Please check the parent class for more information.
 
     Examples::
 

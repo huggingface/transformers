@@ -10,7 +10,7 @@ from transformers.convert_graph_to_onnx import (
     infer_shapes,
     quantize,
 )
-from transformers.testing_utils import require_tf, require_torch, slow
+from transformers.testing_utils import require_tf, require_tokenizers, require_torch, slow
 
 
 class FuncContiguousArgs:
@@ -94,25 +94,29 @@ class OnnxExportTestCase(unittest.TestCase):
             self.fail(e)
 
     @require_torch
+    @require_tokenizers
+    @slow
     def test_infer_dynamic_axis_pytorch(self):
         """
         Validate the dynamic axis generated for each parameters are correct
         """
         from transformers import BertModel
 
-        model = BertModel(BertConfig.from_pretrained("bert-base-cased"))
-        tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
+        model = BertModel(BertConfig.from_pretrained("lysandre/tiny-bert-random"))
+        tokenizer = BertTokenizerFast.from_pretrained("lysandre/tiny-bert-random")
         self._test_infer_dynamic_axis(model, tokenizer, "pt")
 
     @require_tf
+    @require_tokenizers
+    @slow
     def test_infer_dynamic_axis_tf(self):
         """
         Validate the dynamic axis generated for each parameters are correct
         """
         from transformers import TFBertModel
 
-        model = TFBertModel(BertConfig.from_pretrained("bert-base-cased"))
-        tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
+        model = TFBertModel(BertConfig.from_pretrained("lysandre/tiny-bert-random"))
+        tokenizer = BertTokenizerFast.from_pretrained("lysandre/tiny-bert-random")
         self._test_infer_dynamic_axis(model, tokenizer, "tf")
 
     def _test_infer_dynamic_axis(self, model, tokenizer, framework):

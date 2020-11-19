@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import slow
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow
 
 
 if is_torch_available():
@@ -26,6 +26,9 @@ if is_torch_available():
     from transformers import XLMRobertaModel
 
 
+@require_sentencepiece
+@require_tokenizers
+@require_torch
 class XLMRobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_xlm_roberta_base(self):

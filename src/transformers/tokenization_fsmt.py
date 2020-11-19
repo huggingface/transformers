@@ -16,20 +16,20 @@
 
 
 import json
-import logging
 import os
 import re
 import unicodedata
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import sacremoses as sm
 
 from .file_utils import add_start_docstrings
 from .tokenization_utils import BatchEncoding, PreTrainedTokenizer
 from .tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
+from .utils import logging
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
     "src_vocab_file": "vocab-src.json",
@@ -37,15 +37,27 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {}
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {}
-PRETRAINED_INIT_CONFIGURATION = {}
+PRETRAINED_VOCAB_FILES_MAP = {
+    "src_vocab_file": {"stas/tiny-wmt19-en-de": "https://cdn.huggingface.co/stas/tiny-wmt19-en-de/vocab-src.json"},
+    "tgt_vocab_file": {"stas/tiny-wmt19-en-de": "https://cdn.huggingface.co/stas/tiny-wmt19-en-de/vocab-tgt.json"},
+    "merges_file": {"stas/tiny-wmt19-en-de": "https://cdn.huggingface.co/stas/tiny-wmt19-en-de/merges.txt"},
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"stas/tiny-wmt19-en-de": 1024}
+PRETRAINED_INIT_CONFIGURATION = {
+    "stas/tiny-wmt19-en-de": {
+        "langs": ["en", "de"],
+        "model_max_length": 1024,
+        "special_tokens_map_file": None,
+        "full_tokenizer_file": None,
+    }
+}
 
 
 def get_pairs(word):
     """
-    Return set of symbol pairs in a word.
-    word is represented as tuple of symbols (symbols being variable-length strings)
+    Return set of symbol pairs in a word. word is represented as tuple of symbols (symbols being variable-length
+    strings)
     """
     pairs = set()
     prev_char = word[0]
@@ -142,7 +154,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
             File containing the vocabulary for the target language.
         merges_file (:obj:`str`):
             File containing the merges.
-        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to lowercase the input when tokenizing.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
@@ -152,12 +164,12 @@ class FSMTTokenizer(PreTrainedTokenizer):
 
             .. note::
 
-                When building a sequence using special tokens, this is not the token that is used for the beginning
-                of sequence. The token used is the :obj:`cls_token`.
+                When building a sequence using special tokens, this is not the token that is used for the beginning of
+                sequence. The token used is the :obj:`cls_token`.
         sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
-            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences
-            for sequence classification or for a text and a question for question answering.
-            It is also used as the last token of a sequence built with special tokens.
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens.
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
 
@@ -174,6 +186,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
         src_vocab_file=None,
         tgt_vocab_file=None,
         merges_file=None,
+        do_lower_case=False,
         unk_token="<unk>",
         bos_token="<s>",
         sep_token="</s>",
@@ -182,6 +195,10 @@ class FSMTTokenizer(PreTrainedTokenizer):
     ):
         super().__init__(
             langs=langs,
+            src_vocab_file=src_vocab_file,
+            tgt_vocab_file=tgt_vocab_file,
+            merges_file=merges_file,
+            do_lower_case=do_lower_case,
             unk_token=unk_token,
             bos_token=bos_token,
             sep_token=sep_token,
@@ -192,6 +209,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
         self.src_vocab_file = src_vocab_file
         self.tgt_vocab_file = tgt_vocab_file
         self.merges_file = merges_file
+        self.do_lower_case = do_lower_case
 
         # cache of sm.MosesPunctNormalizer instance
         self.cache_moses_punct_normalizer = dict()
@@ -317,12 +335,16 @@ class FSMTTokenizer(PreTrainedTokenizer):
         Tokenize a string given language code using Moses.
 
         Details of tokenization:
-        - [sacremoses](https://github.com/alvations/sacremoses): port of Moses
+
+            - [sacremoses](https://github.com/alvations/sacremoses): port of Moses
             - Install with `pip install sacremoses`
 
         Args:
-            - lang: ISO language code (default = 'en') (string). Languages should belong of the model supported languages. However, we don't enforce it.
-            - bypass_tokenizer: Allow users to preprocess and tokenize the sentences externally (default = False) (bool). If True, we only apply BPE.
+
+            - lang: ISO language code (default = 'en') (string). Languages should belong of the model supported
+              languages. However, we don't enforce it.
+            - bypass_tokenizer: Allow users to preprocess and tokenize the sentences externally (default = False)
+              (bool). If True, we only apply BPE.
 
         Returns:
             List of tokens.
@@ -331,6 +353,9 @@ class FSMTTokenizer(PreTrainedTokenizer):
         # if lang != self.src_lang:
         #     raise ValueError(f"Expected lang={self.src_lang}, but got {lang}")
         lang = self.src_lang
+
+        if self.do_lower_case:
+            text = text.lower()
 
         if bypass_tokenizer:
             text = text.split()
@@ -367,9 +392,8 @@ class FSMTTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens.
-        A FAIRSEQ Transformer sequence has the following format:
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A FAIRSEQ Transformer sequence has the following format:
 
         - single sequence: ``<s> X </s>``
         - pair of sequences: ``<s> A </s> B </s>``
@@ -413,7 +437,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
             if token_ids_1 is not None:
                 raise ValueError(
                     "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formated with special tokens for the model."
+                    "ids is already formatted with special tokens for the model."
                 )
             return list(
                 map(
@@ -430,8 +454,8 @@ class FSMTTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
-        A FAIRSEQ Transformer sequence pair mask has the following format:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A FAIRSEQ
+        Transformer sequence pair mask has the following format:
 
         ::
 
@@ -450,8 +474,8 @@ class FSMTTokenizer(PreTrainedTokenizer):
             :obj:`List[int]`: List of `token type IDs <../glossary.html#token-type-ids>`_ according to the given
             sequence(s).
 
-        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
-        An FAIRSEQ_TRANSFORMER sequence pair mask has the following format:
+        Creates a mask from the two sequences passed to be used in a sequence-pair classification task. An
+        FAIRSEQ_TRANSFORMER sequence pair mask has the following format:
         """
         sep = [self.sep_token_id]
 
@@ -494,24 +518,20 @@ class FSMTTokenizer(PreTrainedTokenizer):
         model_inputs["labels"] = self(tgt_texts, **tokenizer_kwargs)["input_ids"]
         return model_inputs
 
-    def save_vocabulary(self, save_directory):
-        """
-        Save the vocabulary and special tokens file to a directory.
-
-        Args:
-            vocab_path (:obj:`str`):
-                The directory in which to save the vocabulary.
-
-        Returns:
-            :obj:`Tuple(str)`: Paths to the files saved.
-        """
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
 
-        src_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["src_vocab_file"])
-        tgt_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["tgt_vocab_file"])
-        merges_file = os.path.join(save_directory, VOCAB_FILES_NAMES["merges_file"])
+        src_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["src_vocab_file"]
+        )
+        tgt_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["tgt_vocab_file"]
+        )
+        merges_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
+        )
 
         with open(src_vocab_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(self.encoder, ensure_ascii=False))

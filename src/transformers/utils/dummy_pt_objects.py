@@ -26,11 +26,6 @@ class DataCollatorForLanguageModeling:
         requires_pytorch(self)
 
 
-class DataCollatorForNextSentencePrediction:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
 class DataCollatorForPermutationLanguageModeling:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -41,6 +36,20 @@ class DataCollatorForPermutationLanguageModeling:
 
 
 class DataCollatorForSOP:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DataCollatorForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DataCollatorForWholeWordMask:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
@@ -69,6 +78,11 @@ class LineByLineTextDataset:
         requires_pytorch(self)
 
 
+class LineByLineWithRefDataset:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class LineByLineWithSOPTextDataset:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -90,6 +104,66 @@ class TextDataset:
 
 
 class TextDatasetForNextSentencePrediction:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BeamScorer:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BeamSearchScorer:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class LogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class LogitsProcessorList:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class LogitsWarper:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MinLengthLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class NoBadWordsLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class NoRepeatNGramLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class RepetitionPenaltyLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class TemperatureLogitsWarper:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class TopKLogitsWarper:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class TopPLogitsWarper:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
@@ -182,6 +256,9 @@ MODEL_FOR_MASKED_LM_MAPPING = None
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = None
 
 
+MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = None
+
+
 MODEL_FOR_PRETRAINING_MAPPING = None
 
 
@@ -231,6 +308,15 @@ class AutoModelForMaskedLM:
 
 
 class AutoModelForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class AutoModelForNextSentencePrediction:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
@@ -647,6 +733,15 @@ class DistilBertPreTrainedModel:
     @classmethod
     def from_pretrained(self, *args, **kwargs):
         requires_pytorch(self)
+
+
+DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class DPRContextEncoder:
@@ -1305,6 +1400,51 @@ class PegasusForConditionalGeneration:
         requires_pytorch(self)
 
 
+PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class ProphetNetDecoder:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ProphetNetEncoder:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ProphetNetForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ProphetNetForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ProphetNetModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ProphetNetPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class RagModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -1706,6 +1846,42 @@ class XLMWithLMHeadModel:
         requires_pytorch(self)
 
 
+XLM_PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class XLMProphetNetDecoder:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class XLMProphetNetEncoder:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class XLMProphetNetForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class XLMProphetNetForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class XLMProphetNetModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -1879,15 +2055,6 @@ def get_linear_schedule_with_warmup(*args, **kwargs):
 
 def get_polynomial_decay_schedule_with_warmup(*args, **kwargs):
     requires_pytorch(get_polynomial_decay_schedule_with_warmup)
-
-
-class MarianTokenizer:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
 
 
 class Trainer:

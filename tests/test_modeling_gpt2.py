@@ -20,6 +20,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
+from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
@@ -33,6 +34,7 @@ if is_torch_available():
         GPT2ForSequenceClassification,
         GPT2LMHeadModel,
         GPT2Model,
+        GPT2Tokenizer,
     )
 
 
@@ -89,9 +91,6 @@ class GPT2ModelTester:
         self.bos_token_id = vocab_size - 1
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
-
-    def get_large_model_config(self):
-        return GPT2Config.from_pretrained("gpt2")
 
     def prepare_config_and_inputs(self, gradient_checkpointing=False):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -379,7 +378,7 @@ class GPT2ModelTester:
 
 
 @require_torch
-class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
+class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (GPT2Model, GPT2LMHeadModel, GPT2DoubleHeadsModel, GPT2ForSequenceClassification)
@@ -387,9 +386,30 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
-    all_parallelizable_model_classes = (GPT2LMHeadModel,) if is_torch_available() else ()
     test_missing_keys = False
-    test_model_parallel = True
+
+    # special case for DoubleHeads model
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class.__name__ == "GPT2DoubleHeadsModel":
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.num_choices, self.model_tester.seq_length),
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                inputs_dict["input_ids"] = inputs_dict["labels"]
+                inputs_dict["token_type_ids"] = inputs_dict["labels"]
+                inputs_dict["mc_token_ids"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.num_choices),
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+                inputs_dict["mc_labels"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+        return inputs_dict
 
     def setUp(self):
         self.model_tester = GPT2ModelTester(self)
@@ -429,6 +449,49 @@ class GPT2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_gpt2_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs(gradient_checkpointing=True)
         self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs)
+
+    @slow
+    def test_batch_generation(self):
+        model = GPT2LMHeadModel.from_pretrained("gpt2")
+        model.to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+
+        tokenizer.padding_side = "left"
+
+        # Define PAD Token = EOS Token = 50256
+        tokenizer.pad_token = tokenizer.eos_token
+        model.config.pad_token_id = model.config.eos_token_id
+
+        # use different length sentences to test batching
+        sentences = [
+            "Hello, my dog is a little",
+            "Today, I",
+        ]
+
+        inputs = tokenizer(sentences, return_tensors="pt", padding=True)
+
+        outputs = model.generate(
+            input_ids=inputs["input_ids"].to(torch_device),
+            attention_mask=inputs["attention_mask"].to(torch_device),
+        )
+
+        inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
+        output_non_padded = model.generate(input_ids=inputs_non_padded)
+
+        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
+        inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
+        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
+
+        batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
+        padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
+
+        expected_output_sentence = [
+            "Hello, my dog is a little bit of a mess. I'm not sure if he's going",
+            "Today, I'm going to be doing a lot of research on this. I",
+        ]
+        self.assertListEqual(expected_output_sentence, batch_out_sentence)
+        self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
 
     @slow
     def test_model_from_pretrained(self):
@@ -471,32 +534,17 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 
     @slow
-    def test_lm_generate_distilgpt2(self):
-        model = GPT2LMHeadModel.from_pretrained("distilgpt2")
+    def test_gpt2_sample(self):
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("gpt2")
         model.to(torch_device)
-        input_ids = torch.tensor([[464, 1893]], dtype=torch.long, device=torch_device)  # The president
-        expected_output_ids = [
-            464,
-            1893,
-            286,
-            262,
-            1578,
-            1829,
-            11,
-            290,
-            262,
-            1893,
-            286,
-            262,
-            1578,
-            7526,
-            11,
-            423,
-            587,
-            287,
-            262,
-            2635,
-        ]  # The president of the United States, and the president of the United Kingdom, have been in the White
 
-        output_ids = model.generate(input_ids, do_sample=False)
-        self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
+        torch.manual_seed(0)
+        input_ids = tokenizer("Today is a nice day and", return_tensors="pt").input_ids.to(torch_device)
+        output_ids = model.generate(input_ids, do_sample=True)
+        output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+
+        EXPECTED_OUTPUT_STR = (
+            "Today is a nice day and if you don't know anything about the state of play during your holiday"
+        )
+        self.assertEqual(output_str, EXPECTED_OUTPUT_STR)

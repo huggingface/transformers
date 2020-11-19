@@ -42,14 +42,14 @@ def find_code_in_transformers(object_name):
             f"`object_name` should begin with the name of a module of transformers but got {object_name}."
         )
 
-    with open(os.path.join(TRANSFORMERS_PATH, f"{module}.py"), "r", encoding="utf-8") as f:
+    with open(os.path.join(TRANSFORMERS_PATH, f"{module}.py"), "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
 
     # Now let's find the class / func in the code!
     indent = ""
     line_index = 0
     for name in parts[i + 1 :]:
-        while line_index < len(lines) and re.search(f"^{indent}(class|def)\s+{name}", lines[line_index]) is None:
+        while line_index < len(lines) and re.search(fr"^{indent}(class|def)\s+{name}", lines[line_index]) is None:
             line_index += 1
         indent += "    "
         line_index += 1
@@ -82,10 +82,10 @@ def blackify(code):
         code = f"class Bla:\n{code}"
     with tempfile.TemporaryDirectory() as d:
         fname = os.path.join(d, "tmp.py")
-        with open(fname, "w", encoding="utf-8") as f:
+        with open(fname, "w", encoding="utf-8", newline="\n") as f:
             f.write(code)
         os.system(f"black -q --line-length 119 --target-version py35 {fname}")
-        with open(fname, "r", encoding="utf-8") as f:
+        with open(fname, "r", encoding="utf-8", newline="\n") as f:
             result = f.read()
             return result[len("class Bla:\n") :] if has_indent else result
 
@@ -96,11 +96,11 @@ def is_copy_consistent(filename, overwrite=False):
 
     Return the differences or overwrites the content depending on `overwrite`.
     """
-    with open(filename, "r", encoding="utf-8") as f:
+    with open(filename, "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
     diffs = []
     line_index = 0
-    # Not a foor loop cause `lines` is going to change (if `overwrite=True`).
+    # Not a for loop cause `lines` is going to change (if `overwrite=True`).
     while line_index < len(lines):
         search = _re_copy_warning.search(lines[line_index])
         if search is None:
@@ -150,7 +150,7 @@ def is_copy_consistent(filename, overwrite=False):
     if overwrite and len(diffs) > 0:
         # Warn the user a file has been modified.
         print(f"Detected changes, rewriting {filename}.")
-        with open(filename, "w", encoding="utf-8") as f:
+        with open(filename, "w", encoding="utf-8", newline="\n") as f:
             f.writelines(lines)
     return diffs
 
@@ -164,9 +164,9 @@ def check_copies(overwrite: bool = False):
     if not overwrite and len(diffs) > 0:
         diff = "\n".join(diffs)
         raise Exception(
-            "Found the follwing copy inconsistencies:\n"
+            "Found the following copy inconsistencies:\n"
             + diff
-            + "\nRun `make fix-copies` or `python utils/check_copies --fix_and_overwrite` to fix them."
+            + "\nRun `make fix-copies` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
         )
     check_model_list_copy(overwrite=overwrite)
 
@@ -176,7 +176,7 @@ def get_model_list():
     # If the introduction or the conclusion of the list change, the prompts may need to be updated.
     _start_prompt = "🤗 Transformers currently provides the following architectures"
     _end_prompt = "1. Want to contribute a new model?"
-    with open(os.path.join(REPO_PATH, "README.md"), "r", encoding="utf-8") as f:
+    with open(os.path.join(REPO_PATH, "README.md"), "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
     # Find the start of the list.
     start_index = 0
@@ -254,7 +254,7 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
     """ Check the model lists in the README and index.rst are consistent and maybe `overwrite`. """
     _start_prompt = "    This list is updated automatically from the README"
     _end_prompt = ".. toctree::"
-    with open(os.path.join(PATH_TO_DOCS, "index.rst"), "r", encoding="utf-8") as f:
+    with open(os.path.join(PATH_TO_DOCS, "index.rst"), "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
     # Find the start of the list.
     start_index = 0
@@ -279,7 +279,7 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
 
     if converted_list != rst_list:
         if overwrite:
-            with open(os.path.join(PATH_TO_DOCS, "index.rst"), "w", encoding="utf-8") as f:
+            with open(os.path.join(PATH_TO_DOCS, "index.rst"), "w", encoding="utf-8", newline="\n") as f:
                 f.writelines(lines[:start_index] + [converted_list] + lines[end_index:])
         else:
             raise ValueError(

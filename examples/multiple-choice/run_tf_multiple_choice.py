@@ -33,7 +33,13 @@ from transformers import (
     TFTrainingArguments,
     set_seed,
 )
+from transformers.utils import logging as hf_logging
 from utils_multiple_choice import Split, TFMultipleChoiceDataset, processors
+
+
+hf_logging.set_verbosity_info()
+hf_logging.enable_default_handler()
+hf_logging.enable_explicit_format()
 
 
 logger = logging.getLogger(__name__)

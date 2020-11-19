@@ -16,9 +16,17 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_multigpu, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    require_sentencepiece,
+    require_tokenizers,
+    require_torch,
+    require_torch_multi_gpu,
+    slow,
+    torch_device,
+)
 
 from .test_configuration_common import ConfigTester
+from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
@@ -189,11 +197,14 @@ class ReformerModelTester:
         )
 
     def create_and_check_reformer_model_with_lm_backward(self, config, input_ids, input_mask, choice_labels):
+        if not self.is_training:
+            return
+
         config.is_decoder = False
         config.lsh_num_chunks_after = 1
         model = ReformerForMaskedLM(config=config)
         model.to(torch_device)
-        model.eval()
+        model.train()
         loss = model(input_ids, attention_mask=input_mask, labels=input_ids)["loss"]
         loss.backward()
 
@@ -551,8 +562,8 @@ class ReformerTesterMixin:
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_model_fp16_generate(*config_and_inputs)
 
-    @require_multigpu
-    def test_multigpu_data_parallel_forward(self):
+    @require_torch_multi_gpu
+    def test_multi_gpu_data_parallel_forward(self):
         # Opt-out of this test.
         pass
 
@@ -562,7 +573,7 @@ class ReformerTesterMixin:
 
 
 @require_torch
-class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.TestCase):
+class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (ReformerModel, ReformerModelWithLMHead, ReformerForSequenceClassification, ReformerForQuestionAnswering)
         if is_torch_available()
@@ -622,7 +633,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest
 
 
 @require_torch
-class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.TestCase):
+class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
         (ReformerModel, ReformerModelWithLMHead, ReformerForSequenceClassification, ReformerForQuestionAnswering)
         if is_torch_available()
@@ -680,6 +691,8 @@ class ReformerLSHAttnModelTest(ReformerTesterMixin, ModelTesterMixin, unittest.T
 
 
 @require_torch
+@require_sentencepiece
+@require_tokenizers
 class ReformerIntegrationTests(unittest.TestCase):
     """
     These integration tests test the current layer activations and gradients againts the output of the Hugging Face Reformer model at time of integration: 29/06/2020. During integration, the model was tested against the output of the official Trax ReformerLM model for various cases ("lsh" only, "local" only, masked / non-masked, different chunk length, ....). In order to recover the original trax integration tests, one should use patrickvonplaten's fork of trax and the code that lives on the branch `reformer_trax_tests`.

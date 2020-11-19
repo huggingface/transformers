@@ -30,10 +30,15 @@ from .file_utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from .modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Seq2SeqLMOutput, Seq2SeqModelOutput
+from .modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPastAndCrossAttentions,
+    Seq2SeqLMOutput,
+    Seq2SeqModelOutput,
+)
 from .modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from .utils import logging
 from .utils.model_parallel_utils import assert_device_map, get_device_map
@@ -45,7 +50,7 @@ _CONFIG_FOR_DOC = "T5Config"
 _TOKENIZER_FOR_DOC = "T5Tokenizer"
 
 ####################################################
-# This dict contrains shortcut names and associated url
+# This dict contains shortcut names and associated url
 # for the pretrained weights provided with the models
 ####################################################
 T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -104,6 +109,7 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
             continue
         pointer = model
         array = tf_weights[txt_name]
+
         for m_name in name:
             if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
                 scope_names = re.split(r"_(\d+)", m_name)
@@ -111,12 +117,30 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
                 scope_names = [m_name]
             if scope_names[0] in ["kernel", "scale", "embedding"]:
                 pointer = getattr(pointer, "weight")
-            # elif scope_names[0] == 'scale':
-            #     pointer = getattr(pointer, 'weight')
-            # elif scope_names[0] == 'output_bias' or scope_names[0] == 'beta':
-            #     pointer = getattr(pointer, 'bias')
-            # elif scope_names[0] == 'squad':
-            #     pointer = getattr(pointer, 'classifier')
+            elif scope_names[0] == "self_attention":
+                pointer = getattr(pointer, "layer")
+                pointer = pointer[0]
+            elif scope_names[0] == "enc_dec_attention":
+                pointer = getattr(pointer, "layer")
+                pointer = pointer[1]
+            elif scope_names[0] == "dense_relu_dense":
+                pointer = getattr(pointer, "layer")
+                pointer = pointer[2]
+            elif scope_names[0] == "rms_norm":
+                if hasattr(pointer, "layer_norm"):
+                    pointer = getattr(pointer, "layer_norm")
+                elif hasattr(pointer, "final_layer_norm"):
+                    pointer = getattr(pointer, "final_layer_norm")
+            elif scope_names[0] == "scale":
+                pointer = getattr(pointer, "weight")
+            elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
+                pointer = getattr(pointer, "bias")
+            elif scope_names[0] == "squad":
+                pointer = getattr(pointer, "classifier")
+            elif scope_names[0] == "decoder" and name[1] == "logits":
+                continue
+            elif scope_names[0] == "logits":
+                pointer = getattr(pointer, "lm_head")
             else:
                 try:
                     pointer = getattr(pointer, scope_names[0])
@@ -143,7 +167,6 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
         tf_weights.pop(txt_name, None)
 
     logger.info("Weights not copied to PyTorch model: {}".format(", ".join(tf_weights.keys())))
-    # logger.info("Weights not copied to PyTorch model: {}".format(', '.join(tf_weights.keys())))
     return model
 
 
@@ -160,18 +183,14 @@ PARALLELIZE_DOCSTRING = r"""
             A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are
             always automatically mapped to the first device (for esoteric reasons). That means that the first
             device should have fewer attention modules mapped to it than other devices.
-
             For reference, the t5 models have the following number of attention modules:
-
                 - t5-small: 6
                 - t5-base: 12
                 - t5-large: 24
                 - t5-3b: 24
                 - t5-11b: 24
-
     Example::
         Here is an example of a device map on a machine with 4 GPUs using t5-3b, which has a total of 24 attention modules:
-
             model = T5ForConditionalGeneration.from_pretrained('t5-3b')
             device_map = {0: [0, 1, 2],
                          1: [3, 4, 5, 6, 7, 8, 9],
@@ -179,13 +198,10 @@ PARALLELIZE_DOCSTRING = r"""
                          3: [17, 18, 19, 20, 21, 22, 23]}
             model.parallelize(device_map)
 """
-
 DEPARALLELIZE_DOCSTRING = r"""
     Moves the model to cpu from a model parallel state.
-
     Example::
         On a 4 GPU machine with t5-3b:
-
         model = T5ForConditionalGeneration.from_pretrained('t5-3b')
         device_map = {0: [0, 1, 2],
                      1: [3, 4, 5, 6, 7, 8, 9],
@@ -197,21 +213,22 @@ DEPARALLELIZE_DOCSTRING = r"""
 
 class T5LayerNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
-        """Construct a layernorm module in the T5 style
-        No bias and no substraction of mean.
+        """
+        Construct a layernorm module in the T5 style No bias and no subtraction of mean.
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, x):
+    def forward(self, hidden_states):
         # layer norm should always be calculated in float32
-        variance = x.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        x = x / torch.sqrt(variance + self.variance_epsilon)
+        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
 
+        # convert into float16 if necessary
         if self.weight.dtype == torch.float16:
-            x = x.to(torch.float16)
-        return self.weight * x
+            hidden_states = hidden_states.to(torch.float16)
+        return self.weight * hidden_states
 
 
 class T5DenseReluDense(nn.Module):
@@ -222,11 +239,11 @@ class T5DenseReluDense(nn.Module):
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
-        h = self.wi(hidden_states)
-        h = F.relu(h)
-        h = self.dropout(h)
-        h = self.wo(h)
-        return h
+        hidden_states = self.wi(hidden_states)
+        hidden_states = F.relu(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.wo(hidden_states)
+        return hidden_states
 
 
 class T5LayerFF(nn.Module):
@@ -237,25 +254,24 @@ class T5LayerFF(nn.Module):
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
-        norm_x = self.layer_norm(hidden_states)
-        y = self.DenseReluDense(norm_x)
-        layer_output = hidden_states + self.dropout(y)
-        return layer_output
+        forwarded_states = self.layer_norm(hidden_states)
+        forwarded_states = self.DenseReluDense(forwarded_states)
+        hidden_states = hidden_states + self.dropout(forwarded_states)
+        return hidden_states
 
 
 class T5Attention(nn.Module):
-    def __init__(self, config: T5Config, has_relative_attention_bias=False, is_bidirectional=False):
+    def __init__(self, config: T5Config, has_relative_attention_bias=False):
         super().__init__()
-        self.is_bidirectional = is_bidirectional
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
 
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.d_model = config.d_model
-        self.d_kv = config.d_kv
+        self.key_value_proj_dim = config.d_kv
         self.n_heads = config.num_heads
         self.dropout = config.dropout_rate
-        self.inner_dim = self.n_heads * self.d_kv
+        self.inner_dim = self.n_heads * self.key_value_proj_dim
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
         self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
@@ -270,7 +286,9 @@ class T5Attention(nn.Module):
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
-        heads, index = find_pruneable_heads_and_indices(heads, self.n_heads, self.d_kv, self.pruned_heads)
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.n_heads, self.key_value_proj_dim, self.pruned_heads
+        )
         # Prune linear layers
         self.q = prune_linear_layer(self.q, index)
         self.k = prune_linear_layer(self.k, index)
@@ -278,7 +296,7 @@ class T5Attention(nn.Module):
         self.o = prune_linear_layer(self.o, index, dim=1)
         # Update hyper params
         self.n_heads = self.n_heads - len(heads)
-        self.inner_dim = self.d_kv * self.n_heads
+        self.inner_dim = self.key_value_proj_dim * self.n_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
     @staticmethod
@@ -286,69 +304,66 @@ class T5Attention(nn.Module):
         """
         Adapted from Mesh Tensorflow:
         https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
-
-        Translate relative position to a bucket number for relative attention.
-        The relative position is defined as memory_position - query_position, i.e.
-        the distance in tokens from the attending position to the attended-to
-        position.  If bidirectional=False, then positive relative positions are
-        invalid.
-        We use smaller buckets for small absolute relative_position and larger buckets
-        for larger absolute relative_positions.  All relative positions >=max_distance
-        map to the same bucket.  All relative positions <=-max_distance map to the
-        same bucket.  This should allow for more graceful generalization to longer
-        sequences than the model has been trained on.
+        Translate relative position to a bucket number for relative attention. The relative position is defined as
+        memory_position - query_position, i.e. the distance in tokens from the attending position to the attended-to
+        position. If bidirectional=False, then positive relative positions are invalid. We use smaller buckets for
+        small absolute relative_position and larger buckets for larger absolute relative_positions. All relative
+        positions >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket.
+        This should allow for more graceful generalization to longer sequences than the model has been trained on
         Args:
             relative_position: an int32 Tensor
             bidirectional: a boolean - whether the attention is bidirectional
             num_buckets: an integer
             max_distance: an integer
         Returns:
-            a Tensor with the same shape as relative_position, containing int32
-            values in the range [0, num_buckets)
+            a Tensor with the same shape as relative_position, containing int32 values in the range [0, num_buckets)
         """
-        ret = 0
-        n = -relative_position
+        relative_buckets = 0
         if bidirectional:
             num_buckets //= 2
-            ret += (n < 0).to(torch.long) * num_buckets  # mtf.to_int32(mtf.less(n, 0)) * num_buckets
-            n = torch.abs(n)
+            relative_buckets += (relative_position > 0).to(torch.long) * num_buckets
+            relative_position = torch.abs(relative_position)
         else:
-            n = torch.max(n, torch.zeros_like(n))
-        # now n is in the range [0, inf)
+            relative_position = -torch.min(relative_position, torch.zeros_like(relative_position))
+        # now relative_position is in the range [0, inf)
 
         # half of the buckets are for exact increments in positions
         max_exact = num_buckets // 2
-        is_small = n < max_exact
+        is_small = relative_position < max_exact
 
         # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
-        val_if_large = max_exact + (
-            torch.log(n.float() / max_exact) / math.log(max_distance / max_exact) * (num_buckets - max_exact)
+        relative_postion_if_large = max_exact + (
+            torch.log(relative_position.float() / max_exact)
+            / math.log(max_distance / max_exact)
+            * (num_buckets - max_exact)
         ).to(torch.long)
-        val_if_large = torch.min(val_if_large, torch.full_like(val_if_large, num_buckets - 1))
+        relative_postion_if_large = torch.min(
+            relative_postion_if_large, torch.full_like(relative_postion_if_large, num_buckets - 1)
+        )
 
-        ret += torch.where(is_small, n, val_if_large)
-        return ret
+        relative_buckets += torch.where(is_small, relative_position, relative_postion_if_large)
+        return relative_buckets
 
-    def compute_bias(self, qlen, klen):
+    def compute_bias(self, query_length, key_length):
         """ Compute binned relative position bias """
-        context_position = torch.arange(qlen, dtype=torch.long)[:, None]
-        memory_position = torch.arange(klen, dtype=torch.long)[None, :]
-        relative_position = memory_position - context_position  # shape (qlen, klen)
-        rp_bucket = self._relative_position_bucket(
-            relative_position,  # shape (qlen, klen)
-            bidirectional=self.is_bidirectional,
+        context_position = torch.arange(query_length, dtype=torch.long)[:, None]
+        memory_position = torch.arange(key_length, dtype=torch.long)[None, :]
+        relative_position = memory_position - context_position  # shape (query_length, key_length)
+        relative_position_bucket = self._relative_position_bucket(
+            relative_position,  # shape (query_length, key_length)
+            bidirectional=(not self.is_decoder),
             num_buckets=self.relative_attention_num_buckets,
         )
-        rp_bucket = rp_bucket.to(self.relative_attention_bias.weight.device)
-        values = self.relative_attention_bias(rp_bucket)  # shape (qlen, klen, num_heads)
-        values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, qlen, klen)
+        relative_position_bucket = relative_position_bucket.to(self.relative_attention_bias.weight.device)
+        values = self.relative_attention_bias(relative_position_bucket)  # shape (query_length, key_length, num_heads)
+        values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
         return values
 
     def forward(
         self,
-        input,
+        hidden_states,
         mask=None,
-        kv=None,
+        key_value_states=None,
         position_bias=None,
         past_key_value=None,
         head_mask=None,
@@ -357,106 +372,113 @@ class T5Attention(nn.Module):
         output_attentions=False,
     ):
         """
-        Self-attention (if kv is None) or attention over source sentence (provided by kv).
+        Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
         """
-        # Input is (bs, qlen, dim)
-        # Mask is (bs, klen) (non-causal) or (bs, klen, klen)
-        # past_key_value[0] is (bs, n_heads, q_len - 1, dim_per_head)
-        bs, qlen, dim = input.size()
+        # Input is (batch_size, seq_length, dim)
+        # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
+        # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
+        batch_size, seq_length = hidden_states.shape[:2]
+
+        real_seq_length = seq_length
 
         if past_key_value is not None:
-            assert self.is_decoder is True, "Encoder cannot cache past key value states"
             assert (
                 len(past_key_value) == 2
             ), "past_key_value should have 2 past states: keys and values. Got {} past states".format(
                 len(past_key_value)
             )
-            real_qlen = qlen + past_key_value[0].shape[2] if query_length is None else query_length
-        else:
-            real_qlen = qlen
+            real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
 
-        if kv is None:
-            klen = real_qlen
-        else:
-            klen = kv.size(1)
+        key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
 
-        def shape(x):
+        def shape(states):
             """  projection """
-            return x.view(bs, -1, self.n_heads, self.d_kv).transpose(1, 2)
+            return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
-        def unshape(x):
-            """  compute context """
-            return x.transpose(1, 2).contiguous().view(bs, -1, self.inner_dim)
+        def unshape(states):
+            """  reshape """
+            return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
 
-        q = shape(self.q(input))  # (bs, n_heads, qlen, dim_per_head)
+        def project(hidden_states, proj_layer, key_value_states, past_key_value):
+            """ projects hidden states correctly to key/query states """
+            if key_value_states is None:
+                # self-attn
+                # (batch_size, n_heads, seq_length, dim_per_head)
+                hidden_states = shape(proj_layer(hidden_states))
+            elif past_key_value is None:
+                # cross-attn
+                # (batch_size, n_heads, seq_length, dim_per_head)
+                hidden_states = shape(proj_layer(key_value_states))
 
-        if kv is None:
-            k = shape(self.k(input))  # (bs, n_heads, qlen, dim_per_head)
-            v = shape(self.v(input))  # (bs, n_heads, qlen, dim_per_head)
-        elif past_key_value is None:
-            k = v = kv
-            k = shape(self.k(k))  # (bs, n_heads, qlen, dim_per_head)
-            v = shape(self.v(v))  # (bs, n_heads, qlen, dim_per_head)
+            if past_key_value is not None:
+                if key_value_states is None:
+                    # self-attn
+                    # (batch_size, n_heads, key_length, dim_per_head)
+                    hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
+                else:
+                    # cross-attn
+                    hidden_states = past_key_value
+            return hidden_states
 
-        if past_key_value is not None:
-            if kv is None:
-                k_, v_ = past_key_value
-                k = torch.cat([k_, k], dim=2)  # (bs, n_heads, klen, dim_per_head)
-                v = torch.cat([v_, v], dim=2)  # (bs, n_heads, klen, dim_per_head)
-            else:
-                k, v = past_key_value
+        # get query states
+        query_states = shape(self.q(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
 
-        if self.is_decoder and use_cache is True:
-            present_key_value_state = ((k, v),)
-        else:
-            present_key_value_state = (None,)
+        # get key/value states
+        key_states = project(
+            hidden_states, self.k, key_value_states, past_key_value[0] if past_key_value is not None else None
+        )
+        value_states = project(
+            hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
+        )
 
-        # (bs, n_heads, qlen, klen)
+        # compute scores
         scores = torch.matmul(
-            q, k.transpose(3, 2)
-        )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", q, k), compatible with onnx op>9
+            query_states, key_states.transpose(3, 2)
+        )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
 
         if position_bias is None:
             if not self.has_relative_attention_bias:
-                raise ValueError("No position_bias provided and no weights to compute position_bias")
-            position_bias = self.compute_bias(real_qlen, klen)
+                position_bias = torch.zeros(
+                    (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
+                )
+            else:
+                position_bias = self.compute_bias(real_seq_length, key_length)
 
             # if key and values are already calculated
             # we want only the last query position bias
             if past_key_value is not None:
-                position_bias = position_bias[:, :, -qlen:, :]
+                position_bias = position_bias[:, :, -seq_length:, :]
 
             if mask is not None:
-                position_bias = position_bias + mask  # (bs, n_heads, qlen, klen)
+                position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
         scores += position_bias
-        weights = F.softmax(scores.float(), dim=-1).type_as(scores)  # (bs, n_heads, qlen, klen)
-        weights = F.dropout(weights, p=self.dropout, training=self.training)  # (bs, n_heads, qlen, klen)
+        attn_weights = F.softmax(scores.float(), dim=-1).type_as(
+            scores
+        )  # (batch_size, n_heads, seq_length, key_length)
+        attn_weights = F.dropout(
+            attn_weights, p=self.dropout, training=self.training
+        )  # (batch_size, n_heads, seq_length, key_length)
 
         # Mask heads if we want to
         if head_mask is not None:
-            weights = weights * head_mask
+            attn_weights = attn_weights * head_mask
 
-        context = torch.matmul(weights, v)  # (bs, n_heads, qlen, dim_per_head)
-        context = unshape(context)  # (bs, qlen, dim)
+        attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
+        attn_output = self.o(attn_output)
 
-        context = self.o(context)
-
-        outputs = (context,) + present_key_value_state
+        present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
+        outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
 
         if output_attentions:
-            outputs = outputs + (weights,)
-        if self.has_relative_attention_bias:
-            outputs = outputs + (position_bias,)
+            outputs = outputs + (attn_weights,)
         return outputs
 
 
 class T5LayerSelfAttention(nn.Module):
     def __init__(self, config, has_relative_attention_bias=False):
         super().__init__()
-        self.SelfAttention = T5Attention(
-            config, has_relative_attention_bias=has_relative_attention_bias, is_bidirectional=not config.is_decoder
-        )
+        self.SelfAttention = T5Attention(config, has_relative_attention_bias=has_relative_attention_bias)
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -470,9 +492,9 @@ class T5LayerSelfAttention(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):
-        norm_x = self.layer_norm(hidden_states)
+        normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.SelfAttention(
-            norm_x,
+            normed_hidden_states,
             mask=attention_mask,
             position_bias=position_bias,
             head_mask=head_mask,
@@ -480,25 +502,22 @@ class T5LayerSelfAttention(nn.Module):
             use_cache=use_cache,
             output_attentions=output_attentions,
         )
-        y = attention_output[0]
-        layer_output = hidden_states + self.dropout(y)
-        outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
+        hidden_states = hidden_states + self.dropout(attention_output[0])
+        outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
         return outputs
 
 
 class T5LayerCrossAttention(nn.Module):
-    def __init__(self, config, has_relative_attention_bias=False):
+    def __init__(self, config):
         super().__init__()
-        self.EncDecAttention = T5Attention(
-            config, has_relative_attention_bias=has_relative_attention_bias, is_bidirectional=True
-        )
+        self.EncDecAttention = T5Attention(config, has_relative_attention_bias=False)
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(
         self,
         hidden_states,
-        kv,
+        key_value_states,
         attention_mask=None,
         position_bias=None,
         head_mask=None,
@@ -507,11 +526,11 @@ class T5LayerCrossAttention(nn.Module):
         query_length=None,
         output_attentions=False,
     ):
-        norm_x = self.layer_norm(hidden_states)
+        normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.EncDecAttention(
-            norm_x,
+            normed_hidden_states,
             mask=attention_mask,
-            kv=kv,
+            key_value_states=key_value_states,
             position_bias=position_bias,
             head_mask=head_mask,
             past_key_value=past_key_value,
@@ -519,8 +538,7 @@ class T5LayerCrossAttention(nn.Module):
             query_length=query_length,
             output_attentions=output_attentions,
         )
-        y = attention_output[0]
-        layer_output = hidden_states + self.dropout(y)
+        layer_output = hidden_states + self.dropout(attention_output[0])
         outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
         return outputs
 
@@ -532,7 +550,7 @@ class T5Block(nn.Module):
         self.layer = nn.ModuleList()
         self.layer.append(T5LayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
         if self.is_decoder:
-            self.layer.append(T5LayerCrossAttention(config, has_relative_attention_bias=has_relative_attention_bias))
+            self.layer.append(T5LayerCrossAttention(config))
 
         self.layer.append(T5LayerFF(config))
 
@@ -548,6 +566,7 @@ class T5Block(nn.Module):
         past_key_value=None,
         use_cache=False,
         output_attentions=False,
+        return_dict=False,
     ):
 
         if past_key_value is not None:
@@ -578,7 +597,8 @@ class T5Block(nn.Module):
         hidden_states, present_key_value_state = self_attention_outputs[:2]
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
 
-        if self.is_decoder and encoder_hidden_states is not None:
+        do_cross_attention = self.is_decoder and encoder_hidden_states is not None
+        if do_cross_attention:
             # the actual query length is unknown for cross attention
             # if using past key value states. Need to inject it here
             if present_key_value_state is not None:
@@ -588,7 +608,7 @@ class T5Block(nn.Module):
 
             cross_attention_outputs = self.layer[1](
                 hidden_states,
-                kv=encoder_hidden_states,
+                key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
                 head_mask=head_mask,
@@ -609,14 +629,14 @@ class T5Block(nn.Module):
         hidden_states = self.layer[-1](hidden_states)
         outputs = (hidden_states,)
 
-        # Add attentions if we output them
         outputs = outputs + (present_key_value_state,) + attention_outputs
         return outputs  # hidden-states, present_key_value_states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
 
 class T5PreTrainedModel(PreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = T5Config
@@ -657,12 +677,12 @@ class T5PreTrainedModel(PreTrainedModel):
             # Mesh TensorFlow attention initialization to avoid scaling before softmax
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
             d_model = self.config.d_model
-            d_kv = self.config.d_kv
+            key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
-            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * d_kv) ** -0.5))
+            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
             module.k.weight.data.normal_(mean=0.0, std=factor * (d_model ** -0.5))
             module.v.weight.data.normal_(mean=0.0, std=factor * (d_model ** -0.5))
-            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * d_kv) ** -0.5))
+            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
 
@@ -702,8 +722,7 @@ class T5Stack(T5PreTrainedModel):
         self.dropout = nn.Dropout(config.dropout_rate)
 
         self.init_weights()
-
-        # Model parallel
+            # Model parallel
         self.model_parallel = False
         self.device_map = None
 
@@ -712,7 +731,6 @@ class T5Stack(T5PreTrainedModel):
         # Check validity of device_map
         self.device_map = get_device_map(len(self.block), torch.cuda.device_count()) if device_map is None else device_map
         assert_device_map(self.device_map, len(self.block))
-
         self.model_parallel = True
         self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
         self.last_device = "cuda:" + str(max(self.device_map.keys()))
@@ -724,10 +742,8 @@ class T5Stack(T5PreTrainedModel):
         
         # Set embed_tokens to first layer
         self.embed_tokens = self.embed_tokens.to(self.first_device)
-
         # Set final layer norm to last device
         self.final_layer_norm = self.final_layer_norm.to(self.last_device)
-
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def deparallelize(self):
         self.model_parallel = False
@@ -739,6 +755,7 @@ class T5Stack(T5PreTrainedModel):
         self.embed_tokens = self.embed_tokens.to("cpu")
         self.final_layer_norm  = self.final_layer_norm.to("cpu")
         torch.cuda.empty_cache()
+
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -763,7 +780,7 @@ class T5Stack(T5PreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
-        # # Model parallel
+        # Model parallel
         if self.model_parallel:
             torch.cuda.set_device(self.first_device)
             self.embed_tokens = self.embed_tokens.to(self.first_device)
@@ -773,9 +790,8 @@ class T5Stack(T5PreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
-        if input_ids is not None and inputs_embeds is not None:
 
+        if input_ids is not None and inputs_embeds is not None:
             err_msg_prefix = "decoder_" if self.is_decoder else ""
             raise ValueError(
                 f"You cannot specify both {err_msg_prefix}inputs and {err_msg_prefix}inputs_embeds at the same time"
@@ -788,8 +804,9 @@ class T5Stack(T5PreTrainedModel):
         else:
             err_msg_prefix = "decoder_" if self.is_decoder else ""
             raise ValueError(f"You have to specify either {err_msg_prefix}inputs or {err_msg_prefix}inputs_embeds")
+
         if inputs_embeds is None:
-            assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
+            assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
             inputs_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length = input_shape
@@ -801,6 +818,7 @@ class T5Stack(T5PreTrainedModel):
             assert self.is_decoder, ":obj:`use_cache` can only be set to `True` if {} is used as a decoder".format(
                 self
             )
+
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, mask_seq_length).to(inputs_embeds.device)
         if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
@@ -808,6 +826,7 @@ class T5Stack(T5PreTrainedModel):
             encoder_attention_mask = torch.ones(
                 batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
             )
+
         # initialize past_key_values with `None` if past does not exist
         if past_key_values is None:
             past_key_values = [None] * len(self.block)
@@ -825,6 +844,7 @@ class T5Stack(T5PreTrainedModel):
         present_key_value_states = () if use_cache else None
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
+        all_cross_attentions = () if (output_attentions and self.is_decoder) else None
         position_bias = None
         encoder_decoder_position_bias = None
 
@@ -845,7 +865,6 @@ class T5Stack(T5PreTrainedModel):
                     encoder_extended_attention_mask = encoder_extended_attention_mask.to(hidden_states.device)
                 if encoder_decoder_position_bias is not None:
                     encoder_decoder_position_bias = encoder_decoder_position_bias.to(hidden_states.device)
-
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -865,18 +884,21 @@ class T5Stack(T5PreTrainedModel):
             # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
             hidden_states, present_key_value_state = layer_outputs[:2]
 
-            if i == 0:
-                # We share the position biases between the layers - the first layer store them
-                # layer_outputs = hidden-states, key-value-states (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
-                position_bias = layer_outputs[3 if output_attentions else 2]
-                if self.is_decoder and encoder_hidden_states is not None:
-                    encoder_decoder_position_bias = layer_outputs[5 if output_attentions else 3]
+            # We share the position biases between the layers - the first layer store them
+            # layer_outputs = hidden-states, key-value-states (self-attention weights),
+            # (self-attention position bias), (cross-attention weights), (cross-attention position bias)
+            position_bias = layer_outputs[2]
+            if self.is_decoder and encoder_hidden_states is not None:
+                encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
             # append next layer key value states
             if use_cache:
                 present_key_value_states = present_key_value_states + (present_key_value_state,)
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[2],)  # We keep only self-attention weights for now
+                all_attentions = all_attentions + (layer_outputs[3],)
+                if self.is_decoder:
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
+
             # Model Parallel: If it's the last layer for that device, put things on the next device
             if self.model_parallel:
                 for k, v in self.device_map.items():
@@ -893,107 +915,95 @@ class T5Stack(T5PreTrainedModel):
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, present_key_value_states, all_hidden_states, all_attentions]
+                for v in [
+                    hidden_states,
+                    present_key_value_states,
+                    all_hidden_states,
+                    all_attentions,
+                    all_cross_attentions,
+                ]
                 if v is not None
             )
-        return BaseModelOutputWithPast(
+        return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=present_key_value_states,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
+            cross_attentions=all_cross_attentions,
         )
 
 
 T5_START_DOCSTRING = r"""
-
     The T5 model was proposed in `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer
     <https://arxiv.org/abs/1910.10683>`__ by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang,
-    Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu.
-    It's an encoder decoder transformer pre-trained in a text-to-text denoising generative setting.
-
+    Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a text-to-text
+    denoising generative setting.
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
-
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
-
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
     Parameters:
         config (:class:`~transformers.T5Config`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 T5_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary.
-            T5 is a model with relative position embeddings so you should be able to pad the inputs on both the right
-            and the left.
-
-            Indices can be obtained using :class:`~transformers.T5Tokenizer`.
-            See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for detail.
-
-            To know more on how to prepare :obj:`input_ids` for pretraining take a look a
-            `T5 Training <./t5.html#training>`__.
+            Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
+            should be able to pad the inputs on both the right and the left.
+            Indices can be obtained using :class:`~transformers.T5Tokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            detail.
+            To know more on how to prepare :obj:`input_ids` for pretraining take a look a `T5 Training
+            <./t5.html#training>`__.
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
-
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-
             `What are attention masks? <../glossary.html#attention-mask>`__
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Provide for sequence to sequence training. T5 uses the :obj:`pad_token_id` as the starting token for
-            :obj:`decoder_input_ids` generation.
-            If :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
-            :obj:`past_key_values`).
-
-            To know more on how to prepare :obj:`decoder_input_ids` for pretraining take a look at
-            `T5 Training <./t5.html#training>`__. If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both
-            unset, :obj:`decoder_input_ids` takes the value of :obj:`input_ids`.
+            :obj:`decoder_input_ids` generation. If :obj:`past_key_values` is used, optionally only the last
+            :obj:`decoder_input_ids` have to be input (see :obj:`past_key_values`).
+            To know more on how to prepare :obj:`decoder_input_ids` for pretraining take a look at `T5 Training
+            <./t5.html#training>`__. If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both unset,
+            :obj:`decoder_input_ids` takes the value of :obj:`input_ids`.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
         encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
-            Tuple consists of (:obj:`last_hidden_state`, :obj:`optional`: `hidden_states`, :obj:`optional`: `attentions`)
-            :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)` is a sequence of
-            hidden states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+            Tuple consists of (:obj:`last_hidden_state`, :obj:`optional`: `hidden_states`, :obj:`optional`:
+            `attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)` is a
+            sequence of hidden states at the output of the last layer of the encoder. Used in the cross-attention of
+            the decoder.
         past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
             instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
-
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded
-            representation.
-            If :obj:`past_key_values` is used, optionally only the last :obj:`decoder_inputs_embeds` have to be input
-            (see :obj:`past_key_values`).
-            This is useful if you want more control over how to convert :obj:`decoder_input_ids` indices into
-            associated vectors than the model's internal embedding lookup matrix.
-
-            If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both
-            unset, :obj:`decoder_inputs_embeds` takes the value of :obj:`inputs_embeds`.
-
+            representation. If :obj:`past_key_values` is used, optionally only the last :obj:`decoder_inputs_embeds`
+            have to be input (see :obj:`past_key_values`). This is useful if you want more control over how to convert
+            :obj:`decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+            If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both unset, :obj:`decoder_inputs_embeds`
+            takes the value of :obj:`inputs_embeds`.
         use_cache (:obj:`bool`, `optional`):
             If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
             decoding (see :obj:`past_key_values`).
-
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
@@ -1004,11 +1014,18 @@ T5_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
+
 @add_start_docstrings(
     "The bare T5 Model transformer outputting raw hidden-states" "without any specific head on top.",
     T5_START_DOCSTRING,
 )
 class T5Model(T5PreTrainedModel):
+    authorized_missing_keys = [
+        r"encoder\.embed_tokens\.weight",
+        r"decoder\.embed_tokens\.weight",
+        r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
+    ]
+
     def __init__(self, config: T5Config):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
@@ -1032,12 +1049,10 @@ class T5Model(T5PreTrainedModel):
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)    
     def parallelize(self, device_map=None):
-
         self.device_map = (
             get_device_map(len(self.encoder.block), range(torch.cuda.device_count())) if device_map is None else device_map
         )
         assert_device_map(self.device_map, len(self.encoder.block))
-
         self.encoder.parallelize(self.device_map)
         self.decoder.parallelize(self.device_map)
         self.model_parallel = True
@@ -1067,14 +1082,14 @@ class T5Model(T5PreTrainedModel):
         return self.decoder
 
     def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        See base class PreTrainedModel
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(T5_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(T5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1095,18 +1110,13 @@ class T5Model(T5PreTrainedModel):
     ):
         r"""
         Returns:
-
         Example::
-
             >>> from transformers import T5Tokenizer, T5Model
-
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
             >>> model = T5Model.from_pretrained('t5-small')
-
             >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
             >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
             >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids, return_dict=True)
-
             >>> last_hidden_states = outputs.last_hidden_state
         """
         if "decoder_past_key_value_states" in kwargs:
@@ -1147,7 +1157,6 @@ class T5Model(T5PreTrainedModel):
         hidden_states = encoder_outputs[0]
         if self.model_parallel:
             torch.cuda.set_device(self.decoder.first_device)
-
         # Set device for model parallelism
         if self.model_parallel:
             torch.cuda.set_device(self.decoder.first_device)
@@ -1182,6 +1191,7 @@ class T5Model(T5PreTrainedModel):
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
@@ -1190,7 +1200,14 @@ class T5Model(T5PreTrainedModel):
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top. """, T5_START_DOCSTRING)
 class T5ForConditionalGeneration(T5PreTrainedModel):
-    authorized_missing_keys = [r"encoder\.embed_tokens\.weight", r"decoder\.embed_tokens\.weight", r"lm_head\.weight"]
+    authorized_missing_keys = [
+        r"encoder\.embed_tokens\.weight",
+        r"decoder\.embed_tokens\.weight",
+        r"lm_head\.weight",
+        r"encoder\.embed_tokens\.weight",
+        r"decoder\.embed_tokens\.weight",
+        r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
+    ]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1219,12 +1236,10 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
-
         self.device_map = (
             get_device_map(len(self.encoder.block), range(torch.cuda.device_count())) if device_map is None else device_map
         )
         assert_device_map(self.device_map, len(self.encoder.block))
-
         self.encoder.parallelize(self.device_map)
         self.decoder.parallelize(self.device_map)
         self.lm_head = self.lm_head.to(self.decoder.first_device)
@@ -1258,7 +1273,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    @add_start_docstrings_to_callable(T5_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(T5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1280,31 +1295,25 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[-100, 0, ..., config.vocab_size - 1]`.
-            All labels set to ``-100`` are ignored (masked), the loss is only
-            computed for labels in ``[0, ..., config.vocab_size]``
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[-100, 0, ...,
+            config.vocab_size - 1]`. All labels set to ``-100`` are ignored (masked), the loss is only computed for
+            labels in ``[0, ..., config.vocab_size]``
         kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
-
         Returns:
-
         Examples::
-
             >>> from transformers import T5Tokenizer, T5ForConditionalGeneration
-
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
             >>> model = T5ForConditionalGeneration.from_pretrained('t5-small', return_dict=True)
-
             >>> input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids
-            labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2> </s>', return_tensors='pt').input_ids
+            >>> labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2> </s>', return_tensors='pt').input_ids
             >>> outputs = model(input_ids=input_ids, labels=labels)
             >>> loss = outputs.loss
             >>> logits = outputs.logits
-
             >>> input_ids = tokenizer("summarize: studies have shown that owning a dog is good for you ", return_tensors="pt").input_ids  # Batch size 1
             >>> outputs = model.generate(input_ids)
         """
+
         if "lm_labels" in kwargs:
             warnings.warn(
                 "The `lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
@@ -1340,7 +1349,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
@@ -1349,7 +1357,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             )
 
         hidden_states = encoder_outputs[0]
-
+        
         if self.model_parallel:
             torch.cuda.set_device(self.decoder.first_device)
 
@@ -1393,11 +1401,13 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         )
 
         sequence_output = decoder_outputs[0]
+        
         # Set device for model parallelism
         if self.model_parallel:
             torch.cuda.set_device(self.encoder.first_device)
             self.lm_head = self.lm_head.to(self.encoder.first_device)
             sequence_output = sequence_output.to(self.lm_head.weight.device)
+
         # Rescale output before projecting on vocab
         # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
         sequence_output = sequence_output * (self.model_dim ** -0.5)
@@ -1419,12 +1429,15 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
+    ):
 
         # cut decoder_input_ids if past is used
         if past is not None:

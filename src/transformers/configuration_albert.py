@@ -19,14 +19,14 @@ from .configuration_utils import PretrainedConfig
 
 
 ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "albert-base-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-v1-config.json",
-    "albert-large-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-v1-config.json",
-    "albert-xlarge-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-v1-config.json",
-    "albert-xxlarge-v1": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-v1-config.json",
-    "albert-base-v2": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-base-v2-config.json",
-    "albert-large-v2": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-large-v2-config.json",
-    "albert-xlarge-v2": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xlarge-v2-config.json",
-    "albert-xxlarge-v2": "https://s3.amazonaws.com/models.huggingface.co/bert/albert-xxlarge-v2-config.json",
+    "albert-base-v1": "https://huggingface.co/albert-base-v1/resolve/main/config.json",
+    "albert-large-v1": "https://huggingface.co/albert-large-v1/resolve/main/config.json",
+    "albert-xlarge-v1": "https://huggingface.co/albert-xlarge-v1/resolve/main/config.json",
+    "albert-xxlarge-v1": "https://huggingface.co/albert-xxlarge-v1/resolve/main/config.json",
+    "albert-base-v2": "https://huggingface.co/albert-base-v2/resolve/main/config.json",
+    "albert-large-v2": "https://huggingface.co/albert-large-v2/resolve/main/config.json",
+    "albert-xlarge-v2": "https://huggingface.co/albert-xlarge-v2/resolve/main/config.json",
+    "albert-xxlarge-v2": "https://huggingface.co/albert-xxlarge-v2/resolve/main/config.json",
 }
 
 
@@ -37,9 +37,8 @@ class AlbertConfig(PretrainedConfig):
     arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
     configuration to that of the ALBERT `xxlarge <https://huggingface.co/albert-xxlarge-v2>`__ architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30000):
@@ -61,15 +60,15 @@ class AlbertConfig(PretrainedConfig):
         inner_group_num (:obj:`int`, `optional`, defaults to 1):
             The number of inner repetition of attention and ffn.
         hidden_act (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`"gelu_new"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string,
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
-            The maximum sequence length that this model might ever be used with. Typically set this to something
-            large (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
             The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.AlbertModel` or
             :class:`~transformers.TFAlbertModel`.

@@ -23,20 +23,28 @@ from unittest.mock import patch
 import torch
 
 from transformers.file_utils import is_apex_available
-from transformers.testing_utils import TestCasePlus, torch_device
+from transformers.testing_utils import TestCasePlus, require_torch_non_multi_gpu_but_fix_me, torch_device
 
 
 SRC_DIRS = [
     os.path.join(os.path.dirname(__file__), dirname)
-    for dirname in ["text-generation", "text-classification", "language-modeling", "question-answering"]
+    for dirname in [
+        "text-generation",
+        "text-classification",
+        "token-classification",
+        "language-modeling",
+        "question-answering",
+    ]
 ]
 sys.path.extend(SRC_DIRS)
 
 
 if SRC_DIRS is not None:
+    import run_clm
     import run_generation
     import run_glue
-    import run_language_modeling
+    import run_mlm
+    import run_ner
     import run_pl_glue
     import run_squad
 
@@ -59,6 +67,7 @@ def is_cuda_and_apex_available():
 
 
 class ExamplesTests(TestCasePlus):
+    @require_torch_non_multi_gpu_but_fix_me
     def test_run_glue(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -67,10 +76,10 @@ class ExamplesTests(TestCasePlus):
         testargs = f"""
             run_glue.py
             --model_name_or_path distilbert-base-uncased
-            --data_dir ./tests/fixtures/tests_samples/MRPC/
             --output_dir {tmp_dir}
             --overwrite_output_dir
-            --task_name mrpc
+            --train_file ./tests/fixtures/tests_samples/MRPC/train.csv
+            --validation_file ./tests/fixtures/tests_samples/MRPC/dev.csv
             --do_train
             --do_eval
             --per_device_train_batch_size=2
@@ -91,6 +100,7 @@ class ExamplesTests(TestCasePlus):
             for value in result.values():
                 self.assertGreaterEqual(value, 0.75)
 
+    @require_torch_non_multi_gpu_but_fix_me
     def test_run_pl_glue(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -128,33 +138,96 @@ class ExamplesTests(TestCasePlus):
             #         self.assertGreaterEqual(v, 0.75, f"({k})")
             #
 
-    def test_run_language_modeling(self):
+    @require_torch_non_multi_gpu_but_fix_me
+    def test_run_clm(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
-            run_language_modeling.py
-            --model_name_or_path distilroberta-base
-            --model_type roberta
-            --mlm
-            --line_by_line
-            --train_data_file ./tests/fixtures/sample_text.txt
-            --eval_data_file ./tests/fixtures/sample_text.txt
-            --output_dir {tmp_dir}
-            --overwrite_output_dir
+            run_clm.py
+            --model_name_or_path distilgpt2
+            --train_file ./tests/fixtures/sample_text.txt
+            --validation_file ./tests/fixtures/sample_text.txt
             --do_train
             --do_eval
-            --num_train_epochs=1
+            --block_size 128
+            --per_device_train_batch_size 5
+            --per_device_eval_batch_size 5
+            --num_train_epochs 2
+            --output_dir {tmp_dir}
+            --overwrite_output_dir
             """.split()
+
+        if torch.cuda.device_count() > 1:
+            # Skipping because there are not enough batches to train the model + would need a drop_last to work.
+            return
 
         if torch_device != "cuda":
             testargs.append("--no_cuda")
 
         with patch.object(sys, "argv", testargs):
-            result = run_language_modeling.main()
+            result = run_clm.main()
+            self.assertLess(result["perplexity"], 100)
+
+    @require_torch_non_multi_gpu_but_fix_me
+    def test_run_mlm(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_mlm.py
+            --model_name_or_path distilroberta-base
+            --train_file ./tests/fixtures/sample_text.txt
+            --validation_file ./tests/fixtures/sample_text.txt
+            --output_dir {tmp_dir}
+            --overwrite_output_dir
+            --do_train
+            --do_eval
+            --prediction_loss_only
+            --num_train_epochs=1
+        """.split()
+
+        if torch_device != "cuda":
+            testargs.append("--no_cuda")
+
+        with patch.object(sys, "argv", testargs):
+            result = run_mlm.main()
             self.assertLess(result["perplexity"], 42)
 
+    @require_torch_non_multi_gpu_but_fix_me
+    def test_run_ner(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_ner.py
+            --model_name_or_path bert-base-uncased
+            --train_file tests/fixtures/tests_samples/conll/sample.json
+            --validation_file tests/fixtures/tests_samples/conll/sample.json
+            --output_dir {tmp_dir}
+            --overwrite_output_dir
+            --do_train
+            --do_eval
+            --warmup_steps=2
+            --learning_rate=2e-4
+            --per_gpu_train_batch_size=2
+            --per_gpu_eval_batch_size=2
+            --num_train_epochs=2
+        """.split()
+
+        if torch_device != "cuda":
+            testargs.append("--no_cuda")
+
+        with patch.object(sys, "argv", testargs):
+            result = run_ner.main()
+            self.assertGreaterEqual(result["eval_accuracy_score"], 0.75)
+            self.assertGreaterEqual(result["eval_precision"], 0.75)
+            self.assertLess(result["eval_loss"], 0.5)
+
+    @require_torch_non_multi_gpu_but_fix_me
     def test_run_squad(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -183,6 +256,7 @@ class ExamplesTests(TestCasePlus):
             self.assertGreaterEqual(result["f1"], 25)
             self.assertGreaterEqual(result["exact"], 21)
 
+    @require_torch_non_multi_gpu_but_fix_me
     def test_generation(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)

@@ -17,7 +17,9 @@
 
 import os
 from shutil import copyfile
-from typing import List
+from typing import List, Optional, Tuple
+
+import sentencepiece as spm
 
 from .tokenization_utils import PreTrainedTokenizer
 from .utils import logging
@@ -27,9 +29,7 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-tokenizer_url = (
-    "https://s3.amazonaws.com/models.huggingface.co/bert/google/bert_for_seq_generation_L-24_bbc_encoder/spiece.model"
-)
+tokenizer_url = "https://huggingface.co/google/bert_for_seq_generation_L-24_bbc_encoder/resolve/main/spiece.model"
 
 
 class BertGenerationTokenizer(PreTrainedTokenizer):
@@ -55,6 +55,8 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = {"vocab_file": {"bert_for_seq_generation": tokenizer_url}}
+    max_model_input_sizes = {"bert_for_seq_generation": 512}
     prefix_tokens: List[int] = []
 
     def __init__(
@@ -77,16 +79,6 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning(
-                "You need to install SentencePiece to use T5Tokenizer:"
-                "https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            raise
-
         self.vocab_file = vocab_file
 
         self.sp_model = spm.SentencePieceProcessor()
@@ -108,14 +100,6 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
 
     def __setstate__(self, d):
         self.__dict__ = d
-        try:
-            import sentencepiece as spm
-        except ImportError:
-            logger.warning(
-                "You need to install SentencePiece to use BertGenerationTokenizer: https://github.com/google/sentencepiece"
-                "pip install sentencepiece"
-            )
-            raise
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(self.vocab_file)
 
@@ -141,21 +125,13 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
         out_string = self.sp_model.decode_pieces(tokens)
         return out_string
 
-    def save_vocabulary(self, save_directory):
-        """
-        Save the sentencepiece vocabulary (copy original file) and special tokens file to a directory.
-
-        Args:
-            save_directory (:obj:`str`):
-                The directory in which to save the vocabulary.
-
-        Returns:
-            :obj:`Tuple(str)`: Paths to the files saved.
-        """
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
-        out_vocab_file = os.path.join(save_directory, VOCAB_FILES_NAMES["vocab_file"])
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)

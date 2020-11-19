@@ -14,7 +14,7 @@
 # limitations under the License.
 """Tokenization classes for SqueezeBERT."""
 
-from .tokenization_bert import BertTokenizer, BertTokenizerFast
+from .tokenization_bert import BertTokenizer
 from .utils import logging
 
 
@@ -24,9 +24,9 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "squeezebert/squeezebert-uncased": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert-uncased/vocab.txt",
-        "squeezebert/squeezebert-mnli": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert-mnli/vocab.txt",
-        "squeezebert/squeezebert-mnli-headless": "https://s3.amazonaws.com/models.huggingface.co/bert/squeezebert/squeezebert-mnli-headless/vocab.txt",
+        "squeezebert/squeezebert-uncased": "https://huggingface.co/squeezebert/squeezebert-uncased/resolve/main/vocab.txt",
+        "squeezebert/squeezebert-mnli": "https://huggingface.co/squeezebert/squeezebert-mnli/resolve/main/vocab.txt",
+        "squeezebert/squeezebert-mnli-headless": "https://huggingface.co/squeezebert/squeezebert-mnli-headless/resolve/main/vocab.txt",
     }
 }
 
@@ -46,29 +46,12 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class SqueezeBertTokenizer(BertTokenizer):
     r"""
-    Constructs a  SqueezeBert tokenizer.
+    Constructs a SqueezeBert tokenizer.
 
     :class:`~transformers.SqueezeBertTokenizer is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
     tokenization: punctuation splitting + wordpiece.
 
     Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
-    parameters.
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-
-
-class SqueezeBertTokenizerFast(BertTokenizerFast):
-    r"""
-    Constructs a  "Fast" SqueezeBert tokenizer (backed by HuggingFace's `tokenizers` library).
-
-    :class:`~transformers.SqueezeBertTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and
-    runs end-to-end tokenization: punctuation splitting + wordpiece.
-
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
     parameters.
     """
 

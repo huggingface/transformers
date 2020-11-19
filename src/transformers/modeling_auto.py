@@ -43,6 +43,7 @@ from .configuration_auto import (
     MobileBertConfig,
     OpenAIGPTConfig,
     PegasusConfig,
+    ProphetNetConfig,
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
@@ -50,6 +51,7 @@ from .configuration_auto import (
     T5Config,
     TransfoXLConfig,
     XLMConfig,
+    XLMProphetNetConfig,
     XLMRobertaConfig,
     XLNetConfig,
     replace_list_option_in_docstrings,
@@ -75,6 +77,7 @@ from .modeling_bart import (
 from .modeling_bert import (
     BertForMaskedLM,
     BertForMultipleChoice,
+    BertForNextSentencePrediction,
     BertForPreTraining,
     BertForQuestionAnswering,
     BertForSequenceClassification,
@@ -126,6 +129,7 @@ from .modeling_fsmt import FSMTForConditionalGeneration, FSMTModel
 from .modeling_funnel import (
     FunnelForMaskedLM,
     FunnelForMultipleChoice,
+    FunnelForPreTraining,
     FunnelForQuestionAnswering,
     FunnelForSequenceClassification,
     FunnelForTokenClassification,
@@ -141,12 +145,13 @@ from .modeling_longformer import (
     LongformerForTokenClassification,
     LongformerModel,
 )
-from .modeling_lxmert import LxmertForPreTraining, LxmertModel
+from .modeling_lxmert import LxmertForPreTraining, LxmertForQuestionAnswering, LxmertModel
 from .modeling_marian import MarianMTModel
 from .modeling_mbart import MBartForConditionalGeneration
 from .modeling_mobilebert import (
     MobileBertForMaskedLM,
     MobileBertForMultipleChoice,
+    MobileBertForNextSentencePrediction,
     MobileBertForPreTraining,
     MobileBertForQuestionAnswering,
     MobileBertForSequenceClassification,
@@ -155,6 +160,7 @@ from .modeling_mobilebert import (
 )
 from .modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
 from .modeling_pegasus import PegasusForConditionalGeneration
+from .modeling_prophetnet import ProphetNetForCausalLM, ProphetNetForConditionalGeneration, ProphetNetModel
 from .modeling_rag import (  # noqa: F401 - need to import all RagModels to be in globals() function
     RagModel,
     RagSequenceForGeneration,
@@ -163,6 +169,7 @@ from .modeling_rag import (  # noqa: F401 - need to import all RagModels to be i
 from .modeling_reformer import (
     ReformerForMaskedLM,
     ReformerForQuestionAnswering,
+    ReformerForSequenceClassification,
     ReformerModel,
     ReformerModelWithLMHead,
 )
@@ -194,6 +201,11 @@ from .modeling_xlm import (
     XLMModel,
     XLMWithLMHeadModel,
 )
+from .modeling_xlm_prophetnet import (
+    XLMProphetNetForCausalLM,
+    XLMProphetNetForConditionalGeneration,
+    XLMProphetNetModel,
+)
 from .modeling_xlm_roberta import (
     XLMRobertaForCausalLM,
     XLMRobertaForMaskedLM,
@@ -214,11 +226,14 @@ from .modeling_xlnet import (
 from .utils import logging
 
 
+# Add modeling imports here
+
 logger = logging.get_logger(__name__)
 
 
 MODEL_MAPPING = OrderedDict(
     [
+        # Base model mapping
         (RetriBertConfig, RetriBertModel),
         (T5Config, T5Model),
         (DistilBertConfig, DistilBertModel),
@@ -247,11 +262,14 @@ MODEL_MAPPING = OrderedDict(
         (BertGenerationConfig, BertGenerationEncoder),
         (DebertaConfig, DebertaModel),
         (DPRConfig, DPRQuestionEncoder),
+        (XLMProphetNetConfig, XLMProphetNetModel),
+        (ProphetNetConfig, ProphetNetModel),
     ]
 )
 
 MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
+        # Model for pre-training mapping
         (LayoutLMConfig, LayoutLMForMaskedLM),
         (RetriBertConfig, RetriBertModel),
         (T5Config, T5ForConditionalGeneration),
@@ -275,11 +293,13 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (CTRLConfig, CTRLLMHeadModel),
         (ElectraConfig, ElectraForPreTraining),
         (LxmertConfig, LxmertForPreTraining),
+        (FunnelConfig, FunnelForPreTraining),
     ]
 )
 
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
+        # Model with LM heads mapping
         (LayoutLMConfig, LayoutLMForMaskedLM),
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
@@ -310,6 +330,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
+        # Model for Causal LM mapping
         (CamembertConfig, CamembertForCausalLM),
         (XLMRobertaConfig, XLMRobertaForCausalLM),
         (RobertaConfig, RobertaForCausalLM),
@@ -325,11 +346,14 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
         (CTRLConfig, CTRLLMHeadModel),
         (ReformerConfig, ReformerModelWithLMHead),
         (BertGenerationConfig, BertGenerationDecoder),
+        (XLMProphetNetConfig, XLMProphetNetForCausalLM),
+        (ProphetNetConfig, ProphetNetForCausalLM),
     ]
 )
 
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
+        # Model for Masked LM mapping
         (LayoutLMConfig, LayoutLMForMaskedLM),
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForMaskedLM),
@@ -351,6 +375,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
 
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
+        # Model for Seq2Seq Causal LM mapping
         (T5Config, T5ForConditionalGeneration),
         (PegasusConfig, PegasusForConditionalGeneration),
         (MarianConfig, MarianMTModel),
@@ -359,11 +384,14 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
         (BartConfig, BartForConditionalGeneration),
         (FSMTConfig, FSMTForConditionalGeneration),
         (EncoderDecoderConfig, EncoderDecoderModel),
+        (XLMProphetNetConfig, XLMProphetNetForConditionalGeneration),
+        (ProphetNetConfig, ProphetNetForConditionalGeneration),
     ]
 )
 
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
+        # Model for Sequence Classification mapping
         (DistilBertConfig, DistilBertForSequenceClassification),
         (AlbertConfig, AlbertForSequenceClassification),
         (CamembertConfig, CamembertForSequenceClassification),
@@ -382,11 +410,13 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (DebertaConfig, DebertaForSequenceClassification),
         (GPT2Config, GPT2ForSequenceClassification),
         (OpenAIGPTConfig, OpenAIGPTForSequenceClassification),
+        (ReformerConfig, ReformerForSequenceClassification),
     ]
 )
 
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
+        # Model for Question Answering mapping
         (DistilBertConfig, DistilBertForQuestionAnswering),
         (AlbertConfig, AlbertForQuestionAnswering),
         (CamembertConfig, CamembertForQuestionAnswering),
@@ -403,11 +433,13 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForQuestionAnswering),
         (ReformerConfig, ReformerForQuestionAnswering),
         (FunnelConfig, FunnelForQuestionAnswering),
+        (LxmertConfig, LxmertForQuestionAnswering),
     ]
 )
 
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
+        # Model for Token Classification mapping
         (LayoutLMConfig, LayoutLMForTokenClassification),
         (DistilBertConfig, DistilBertForTokenClassification),
         (CamembertConfig, CamembertForTokenClassification),
@@ -429,6 +461,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
+        # Model for Multiple Choice mapping
         (CamembertConfig, CamembertForMultipleChoice),
         (ElectraConfig, ElectraForMultipleChoice),
         (XLMRobertaConfig, XLMRobertaForMultipleChoice),
@@ -446,11 +479,18 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     ]
 )
 
+MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = OrderedDict(
+    [
+        (BertConfig, BertForNextSentencePrediction),
+        (MobileBertConfig, MobileBertForNextSentencePrediction),
+    ]
+)
+
 AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
 
-        The model class to instantiate is selected based on the :obj:`model_type` property of the config object
-        (either passed as an argument or loaded from :obj:`pretrained_model_name_or_path` if possible), or when it's
-        missing, by falling back to using pattern matching on :obj:`pretrained_model_name_or_path`:
+        The model class to instantiate is selected based on the :obj:`model_type` property of the config object (either
+        passed as an argument or loaded from :obj:`pretrained_model_name_or_path` if possible), or when it's missing,
+        by falling back to using pattern matching on :obj:`pretrained_model_name_or_path`:
 
         List options
 
@@ -474,14 +514,14 @@ AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
             model_args (additional positional arguments, `optional`):
                 Will be passed along to the underlying model ``__init__()`` method.
             config (:class:`~transformers.PretrainedConfig`, `optional`):
-                Configuration for the model to use instead of an automatically loaded configuation. Configuration can
+                Configuration for the model to use instead of an automatically loaded configuration. Configuration can
                 be automatically loaded when:
 
                     - The model is a model provided by the library (loaded with the `shortcut name` string of a
                       pretrained model).
                     - The model was saved using :meth:`~transformers.PreTrainedModel.save_pretrained` and is reloaded
-                      by suppling the save directory.
-                    - The model is loaded by suppling a local directory as ``pretrained_model_name_or_path`` and a
+                      by supplying the save directory.
+                    - The model is loaded by supplying a local directory as ``pretrained_model_name_or_path`` and a
                       configuration JSON file named `config.json` is found in the directory.
             state_dict (`Dict[str, torch.Tensor]`, `optional`):
                 A state dictionary to use instead of a state dictionary loaded from saved weights file.
@@ -503,17 +543,16 @@ AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
                 Whether or not to delete incompletely received files. Will attempt to resume the download if such a
                 file exists.
             proxies (:obj:`Dict[str, str], `optional`):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g.,
-                :obj:`{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each
-                request.
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether ot not to also return a dictionary containing missing keys, unexpected keys and error
-                messages.
+                Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to only look at local files (e.g., not try doanloading the model).
-            use_cdn(:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether or not to use Cloudfront (a Content Delivery Network, or CDN) when searching for the model on
-                our S3 (faster). Should be set to :obj:`False` for checkpoints larger than 20GB.
+                Whether or not to only look at local files (e.g., not try downloading the model).
+            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+                identifier allowed by git.
             kwargs (additional keyword arguments, `optional`):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 :obj:`output_attentions=True`). Behaves differently depending on whether a ``config`` is provided or
@@ -532,8 +571,8 @@ AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
 
 class AutoModel:
     r"""
-    This is a generic model class that will be instantiated as one of the base model classes of the library
-    when created with the :meth:`~transformers.AutoModel.from_pretrained` class method or the
+    This is a generic model class that will be instantiated as one of the base model classes of the library when
+    created with the :meth:`~transformers.AutoModel.from_pretrained` class method or the
     :meth:`~transformers.AutoModel.from_config` class methods.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
@@ -553,9 +592,8 @@ class AutoModel:
         Instantiates one of the base model classes of the library from a configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use :meth:`~transformers.AutoModel.from_pretrained` to load
-            the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModel.from_pretrained` to load the model weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -647,9 +685,9 @@ class AutoModelForPreTraining:
         model---from a configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use
-            :meth:`~transformers.AutoModelForPreTraining.from_pretrained` to load the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForPreTraining.from_pretrained` to load the model
+            weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -747,9 +785,9 @@ class AutoModelWithLMHead:
         Instantiates one of the model classes of the library---with a language modeling head---from a configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use :meth:`~transformers.AutoModelWithLMHead.from_pretrained`
-            to load the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelWithLMHead.from_pretrained` to load the model
+            weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -830,8 +868,8 @@ class AutoModelWithLMHead:
 
 class AutoModelForCausalLM:
     r"""
-    This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    causal language modeling head---when created with the when created with the
+    This is a generic model class that will be instantiated as one of the model classes of the library---with a causal
+    language modeling head---when created with the when created with the
     :meth:`~transformers.AutoModelForCausalLM.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForCausalLM.from_config` class method.
 
@@ -853,9 +891,9 @@ class AutoModelForCausalLM:
         configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use :meth:`~transformers.AutoModelForCausalLM.from_pretrained`
-            to load the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForCausalLM.from_pretrained` to load the model
+            weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -924,10 +962,10 @@ class AutoModelForCausalLM:
 
 class AutoModelForMaskedLM:
     r"""
-    This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    masked language modeling head---when created with the when created with the
+    This is a generic model class that will be instantiated as one of the model classes of the library---with a masked
+    language modeling head---when created with the when created with the
     :meth:`~transformers.AutoModelForMaskedLM.from_pretrained` class method or the
-    :meth:`~transformers.AutoModelForMasedLM.from_config` class method.
+    :meth:`~transformers.AutoModelForMaskedLM.from_config` class method.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
@@ -947,9 +985,9 @@ class AutoModelForMaskedLM:
         configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use :meth:`~transformers.AutoModelForMaskedLM.from_pretrained`
-            to load the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForMaskedLM.from_pretrained` to load the model
+            weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -1041,9 +1079,9 @@ class AutoModelForSeq2SeqLM:
         head---from a configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use :meth:`~transformers.AutoModelForSeq2SeqLM.from_pretrained`
-            to load the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForSeq2SeqLM.from_pretrained` to load the model
+            weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -1139,9 +1177,9 @@ class AutoModelForSequenceClassification:
         configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use
-            :meth:`~transformers.AutoModelForSequenceClassification.from_pretrained` to load the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForSequenceClassification.from_pretrained` to load
+            the model weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -1236,9 +1274,9 @@ class AutoModelForQuestionAnswering:
         Instantiates one of the model classes of the library---with a question answering head---from a configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use
-            :meth:`~transformers.AutoModelForQuestionAnswering.from_pretrained` to load the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForQuestionAnswering.from_pretrained` to load the
+            model weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -1313,8 +1351,8 @@ class AutoModelForQuestionAnswering:
 
 class AutoModelForTokenClassification:
     r"""
-    This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    token classification head---when created with the when created with the
+    This is a generic model class that will be instantiated as one of the model classes of the library---with a token
+    classification head---when created with the when created with the
     :meth:`~transformers.AutoModelForTokenClassification.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForTokenClassification.from_config` class method.
 
@@ -1335,9 +1373,9 @@ class AutoModelForTokenClassification:
         Instantiates one of the model classes of the library---with a token classification head---from a configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use
-            :meth:`~transformers.AutoModelForTokenClassification.from_pretrained` to load the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForTokenClassification.from_pretrained` to load
+            the model weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -1413,7 +1451,7 @@ class AutoModelForTokenClassification:
 class AutoModelForMultipleChoice:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    multiple choice classifcation head---when created with the when created with the
+    multiple choice classification head---when created with the when created with the
     :meth:`~transformers.AutoModelForMultipleChoice.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForMultipleChoice.from_config` class method.
 
@@ -1435,9 +1473,9 @@ class AutoModelForMultipleChoice:
         configuration.
 
         Note:
-            Loading a model from its configuration file does **not** load the model weights.
-            It only affects the model's configuration. Use
-            :meth:`~transformers.AutoModelForMultipleChoice.from_pretrained` to load the model weights.
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForMultipleChoice.from_pretrained` to load the
+            model weights.
 
         Args:
             config (:class:`~transformers.PretrainedConfig`):
@@ -1506,5 +1544,105 @@ class AutoModelForMultipleChoice:
                 config.__class__,
                 cls.__name__,
                 ", ".join(c.__name__ for c in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys()),
+            )
+        )
+
+
+class AutoModelForNextSentencePrediction:
+    r"""
+    This is a generic model class that will be instantiated as one of the model classes of the library---with a
+    multiple choice classification head---when created with the when created with the
+    :meth:`~transformers.AutoModelForNextSentencePrediction.from_pretrained` class method or the
+    :meth:`~transformers.AutoModelForNextSentencePrediction.from_config` class method.
+
+    This class cannot be instantiated directly using ``__init__()`` (throws an error).
+    """
+
+    def __init__(self):
+        raise EnvironmentError(
+            "AutoModelForNextSentencePrediction is designed to be instantiated "
+            "using the `AutoModelForNextSentencePrediction.from_pretrained(pretrained_model_name_or_path)` or "
+            "`AutoModelForNextSentencePrediction.from_config(config)` methods."
+        )
+
+    @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING, use_model_types=False)
+    def from_config(cls, config):
+        r"""
+        Instantiates one of the model classes of the library---with a multiple choice classification head---from a
+        configuration.
+
+        Note:
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForNextSentencePrediction.from_pretrained` to load
+            the model weights.
+
+        Args:
+            config (:class:`~transformers.PretrainedConfig`):
+                The model class to instantiate is selected based on the configuration class:
+
+                List options
+
+        Examples::
+
+            >>> from transformers import AutoConfig, AutoModelForNextSentencePrediction
+            >>> # Download configuration from S3 and cache.
+            >>> config = AutoConfig.from_pretrained('bert-base-uncased')
+            >>> model = AutoModelForNextSentencePrediction.from_config(config)
+        """
+        if type(config) in MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys():
+            return MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING[type(config)](config)
+
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__,
+                cls.__name__,
+                ", ".join(c.__name__ for c in MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys()),
+            )
+        )
+
+    @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING)
+    @add_start_docstrings(
+        "Instantiate one of the model classes of the library---with a multiple choice classification head---from a "
+        "pretrained model.",
+        AUTO_MODEL_PRETRAINED_DOCSTRING,
+    )
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        r"""
+        Examples::
+
+            >>> from transformers import AutoConfig, AutoModelForNextSentencePrediction
+
+            >>> # Download model and configuration from S3 and cache.
+            >>> model = AutoModelForNextSentencePrediction.from_pretrained('bert-base-uncased')
+
+            >>> # Update configuration during loading
+            >>> model = AutoModelForNextSentencePrediction.from_pretrained('bert-base-uncased', output_attentions=True)
+            >>> model.config.output_attentions
+            True
+
+            >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
+            >>> config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            >>> model = AutoModelForNextSentencePrediction.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+        """
+        config = kwargs.pop("config", None)
+        if not isinstance(config, PretrainedConfig):
+            config, kwargs = AutoConfig.from_pretrained(
+                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+            )
+
+        if type(config) in MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys():
+            return MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__,
+                cls.__name__,
+                ", ".join(c.__name__ for c in MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys()),
             )
         )

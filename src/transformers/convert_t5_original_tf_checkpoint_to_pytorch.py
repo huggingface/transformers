@@ -17,8 +17,6 @@
 
 import argparse
 
-import torch
-
 from transformers import T5Config, T5Model, load_tf_weights_in_t5
 from transformers.utils import logging
 
@@ -37,7 +35,7 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_du
 
     # Save pytorch-model
     print("Save PyTorch model to {}".format(pytorch_dump_path))
-    torch.save(model.state_dict(), pytorch_dump_path)
+    model.save_pretrained(pytorch_dump_path)
 
 
 if __name__ == "__main__":

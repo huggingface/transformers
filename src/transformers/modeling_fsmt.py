@@ -43,10 +43,15 @@ from .file_utils import (
     add_code_sample_docstrings,
     add_end_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from .modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, Seq2SeqLMOutput, Seq2SeqModelOutput
+from .modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPastAndCrossAttentions,
+    Seq2SeqLMOutput,
+    Seq2SeqModelOutput,
+)
 from .modeling_utils import PreTrainedModel
 from .utils import logging
 
@@ -103,6 +108,7 @@ _TOKENIZER_FOR_DOC = "FSMTTokenizer"
 # TODO:
 # - port model ensemble (fs uses 4 model checkpoints)
 # - solve beam search discrepancies
+# docstyle-ignore
 
 """
 
@@ -180,14 +186,15 @@ FSMT_START_DOCSTRING = r"""
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
 
-    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
+    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
+    general usage and behavior.
 
     Parameters:
         config (:class:`~transformers.FSMTConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 
 """
 FSMT_GENERATION_EXAMPLE = r"""
@@ -214,14 +221,13 @@ FSMT_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            IIndices can be obtained using :class:`~transformers.FSTMTokenizer`.
-            See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details.
+            IIndices can be obtained using :class:`~transformers.FSTMTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -232,21 +238,19 @@ FSMT_INPUTS_DOCSTRING = r"""
             shifting the input_ids right, following the paper.
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
-            also be used by default.
-            If you want to change padding behavior, you should read
-            :func:`modeling_fstm._prepare_fstm_decoder_inputs` and modify.
-            See diagram 1 in the paper for more info on the default strategy
+            also be used by default. If you want to change padding behavior, you should read
+            :func:`modeling_fstm._prepare_fstm_decoder_inputs` and modify. See diagram 1 in the paper for more info on
+            the default strategy
         encoder_outputs (:obj:`Tuple(torch.FloatTensor)`, `optional`):
-            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`: :obj:`attentions`)
-            :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)` is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
+            :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)` is a
+            sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention of
+            the decoder.
         past_key_values (:obj:`Tuple(torch.FloatTensor)` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden-states of the attention blocks.
-            Can be used to speed up decoding.
-            If :obj:`past_key_values` are used, the user can optionally input only the last
-            :obj:`decoder_input_ids` (those that don't have their past key value states given to this model) of shape
-            :obj:`(batch_size, 1)` instead of all :obj:`decoder_input_ids` of shape
-            :obj:`(batch_size, sequence_length)`.
+            Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
+            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
+            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
+            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
             decoding (see :obj:`past_key_values`).
@@ -282,9 +286,10 @@ def invert_mask(attention_mask):
 def _prepare_fsmt_decoder_inputs(
     config, input_ids, decoder_input_ids=None, decoder_padding_mask=None, causal_mask_dtype=torch.float32
 ):
-    """Prepare masks that ignore padding tokens in the decoder and a causal mask for the decoder if
-    none are provided. This mimics the default behavior in fairseq. To override it pass in masks.
-    Note: this is not called during generation
+    """
+    Prepare masks that ignore padding tokens in the decoder and a causal mask for the decoder if none are provided.
+    This mimics the default behavior in fairseq. To override it pass in masks. Note: this is not called during
+    generation
     """
     pad_token_id = config.pad_token_id
     if decoder_input_ids is None:
@@ -406,8 +411,8 @@ class EncoderLayer(nn.Module):
 
 class FSMTEncoder(nn.Module):
     """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer
-    is a :class:`EncoderLayer`.
+    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
+    :class:`EncoderLayer`.
 
     Args:
         config: FSMTConfig
@@ -435,14 +440,14 @@ class FSMTEncoder(nn.Module):
         Args:
             input_ids (LongTensor): tokens in the source language of shape
                 `(batch, src_len)`
-            attention_mask (torch.LongTensor): indicating which indices are padding tokens.
+            attention_mask (torch.LongTensor): indicating which indices are padding tokens
+
         Returns:
             BaseModelOutput or Tuple comprised of:
-                - **x** (Tensor): the last encoder layer's output of
-                  shape `(src_len, batch, embed_dim)`
-                - **encoder_states** (tuple(torch.FloatTensor)): all intermediate
-                  hidden states of shape `(src_len, batch, embed_dim)`.
-                  Only populated if *output_hidden_states:* is True.
+
+                - **x** (Tensor): the last encoder layer's output of shape `(src_len, batch, embed_dim)`
+                - **encoder_states** (tuple(torch.FloatTensor)): all intermediate hidden states of shape `(src_len,
+                  batch, embed_dim)`. Only populated if *output_hidden_states:* is True.
                 - **all_attentions** (tuple(torch.FloatTensor)): Attention weights for each layer.
                 During training might not be of length n_layers because of layer dropout.
         """
@@ -543,11 +548,12 @@ class DecoderLayer(nn.Module):
         # Cross attention
         residual = x
         assert self.encoder_attn.cache_key != self.self_attn.cache_key
-        x, _ = self.encoder_attn(
+        x, cross_attn_weights = self.encoder_attn(
             query=x,
             key=encoder_hidden_states,
             key_padding_mask=encoder_attn_mask,
             layer_state=layer_state,  # mutates layer state
+            output_attentions=output_attentions,
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -565,13 +571,14 @@ class DecoderLayer(nn.Module):
             x,
             self_attn_weights,
             layer_state,
-        )  # just self_attn weights for now, following t5, layer_state = cache for decoding
+            cross_attn_weights,
+        )  # layer_state = cache for decoding
 
 
 class FSMTDecoder(nn.Module):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer
-    is a :class:`DecoderLayer`.
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`DecoderLayer`
+
     Args:
         config: FSMTConfig
         embed_tokens (torch.nn.Embedding): output embedding
@@ -614,8 +621,8 @@ class FSMTDecoder(nn.Module):
         **unused,
     ):
         """
-        Includes several features from "Jointly Learning to Align and
-        Translate with Transformer Models" (Garg et al., EMNLP 2019).
+        Includes several features from "Jointly Learning to Align and Translate with Transformer Models" (Garg et al.,
+        EMNLP 2019).
 
         Args:
             input_ids (LongTensor): previous decoder outputs of shape
@@ -627,6 +634,7 @@ class FSMTDecoder(nn.Module):
 
         Returns:
             BaseModelOutputWithPast or tuple:
+
                 - the decoder's features of shape `(batch, tgt_len, embed_dim)`
                 - the cache
                 - hidden states
@@ -668,6 +676,7 @@ class FSMTDecoder(nn.Module):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
+        all_cross_attns = () if output_attentions else None
         next_decoder_cache = []
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -679,7 +688,7 @@ class FSMTDecoder(nn.Module):
 
             layer_state = past_key_values[idx] if past_key_values is not None else None
 
-            x, layer_self_attn, layer_past = decoder_layer(
+            x, layer_self_attn, layer_past, layer_cross_attn = decoder_layer(
                 x,
                 encoder_hidden_states,
                 encoder_attn_mask=encoder_padding_mask,
@@ -694,6 +703,7 @@ class FSMTDecoder(nn.Module):
 
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
+                all_cross_attns += (layer_cross_attn,)
 
         # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         if output_hidden_states:
@@ -706,9 +716,15 @@ class FSMTDecoder(nn.Module):
         next_cache = next_decoder_cache if use_cache else None
 
         if not return_dict:
-            return tuple(v for v in [x, next_cache, all_hidden_states, all_self_attns] if v is not None)
-        return BaseModelOutputWithPast(
-            last_hidden_state=x, past_key_values=next_cache, hidden_states=all_hidden_states, attentions=all_self_attns
+            return tuple(
+                v for v in [x, next_cache, all_hidden_states, all_self_attns, all_cross_attns] if v is not None
+            )
+        return BaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=x,
+            past_key_values=next_cache,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+            cross_attentions=all_cross_attns,
         )
 
 
@@ -898,11 +914,11 @@ class FSMTModel(PretrainedFSMTModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(FSMT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(FSMT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="facebook/wmt19-ru-en",
-        output_type=BaseModelOutputWithPast,
+        output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -988,6 +1004,7 @@ class FSMTModel(PretrainedFSMTModel):
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
@@ -1038,7 +1055,7 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
 
         return new_embeddings
 
-    @add_start_docstrings_to_callable(FSMT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(FSMT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     @add_end_docstrings(FSMT_GENERATION_EXAMPLE)
     def forward(
@@ -1058,10 +1075,9 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss.
-            Indices should either be in ``[0, ..., config.vocab_size]`` or -100 (see ``input_ids`` docstring).
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens
-            with labels in ``[0, ..., config.vocab_size]``.
+            Labels for computing the masked language modeling loss. Indices should either be in ``[0, ...,
+            config.vocab_size]`` or -100 (see ``input_ids`` docstring). Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
 
         Returns:
 
@@ -1101,13 +1117,14 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
 
     def prepare_inputs_for_generation(
-        self, decoder_input_ids, past, attention_mask, use_cache, encoder_outputs, **kwargs
+        self, decoder_input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
     ):
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -1157,8 +1174,7 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
     """
     This module produces sinusoidal positional embeddings of any length.
 
-    We don't want to save the weight of this embedding since it's not trained
-    (deterministic) and it can be huge.
+    We don't want to save the weight of this embedding since it's not trained (deterministic) and it can be huge.
 
     Padding symbols are ignored.
 
@@ -1182,10 +1198,11 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
 
     @staticmethod
     def get_embedding(num_embeddings, embedding_dim, padding_idx):
-        """Build sinusoidal embeddings.
+        """
+        Build sinusoidal embeddings.
 
-        This matches the implementation in tensor2tensor, but differs slightly
-        from the description in Section 3.5 of "Attention Is All You Need".
+        This matches the implementation in tensor2tensor, but differs slightly from the description in Section 3.5 of
+        "Attention Is All You Need".
         """
         half_dim = embedding_dim // 2
         emb = math.log(10000) / (half_dim - 1)
@@ -1201,7 +1218,8 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
 
     @staticmethod
     def make_positions(tensor, padding_idx: int):
-        """Replace non-padding symbols with their position numbers.
+        """
+        Replace non-padding symbols with their position numbers.
 
         Position numbers begin at padding_idx+1. Padding symbols are ignored.
         """

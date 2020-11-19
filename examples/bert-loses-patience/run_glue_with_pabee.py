@@ -29,6 +29,7 @@ from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, Tenso
 from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
+import transformers
 from pabee.modeling_pabee_albert import AlbertForSequenceClassificationWithPabee
 from pabee.modeling_pabee_bert import BertForSequenceClassificationWithPabee
 from transformers import (
@@ -44,6 +45,7 @@ from transformers import glue_compute_metrics as compute_metrics
 from transformers import glue_convert_examples_to_features as convert_examples_to_features
 from transformers import glue_output_modes as output_modes
 from transformers import glue_processors as processors
+from transformers.trainer_utils import is_main_process
 
 
 try:
@@ -630,7 +632,11 @@ def main():
         bool(args.local_rank != -1),
         args.fp16,
     )
-
+    # Set the verbosity to info of the Transformers logger (on main process only):
+    if is_main_process(args.local_rank):
+        transformers.utils.logging.set_verbosity_info()
+        transformers.utils.logging.enable_default_handler()
+        transformers.utils.logging.enable_explicit_format()
     # Set seed
     set_seed(args)
 

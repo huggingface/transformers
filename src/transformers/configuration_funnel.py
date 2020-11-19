@@ -21,16 +21,16 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "funnel-transformer/small": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/small/config.json",
-    "funnel-transformer/small-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/small-base/config.json",
-    "funnel-transformer/medium": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/medium/config.json",
-    "funnel-transformer/medium-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/medium-base/config.json",
-    "funnel-transformer/intermediate": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/intermediate/config.json",
-    "funnel-transformer/intermediate-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/intermediate-base/config.json",
-    "funnel-transformer/large": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/large/config.json",
-    "funnel-transformer/large-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/large-base/config.json",
-    "funnel-transformer/xlarge": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/xlarge/config.json",
-    "funnel-transformer/xlarge-base": "https://s3.amazonaws.com/models.huggingface.co/bert/funnel-transformer/xlarge-base/config.json",
+    "funnel-transformer/small": "https://huggingface.co/funnel-transformer/small/resolve/main/config.json",
+    "funnel-transformer/small-base": "https://huggingface.co/funnel-transformer/small-base/resolve/main/config.json",
+    "funnel-transformer/medium": "https://huggingface.co/funnel-transformer/medium/resolve/main/config.json",
+    "funnel-transformer/medium-base": "https://huggingface.co/funnel-transformer/medium-base/resolve/main/config.json",
+    "funnel-transformer/intermediate": "https://huggingface.co/funnel-transformer/intermediate/resolve/main/config.json",
+    "funnel-transformer/intermediate-base": "https://huggingface.co/funnel-transformer/intermediate-base/resolve/main/config.json",
+    "funnel-transformer/large": "https://huggingface.co/funnel-transformer/large/resolve/main/config.json",
+    "funnel-transformer/large-base": "https://huggingface.co/funnel-transformer/large-base/resolve/main/config.json",
+    "funnel-transformer/xlarge": "https://huggingface.co/funnel-transformer/xlarge/resolve/main/config.json",
+    "funnel-transformer/xlarge-base": "https://huggingface.co/funnel-transformer/xlarge-base/resolve/main/config.json",
 }
 
 
@@ -42,9 +42,8 @@ class FunnelConfig(PretrainedConfig):
     configuration to that of the Funnel Transformer `funnel-transformer/small
     <https://huggingface.co/funnel-transformer/small>`__ architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
@@ -66,17 +65,17 @@ class FunnelConfig(PretrainedConfig):
         d_inner (:obj:`int`, `optional`, defaults to 3072):
             Inner dimension in the feed-forward blocks.
         hidden_act (:obj:`str` or :obj:`callable`, `optional`, defaults to :obj:`"gelu_new"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"swish"` and :obj:`"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string,
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
         hidden_dropout (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probability for the attention probabilities.
         activation_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout probability used between the two layers of the feed-forward blocks.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 3):
             The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.FunnelModel` or
             :class:`~transformers.TFFunnelModel`.
@@ -90,19 +89,17 @@ class FunnelConfig(PretrainedConfig):
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-9):
             The epsilon used by the layer normalization layers.
         pooling_type (:obj:`str`, `optional`, defaults to :obj:`"mean"`):
-            Possible values are ``"mean"`` or ``"max"``. The way pooling is performed at the beginning of each
-            block.
+            Possible values are ``"mean"`` or ``"max"``. The way pooling is performed at the beginning of each block.
         attention_type (:obj:`str`, `optional`, defaults to :obj:`"relative_shift"`):
-            Possible values are ``"relative_shift"`` or ``"factorized"``. The former is faster on CPU/GPU while
-            the latter is faster on TPU.
+            Possible values are ``"relative_shift"`` or ``"factorized"``. The former is faster on CPU/GPU while the
+            latter is faster on TPU.
         separate_cls (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to separate the cls token when applying pooling.
         truncate_seq (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            When using ``separate_cls``, whether or not to truncate the last token when pooling, to avoid getting
-            a sequence length that is not a multiple of 2.
+            When using ``separate_cls``, whether or not to truncate the last token when pooling, to avoid getting a
+            sequence length that is not a multiple of 2.
         pool_q_only (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to apply the pooling only to the query or to query, key and values for the attention
-            layers.
+            Whether or not to apply the pooling only to the query or to query, key and values for the attention layers.
     """
     model_type = "funnel"
 

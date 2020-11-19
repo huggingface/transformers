@@ -13,19 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .tokenization_bert import BertTokenizer, BertTokenizerFast
+from .tokenization_bert import BertTokenizer
 
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "google/electra-small-generator": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-small-generator/vocab.txt",
-        "google/electra-base-generator": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-base-generator/vocab.txt",
-        "google/electra-large-generator": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-large-generator/vocab.txt",
-        "google/electra-small-discriminator": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-small-discriminator/vocab.txt",
-        "google/electra-base-discriminator": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-base-discriminator/vocab.txt",
-        "google/electra-large-discriminator": "https://s3.amazonaws.com/models.huggingface.co/bert/google/electra-large-discriminator/vocab.txt",
+        "google/electra-small-generator": "https://huggingface.co/google/electra-small-generator/resolve/main/vocab.txt",
+        "google/electra-base-generator": "https://huggingface.co/google/electra-base-generator/resolve/main/vocab.txt",
+        "google/electra-large-generator": "https://huggingface.co/google/electra-large-generator/resolve/main/vocab.txt",
+        "google/electra-small-discriminator": "https://huggingface.co/google/electra-small-discriminator/resolve/main/vocab.txt",
+        "google/electra-base-discriminator": "https://huggingface.co/google/electra-base-discriminator/resolve/main/vocab.txt",
+        "google/electra-large-discriminator": "https://huggingface.co/google/electra-large-discriminator/resolve/main/vocab.txt",
     }
 }
 
@@ -64,20 +64,3 @@ class ElectraTokenizer(BertTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-
-
-class ElectraTokenizerFast(BertTokenizerFast):
-    r"""
-    Construct a "fast" ELECTRA tokenizer (backed by HuggingFace's `tokenizers` library).
-
-    :class:`~transformers.ElectraTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
-    end-to-end tokenization: punctuation splitting and wordpiece.
-
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
-    parameters.
-    """
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    slow_tokenizer_class = ElectraTokenizer

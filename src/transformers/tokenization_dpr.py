@@ -19,50 +19,71 @@ import collections
 from typing import List, Optional, Union
 
 from .file_utils import add_end_docstrings, add_start_docstrings
-from .tokenization_bert import BertTokenizer, BertTokenizerFast
+from .tokenization_bert import BertTokenizer
 from .tokenization_utils_base import BatchEncoding, TensorType
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
 CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-ctx_encoder-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
-    }
+        "facebook/dpr-ctx_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
+        "facebook/dpr-ctx_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
+    },
+    "tokenizer_file": {
+        "facebook/dpr-ctx_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
+        "facebook/dpr-ctx_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
+    },
 }
 QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-question_encoder-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
-    }
+        "facebook/dpr-question_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
+        "facebook/dpr-question_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
+    },
+    "tokenizer_file": {
+        "facebook/dpr-question_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
+        "facebook/dpr-question_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
+    },
 }
 READER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-reader-single-nq-base": "https://s3.amazonaws.com/models.huggingface.co/bert/bert-base-uncased-vocab.txt",
-    }
+        "facebook/dpr-reader-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
+        "facebook/dpr-reader-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
+    },
+    "tokenizer_file": {
+        "facebook/dpr-reader-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
+        "facebook/dpr-reader-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
+    },
 }
 
 CONTEXT_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "facebook/dpr-ctx_encoder-single-nq-base": 512,
+    "facebook/dpr-ctx_encoder-multiset-base": 512,
 }
 QUESTION_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "facebook/dpr-question_encoder-single-nq-base": 512,
+    "facebook/dpr-question_encoder-multiset-base": 512,
 }
 READER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "facebook/dpr-reader-single-nq-base": 512,
+    "facebook/dpr-reader-multiset-base": 512,
 }
 
 
 CONTEXT_ENCODER_PRETRAINED_INIT_CONFIGURATION = {
     "facebook/dpr-ctx_encoder-single-nq-base": {"do_lower_case": True},
+    "facebook/dpr-ctx_encoder-multiset-base": {"do_lower_case": True},
 }
 QUESTION_ENCODER_PRETRAINED_INIT_CONFIGURATION = {
     "facebook/dpr-question_encoder-single-nq-base": {"do_lower_case": True},
+    "facebook/dpr-question_encoder-multiset-base": {"do_lower_case": True},
 }
 READER_PRETRAINED_INIT_CONFIGURATION = {
     "facebook/dpr-reader-single-nq-base": {"do_lower_case": True},
+    "facebook/dpr-reader-multiset-base": {"do_lower_case": True},
 }
 
 
@@ -83,24 +104,6 @@ class DPRContextEncoderTokenizer(BertTokenizer):
     pretrained_init_configuration = CONTEXT_ENCODER_PRETRAINED_INIT_CONFIGURATION
 
 
-class DPRContextEncoderTokenizerFast(BertTokenizerFast):
-    r"""
-    Construct a "fast" DPRContextEncoder tokenizer (backed by HuggingFace's `tokenizers` library).
-
-    :class:`~transformers.DPRContextEncoderTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and
-    runs end-to-end tokenization: punctuation splitting and wordpiece.
-
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
-    parameters.
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = CONTEXT_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = CONTEXT_ENCODER_PRETRAINED_INIT_CONFIGURATION
-    slow_tokenizer_class = DPRContextEncoderTokenizer
-
-
 class DPRQuestionEncoderTokenizer(BertTokenizer):
     r"""
     Constructs a DPRQuestionEncoder tokenizer.
@@ -118,24 +121,6 @@ class DPRQuestionEncoderTokenizer(BertTokenizer):
     pretrained_init_configuration = QUESTION_ENCODER_PRETRAINED_INIT_CONFIGURATION
 
 
-class DPRQuestionEncoderTokenizerFast(BertTokenizerFast):
-    r"""
-    Constructs a "fast" DPRQuestionEncoder tokenizer (backed by HuggingFace's `tokenizers` library).
-
-    :class:`~transformers.DPRQuestionEncoderTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and
-    runs end-to-end tokenization: punctuation splitting and wordpiece.
-
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
-    parameters.
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = QUESTION_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = QUESTION_ENCODER_PRETRAINED_INIT_CONFIGURATION
-    slow_tokenizer_class = DPRQuestionEncoderTokenizer
-
-
 DPRSpanPrediction = collections.namedtuple(
     "DPRSpanPrediction", ["span_score", "relevance_score", "doc_id", "start_index", "end_index", "text"]
 )
@@ -145,19 +130,19 @@ DPRReaderOutput = collections.namedtuple("DPRReaderOutput", ["start_logits", "en
 
 CUSTOM_DPR_READER_DOCSTRING = r"""
     Return a dictionary with the token ids of the input strings and other information to give to
-    :obj:`.decode_best_spans`.
-    It converts the strings of a question and different passages (title and text) in a sequence of IDs (integers),
-    using the tokenizer and vocabulary. The resulting :obj:`input_ids` is a matrix of size
+    :obj:`.decode_best_spans`. It converts the strings of a question and different passages (title and text) in a
+    sequence of IDs (integers), using the tokenizer and vocabulary. The resulting :obj:`input_ids` is a matrix of size
     :obj:`(n_passages, sequence_length)` with the format:
+
+    ::
 
         [CLS] <question token ids> [SEP] <titles ids> [SEP] <texts ids>
 
     Args:
         questions (:obj:`str` or :obj:`List[str]`):
-            The questions to be encoded.
-            You can specify one question for many passages. In this case, the question will be duplicated like
-            :obj:`[questions] * n_passages`.
-            Otherwise you have to specify as many questions as in :obj:`titles` or :obj:`texts`.
+            The questions to be encoded. You can specify one question for many passages. In this case, the question
+            will be duplicated like :obj:`[questions] * n_passages`. Otherwise you have to specify as many questions as
+            in :obj:`titles` or :obj:`texts`.
         titles (:obj:`str` or :obj:`List[str]`):
             The passages titles to be encoded. This can be a string or a list of strings if there are several passages.
         texts (:obj:`str` or :obj:`List[str]`):
@@ -165,8 +150,8 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
         padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
             Activates and controls padding. Accepts the following values:
 
-            * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
-              single sequence if provided).
+            * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+              sequence if provided).
             * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
               maximum acceptable input length for the model if that argument is not provided.
             * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
@@ -176,16 +161,16 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
 
             * :obj:`True` or :obj:`'longest_first'`: Truncate to a maximum length specified with the argument
               :obj:`max_length` or to the maximum acceptable input length for the model if that argument is not
-              provided. This will truncate token by token, removing a token from the longest sequence in the pair
-              if a pair of sequences (or a batch of pairs) is provided.
-            * :obj:`'only_first'`: Truncate to a maximum length specified with the argument :obj:`max_length` or to
+              provided. This will truncate token by token, removing a token from the longest sequence in the pair if a
+              pair of sequences (or a batch of pairs) is provided.
+            * :obj:`'only_first'`: Truncate to a maximum length specified with the argument :obj:`max_length` or to the
+              maximum acceptable input length for the model if that argument is not provided. This will only truncate
+              the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+            * :obj:`'only_second'`: Truncate to a maximum length specified with the argument :obj:`max_length` or to
               the maximum acceptable input length for the model if that argument is not provided. This will only
-              truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-            * :obj:`'only_second'`: Truncate to a maximum length specified with the argument :obj:`max_length` or
-              to the maximum acceptable input length for the model if that argument is not provided. This will only
               truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-            * :obj:`False` or :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with
-              sequence lengths greater than the model maximum admissible input size).
+            * :obj:`False` or :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence
+              lengths greater than the model maximum admissible input size).
         max_length (:obj:`int`, `optional`):
                 Controls the maximum length to use by one of the truncation/padding parameters.
 
@@ -204,12 +189,12 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
 
             `What are attention masks? <../glossary.html#attention-mask>`__
 
-    Return:
+    Returns:
         :obj:`Dict[str, List[List[int]]]`: A dictionary with the following keys:
 
         - ``input_ids``: List of token ids to be fed to a model.
         - ``attention_mask``: List of indices specifying which tokens should be attended to by the model.
-        """
+    """
 
 
 @add_start_docstrings(CUSTOM_DPR_READER_DOCSTRING)
@@ -280,15 +265,17 @@ class CustomDPRReaderTokenizerMixin:
     ) -> List[DPRSpanPrediction]:
         """
         Get the span predictions for the extractive Q&A model.
-        Outputs: `List` of `DPRReaderOutput` sorted by descending `(relevance_score, span_score)`.
-            Each `DPRReaderOutput` is a `Tuple` with:
-            **span_score**: ``float`` that corresponds to the score given by the reader for this span compared to other spans
-                in the same passage. It corresponds to the sum of the start and end logits of the span.
-            **relevance_score**: ``float`` that corresponds to the score of the each passage to answer the question,
-                compared to all the other passages. It corresponds to the output of the QA classifier of the DPRReader.
-            **doc_id**: ``int``` the id of the passage.
-            **start_index**: ``int`` the start index of the span (inclusive).
-            **end_index**: ``int`` the end index of the span (inclusive).
+
+        Returns: `List` of `DPRReaderOutput` sorted by descending `(relevance_score, span_score)`. Each
+        `DPRReaderOutput` is a `Tuple` with:
+
+            - **span_score**: ``float`` that corresponds to the score given by the reader for this span compared to
+              other spans in the same passage. It corresponds to the sum of the start and end logits of the span.
+            - **relevance_score**: ``float`` that corresponds to the score of the each passage to answer the question,
+              compared to all the other passages. It corresponds to the output of the QA classifier of the DPRReader.
+            - **doc_id**: ``int``` the id of the passage.
+            - **start_index**: ``int`` the start index of the span (inclusive).
+            - **end_index**: ``int`` the end index of the span (inclusive).
 
         Examples::
 
@@ -351,9 +338,8 @@ class CustomDPRReaderTokenizerMixin:
         top_spans: int,
     ) -> List[DPRSpanPrediction]:
         """
-        Finds the best answer span for the extractive Q&A model for one passage.
-        It returns the best span by descending `span_score` order and keeping max `top_spans` spans.
-        Spans longer that `max_answer_length` are ignored.
+        Finds the best answer span for the extractive Q&A model for one passage. It returns the best span by descending
+        `span_score` order and keeping max `top_spans` spans. Spans longer that `max_answer_length` are ignored.
         """
         scores = []
         for (start_index, start_score) in enumerate(start_logits):
@@ -398,25 +384,3 @@ class DPRReaderTokenizer(CustomDPRReaderTokenizerMixin, BertTokenizer):
     max_model_input_sizes = READER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = READER_PRETRAINED_INIT_CONFIGURATION
     model_input_names = ["attention_mask"]
-
-
-@add_end_docstrings(CUSTOM_DPR_READER_DOCSTRING)
-class DPRReaderTokenizerFast(CustomDPRReaderTokenizerMixin, BertTokenizerFast):
-    r"""
-    Constructs a "fast" DPRReader tokenizer (backed by HuggingFace's `tokenizers` library).
-
-    :class:`~transformers.DPRReaderTokenizerFast` is almost identical to :class:`~transformers.BertTokenizerFast` and
-    runs end-to-end tokenization: punctuation splitting and wordpiece. The difference is that is has three inputs
-    strings: question, titles and texts that are combined to be fed to the :class:`~transformers.DPRReader` model.
-
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
-    parameters.
-
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = READER_PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = READER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = READER_PRETRAINED_INIT_CONFIGURATION
-    model_input_names = ["attention_mask"]
-    slow_tokenizer_class = DPRReaderTokenizer
