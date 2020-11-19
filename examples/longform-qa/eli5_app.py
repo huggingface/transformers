@@ -107,7 +107,12 @@ def make_support(question, source="wiki40b", method="dense", n_results=10):
     return question_doc, support_list
 
 
-@st.cache(hash_funcs={torch.Tensor: (lambda _: None), transformers.tokenization_bart.BartTokenizer: (lambda _: None)})
+@st.cache(
+    hash_funcs={
+        torch.Tensor: (lambda _: None),
+        transformers.models.bart.tokenization_bart.BartTokenizer: (lambda _: None),
+    }
+)
 def answer_question(
     question_doc, s2s_model, s2s_tokenizer, min_len=64, max_len=256, sampling=False, n_beams=2, top_p=0.95, temp=0.8
 ):
