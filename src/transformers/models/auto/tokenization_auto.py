@@ -22,7 +22,6 @@ from ...file_utils import is_sentencepiece_available, is_tokenizers_available
 from ...utils import logging
 from ..bart.tokenization_bart import BartTokenizer
 from ..bert.tokenization_bert import BertTokenizer
-from ..bert_japanese.tokenization_bert_japanese import BertJapaneseTokenizer
 from ..bertweet.tokenization_bertweet import BertweetTokenizer
 from ..blenderbot.tokenization_blenderbot import BlenderbotSmallTokenizer
 from ..ctrl.tokenization_ctrl import CTRLTokenizer
