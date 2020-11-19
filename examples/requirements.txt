@@ -13,7 +13,7 @@ streamlit
 elasticsearch
 nltk
 pandas
-datasets
+datasets >= 1.1.3
 fire
 pytest
 conllu
