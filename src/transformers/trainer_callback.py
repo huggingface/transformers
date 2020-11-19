@@ -61,10 +61,6 @@ class TrainerState:
         best_model_checkpoint (:obj:`str`, `optional`):
             When tracking the best model, the value of the name of the checkpoint for the best model encountered so
             far.
-        early_stopping_patience (:obj:`int`, `optional`):
-            The early stopping patience when evaluating the model during training.
-        early_stopping_patience_counter (:obj:`int`, `optional`):
-            The number of times validation metrics failed to improve.
         is_local_process_zero (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on
             several machines) main process.
@@ -84,7 +80,6 @@ class TrainerState:
     log_history: List[Dict[str, float]] = None
     best_metric: Optional[float] = None
     best_model_checkpoint: Optional[str] = None
-    early_stopping_patience_counter: Optional[int] = None
     is_local_process_zero: bool = True
     is_world_process_zero: bool = True
     is_hyper_param_search: bool = False
@@ -486,20 +481,43 @@ class PrinterCallback(TrainerCallback):
 class EarlyStoppingCallback(TrainerCallback):
     """
     An early stopping callback
+
+    Args:
+       early_stopping_patience (:obj:`int`):
+            Use with :obj:`metric_for_best_model` to stop training when the specified metric worsens for
+            :obj:`early_stopping_patience` evaluation calls.
+        early_stopping_threshold(:obj:`float`, `optional`):
+            Use with TrainingAruments :obj:`metric_for_best_model` and :obj:`early_stopping_patience` to denote how much the specified
+            metric must improve to satisfy early stopping conditions.
+`
+
+    Internal State:
+        early_stopping_patience_counter (:obj:`int`):
+            The number of times validation metrics failed to improve.
     """
+
+    def __init__(self, early_stopping_patience : int = 1, early_stopping_threshold : Optional[float] = 0.):
+        self.training_bar = None
+        self.prediction_bar = None
+        self.early_stopping_patience = early_stopping_patience
+        self.early_stopping_threshold = early_stopping_threshold
+        self.early_stopping_patience_counter = 0
 
     def check_metric_value(self, args, state, control, metric_value):
         # best_metric is set by code for load_best_model
         operator = np.greater if args.greater_is_better else np.less
         if state.best_metric is None or (
             operator(metric_value, state.best_metric)
-            and abs(metric_value - state.best_metric) > args.early_stopping_threshold
+            and abs(metric_value - state.best_metric) > early_stopping_threshold
         ):
-            state.early_stopping_patience_counter = 0
+            self.early_stopping_patience_counter = 0
         else:
-            state.early_stopping_patience_counter += 1
+            self.early_stopping_patience_counter += 1
 
     def on_evaluate(self, args, state, control, metrics, **kwargs):
+        # Ensure state.best_metric gets set in later steps
+        args.load_best_model_at_end = True
+
         metric_to_check = args.metric_for_best_model
         if not metric_to_check.startswith("eval_"):
             metric_to_check = f"eval_{metric_to_check}"
@@ -510,8 +528,5 @@ class EarlyStoppingCallback(TrainerCallback):
             return
 
         self.check_metric_value(args, state, control, metric_value)
-        if (
-            args.early_stopping_patience is not None
-            and state.early_stopping_patience_counter >= args.early_stopping_patience
-        ):
+        if self.early_stopping_patience_counter >= self.early_stopping_patience:
             control.should_training_stop = True

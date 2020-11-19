@@ -679,9 +679,8 @@ class TrainerIntegrationTest(unittest.TestCase):
             evaluation_strategy=EvaluationStrategy.EPOCH,
             compute_metrics=AlmostAccuracy(),
             metric_for_best_model="accuracy",
-            early_stopping_patience=1,
         )
-        trainer.add_callback(EarlyStoppingCallback)
+        trainer.add_callback(EarlyStoppingCallback(1, 0.0001))
         train_output = trainer.train()
         self.assertLess(train_output.global_step, 20 * 64 / 16)
 
