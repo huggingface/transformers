@@ -22,6 +22,7 @@ from ...file_utils import is_sentencepiece_available, is_tokenizers_available
 from ...utils import logging
 from ..bart.tokenization_bart import BartTokenizer
 from ..bert.tokenization_bert import BertTokenizer
+from ..bert_japanese.tokenization_bert_japanese import BertJapaneseTokenizer  # noqa: F401
 from ..bertweet.tokenization_bertweet import BertweetTokenizer
 from ..blenderbot.tokenization_blenderbot import BlenderbotSmallTokenizer
 from ..ctrl.tokenization_ctrl import CTRLTokenizer
@@ -309,11 +310,14 @@ class AutoTokenizer:
         use_fast = kwargs.pop("use_fast", True)
 
         if config.tokenizer_class is not None:
+            tokenizer_class = None
             if use_fast and not config.tokenizer_class.endswith("Fast"):
                 tokenizer_class_candidate = f"{config.tokenizer_class}Fast"
-            else:
+                tokenizer_class = globals().get(tokenizer_class_candidate)
+            if tokenizer_class is None:
                 tokenizer_class_candidate = config.tokenizer_class
-            tokenizer_class = globals().get(tokenizer_class_candidate)
+                tokenizer_class = globals().get(tokenizer_class_candidate)
+
             if tokenizer_class is None:
                 raise ValueError(
                     "Tokenizer class {} does not exist or is not currently imported.".format(tokenizer_class_candidate)
