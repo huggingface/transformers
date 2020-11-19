@@ -1,14 +1,7 @@
 import tempfile
 import unittest
 
-from transformers import (
-    SPIECE_UNDERLINE,
-    AutoTokenizer,
-    BatchEncoding,
-    MBartTokenizer,
-    MBartTokenizerFast,
-    is_torch_available,
-)
+from transformers import SPIECE_UNDERLINE, BatchEncoding, MBartTokenizer, MBartTokenizerFast, is_torch_available
 from transformers.testing_utils import (
     _sentencepiece_available,
     require_sentencepiece,
