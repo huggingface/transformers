@@ -480,23 +480,20 @@ class PrinterCallback(TrainerCallback):
 
 class EarlyStoppingCallback(TrainerCallback):
     """
-    An early stopping callback
+        An early stopping callback
 
-    Args:
-       early_stopping_patience (:obj:`int`):
-            Use with :obj:`metric_for_best_model` to stop training when the specified metric worsens for
-            :obj:`early_stopping_patience` evaluation calls.
-        early_stopping_threshold(:obj:`float`, `optional`):
-            Use with TrainingAruments :obj:`metric_for_best_model` and :obj:`early_stopping_patience` to denote how much the specified
-            metric must improve to satisfy early stopping conditions.
-`
+        Args:
+           early_stopping_patience (:obj:`int`):
+                Use with :obj:`metric_for_best_model` to stop training when the specified metric worsens for
+                :obj:`early_stopping_patience` evaluation calls. early_stopping_threshold(:obj:`float`, `optional`):
+                Use with TrainingAruments :obj:`metric_for_best_model` and :obj:`early_stopping_patience` to denote how
+                much the specified metric must improve to satisfy early stopping conditions. `
 
-    Internal State:
-        early_stopping_patience_counter (:obj:`int`):
-            The number of times validation metrics failed to improve.
+        Internal State: early_stopping_patience_counter (:obj:`int`): The number of times validation metrics failed to
+        improve.
     """
 
-    def __init__(self, early_stopping_patience : int = 1, early_stopping_threshold : Optional[float] = 0.):
+    def __init__(self, early_stopping_patience: int = 1, early_stopping_threshold: Optional[float] = 0.0):
         self.training_bar = None
         self.prediction_bar = None
         self.early_stopping_patience = early_stopping_patience
@@ -524,7 +521,9 @@ class EarlyStoppingCallback(TrainerCallback):
         metric_value = metrics.get(metric_to_check)
 
         if metric_value is None:
-            logger.warning(f'early stopping required metric_for_best_model, but did not find {metric_to_check} so early stopping is disabled')
+            logger.warning(
+                f"early stopping required metric_for_best_model, but did not find {metric_to_check} so early stopping is disabled"
+            )
             return
 
         self.check_metric_value(args, state, control, metric_value)
