@@ -912,7 +912,6 @@ class Trainer:
             if not metric_to_check.startswith("eval_"):
                 metric_to_check = f"eval_{metric_to_check}"
             metric_value = metrics[metric_to_check]
-            self.callback_handler.on_best_metric_check(self.args, self.state, self.control, metric_value=metric_value)
 
             operator = np.greater if self.args.greater_is_better else np.less
             if (
@@ -1320,6 +1319,7 @@ class Trainer:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
             xm.master_print(met.metrics_report())
 
+        # best_metric_value = self._get_best_metric(output.metrics)
         self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
         return output.metrics
 

@@ -257,12 +257,6 @@ class TrainerCallback:
         """
         pass
 
-    def on_best_metric_check(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        """
-        Event called after best metric calcuated
-        """
-        pass
-
     def on_save(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called after a checkpoint save.
@@ -368,11 +362,6 @@ class CallbackHandler(TrainerCallback):
     def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, metrics):
         control.should_evaluate = False
         return self.call_event("on_evaluate", args, state, control, metrics=metrics)
-
-    def on_best_metric_check(
-        self, args: TrainingArguments, state: TrainerState, control: TrainerControl, metric_value: float
-    ):
-        return self.call_event("on_best_metric_check", args, state, control, metric_value=metric_value)
 
     def on_save(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
         control.should_save = False
@@ -510,10 +499,17 @@ class EarlyStoppingCallback(TrainerCallback):
         else:
             state.early_stopping_patience_counter += 1
 
-    def on_best_metric_check(self, args, state, control, metric_value, **kwargs):
+    def on_evaluate(self, args, state, control, metrics, **kwargs):
+        metric_to_check = args.metric_for_best_model
+        if not metric_to_check.startswith("eval_"):
+            metric_to_check = f"eval_{metric_to_check}"
+        metric_value = metrics.get(metric_to_check)
+
+        if metric_value is None:
+            logger.warning(f'early stopping required metric_for_best_model, but did not find {metric_to_check} so early stopping is disabled')
+            return
+
         self.check_metric_value(args, state, control, metric_value)
-        print(state.early_stopping_patience_counter)
-        print(args.early_stopping_patience)
         if (
             args.early_stopping_patience is not None
             and state.early_stopping_patience_counter >= args.early_stopping_patience
