@@ -185,7 +185,7 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
         **kwargs,
     ) -> BatchEncoding:
         if max_length is None:
-            max_length = self.max_len
+            max_length = self.model_max_length
         self.set_src_lang_special_tokens(src_lang)
         model_inputs: BatchEncoding = self(
             src_texts,
