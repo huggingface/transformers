@@ -119,7 +119,7 @@ extras["dev"] = extras["all"] + extras["testing"] + extras["quality"] + extras["
 
 setup(
     name="transformers",
-    version="4.0.0-dev",
+    version="4.0.0-rc-1",
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
