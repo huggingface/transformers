@@ -36,6 +36,9 @@ class DependencyVersionCheckTest(TestCasePlus):
         # gt
         require_version_core("numpy>1.0.0")
 
+        # requirement w/o version
+        require_version_core("numpy")
+
         # unmet requirements due to version conflict
         for req in ["numpy==1.0.0", "numpy>=1000.0.0", f"numpy<{numpy_ver}"]:
             try:
@@ -45,7 +48,7 @@ class DependencyVersionCheckTest(TestCasePlus):
                 self.assertIn("but found", str(e))
 
         # unmet requirements due to missing module
-        for req in ["numpipypie>1"]:
+        for req in ["numpipypie>1", "numpipypie2"]:
             try:
                 require_version_core(req)
             except pkg_resources.DistributionNotFound as e:

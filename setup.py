@@ -74,17 +74,19 @@ if stale_egg_info.exists():
 # 1. all version requirements should be in this table
 # 2. once modified, run: python setup.py --name to generate src/transformers/dependency_versions_table.py
 _deps = [
+    "flax==0.2.2",
+    "jax>=0.2.0",
+    "jaxlib==0.1.55",
+    "numpy",
+    "python>=3.6.0",
+    "regex!=2019.12.17",
     "tokenizers==0.9.4",
     "tqdm>=4.27",
-    "regex!=2019.12.17",
-    "jaxlib==0.1.55",
-    "jax>=0.2.0",
-    "flax==0.2.2",
-    "python>=3.6.0",
 ]
 
 # tokenizers: "tokenizers==0.9.4" lookup table
-deps = { b:a for a,b in (re.findall(r"^(([^!=<>]+)[!=<>].*$)", x)[0] for x in _deps) }
+# support non-versions file too so that they can be checked at run time
+deps = { b:a for a,b in (re.findall(r"^(([^!=<>]+)(?:[!=<>].*)?$)", x)[0] for x in _deps) }
 
 def deps_list(*pkgs):
     return [deps[pkg] for pkg in pkgs]
