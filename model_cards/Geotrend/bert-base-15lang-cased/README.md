@@ -13,6 +13,7 @@ We are sharing smaller versions of [bert-base-multilingual-cased](https://huggin
 Unlike [distilbert-base-multilingual-cased](https://huggingface.co/distilbert-base-multilingual-cased), our versions give exactly the same representations produced by the original model which preserves the original accuracy.
 
 The measurements below have been computed on a [Google Cloud n1-standard-1 machine (1 vCPU, 3.75 GB)](https://cloud.google.com/compute/docs/machine-types\#n1_machine_type):
+
 |             Model               | Num parameters |   Size   |  Memory  | Loading time |
 | ------------------------------- | -------------- | -------- | -------- | ------------ |
 | bert-base-multilingual-cased    |   178 million  |  714 MB  | 1400 MB  |    4.2 sec   |
