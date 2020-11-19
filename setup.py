@@ -166,7 +166,6 @@ setup(
         "dataclasses;python_version<'3.7'",
         # utilities from PyPA to e.g., compare versions
         "packaging",
-        "pkg_resources",
         # filesystem locks, e.g., to prevent parallel downloads
         "filelock",
         # for downloading models over HTTPS
