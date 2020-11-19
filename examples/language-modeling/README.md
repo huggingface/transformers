@@ -164,7 +164,7 @@ context length for permutation language modeling.
 The `--max_span_length` flag may also be used to limit the length of a span of masked tokens used 
 for permutation language modeling.
 
-Here is how to fine-tun XLNet on wikitext-2:
+Here is how to fine-tune XLNet on wikitext-2:
 
 ```bash
 python run_plm.py \
