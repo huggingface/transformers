@@ -7,11 +7,6 @@ customize it to your needs if you need extra processing on your datasets.
 It will either run on a datasets hosted on our [hub](https://huggingface.co/datasets) or with your own text files for
 training and validation.
 
-<!--
-Remove this part when there is a new release of datasets and we have pinned the requirements to it
--->
-**Important note:** The current version of the script only works with a source install of 🤗 Datasets.
-
 The following example fine-tunes BERT on CoNLL-2003:
 
 ```bash
