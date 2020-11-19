@@ -480,17 +480,21 @@ class PrinterCallback(TrainerCallback):
 
 class EarlyStoppingCallback(TrainerCallback):
     """
-        An early stopping callback
+    An early stopping callback
 
-        Args:
-           early_stopping_patience (:obj:`int`):
-                Use with :obj:`metric_for_best_model` to stop training when the specified metric worsens for
-                :obj:`early_stopping_patience` evaluation calls. early_stopping_threshold(:obj:`float`, `optional`):
-                Use with TrainingAruments :obj:`metric_for_best_model` and :obj:`early_stopping_patience` to denote how
-                much the specified metric must improve to satisfy early stopping conditions. `
+    Args:
+       early_stopping_patience (:obj:`int`):
+            Use with :obj:`metric_for_best_model` to stop training when the specified metric worsens for
+            :obj:`early_stopping_patience` evaluation calls.
+       early_stopping_threshold(:obj:`float`, `optional`):
+            Use with TrainingAruments :obj:`metric_for_best_model` and :obj:`early_stopping_patience` to denote how
+            much the specified metric must improve to satisfy early stopping conditions. `
 
-        Internal State: early_stopping_patience_counter (:obj:`int`): The number of times validation metrics failed to
-        improve.
+    Internal State: early_stopping_patience_counter (:obj:`int`): The number of times validation metrics failed to
+    improve.
+
+    This callback depends on :class:`~transformers.TrainingArguments` argument load_best_model_at_end functionality to
+    set best_metric in :class:`~transformers.TrainerState`.
     """
 
     def __init__(self, early_stopping_patience: int = 1, early_stopping_threshold: Optional[float] = 0.0):
