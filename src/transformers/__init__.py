@@ -766,7 +766,10 @@ if is_tf_available():
     from .models.longformer import (
         TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFLongformerForMaskedLM,
+        TFLongformerForMultipleChoice,
         TFLongformerForQuestionAnswering,
+        TFLongformerForSequenceClassification,
+        TFLongformerForTokenClassification,
         TFLongformerModel,
         TFLongformerSelfAttention,
     )
