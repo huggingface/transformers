@@ -38,7 +38,6 @@ from ...modeling_tf_outputs import (
 # Public API
 from ...modeling_tf_utils import (
     DUMMY_INPUTS,
-    TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
     TFSharedEmbeddings,
     TFWrappedEmbeddings,
@@ -1200,7 +1199,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
 
     def get_encoder(self):
         return self.model.encoder
-    
+
     def compute_loss(self, labels, logits):
         """CrossEntropyLoss that ignores pad tokens"""
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
