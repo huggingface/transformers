@@ -230,7 +230,7 @@ SLOW_TOKENIZER_MAPPING[HerbertTokenizer] = HerbertTokenizerFast
 
 def tokenizer_class_from_name(class_name: str):
     all_tokenizer_classes = (
-        [v[0] for v in TOKENIZER_MAPPING.values()]
+        [v[0] for v in TOKENIZER_MAPPING.values() if v[0] is not None]
         + [v[1] for v in TOKENIZER_MAPPING.values() if v[1] is not None]
         + NO_CONFIG_TOKENIZER
     )
