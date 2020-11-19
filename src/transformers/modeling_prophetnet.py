@@ -1789,8 +1789,8 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
                 encoder_attentions=outputs.encoder_attentions,
             )
 
-    def _compute_loss(self, logits, labels):
-        expend_targets = labels.new_zeros(self.config.ngram, labels.size(0), labels.size(1)).fill_(-100)
+    def _compute_loss(self, logits, labels, ignore_index=-100):
+        expend_targets = labels.new_zeros(self.config.ngram, labels.size(0), labels.size(1)).fill_(ignore_index)
 
         for i in range(self.config.ngram):
             if i > 0 and self.disable_ngram_loss:
@@ -1807,7 +1807,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
 
         if self.config.eps > 0.0:
             smooth_loss = -lprobs.sum(dim=-1, keepdim=True)
-            non_masked_tokens = expend_targets.ne(-100).view(-1)
+            non_masked_tokens = expend_targets.ne(ignore_index).view(-1)
             smooth_loss = smooth_loss[non_masked_tokens]
             smooth_loss = smooth_loss.mean()
 
@@ -2006,8 +2006,8 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
                 cross_attentions=outputs.cross_attentions,
             )
 
-    def _compute_loss(self, logits, labels):
-        expend_targets = labels.new_zeros(self.config.ngram, labels.size(0), labels.size(1)).fill_(-100)
+    def _compute_loss(self, logits, labels, ignore_index=-100):
+        expend_targets = labels.new_zeros(self.config.ngram, labels.size(0), labels.size(1)).fill_(ignore_index)
 
         for i in range(self.config.ngram):
             if i > 0 and self.disable_ngram_loss:
@@ -2024,7 +2024,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
 
         if self.config.eps > 0.0:
             smooth_loss = -lprobs.sum(dim=-1, keepdim=True)
-            non_masked_tokens = expend_targets.ne(-100).view(-1)
+            non_masked_tokens = expend_targets.ne(ignore_index).view(-1)
             smooth_loss = smooth_loss[non_masked_tokens]
             smooth_loss = smooth_loss.mean()
 
