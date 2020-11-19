@@ -237,7 +237,6 @@ def tokenizer_class_from_name(class_name: str):
     for c in all_tokenizer_classes:
         if c.__name__ == class_name:
             return c
-    raise ValueError(f"There is no tokenizer class named {class_name}.")
 
 
 class AutoTokenizer:
