@@ -499,7 +499,7 @@ class EarlyStoppingCallback(TrainerCallback):
     An early stopping callback
     """
 
-    def check_if_metric_value(self, args, state, control, metric_value):
+    def check_metric_value(self, args, state, control, metric_value):
         # best_metric is set by code for load_best_model
         operator = np.greater if args.greater_is_better else np.less
         if state.best_metric is None or (
@@ -511,7 +511,7 @@ class EarlyStoppingCallback(TrainerCallback):
             state.early_stopping_patience_counter += 1
 
     def on_best_metric_check(self, args, state, control, metric_value, **kwargs):
-        self.check_if_metric_value(args, state, control, metric_value)
+        self.check_metric_value(args, state, control, metric_value)
         print(state.early_stopping_patience_counter)
         print(args.early_stopping_patience)
         if (
