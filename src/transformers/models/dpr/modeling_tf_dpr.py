@@ -82,7 +82,7 @@ class TFDPRContextEncoderOutput(ModelOutput):
             heads.
     """
 
-    pooler_output: tf.Tensor
+    pooler_output: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
 
@@ -110,7 +110,7 @@ class TFDPRQuestionEncoderOutput(ModelOutput):
             heads.
     """
 
-    pooler_output: tf.Tensor
+    pooler_output: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
 
@@ -141,7 +141,7 @@ class TFDPRReaderOutput(ModelOutput):
             heads.
     """
 
-    start_logits: tf.Tensor
+    start_logits: tf.Tensor = None
     end_logits: tf.Tensor = None
     relevance_logits: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
@@ -181,7 +181,7 @@ class TFDPREncoder(TFPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.bert_model.return_dict
 
         outputs = self.bert_model(
-            inputs=input_ids,
+            input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
@@ -228,7 +228,8 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
     def call(
         self,
         input_ids: Tensor,
-        attention_mask: Tensor,
+        attention_mask: Optional[Tensor] = None,
+        token_type_ids: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -242,6 +243,7 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
         outputs = self.encoder(
             input_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -474,19 +476,21 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            inputs_embeds = inputs[2] if len(inputs) > 2 else inputs_embeds
-            output_attentions = inputs[3] if len(inputs) > 3 else output_attentions
-            output_hidden_states = inputs[4] if len(inputs) > 4 else output_hidden_states
-            return_dict = inputs[5] if len(inputs) > 5 else return_dict
-            assert len(inputs) <= 6, "Too many inputs."
+            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
+            inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
+            output_attentions = inputs[4] if len(inputs) > 4 else output_attentions
+            output_hidden_states = inputs[5] if len(inputs) > 5 else output_hidden_states
+            return_dict = inputs[6] if len(inputs) > 6 else return_dict
+            assert len(inputs) <= 7, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
+            token_type_ids = inputs.get("token_type_ids", token_type_ids)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
             return_dict = inputs.get("return_dict", return_dict)
-            assert len(inputs) <= 6, "Too many inputs."
+            assert len(inputs) <= 7, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -573,19 +577,21 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            inputs_embeds = inputs[2] if len(inputs) > 2 else inputs_embeds
-            output_attentions = inputs[3] if len(inputs) > 3 else output_attentions
-            output_hidden_states = inputs[4] if len(inputs) > 4 else output_hidden_states
-            return_dict = inputs[5] if len(inputs) > 5 else return_dict
-            assert len(inputs) <= 6, "Too many inputs."
+            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
+            inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
+            output_attentions = inputs[4] if len(inputs) > 4 else output_attentions
+            output_hidden_states = inputs[5] if len(inputs) > 5 else output_hidden_states
+            return_dict = inputs[6] if len(inputs) > 6 else return_dict
+            assert len(inputs) <= 7, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
+            token_type_ids = inputs.get("token_type_ids", token_type_ids)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
             return_dict = inputs.get("return_dict", return_dict)
-            assert len(inputs) <= 6, "Too many inputs."
+            assert len(inputs) <= 7, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -650,6 +656,7 @@ class TFDPRReader(TFDPRPretrainedReader):
         self,
         inputs,
         attention_mask: Optional[Tensor] = None,
+        token_type_ids: Optional[Tensor] = None,
         inputs_embeds: Optional[Tensor] = None,
         output_attentions: bool = None,
         output_hidden_states: bool = None,
@@ -679,19 +686,21 @@ class TFDPRReader(TFDPRPretrainedReader):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            inputs_embeds = inputs[2] if len(inputs) > 2 else inputs_embeds
-            output_attentions = inputs[3] if len(inputs) > 3 else output_attentions
-            output_hidden_states = inputs[4] if len(inputs) > 4 else output_hidden_states
-            return_dict = inputs[5] if len(inputs) > 5 else return_dict
-            assert len(inputs) <= 6, "Too many inputs."
+            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
+            inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
+            output_attentions = inputs[4] if len(inputs) > 4 else output_attentions
+            output_hidden_states = inputs[5] if len(inputs) > 5 else output_hidden_states
+            return_dict = inputs[6] if len(inputs) > 6 else return_dict
+            assert len(inputs) <= 7, "Too many inputs."
         elif isinstance(inputs, (dict, BatchEncoding)):
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
+            token_type_ids = inputs.get("token_type_ids", token_type_ids)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
             return_dict = inputs.get("return_dict", return_dict)
-            assert len(inputs) <= 6, "Too many inputs."
+            assert len(inputs) <= 7, "Too many inputs."
         else:
             input_ids = inputs
 
@@ -713,9 +722,13 @@ class TFDPRReader(TFDPRPretrainedReader):
         if attention_mask is None:
             attention_mask = tf.ones(input_shape, dtype=tf.dtypes.int32)
 
+        if token_type_ids is None:
+            token_type_ids = tf.zeros(input_shape, dtype=tf.dtypes.int32)
+
         return self.span_predictor(
             input_ids,
-            attention_mask,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
