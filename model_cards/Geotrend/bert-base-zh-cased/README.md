@@ -1,10 +1,5 @@
 ---
-tags:
-- bert
-- zh
-- masked-lm
-- pytorch
-- tf
+language: zh
 
 datasets: wikipedia
 

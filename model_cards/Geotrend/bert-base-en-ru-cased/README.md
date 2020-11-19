@@ -1,10 +1,5 @@
 ---
-tags:
-- bert
-- multilingual
-- masked-lm
-- pytorch
-- tf
+language: multilingual
 
 datasets: wikipedia
 

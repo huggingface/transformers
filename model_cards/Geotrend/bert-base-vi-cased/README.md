@@ -1,10 +1,5 @@
 ---
-tags:
-- bert
-- vi
-- masked-lm
-- pytorch
-- tf
+language: vi
 
 datasets: wikipedia
 

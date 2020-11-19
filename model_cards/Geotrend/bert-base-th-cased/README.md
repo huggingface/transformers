@@ -1,10 +1,5 @@
 ---
-tags:
-- bert
-- th
-- masked-lm
-- pytorch
-- tf
+language: th
 
 datasets: wikipedia
 
