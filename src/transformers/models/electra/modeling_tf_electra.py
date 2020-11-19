@@ -916,6 +916,14 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
     def get_output_embeddings(self):
         return self.generator_lm_head
 
+    def resize_token_embeddings(self, new_num_tokens):
+        super().resize_token_embeddings(new_num_tokens=new_num_tokens)
+
+        if new_num_tokens is not None:
+            self.generator_lm_head.bias = self.add_weight(
+                shape=(new_num_tokens,), initializer="zeros", trainable=True, name="bias"
+            )
+
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,

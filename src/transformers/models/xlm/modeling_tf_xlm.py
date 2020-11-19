@@ -803,6 +803,14 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
     def get_output_embeddings(self):
         return self.pred_layer.input_embeddings
 
+    def resize_token_embeddings(self, new_num_tokens):
+        super().resize_token_embeddings(new_num_tokens=new_num_tokens)
+
+        if new_num_tokens is not None:
+            self.pred_layer.bias = self.add_weight(
+                shape=(new_num_tokens,), initializer="zeros", trainable=True, name="bias"
+            )
+
     def prepare_inputs_for_generation(self, inputs, **kwargs):
         mask_token_id = self.config.mask_token_id
         lang_id = self.config.lang_id

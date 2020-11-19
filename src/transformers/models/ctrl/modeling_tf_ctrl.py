@@ -629,6 +629,14 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
     def get_output_embeddings(self):
         return self.lm_head.input_embeddings
 
+    def resize_token_embeddings(self, new_num_tokens):
+        super().resize_token_embeddings(new_num_tokens=new_num_tokens)
+
+        if new_num_tokens is not None:
+            self.lm_head.bias = self.add_weight(
+                shape=(new_num_tokens,), initializer="zeros", trainable=True, name="bias"
+            )
+
     def prepare_inputs_for_generation(self, inputs, past, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
         if past:

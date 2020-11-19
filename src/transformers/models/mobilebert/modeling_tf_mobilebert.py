@@ -1026,6 +1026,20 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
     def get_output_embeddings(self):
         return self.mobilebert.embeddings
 
+    def resize_token_embeddings(self, new_num_tokens):
+        super().resize_token_embeddings(new_num_tokens=new_num_tokens)
+
+        if new_num_tokens is not None:
+            self.predictions.predictions.bias = self.add_weight(
+                shape=(new_num_tokens,), initializer="zeros", trainable=True, name="bias"
+            )
+            self.predictions.predictions.decoder = self.add_weight(
+                shape=(new_num_tokens, self.config.embedding_size),
+                initializer="zeros",
+                trainable=True,
+                name="decoder/weight",
+            )
+
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFMobileBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -1118,6 +1132,20 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
 
     def get_output_embeddings(self):
         return self.mobilebert.embeddings
+
+    def resize_token_embeddings(self, new_num_tokens):
+        super().resize_token_embeddings(new_num_tokens=new_num_tokens)
+
+        if new_num_tokens is not None:
+            self.mlm.predictions.bias = self.add_weight(
+                shape=(new_num_tokens,), initializer="zeros", trainable=True, name="bias"
+            )
+            self.mlm.predictions.decoder = self.add_weight(
+                shape=(new_num_tokens, self.config.embedding_size),
+                initializer="zeros",
+                trainable=True,
+                name="decoder/weight",
+            )
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
