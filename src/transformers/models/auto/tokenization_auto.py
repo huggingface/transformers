@@ -22,7 +22,7 @@ from ...file_utils import is_sentencepiece_available, is_tokenizers_available
 from ...utils import logging
 from ..bart.tokenization_bart import BartTokenizer
 from ..bert.tokenization_bert import BertTokenizer
-from ..bert_japanese.tokenization_bert_japanese import BertJapaneseTokenizer  # noqa: F401
+from ..bert_japanese.tokenization_bert_japanese import BertJapaneseTokenizer
 from ..bertweet.tokenization_bertweet import BertweetTokenizer
 from ..blenderbot.tokenization_blenderbot import BlenderbotSmallTokenizer
 from ..ctrl.tokenization_ctrl import CTRLTokenizer
@@ -185,8 +185,6 @@ TOKENIZER_MAPPING = OrderedDict(
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
         (BartConfig, (BartTokenizer, BartTokenizerFast)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
-        (RobertaConfig, (BertweetTokenizer, None)),
-        (RobertaConfig, (PhobertTokenizer, None)),
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
         (ReformerConfig, (ReformerTokenizer, ReformerTokenizerFast)),
         (ElectraConfig, (ElectraTokenizer, ElectraTokenizerFast)),
@@ -195,7 +193,6 @@ TOKENIZER_MAPPING = OrderedDict(
         (LayoutLMConfig, (LayoutLMTokenizer, LayoutLMTokenizerFast)),
         (DPRConfig, (DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast)),
         (SqueezeBertConfig, (SqueezeBertTokenizer, SqueezeBertTokenizerFast)),
-        (BertConfig, (HerbertTokenizer, HerbertTokenizerFast)),
         (BertConfig, (BertTokenizer, BertTokenizerFast)),
         (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),
         (GPT2Config, (GPT2Tokenizer, GPT2TokenizerFast)),
@@ -213,11 +210,34 @@ TOKENIZER_MAPPING = OrderedDict(
     ]
 )
 
+# For tokenizers that do not have a config
+NO_CONFIG_TOKENIZER = [
+    BertJapaneseTokenizer,
+    BertweetTokenizer,
+    HerbertTokenizer,
+    HerbertTokenizerFast,
+    PhobertTokenizer,
+]
+
+
 SLOW_TOKENIZER_MAPPING = {
     k: (v[0] if v[0] is not None else v[1])
     for k, v in TOKENIZER_MAPPING.items()
     if (v[0] is not None or v[1] is not None)
 }
+SLOW_TOKENIZER_MAPPING[HerbertTokenizer] = HerbertTokenizerFast
+
+
+def tokenizer_class_from_name(class_name: str):
+    all_tokenizer_classes = (
+        [v[0] for v in TOKENIZER_MAPPING.values()]
+        + [v[1] for v in TOKENIZER_MAPPING.values() if v[1] is not None]
+        + NO_CONFIG_TOKENIZER
+    )
+    for c in all_tokenizer_classes:
+        if c.__name__ == class_name:
+            return c
+    raise ValueError(f"There is no tokenizer class named {class_name}.")
 
 
 class AutoTokenizer:
@@ -313,10 +333,10 @@ class AutoTokenizer:
             tokenizer_class = None
             if use_fast and not config.tokenizer_class.endswith("Fast"):
                 tokenizer_class_candidate = f"{config.tokenizer_class}Fast"
-                tokenizer_class = globals().get(tokenizer_class_candidate)
+                tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
             if tokenizer_class is None:
                 tokenizer_class_candidate = config.tokenizer_class
-                tokenizer_class = globals().get(tokenizer_class_candidate)
+                tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
 
             if tokenizer_class is None:
                 raise ValueError(
