@@ -44,7 +44,7 @@ the sequences for sequence-to-sequence fine-tuning.
 
     example_english_phrase = "UN Chief Says There Is No Military Solution in Syria"
     expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
-    batch = tokenizer.prepare_seq2seq_batch(example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian)
+    batch = tokenizer.prepare_seq2seq_batch(example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian, return_tensors="pt")
     model(input_ids=batch['input_ids'], labels=batch['labels']) # forward pass
 
 - Generation
@@ -58,7 +58,7 @@ the sequences for sequence-to-sequence fine-tuning.
     model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-en-ro")
     tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro")
     article = "UN Chief Says There Is No Military Solution in Syria"
-    batch = tokenizer.prepare_seq2seq_batch(src_texts=[article], src_lang="en_XX")
+    batch = tokenizer.prepare_seq2seq_batch(src_texts=[article], src_lang="en_XX", return_tensors="pt")
     translated_tokens = model.generate(**batch, decoder_start_token_id=tokenizer.lang_code_to_id["ro_RO"])
     translation = tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
     assert translation == "Şeful ONU declară că nu există o soluţie militară în Siria"

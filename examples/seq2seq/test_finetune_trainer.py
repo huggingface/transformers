@@ -4,7 +4,13 @@ from unittest.mock import patch
 
 from transformers import BertTokenizer, EncoderDecoderModel
 from transformers.file_utils import is_datasets_available
-from transformers.testing_utils import TestCasePlus, execute_subprocess_async, get_gpu_count, slow
+from transformers.testing_utils import (
+    TestCasePlus,
+    execute_subprocess_async,
+    get_gpu_count,
+    require_torch_non_multi_gpu_but_fix_me,
+    slow,
+)
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import set_seed
 
@@ -46,6 +52,7 @@ class TestFinetuneTrainer(TestCasePlus):
         assert "test_results.json" in contents
 
     @slow
+    @require_torch_non_multi_gpu_but_fix_me
     def test_finetune_bert2bert(self):
         if not is_datasets_available():
             return
@@ -138,7 +145,7 @@ class TestFinetuneTrainer(TestCasePlus):
             per_device_train_batch_size=batch_size,
             per_device_eval_batch_size=batch_size,
             predict_with_generate=True,
-            evaluate_during_training=True,
+            evaluation_strategy="steps",
             do_train=True,
             do_eval=True,
             warmup_steps=0,
@@ -179,7 +186,7 @@ class TestFinetuneTrainer(TestCasePlus):
             --per_device_eval_batch_size 4
             --learning_rate 3e-3
             --warmup_steps 8
-            --evaluate_during_training
+            --evaluation_strategy steps
             --predict_with_generate
             --logging_steps 0
             --save_steps {str(eval_steps)}

@@ -27,7 +27,7 @@ if is_tf_available():
     import numpy
     import tensorflow as tf
 
-    from transformers.modeling_tf_roberta import (
+    from transformers.models.roberta.modeling_tf_roberta import (
         TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFRobertaForMaskedLM,
         TFRobertaForMultipleChoice,
@@ -97,7 +97,6 @@ class TFRobertaModelTester:
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
-            return_dict=True,
         )
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels

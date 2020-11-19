@@ -27,7 +27,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TF_MODEL_FOR_PRETRAINING_MAPPING
-    from transformers.modeling_tf_bert import (
+    from transformers.models.bert.modeling_tf_bert import (
         TFBertForMaskedLM,
         TFBertForMultipleChoice,
         TFBertForNextSentencePrediction,
@@ -120,7 +120,6 @@ class TFBertModelTester:
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
-            return_dict=True,
         )
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -341,6 +340,7 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertTrue(layer.split("_")[0] in ["dropout", "classifier"])
 
 
+@require_tf
 class TFBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):

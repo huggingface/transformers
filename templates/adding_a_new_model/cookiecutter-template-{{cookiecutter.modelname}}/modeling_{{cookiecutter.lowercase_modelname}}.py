@@ -25,13 +25,12 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Config
-from .file_utils import (
+from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
 )
-from .modeling_outputs import (
+from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
     MaskedLMOutput,
@@ -40,15 +39,16 @@ from .modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from .modeling_utils import (
+from ...modeling_utils import (
     PreTrainedModel,
     SequenceSummary,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
-from .utils import logging
-from .activations import ACT2FN
+from ...utils import logging
+from ...activations import ACT2FN
+from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Config
 
 
 logger = logging.get_logger(__name__)
@@ -140,7 +140,7 @@ def mish(x):
     return x * torch.tanh(nn.functional.softplus(x))
 
 
-# Copied from transformers.modeling_bert.BertEmbeddings with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}Embeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -183,7 +183,7 @@ class {{cookiecutter.camelcase_modelname}}Embeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.modeling_bert.BertSelfAttention with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}SelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -262,7 +262,7 @@ class {{cookiecutter.camelcase_modelname}}SelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.modeling_bert.BertSelfOutput with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}SelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -277,7 +277,7 @@ class {{cookiecutter.camelcase_modelname}}SelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.modeling_bert.BertAttention with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}Attention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -325,7 +325,7 @@ class {{cookiecutter.camelcase_modelname}}Attention(nn.Module):
         return outputs
 
 
-# Copied from transformers.modeling_bert.BertIntermediate with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}Intermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -341,7 +341,7 @@ class {{cookiecutter.camelcase_modelname}}Intermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.modeling_bert.BertOutput with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}Output(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -356,7 +356,7 @@ class {{cookiecutter.camelcase_modelname}}Output(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.modeling_bert.BertLayer with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}Layer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -416,7 +416,7 @@ class {{cookiecutter.camelcase_modelname}}Layer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.modeling_bert.BertEncoder with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -481,7 +481,7 @@ class {{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
         )
 
 
-# Copied from transformers.modeling_bert.BertPredictionHead with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_bert.BertPredictionHead with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}PredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -499,7 +499,7 @@ class {{cookiecutter.camelcase_modelname}}PredictionHeadTransform(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.modeling_bert.BertLMPredictionHead with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}LMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -520,7 +520,7 @@ class {{cookiecutter.camelcase_modelname}}LMPredictionHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.modeling_bert.BertOnlyMLMHead with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}OnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()

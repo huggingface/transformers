@@ -142,7 +142,6 @@ class ProphetNetModelTester:
             disable_ngram_loss=self.disable_ngram_loss,
             max_position_embeddings=self.max_position_embeddings,
             is_encoder_decoder=self.is_encoder_decoder,
-            return_dict=True,
         )
 
         return (
@@ -344,7 +343,6 @@ class ProphetNetModelTester:
                 decoder_input_ids=decoder_input_ids,
                 attention_mask=attention_mask,
                 decoder_attention_mask=decoder_attention_mask,
-                return_dict=True,
             )
 
             tied_model_result = tied_model(
@@ -352,7 +350,6 @@ class ProphetNetModelTester:
                 decoder_input_ids=decoder_input_ids,
                 attention_mask=attention_mask,
                 decoder_attention_mask=decoder_attention_mask,
-                return_dict=True,
             )
 
             # check that models has less parameters
@@ -419,7 +416,6 @@ class ProphetNetModelTester:
                 attention_mask=attention_mask,
                 decoder_attention_mask=decoder_attention_mask,
                 labels=lm_labels,
-                return_dict=True,
             )
         self.parent.assertTrue(torch.allclose(result.loss, torch.tensor(128.2925, device=torch_device), atol=1e-3))
 
@@ -433,9 +429,7 @@ class ProphetNetModelTester:
         model.to(torch_device)
         model.eval()
 
-        outputs_no_mask = model(
-            input_ids=input_ids[:, :5], decoder_input_ids=decoder_input_ids[:, :5], return_dict=True
-        )
+        outputs_no_mask = model(input_ids=input_ids[:, :5], decoder_input_ids=decoder_input_ids[:, :5])
         attention_mask = torch.ones_like(input_ids)
         decoder_attention_mask = torch.ones_like(decoder_input_ids)
 
@@ -446,7 +440,6 @@ class ProphetNetModelTester:
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
-            return_dict=True,
         )
 
         # check encoder
@@ -524,7 +517,6 @@ class ProphetNetStandaloneDecoderModelTester:
         bos_token_id=1,
         eos_token_id=2,
         ngram=2,
-        return_dict=True,
         num_buckets=32,
         relative_max_distance=128,
         disable_ngram_loss=False,
@@ -562,7 +554,6 @@ class ProphetNetStandaloneDecoderModelTester:
         self.max_position_embeddings = max_position_embeddings
         self.add_cross_attention = add_cross_attention
         self.is_encoder_decoder = is_encoder_decoder
-        self.return_dict = return_dict
 
         self.scope = None
         self.decoder_key_length = decoder_seq_length
@@ -602,7 +593,6 @@ class ProphetNetStandaloneDecoderModelTester:
             max_position_embeddings=self.max_position_embeddings,
             add_cross_attention=self.add_cross_attention,
             is_encoder_decoder=self.is_encoder_decoder,
-            return_dict=self.return_dict,
         )
 
         return (
@@ -757,7 +747,6 @@ class ProphetNetStandaloneEncoderModelTester:
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        return_dict=True,
         num_buckets=32,
         relative_max_distance=128,
         disable_ngram_loss=False,
@@ -794,7 +783,6 @@ class ProphetNetStandaloneEncoderModelTester:
         self.max_position_embeddings = max_position_embeddings
         self.add_cross_attention = add_cross_attention
         self.is_encoder_decoder = is_encoder_decoder
-        self.return_dict = return_dict
 
         self.scope = None
         self.decoder_key_length = decoder_seq_length
@@ -829,7 +817,6 @@ class ProphetNetStandaloneEncoderModelTester:
             max_position_embeddings=self.max_position_embeddings,
             add_cross_attention=self.add_cross_attention,
             is_encoder_decoder=self.is_encoder_decoder,
-            return_dict=self.return_dict,
         )
 
         return (
@@ -919,7 +906,6 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     # methods overwrite method in `test_modeling_common.py`
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
 
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
@@ -933,7 +919,6 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -1121,7 +1106,6 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
             attention_mask=None,
             encoder_outputs=None,
             decoder_input_ids=decoder_prev_ids,
-            return_dict=True,
         )
         output_predited_logits = output[0]
         expected_shape = torch.Size((1, 12, 30522))
@@ -1143,9 +1127,7 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
         assert torch.allclose(encoder_outputs[:, :3, :3], expected_encoder_outputs_slice, atol=1e-4)
 
         # decoder outputs
-        decoder_outputs = model.prophetnet.decoder(
-            decoder_prev_ids, encoder_hidden_states=encoder_outputs, return_dict=True
-        )
+        decoder_outputs = model.prophetnet.decoder(decoder_prev_ids, encoder_hidden_states=encoder_outputs)
         predicting_streams = decoder_outputs[1].view(1, model.config.ngram, 12, -1)
         predicting_streams_logits = model.lm_head(predicting_streams)
         next_first_stream_logits = predicting_streams_logits[:, 0]

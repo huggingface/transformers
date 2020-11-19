@@ -24,10 +24,7 @@ from typing import Dict, List, Tuple
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
-# from transformers.tokenization_openai import OpenAIGPTTokenizer
-from transformers.utils import sentencepiece_model_pb2 as model
-
-from .file_utils import requires_sentencepiece
+from .file_utils import requires_protobuf, requires_sentencepiece
 
 
 class SentencePieceExtractor:
@@ -62,12 +59,6 @@ class SentencePieceExtractor:
 
 def check_number_comma(piece: str) -> bool:
     return len(piece) < 2 or piece[-1] != "," or not piece[-2].isdigit()
-
-
-def get_proto(filename: str):
-    m = model.ModelProto()
-    m.ParseFromString(open(filename, "rb").read())
-    return m
 
 
 class Converter:
@@ -292,8 +283,15 @@ class RobertaConverter(Converter):
 
 class SpmConverter(Converter):
     def __init__(self, *args):
+        requires_protobuf(self)
+
         super().__init__(*args)
-        self.proto = get_proto(self.original_tokenizer.vocab_file)
+
+        from .utils import sentencepiece_model_pb2 as model_pb2
+
+        m = model_pb2.ModelProto()
+        m.ParseFromString(open(self.original_tokenizer.vocab_file, "rb").read())
+        self.proto = m
 
     def vocab(self, proto):
         return [(piece.piece, piece.score) for piece in proto.pieces]
