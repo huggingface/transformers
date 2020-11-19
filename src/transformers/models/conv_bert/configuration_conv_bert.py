@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright The HuggingFace Team and The HuggingFace Inc. team.
+# Copyright 2020 The HuggingFace Team and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 CONV_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "brand-new-bert-base-cased": "https://huggingface.co/brand-new-bert-base-cased/resolve/main/config.json",
+    "convbert-base-uncased": "https://huggingface.co/convbert-base-uncased/resolve/main/config.json",
     # See all ConvBERT models at https://huggingface.co/models?filter=conv_bert
 }
 
@@ -31,7 +31,7 @@ class ConvBertConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a :class:`~transformers.ConvBertModel`.
     It is used to instantiate an ConvBERT model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the ConvBERT `brand-new-bert-base-cased <https://huggingface.co/brand-new-bert-base-cased>`__ architecture.
+    the ConvBERT `convbert-base-uncased <https://huggingface.co/convbert-base-uncased>`__ architecture.
 
     Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
     to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
@@ -75,10 +75,10 @@ class ConvBertConfig(PretrainedConfig):
 
         >>> from transformers import ConvBertModel, ConvBertConfig
 
-        >>> # Initializing a ConvBERT brand-new-bert-base-cased style configuration
+        >>> # Initializing a ConvBERT convbert-base-uncased style configuration
         >>> configuration = ConvBertConfig()
 
-        >>> # Initializing a model from the brand-new-bert-base-cased style configuration
+        >>> # Initializing a model from the convbert-base-uncased style configuration
         >>> model = ConvBertModel(configuration)
 
         >>> # Accessing the model configuration
@@ -111,7 +111,7 @@ class ConvBertConfig(PretrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            **kwargs
+            **kwargs,
         )
 
         self.vocab_size = vocab_size
@@ -126,4 +126,3 @@ class ConvBertConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-
