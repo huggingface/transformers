@@ -181,7 +181,7 @@ class TrainingArguments:
               :obj:`"eval_loss"`.
             - :obj:`False` if :obj:`metric_for_best_model` is not set, or set to :obj:`"loss"` or :obj:`"eval_loss"`.
         early_stopping_patience (:obj:`int`, `optional`):
-            Use with :obj:`metric_for_best_model` to stop training if the specified metric worsens for
+            Use with :obj:`metric_for_best_model` to stop training when the specified metric worsens for
             :obj:`early_stopping_patience` evaluation calls.
         early_stopping_threshold(:obj:`float`, `optional`):
             Use with :obj:`metric_for_best_model` and :obj:`early_stopping_patience` to denote how much the specified
