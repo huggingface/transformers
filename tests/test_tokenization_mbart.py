@@ -138,7 +138,7 @@ class MBartEnroIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.tokenizer: MBartTokenizer = AutoTokenizer.from_pretrained(cls.checkpoint_name)
+        cls.tokenizer: MBartTokenizer = MBartTokenizer.from_pretrained(cls.checkpoint_name)
         cls.pad_token_id = 1
         return cls
 
