@@ -164,9 +164,10 @@ setup(
         deps["tokenizers"],
         # dataclasses for Python versions that don't have it
         "dataclasses;python_version<'3.7'",
-        # utilities from PyPA to e.g. compare versions
+        # utilities from PyPA to e.g., compare versions
         "packaging",
-        # filesystem locks e.g. to prevent parallel downloads
+        "pkg_resources",
+        # filesystem locks, e.g., to prevent parallel downloads
         "filelock",
         # for downloading models over HTTPS
         "requests",
