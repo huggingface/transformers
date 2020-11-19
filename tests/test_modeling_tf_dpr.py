@@ -123,8 +123,6 @@ class TFDPRModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            # MODIFY
-            return_dict=False,
         )
         config = DPRConfig(projection_dim=self.projection_dim, **config.to_dict())
 
@@ -136,7 +134,7 @@ class TFDPRModelTester:
         model = TFDPRContextEncoder(config=config)
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids, return_dict=True)  # MODIFY
+        result = model(input_ids)
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.projection_dim or self.hidden_size))
 
     def create_and_check_dpr_question_encoder(
@@ -145,14 +143,14 @@ class TFDPRModelTester:
         model = TFDPRQuestionEncoder(config=config)
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids, return_dict=True)  # MODIFY
+        result = model(input_ids)
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.projection_dim or self.hidden_size))
 
     def create_and_check_dpr_reader(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFDPRReader(config=config)
-        result = model(input_ids, attention_mask=input_mask, return_dict=True)  # MODIFY
+        result = model(input_ids, attention_mask=input_mask)
 
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
@@ -267,7 +265,7 @@ class TFDPRModelTest(TFModelTesterMixin, unittest.TestCase):
 class TFDPRModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        model = TFDPRQuestionEncoder.from_pretrained("facebook/dpr-question_encoder-single-nq-base", return_dict=False)
+        model = TFDPRQuestionEncoder.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
 
         input_ids = tf.constant(
             [[101, 7592, 1010, 2003, 2026, 3899, 10140, 1029, 102]]

@@ -82,7 +82,7 @@ class TFDPRContextEncoderOutput(ModelOutput):
             heads.
     """
 
-    pooler_output: tf.Tensor
+    pooler_output: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
 
@@ -110,7 +110,7 @@ class TFDPRQuestionEncoderOutput(ModelOutput):
             heads.
     """
 
-    pooler_output: tf.Tensor
+    pooler_output: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
 
@@ -141,7 +141,7 @@ class TFDPRReaderOutput(ModelOutput):
             heads.
     """
 
-    start_logits: tf.Tensor
+    start_logits: tf.Tensor = None
     end_logits: tf.Tensor = None
     relevance_logits: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
