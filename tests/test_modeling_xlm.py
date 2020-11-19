@@ -37,7 +37,7 @@ if is_torch_available():
         XLMModel,
         XLMWithLMHeadModel,
     )
-    from transformers.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.xlm.modeling_xlm import XLM_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class XLMModelTester:
@@ -116,7 +116,6 @@ class XLMModelTester:
             use_proj=self.use_proj,
             num_labels=self.num_labels,
             bos_token_id=self.bos_token_id,
-            return_dict=True,
         )
 
         return (

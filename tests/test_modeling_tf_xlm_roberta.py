@@ -39,7 +39,7 @@ class TFFlaubertModelIntegrationTest(unittest.TestCase):
             "attention_mask": tf.convert_to_tensor([[1, 1, 1, 1, 1, 1]], dtype=tf.int32),
         }
 
-        output = model(features, return_dict=True)["last_hidden_state"]
+        output = model(features)["last_hidden_state"]
         expected_shape = tf.TensorShape((1, 6, 768))
         self.assertEqual(output.shape, expected_shape)
         # compare the actual values for a slice.

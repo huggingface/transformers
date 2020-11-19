@@ -50,7 +50,7 @@ XLMTokenizer
 XLM specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.modeling_xlm.XLMForQuestionAnsweringOutput
+.. autoclass:: transformers.models.xlm.modeling_xlm.XLMForQuestionAnsweringOutput
     :members:
 
 

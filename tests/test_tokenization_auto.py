@@ -27,8 +27,9 @@ from transformers import (
     RobertaTokenizer,
     RobertaTokenizerFast,
 )
-from transformers.configuration_auto import AutoConfig
-from transformers.configuration_roberta import RobertaConfig
+from transformers.models.auto.configuration_auto import AutoConfig
+from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING
+from transformers.models.roberta.configuration_roberta import RobertaConfig
 from transformers.testing_utils import (
     DUMMY_DIFF_TOKENIZER_IDENTIFIER,
     DUMMY_UNKWOWN_IDENTIFIER,
@@ -36,7 +37,6 @@ from transformers.testing_utils import (
     require_tokenizers,
     slow,
 )
-from transformers.tokenization_auto import TOKENIZER_MAPPING
 
 
 class AutoTokenizerTest(unittest.TestCase):
@@ -83,7 +83,7 @@ class AutoTokenizerTest(unittest.TestCase):
             else:
                 self.assertEqual(tokenizer.do_lower_case, False)
 
-            self.assertEqual(tokenizer.max_len, 512)
+            self.assertEqual(tokenizer.model_max_length, 512)
 
     @require_tokenizers
     def test_tokenizer_identifier_non_existent(self):
@@ -116,5 +116,5 @@ class AutoTokenizerTest(unittest.TestCase):
 
     @require_tokenizers
     def test_from_pretrained_use_fast_toggle(self):
-        self.assertIsInstance(AutoTokenizer.from_pretrained("bert-base-cased"), BertTokenizer)
-        self.assertIsInstance(AutoTokenizer.from_pretrained("bert-base-cased", use_fast=True), BertTokenizerFast)
+        self.assertIsInstance(AutoTokenizer.from_pretrained("bert-base-cased", use_fast=False), BertTokenizer)
+        self.assertIsInstance(AutoTokenizer.from_pretrained("bert-base-cased"), BertTokenizerFast)

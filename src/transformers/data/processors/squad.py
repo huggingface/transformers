@@ -7,8 +7,8 @@ import numpy as np
 from tqdm import tqdm
 
 from ...file_utils import is_tf_available, is_torch_available
-from ...tokenization_bert import whitespace_tokenize
-from ...tokenization_utils_base import PreTrainedTokenizerBase, TruncationStrategy
+from ...models.bert.tokenization_bert import whitespace_tokenize
+from ...tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase, TruncationStrategy
 from ...utils import logging
 from .utils import DataProcessor
 
@@ -145,11 +145,11 @@ def squad_convert_example_to_features(
     # in the way they compute mask of added tokens.
     tokenizer_type = type(tokenizer).__name__.replace("Tokenizer", "").lower()
     sequence_added_tokens = (
-        tokenizer.max_len - tokenizer.max_len_single_sentence + 1
+        tokenizer.model_max_length - tokenizer.max_len_single_sentence + 1
         if tokenizer_type in MULTI_SEP_TOKENS_TOKENIZERS_SET
-        else tokenizer.max_len - tokenizer.max_len_single_sentence
+        else tokenizer.model_max_length - tokenizer.max_len_single_sentence
     )
-    sequence_pair_added_tokens = tokenizer.max_len - tokenizer.max_len_sentences_pair
+    sequence_pair_added_tokens = tokenizer.model_max_length - tokenizer.max_len_sentences_pair
 
     span_doc_tokens = all_doc_tokens
     while len(spans) * doc_stride < len(all_doc_tokens):
@@ -765,6 +765,7 @@ class SquadFeatures:
         token_to_orig_map: mapping between the tokens and the original text, needed in order to identify the answer.
         start_position: start of the answer token index
         end_position: end of the answer token index
+        encoding: optionally store the BatchEncoding with the fast-tokenizer alignement methods.
     """
 
     def __init__(
@@ -784,6 +785,7 @@ class SquadFeatures:
         end_position,
         is_impossible,
         qas_id: str = None,
+        encoding: BatchEncoding = None,
     ):
         self.input_ids = input_ids
         self.attention_mask = attention_mask
@@ -802,6 +804,8 @@ class SquadFeatures:
         self.end_position = end_position
         self.is_impossible = is_impossible
         self.qas_id = qas_id
+
+        self.encoding = encoding
 
 
 class SquadResult:

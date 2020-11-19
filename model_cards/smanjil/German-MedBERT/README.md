@@ -2,6 +2,7 @@
 language: de
 tags: 
 - exbert
+- German
 ---
 
 <a href="https://huggingface.co/exbert/?model=smanjil/German-MedBERT">
@@ -10,7 +11,7 @@ tags:
 
 # German Medical BERT
 
-This is a fine-tuned model on Medical domain for German language and based on German BERT.
+This is a fine-tuned model on Medical domain for German language and based on German BERT. This model has only been trained to improve on target task (Masked Language Model). It can later be used to perform a downstream task of your needs, while I performed it for NTS-ICD-10 text classification task.
 
 ## Overview
 **Language model:** bert-base-german-cased
@@ -30,7 +31,12 @@ This is a fine-tuned model on Medical domain for German language and based on Ge
 - Although had to train for upto 25 epochs for classification.
 
 ## Performance (Micro precision, recall and f1 score for multilabel code classification)
-![performance](https://raw.githubusercontent.com/smanjil/finetune-lm/master/performance.png)
+
+|Models			|P	|R	|F1	|
+|:--------------	|:------|:------|:------|
+|German BERT		|86.04	|75.82	|80.60	|
+|German MedBERT-256	|87.41	|77.97	|82.42	|
+|German MedBERT-512	|87.75	|78.26	|82.73	|
 
 ## Author
 Manjil Shrestha: `shresthamanjil21 [at] gmail.com`
