@@ -20,7 +20,11 @@ import os
 import unittest
 
 from transformers.file_utils import cached_property
-from transformers.tokenization_blenderbot import VOCAB_FILES_NAMES, BlenderbotSmallTokenizer, BlenderbotTokenizer
+from transformers.models.blenderbot.tokenization_blenderbot import (
+    VOCAB_FILES_NAMES,
+    BlenderbotSmallTokenizer,
+    BlenderbotTokenizer,
+)
 
 from .test_tokenization_common import TokenizerTesterMixin
 

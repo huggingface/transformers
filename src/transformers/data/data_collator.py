@@ -261,7 +261,7 @@ class DataCollatorForLanguageModeling:
                 batch["input_ids"], special_tokens_mask=special_tokens_mask
             )
         else:
-            labels = batch["input_ids"]
+            labels = batch["input_ids"].clone()
             if self.tokenizer.pad_token_id is not None:
                 labels[labels == self.tokenizer.pad_token_id] = -100
             batch["labels"] = labels

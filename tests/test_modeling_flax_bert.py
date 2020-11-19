@@ -2,18 +2,17 @@ import unittest
 
 from numpy import ndarray
 
-from transformers import TensorType, is_flax_available, is_torch_available
+from transformers import BertTokenizerFast, TensorType, is_flax_available, is_torch_available
 from transformers.testing_utils import require_flax, require_torch
-from transformers.tokenization_bert_fast import BertTokenizerFast
 
 
 if is_flax_available():
-    from transformers.modeling_flax_bert import FlaxBertModel
+    from transformers.models.bert.modeling_flax_bert import FlaxBertModel
 
 if is_torch_available():
     import torch
 
-    from transformers.modeling_bert import BertModel
+    from transformers.models.bert.modeling_bert import BertModel
 
 
 @require_flax
@@ -29,7 +28,7 @@ class FlaxBertModelTest(unittest.TestCase):
                 # Check for simple input
                 pt_inputs = tokenizer.encode_plus("This is a simple input", return_tensors=TensorType.PYTORCH)
                 fx_inputs = tokenizer.encode_plus("This is a simple input", return_tensors=TensorType.JAX)
-                pt_outputs = pt_model(**pt_inputs)
+                pt_outputs = pt_model(**pt_inputs).to_tuple()
                 fx_outputs = fx_model(**fx_inputs)
 
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")

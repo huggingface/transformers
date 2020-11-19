@@ -21,6 +21,7 @@ import numpy as np
 from transformers import BatchEncoding, BertTokenizer, BertTokenizerFast, PreTrainedTokenizer, TensorType, TokenSpan
 from transformers.testing_utils import CaptureStderr, require_flax, require_tf, require_tokenizers, require_torch, slow
 from transformers.tokenization_gpt2 import GPT2Tokenizer
+from transformers.models.gpt2.tokenization_gpt2 import GPT2Tokenizer
 
 
 class TokenizerUtilsTest(unittest.TestCase):

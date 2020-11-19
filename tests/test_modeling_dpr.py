@@ -24,8 +24,10 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 
 
 if is_torch_available():
+    import torch
+
     from transformers import BertConfig, DPRConfig, DPRContextEncoder, DPRQuestionEncoder, DPRReader
-    from transformers.modeling_dpr import (
+    from transformers.models.dpr.modeling_dpr import (
         DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
         DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
         DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -115,7 +117,6 @@ class DPRModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            return_dict=True,
         )
         config = DPRConfig(projection_dim=self.projection_dim, **config.to_dict())
 
@@ -227,3 +228,36 @@ class DPRModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = DPRReader.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+
+@require_torch
+class DPRModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference_no_head(self):
+        model = DPRQuestionEncoder.from_pretrained("facebook/dpr-question_encoder-single-nq-base", return_dict=False)
+        model.to(torch_device)
+
+        input_ids = torch.tensor(
+            [[101, 7592, 1010, 2003, 2026, 3899, 10140, 1029, 102]], dtype=torch.long, device=torch_device
+        )  # [CLS] hello, is my dog cute? [SEP]
+        output = model(input_ids)[0]  # embedding shape = (1, 768)
+        # compare the actual values for a slice.
+        expected_slice = torch.tensor(
+            [
+                [
+                    0.03236253,
+                    0.12753335,
+                    0.16818509,
+                    0.00279786,
+                    0.3896933,
+                    0.24264945,
+                    0.2178971,
+                    -0.02335227,
+                    -0.08481959,
+                    -0.14324117,
+                ]
+            ],
+            dtype=torch.float,
+            device=torch_device,
+        )
+        self.assertTrue(torch.allclose(output[:, :10], expected_slice, atol=1e-4))

@@ -35,7 +35,7 @@ Here is an example of how to customize :class:`~transformers.Trainer` using a cu
     class MyTrainer(Trainer):
         def compute_loss(self, model, inputs):
             labels = inputs.pop("labels")
-            outputs = models(**inputs)
+            outputs = model(**inputs)
             logits = outputs[0]
             return my_custom_loss(logits, labels)
 

@@ -26,7 +26,7 @@ target_str = "us rejects charges against its ambassador in bolivia"
 input_ids = tokenizer(input_str, return_tensors="pt").input_ids
 labels = tokenizer(target_str, return_tensors="pt").input_ids
 
-loss = model(input_ids, labels=labels, return_dict=True).loss
+loss = model(input_ids, labels=labels).loss
 ```
 
 Note that since this model is a multi-lingual model it can be fine-tuned on all kinds of other languages.

@@ -4,7 +4,7 @@ language:
 - en
 datasets:
 - lince
-license: "MIT"
+license: mit
 tags:
 - codeswitching
 - spanish-english

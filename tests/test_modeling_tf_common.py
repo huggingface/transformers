@@ -35,6 +35,8 @@ if is_tf_available():
         TF_MODEL_FOR_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_MASKED_LM_MAPPING,
         TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+        TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
+        TF_MODEL_FOR_PRETRAINING_MAPPING,
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -95,10 +97,13 @@ class TFModelTesterMixin:
                 inputs_dict["end_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
             elif model_class in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values():
                 inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
+            elif model_class in TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.values():
+                inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
             elif model_class in [
                 *TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.values(),
                 *TF_MODEL_FOR_CAUSAL_LM_MAPPING.values(),
                 *TF_MODEL_FOR_MASKED_LM_MAPPING.values(),
+                *TF_MODEL_FOR_PRETRAINING_MAPPING.values(),
                 *TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.values(),
             ]:
                 inputs_dict["labels"] = tf.zeros(
@@ -279,7 +284,7 @@ class TFModelTesterMixin:
         if isinstance(after_outputs, tf.Tensor):
             out_1 = after_outputs.numpy()
         elif isinstance(after_outputs, dict):
-            out_1 = after_outputs[list(after_outputs.keys())[0]]
+            out_1 = after_outputs[list(after_outputs.keys())[0]].numpy()
         else:
             out_1 = after_outputs[0].numpy()
         out_2 = outputs[0].numpy()
@@ -449,7 +454,7 @@ class TFModelTesterMixin:
 
     def test_compile_tf_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
+        max_input = getattr(self.model_tester, "max_position_embeddings", 512)
         optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
         loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
@@ -458,14 +463,16 @@ class TFModelTesterMixin:
             if self.is_encoder_decoder:
                 input_ids = {
                     "decoder_input_ids": tf.keras.Input(
-                        batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"
+                        batch_shape=(2, max_input),
+                        name="decoder_input_ids",
+                        dtype="int32",
                     ),
-                    "input_ids": tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32"),
+                    "input_ids": tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32"),
                 }
             elif model_class in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
-                input_ids = tf.keras.Input(batch_shape=(4, 2, 2000), name="input_ids", dtype="int32")
+                input_ids = tf.keras.Input(batch_shape=(4, 2, max_input), name="input_ids", dtype="int32")
             else:
-                input_ids = tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32")
+                input_ids = tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32")
 
             # Prepare our model
             model = model_class(config)
@@ -505,11 +512,30 @@ class TFModelTesterMixin:
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
-
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", self.model_tester.seq_length)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
         decoder_key_length = getattr(self.model_tester, "key_length", decoder_seq_length)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+
+        def check_decoder_attentions_output(outputs):
+            out_len = len(outputs)
+            self.assertEqual(out_len % 2, 0)
+            decoder_attentions = outputs.decoder_attentions
+            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(decoder_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+            )
+
+        def check_encoder_attentions_output(outputs):
+            attentions = [
+                t.numpy() for t in (outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions)
+            ]
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+            )
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -517,58 +543,33 @@ class TFModelTesterMixin:
             config.output_hidden_states = False
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
-            attentions = [
-                t.numpy() for t in (outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions)
-            ]
-            self.assertEqual(model.config.output_hidden_states, False)
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-            )
             out_len = len(outputs)
+            self.assertEqual(config.output_hidden_states, False)
+            check_encoder_attentions_output(outputs)
 
             if self.is_encoder_decoder:
-                self.assertEqual(out_len % 2, 0)
-                decoder_attentions = outputs.decoder_attentions
-                self.assertEqual(model.config.output_hidden_states, False)
-                self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
-                self.assertListEqual(
-                    list(decoder_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
-                )
+                model = model_class(config)
+                outputs = model(self._prepare_for_class(inputs_dict, model_class))
+                self.assertEqual(config.output_hidden_states, False)
+                check_decoder_attentions_output(outputs)
 
             # Check that output attentions can also be changed via the config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
-            attentions = [
-                t.numpy() for t in (outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions)
-            ]
-            self.assertEqual(model.config.output_hidden_states, False)
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-            )
+            self.assertEqual(config.output_hidden_states, False)
+            check_encoder_attentions_output(outputs)
 
             # Check attention is always last and order is fine
             inputs_dict["output_attentions"] = True
             config.output_hidden_states = True
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
+
             self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
             self.assertEqual(model.config.output_hidden_states, True)
-
-            attentions = [
-                t.numpy() for t in (outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions)
-            ]
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-            )
+            check_encoder_attentions_output(outputs)
 
     def test_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -576,10 +577,12 @@ class TFModelTesterMixin:
         def check_hidden_states_output(config, inputs_dict, model_class):
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
-            hidden_states = [t.numpy() for t in outputs[-1]]
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
             )
+
+            hidden_states = outputs[-1]
+            self.assertEqual(config.output_attentions, False)
             self.assertEqual(len(hidden_states), expected_num_layers)
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
@@ -831,7 +834,9 @@ class TFModelTesterMixin:
             if getattr(model, "compute_loss", None):
                 # The number of elements in the loss should be the same as the number of elements in the label
                 prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
-                added_label = prepared_for_class[list(prepared_for_class.keys() - inputs_dict.keys())[0]]
+                added_label = prepared_for_class[
+                    sorted(list(prepared_for_class.keys() - inputs_dict.keys()), reverse=True)[0]
+                ]
                 loss_size = tf.size(added_label)
 
                 if model.__class__ in TF_MODEL_FOR_CAUSAL_LM_MAPPING.values():
@@ -856,23 +861,30 @@ class TFModelTesterMixin:
 
                 # Get keys that were added with the _prepare_for_class function
                 label_keys = prepared_for_class.keys() - inputs_dict.keys()
-                signature = inspect.getfullargspec(model.call)[0]
+                signature = inspect.signature(model.call).parameters
+                signature_names = list(signature.keys())
 
                 # Create a dictionary holding the location of the tensors in the tuple
-                tuple_index_mapping = {1: "input_ids"}
+                tuple_index_mapping = {0: "input_ids"}
                 for label_key in label_keys:
-                    label_key_index = signature.index(label_key)
+                    label_key_index = signature_names.index(label_key)
                     tuple_index_mapping[label_key_index] = label_key
                 sorted_tuple_index_mapping = sorted(tuple_index_mapping.items())
+                # Initialize a list with their default values, update the values and convert to a tuple
+                list_input = []
 
-                # Initialize a list with None, update the values and convert to a tuple
-                list_input = [None] * sorted_tuple_index_mapping[-1][0]
+                for name in signature_names:
+                    if name != "kwargs":
+                        list_input.append(signature[name].default)
+
                 for index, value in sorted_tuple_index_mapping:
-                    list_input[index - 1] = prepared_for_class[value]
+                    list_input[index] = prepared_for_class[value]
+
                 tuple_input = tuple(list_input)
 
                 # Send to model
-                loss = model(tuple_input)[0]
+                loss = model(tuple_input[:-1])[0]
+
                 self.assertEqual(loss.shape, [loss_size])
 
     def _generate_random_bad_tokens(self, num_bad_tokens, model):

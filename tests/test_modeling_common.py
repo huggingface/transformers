@@ -23,7 +23,7 @@ from typing import List, Tuple
 
 from transformers import is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
-from transformers.testing_utils import require_torch, require_torch_multigpu, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
 
 
 if is_torch_available():
@@ -461,7 +461,7 @@ class ModelTesterMixin:
             inputs = self._prepare_for_class(inputs_dict, model_class).copy()
             inputs["head_mask"] = head_mask
 
-            outputs = model(**inputs)
+            outputs = model(**inputs, return_dict=True)
 
             # Test that we can get a gradient back for importance score computation
             output = sum(t.sum() for t in outputs[0])
@@ -657,7 +657,7 @@ class ModelTesterMixin:
             model.eval()
 
             with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class), return_dict=True)
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             hidden_states = outputs["hidden_states"] if "hidden_states" in outputs else outputs[-1]
 
             expected_num_layers = getattr(
@@ -928,8 +928,8 @@ class ModelTesterMixin:
             with torch.no_grad():
                 model(**inputs)[0]
 
-    @require_torch_multigpu
-    def test_multigpu_data_parallel_forward(self):
+    @require_torch_multi_gpu
+    def test_multi_gpu_data_parallel_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         # some params shouldn't be scattered by nn.DataParallel

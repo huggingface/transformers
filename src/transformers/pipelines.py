@@ -30,13 +30,13 @@ from uuid import UUID
 
 import numpy as np
 
-from .configuration_auto import AutoConfig
 from .configuration_utils import PretrainedConfig
-from .data import SquadExample, squad_convert_examples_to_features
+from .data import SquadExample, SquadFeatures, squad_convert_examples_to_features
 from .file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from .modelcard import ModelCard
-from .tokenization_auto import AutoTokenizer
-from .tokenization_bert import BasicTokenizer
+from .models.auto.configuration_auto import AutoConfig
+from .models.auto.tokenization_auto import AutoTokenizer
+from .models.bert.tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import PaddingStrategy
 from .utils import logging
@@ -45,7 +45,7 @@ from .utils import logging
 if is_tf_available():
     import tensorflow as tf
 
-    from .modeling_tf_auto import (
+    from .models.auto.modeling_tf_auto import (
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -63,7 +63,7 @@ if is_tf_available():
 if is_torch_available():
     import torch
 
-    from .modeling_auto import (
+    from .models.auto.modeling_auto import (
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
@@ -1057,12 +1057,12 @@ class ZeroShotClassificationPipeline(Pipeline):
         return -1
 
     def _parse_and_tokenize(
-        self, sequences, candidal_labels, hypothesis_template, padding=True, add_special_tokens=True, **kwargs
+        self, sequences, candidate_labels, hypothesis_template, padding=True, add_special_tokens=True, **kwargs
     ):
         """
         Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
         """
-        sequence_pairs = self._args_parser(sequences, candidal_labels, hypothesis_template)
+        sequence_pairs = self._args_parser(sequences, candidate_labels, hypothesis_template)
         inputs = self.tokenizer(
             sequence_pairs,
             add_special_tokens=add_special_tokens,
@@ -1182,7 +1182,6 @@ class FillMaskPipeline(Pipeline):
         device: int = -1,
         top_k=5,
         task: str = "",
-        **kwargs
     ):
         super().__init__(
             model=model,
@@ -1196,15 +1195,7 @@ class FillMaskPipeline(Pipeline):
         )
 
         self.check_model_type(TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_MASKED_LM_MAPPING)
-
-        if "topk" in kwargs:
-            warnings.warn(
-                "The `topk` argument is deprecated and will be removed in a future version, use `top_k` instead.",
-                FutureWarning,
-            )
-            self.top_k = kwargs.pop("topk")
-        else:
-            self.top_k = top_k
+        self.top_k = top_k
 
     def ensure_exactly_one_mask_token(self, masked_index: np.ndarray):
         numel = np.prod(masked_index.shape)
@@ -1758,6 +1749,7 @@ class QuestionAnsweringPipeline(Pipeline):
             - **answer** (:obj:`str`) -- The answer to the question.
         """
         # Set defaults values
+        kwargs.setdefault("padding", "longest")
         kwargs.setdefault("topk", 1)
         kwargs.setdefault("doc_stride", 128)
         kwargs.setdefault("max_answer_len", 15)
@@ -1773,19 +1765,87 @@ class QuestionAnsweringPipeline(Pipeline):
 
         # Convert inputs to features
         examples = self._args_parser(*args, **kwargs)
-        features_list = [
-            squad_convert_examples_to_features(
-                examples=[example],
-                tokenizer=self.tokenizer,
-                max_seq_length=kwargs["max_seq_len"],
-                doc_stride=kwargs["doc_stride"],
-                max_query_length=kwargs["max_question_len"],
-                padding_strategy=PaddingStrategy.MAX_LENGTH.value,
-                is_training=False,
-                tqdm_enabled=False,
-            )
-            for example in examples
-        ]
+        if not self.tokenizer.is_fast:
+            features_list = [
+                squad_convert_examples_to_features(
+                    examples=[example],
+                    tokenizer=self.tokenizer,
+                    max_seq_length=kwargs["max_seq_len"],
+                    doc_stride=kwargs["doc_stride"],
+                    max_query_length=kwargs["max_question_len"],
+                    padding_strategy=PaddingStrategy.MAX_LENGTH.value,
+                    is_training=False,
+                    tqdm_enabled=False,
+                )
+                for example in examples
+            ]
+        else:
+            features_list = []
+            for example in examples:
+                # Define the side we want to truncate / pad and the text/pair sorting
+                question_first = bool(self.tokenizer.padding_side == "right")
+
+                encoded_inputs = self.tokenizer(
+                    text=example.question_text if question_first else example.context_text,
+                    text_pair=example.context_text if question_first else example.question_text,
+                    padding=kwargs["padding"],
+                    truncation="only_second" if question_first else "only_first",
+                    max_length=kwargs["max_seq_len"],
+                    stride=kwargs["doc_stride"],
+                    return_tensors="np",
+                    return_token_type_ids=True,
+                    return_overflowing_tokens=True,
+                    return_offsets_mapping=True,
+                    return_special_tokens_mask=True,
+                )
+
+                # When the input is too long, it's converted in a batch of inputs with overflowing tokens
+                # and a stride of overlap between the inputs. If a batch of inputs is given, a special output
+                # "overflow_to_sample_mapping" indicate which member of the encoded batch belong to which original batch sample.
+                # Here we tokenize examples one-by-one so we don't need to use "overflow_to_sample_mapping".
+                # "num_span" is the number of output samples generated from the overflowing tokens.
+                num_spans = len(encoded_inputs["input_ids"])
+
+                # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
+                # We put 0 on the tokens from the context and 1 everywhere else (question and special tokens)
+                p_mask = np.asarray(
+                    [
+                        [tok != 1 if question_first else 0 for tok in encoded_inputs.sequence_ids(span_id)]
+                        for span_id in range(num_spans)
+                    ]
+                )
+
+                # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
+                if self.tokenizer.cls_token_id:
+                    cls_index = np.nonzero(encoded_inputs["input_ids"] == self.tokenizer.cls_token_id)
+                    p_mask[cls_index] = 0
+
+                features = []
+                for span_idx in range(num_spans):
+                    features.append(
+                        SquadFeatures(
+                            input_ids=encoded_inputs["input_ids"][span_idx],
+                            attention_mask=encoded_inputs["attention_mask"][span_idx],
+                            token_type_ids=encoded_inputs["token_type_ids"][span_idx],
+                            p_mask=p_mask[span_idx].tolist(),
+                            encoding=encoded_inputs[span_idx],
+                            # We don't use the rest of the values - and actually
+                            # for Fast tokenizer we could totally avoid using SquadFeatures and SquadExample
+                            cls_index=None,
+                            token_to_orig_map={},
+                            example_index=0,
+                            unique_id=0,
+                            paragraph_len=0,
+                            token_is_max_context=0,
+                            tokens=[],
+                            start_position=0,
+                            end_position=0,
+                            is_impossible=False,
+                            qas_id=None,
+                        )
+                    )
+                features_list.append(features)
+
         all_answers = []
         for features, example in zip(features_list, examples):
             model_input_names = self.tokenizer.model_input_names + ["input_ids"]
@@ -1828,20 +1888,56 @@ class QuestionAnsweringPipeline(Pipeline):
                 start_[0] = end_[0] = 0.0
 
                 starts, ends, scores = self.decode(start_, end_, kwargs["topk"], kwargs["max_answer_len"])
-                char_to_word = np.array(example.char_to_word_offset)
+                if not self.tokenizer.is_fast:
+                    char_to_word = np.array(example.char_to_word_offset)
 
-                # Convert the answer (tokens) back to the original text
-                answers += [
-                    {
-                        "score": score.item(),
-                        "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
-                        "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
-                        "answer": " ".join(
-                            example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
-                        ),
-                    }
-                    for s, e, score in zip(starts, ends, scores)
-                ]
+                    # Convert the answer (tokens) back to the original text
+                    # Score: score from the model
+                    # Start: Index of the first character of the answer in the context string
+                    # End: Index of the character following the last character of the answer in the context string
+                    # Answer: Plain text of the answer
+                    answers += [
+                        {
+                            "score": score.item(),
+                            "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
+                            "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
+                            "answer": " ".join(
+                                example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
+                            ),
+                        }
+                        for s, e, score in zip(starts, ends, scores)
+                    ]
+                else:
+                    # Convert the answer (tokens) back to the original text
+                    # Score: score from the model
+                    # Start: Index of the first character of the answer in the context string
+                    # End: Index of the character following the last character of the answer in the context string
+                    # Answer: Plain text of the answer
+                    question_first = bool(self.tokenizer.padding_side == "right")
+                    enc = feature.encoding
+
+                    # Sometimes the max probability token is in the middle of a word so:
+                    # - we start by finding the right word containing the token with `token_to_word`
+                    # - then we convert this word in a character span with `word_to_chars`
+                    answers += [
+                        {
+                            "score": score.item(),
+                            "start": enc.word_to_chars(
+                                enc.token_to_word(s), sequence_index=1 if question_first else 0
+                            )[0],
+                            "end": enc.word_to_chars(enc.token_to_word(e), sequence_index=1 if question_first else 0)[
+                                1
+                            ],
+                            "answer": example.context_text[
+                                enc.word_to_chars(enc.token_to_word(s), sequence_index=1 if question_first else 0)[
+                                    0
+                                ] : enc.word_to_chars(enc.token_to_word(e), sequence_index=1 if question_first else 0)[
+                                    1
+                                ]
+                            ],
+                        }
+                        for s, e, score in zip(starts, ends, scores)
+                    ]
 
             if kwargs["handle_impossible_answer"]:
                 answers.append({"score": min_null_score, "start": 0, "end": 0, "answer": ""})
@@ -2735,7 +2831,7 @@ def pipeline(
     tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
     framework: Optional[str] = None,
     revision: Optional[str] = None,
-    use_fast: bool = False,
+    use_fast: bool = True,
     **kwargs
 ) -> Pipeline:
     """
@@ -2758,7 +2854,9 @@ def pipeline(
             - :obj:`"fill-mask"`: will return a :class:`~transformers.FillMaskPipeline`.
             - :obj:`"summarization"`: will return a :class:`~transformers.SummarizationPipeline`.
             - :obj:`"translation_xx_to_yy"`: will return a :class:`~transformers.TranslationPipeline`.
+            - :obj:`"text2text-generation"`: will return a :class:`~transformers.Text2TextGenerationPipeline`.
             - :obj:`"text-generation"`: will return a :class:`~transformers.TextGenerationPipeline`.
+            - :obj:`"zero-shot-classification:`: will return a :class:`~transformers.ZeroShotClassificationPipeline`.
             - :obj:`"conversation"`: will return a :class:`~transformers.ConversationalPipeline`.
         model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`):
             The model that will be used by the pipeline to make predictions. This can be a model identifier or an
@@ -2793,7 +2891,7 @@ def pipeline(
             When passing a task name or a string model identifier: The specific model version to use. It can be a
             branch name, a tag name, or a commit id, since we use a git-based system for storing models and other
             artifacts on huggingface.co, so ``revision`` can be any identifier allowed by git.
-        use_fast (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to use a Fast tokenizer if possible (a :class:`~transformers.PreTrainedTokenizerFast`).
         kwargs:
             Additional keyword arguments passed along to the specific pipeline init (see the documentation for the

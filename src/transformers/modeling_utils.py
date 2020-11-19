@@ -539,7 +539,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                         ) != len(decoder_modules):
                             # this can happen if the name corresponds to the position in a list module list of layers
                             # in this case the decoder has added a cross-attention that the encoder does not have
-                            # thus skip this step and substract one layer pos from encoder
+                            # thus skip this step and subtract one layer pos from encoder
                             encoder_layer_pos -= 1
                             continue
                     elif name not in encoder_modules:
@@ -598,7 +598,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             new_num_tokens (:obj:`int`, `optional`):
                 The number of new tokens in the embedding matrix. Increasing the size will add newly initialized
                 vectors at the end. Reducing the size will remove vectors from the end. If not provided or :obj:`None`,
-                just returns a pointer to the input tokens :obj:`torch.nn.Embedding` module of the model wihtout doing
+                just returns a pointer to the input tokens :obj:`torch.nn.Embedding` module of the model without doing
                 anything.
 
         Return:
@@ -639,7 +639,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
                 Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
                 vectors from the end. If not provided or :obj:`None`, just returns a pointer to the input tokens
-                :obj:`torch.nn.Embedding`` module of the model wihtout doing anything.
+                :obj:`torch.nn.Embedding`` module of the model without doing anything.
 
         Return:
             :obj:`torch.nn.Embedding`: Pointer to the resized Embedding Module or the old Embedding Module if
@@ -758,10 +758,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             pretrained_model_name_or_path (:obj:`str`, `optional`):
                 Can be either:
 
-                    - A string with the `shortcut name` of a pretrained model to load from cache or download, e.g.,
-                      ``bert-base-uncased``.
-                    - A string with the `identifier name` of a pretrained model that was user-uploaded to our S3, e.g.,
-                      ``dbmdz/bert-base-german-cased``.
+                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
+                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing model weights saved using
                       :func:`~transformers.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
                     - A path or url to a `tensorflow index checkpoint file` (e.g, ``./tf_model/model.ckpt.index``). In
@@ -781,8 +780,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 Configuration for the model to use instead of an automatically loaded configuation. Configuration can
                 be automatically loaded when:
 
-                    - The model is a model provided by the library (loaded with the `shortcut name` string of a
-                      pretrained model).
+                    - The model is a model provided by the library (loaded with the `model id` string of a pretrained
+                      model).
                     - The model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded
                       by supplying the save directory.
                     - The model is loaded by supplying a local directory as ``pretrained_model_name_or_path`` and a
@@ -812,7 +811,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             output_loading_info(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to only look at local files (e.g., not try doanloading the model).
+                Whether or not to only look at local files (i.e., do not try to download the model).
             revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
@@ -838,7 +837,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         Examples::
 
             >>> from transformers import BertConfig, BertModel
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = BertModel.from_pretrained('bert-base-uncased')
             >>> # Model was saved using `save_pretrained('./test/saved_model/')` (for example purposes, not runnable).
             >>> model = BertModel.from_pretrained('./test/saved_model/')
@@ -1366,7 +1365,7 @@ class SQuADHead(nn.Module):
                 Mask for tokens at invalid position, such as query and special symbols (PAD, SEP, CLS). 1.0 means token
                 should be masked.
             return_dict (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOuput` instead of a plain tuple.
+                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 
         Returns:
         """
@@ -1652,7 +1651,7 @@ def apply_chunking_to_forward(
             The input tensors of ``forward_fn`` which will be chunked
 
     Returns:
-        :obj:`torch.Tensor`: A tensor with the same shape as the :obj:`foward_fn` would have given if applied`.
+        :obj:`torch.Tensor`: A tensor with the same shape as the :obj:`forward_fn` would have given if applied`.
 
 
     Examples::
@@ -1668,12 +1667,12 @@ def apply_chunking_to_forward(
     """
 
     assert len(input_tensors) > 0, "{} has to be a tuple/list of tensors".format(input_tensors)
-    tensor_shape = input_tensors[0].shape
+    tensor_shape = input_tensors[0].shape[chunk_dim]
     assert all(
-        input_tensor.shape == tensor_shape for input_tensor in input_tensors
+        input_tensor.shape[chunk_dim] == tensor_shape for input_tensor in input_tensors
     ), "All input tenors have to be of the same shape"
 
-    # inspect.signature exist since python 3.5 and is a python method -> no problem with backward compability
+    # inspect.signature exist since python 3.5 and is a python method -> no problem with backward compatibility
     num_args_in_forward_chunk_fn = len(inspect.signature(forward_fn).parameters)
     assert num_args_in_forward_chunk_fn == len(
         input_tensors
