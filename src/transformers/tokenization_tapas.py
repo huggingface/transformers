@@ -1897,9 +1897,6 @@ class BasicTokenizer(object):
                 Kept for backward compatibility purposes. Now implemented directly at the base class level (see
                 :func:`PreTrainedTokenizer.tokenize`) List of token not to split.
         """
-        ## TAPAS use a special token for empty cells in a table
-        if format_text(text) == EMPTY_TEXT:
-            return _EMPTY
         # union() returns a new set by concatenating the two sets.
         never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
         text = self._clean_text(text)
