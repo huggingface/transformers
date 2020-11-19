@@ -42,6 +42,7 @@ if is_torch_available():
         AutoModelForMaskedLM,
         AutoModelForSequenceClassification,
         DataCollatorForLanguageModeling,
+        EarlyStoppingCallback,
         GlueDataset,
         GlueDataTrainingArguments,
         LineByLineTextDataset,
@@ -49,7 +50,6 @@ if is_torch_available():
         TextDataset,
         Trainer,
         TrainerState,
-        EarlyStoppingCallback,
     )
 
 

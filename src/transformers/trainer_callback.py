@@ -263,7 +263,6 @@ class TrainerCallback:
         """
         pass
 
-
     def on_save(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called after a checkpoint save.
@@ -370,7 +369,9 @@ class CallbackHandler(TrainerCallback):
         control.should_evaluate = False
         return self.call_event("on_evaluate", args, state, control, metrics=metrics)
 
-    def on_best_metric_check(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, metric_value : float):
+    def on_best_metric_check(
+        self, args: TrainingArguments, state: TrainerState, control: TrainerControl, metric_value: float
+    ):
         return self.call_event("on_best_metric_check", args, state, control, metric_value=metric_value)
 
     def on_save(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
@@ -501,11 +502,9 @@ class EarlyStoppingCallback(TrainerCallback):
     def check_if_metric_value(self, args, state, control, metric_value):
         # best_metric is set by code for load_best_model
         operator = np.greater if args.greater_is_better else np.less
-        if (
-            state.best_metric is None or (
-                operator(metric_value, state.best_metric)
-                and abs(metric_value - state.best_metric) > args.early_stopping_threshold
-            )
+        if state.best_metric is None or (
+            operator(metric_value, state.best_metric)
+            and abs(metric_value - state.best_metric) > args.early_stopping_threshold
         ):
             state.early_stopping_patience_counter = 0
         else:
