@@ -82,14 +82,9 @@ _dep_versions = [
     "flax==0.2.2",
     "python>=3.6.0",
 ]
-# tokenizers: "==0.9.4" lookup table
-
-dep_versions_short = { k:v for k,v in list(re.findall(r"^([^!=<>]+)([!=<>]{,2}.*)", x, 2)[0] for x in _dep_versions) }
-# much simpler, but not working on py36
-#dep_versions_short = { k:v for k,v in (re.split(r"(?=\b[!=<>].+)", x, 2) for x in _dep_versions) }
 
 # tokenizers: "tokenizers==0.9.4" lookup table
-dep_versions = { k:f"{k}{v}" for k,v in dep_versions_short.items() }
+dep_versions = { b:a for a,b in list(re.findall(r"^(([^!=<>]+)[!=<>].*$)", x)[0] for x in _dep_versions) }
 
 def dep_versions_list(*pkgs):
     return [dep_versions[pkg] for pkg in pkgs]
@@ -182,7 +177,7 @@ setup(
     ],
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
-    python_requires=dep_versions_short["python"],
+    python_requires=">=3.6.0",
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
