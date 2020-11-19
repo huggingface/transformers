@@ -20,6 +20,7 @@ from transformers import (
     BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
     AutoTokenizer,
+    BertJapaneseTokenizer,
     BertTokenizer,
     BertTokenizerFast,
     GPT2Tokenizer,
@@ -71,6 +72,11 @@ class AutoTokenizerTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(DUMMY_DIFF_TOKENIZER_IDENTIFIER, config=config)
         self.assertIsInstance(tokenizer, (BertTokenizer, BertTokenizerFast))
         self.assertEqual(tokenizer.vocab_size, 12)
+
+    def test_tokenizer_bert_japanese(self):
+        EXAMPLE_BERT_JAPANESE_ID = "cl-tohoku/bert-base-japanese"
+        tokenizer = AutoTokenizer.from_pretrained(EXAMPLE_BERT_JAPANESE_ID)
+        self.assertIsInstance(tokenizer, BertJapaneseTokenizer)
 
     @require_tokenizers
     def test_tokenizer_identifier_with_correct_config(self):
