@@ -1897,6 +1897,9 @@ class BasicTokenizer(object):
                 Kept for backward compatibility purposes. Now implemented directly at the base class level (see
                 :func:`PreTrainedTokenizer.tokenize`) List of token not to split.
         """
+        ## TAPAS use a special token for empty cells in a table
+        if format_text(text) == EMPTY_TEXT:
+            return _EMPTY
         # union() returns a new set by concatenating the two sets.
         never_split = self.never_split.union(set(never_split)) if never_split else self.never_split
         text = self._clean_text(text)
@@ -2334,6 +2337,20 @@ def normalize_for_match(text):
     return " ".join(text.lower().split())
 
 
+def format_text(text):
+    """Lowercases and strips punctuation."""
+    text = text.lower().strip()
+    if text == "n/a" or text == "?" or text == "nan":
+        text = EMPTY_TEXT
+
+    text = re.sub(r"[^\w\d]+", " ", text).replace("_", " ")
+    text = " ".join(text.split())
+    text = text.strip()
+    if text:
+        return text
+    return EMPTY_TEXT
+
+
 def parse_text(text):
     """
     Extracts longest number and date spans.
@@ -2406,6 +2423,9 @@ _PrimitiveNumericValue = Union[float, Tuple[Optional[float], Optional[float], Op
 _SortKeyFn = Callable[[NumericValue], Tuple[float, Ellipsis]]
 
 _DATE_TUPLE_SIZE = 3
+
+EMPTY_TEXT = 'EMPTY'
+_EMPTY = '[EMPTY]'
 
 NUMBER_TYPE = "number"
 DATE_TYPE = "date"

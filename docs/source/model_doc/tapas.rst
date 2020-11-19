@@ -45,9 +45,13 @@ Tips:
 
 - TAPAS is a model that uses relative position embeddings by default (restarting the position embeddings at every cell
   of the table). According to the authors, this usually results in a slightly better performance, and allows you to
-  encode longer sequences without running out of embeddings. This is reflected in the hyperparameter
-  ``reset_position_index_per_cell`` parameter of :class:`~transformers.TapasConfig`, which is set to ``True`` by default.  
-  There are both pre-trained models in the model hub with absolute and relative position embeddings. 
+  encode longer sequences without running out of embeddings. This is reflected in the ``reset_position_index_per_cell`` 
+  parameter of :class:`~transformers.TapasConfig`, which is set to ``True`` by default. 
+  There are both pre-trained models in the `model hub`_ with absolute and relative position embeddings. Note that it's
+  usually advised to pad the inputs on the right rather than the left.
+- TAPAS is based on BERT, so ``TAPAS-base`` for example corresponds to a ``BERT-base`` architecture. Of course, TAPAS-large 
+  will result in the best performance (the results reported in the paper are from TAPAS-large). Metrics of the various 
+  sized models are shown on the `original Github repository`_. 
 - TAPAS has checkpoints fine-tuned on SQA, which are capable of answering questions related to a table in a
   conversational set-up. This means that you can ask follow-up questions such as "what is his age?" related to the
   previous question. Note that the forward pass of TAPAS is a bit different in case of a conversational set-up: in that
@@ -56,6 +60,8 @@ Tips:
 - TAPAS is similar to BERT and therefore relies on the masked language modeling (MLM) objective. It is therefore
   efficient at predicting masked tokens and at NLU in general, but is not optimal for text generation. Models trained
   with a causal language modeling (CLM) objective are better in that regard.
+
+.. _original Github repository: https://huggingface.co/models?search=tapas
 
 
 Usage: fine-tuning
@@ -231,7 +237,7 @@ text-only data. Of course, this only shows how to encode a single training examp
         >>> train_dataset = TableDataset(data, tokenizer)
         >>> train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=32)
 
-Note that here, we encode table-question pairs independently. This is fine as long as your dataset is **not conversational**. In case your 
+Note that here, we encode each table-question pair independently. This is fine as long as your dataset is **not conversational**. In case your 
 dataset involves conversational questions (such as in SQA), then you should first group together the ``queries``, ``answer_coordinates`` and 
 ``answer_text`` per table (in the order of their ``position`` index) and batch encode each table with its questions. This will make sure that 
 the ``prev_label_ids`` token types (see docs of :class:`~transformers.TapasTokenizer`) are set correctly. 
