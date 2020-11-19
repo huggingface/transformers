@@ -498,8 +498,6 @@ class EarlyStoppingCallback(TrainerCallback):
     """
 
     def __init__(self, early_stopping_patience: int = 1, early_stopping_threshold: Optional[float] = 0.0):
-        self.training_bar = None
-        self.prediction_bar = None
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_threshold = early_stopping_threshold
         self.early_stopping_patience_counter = 0
@@ -509,7 +507,7 @@ class EarlyStoppingCallback(TrainerCallback):
         operator = np.greater if args.greater_is_better else np.less
         if state.best_metric is None or (
             operator(metric_value, state.best_metric)
-            and abs(metric_value - state.best_metric) > early_stopping_threshold
+            and abs(metric_value - state.best_metric) > self.early_stopping_threshold
         ):
             self.early_stopping_patience_counter = 0
         else:
