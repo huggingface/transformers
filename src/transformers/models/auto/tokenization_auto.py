@@ -307,9 +307,6 @@ class AutoTokenizer:
         if not isinstance(config, PretrainedConfig):
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-        if "bert-base-japanese" in str(pretrained_model_name_or_path):
-            return BertJapaneseTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-
         use_fast = kwargs.pop("use_fast", True)
 
         if config.tokenizer_class is not None:
