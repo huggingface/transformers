@@ -369,6 +369,8 @@ class TrainingArguments:
             self.metric_for_best_model = "loss"
         if self.greater_is_better is None and self.metric_for_best_model is not None:
             self.greater_is_better = self.metric_for_best_model not in ["loss", "eval_loss"]
+        if self.early_stopping_patience is not None and self.metric_for_best_model is not None:
+            self.load_best_model_at_end = True
         if self.run_name is None:
             self.run_name = self.output_dir
 

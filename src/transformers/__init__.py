@@ -257,6 +257,7 @@ from .trainer_callback import (
     TrainerCallback,
     TrainerControl,
     TrainerState,
+    EarlyStoppingCallback,
 )
 from .trainer_utils import EvalPrediction, EvaluationStrategy, set_seed
 from .training_args import TrainingArguments

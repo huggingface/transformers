@@ -49,6 +49,7 @@ if is_torch_available():
         TextDataset,
         Trainer,
         TrainerState,
+        EarlyStoppingCallback,
     )
 
 
@@ -672,10 +673,17 @@ class TrainerIntegrationTest(unittest.TestCase):
 
         # early stopping stops training early
         trainer = get_regression_trainer(
-            train_len=512, per_device_train_batch_size=16, gradient_accumulation_steps=5, early_stopping_patience=1
+            num_train_epochs=20,
+            gradient_accumulation_steps=1,
+            per_device_train_batch_size=16,
+            evaluation_strategy=EvaluationStrategy.EPOCH,
+            compute_metrics=AlmostAccuracy(),
+            metric_for_best_model="accuracy",
+            early_stopping_patience=1,
         )
+        trainer.add_callback(EarlyStoppingCallback)
         train_output = trainer.train()
-        self.assertLess(train_output.global_step, int(self.n_epochs))
+        self.assertLess(train_output.global_step, 20 * 64 / 16)
 
     def test_flos_extraction(self):
         trainer = get_regression_trainer(learning_rate=0.1)

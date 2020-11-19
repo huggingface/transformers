@@ -21,6 +21,7 @@ import json
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
+import numpy as np
 from tqdm.auto import tqdm
 
 from .trainer_utils import EvaluationStrategy
@@ -83,7 +84,6 @@ class TrainerState:
     log_history: List[Dict[str, float]] = None
     best_metric: Optional[float] = None
     best_model_checkpoint: Optional[str] = None
-    early_stopping_patience: Optional[int] = None
     early_stopping_patience_counter: Optional[int] = None
     is_local_process_zero: bool = True
     is_world_process_zero: bool = True
@@ -257,6 +257,13 @@ class TrainerCallback:
         """
         pass
 
+    def on_best_metric_check(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called after best metric calcuated
+        """
+        pass
+
+
     def on_save(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called after a checkpoint save.
@@ -363,6 +370,9 @@ class CallbackHandler(TrainerCallback):
         control.should_evaluate = False
         return self.call_event("on_evaluate", args, state, control, metrics=metrics)
 
+    def on_best_metric_check(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, metric_value : float):
+        return self.call_event("on_best_metric_check", args, state, control, metric_value=metric_value)
+
     def on_save(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
         control.should_save = False
         return self.call_event("on_save", args, state, control)
@@ -418,13 +428,6 @@ class DefaultFlowCallback(TrainerCallback):
 
         # End training
         if state.global_step >= state.max_steps:
-            control.should_training_stop = True
-
-        # End training via early stopping
-        if (
-            state.early_stopping_patience is not None
-            and state.early_sotpping_patience_counter >= state.early_stopping_patience
-        ):
             control.should_training_stop = True
 
         return control
@@ -488,3 +491,32 @@ class PrinterCallback(TrainerCallback):
         _ = logs.pop("total_flos", None)
         if state.is_local_process_zero:
             print(logs)
+
+
+class EarlyStoppingCallback(TrainerCallback):
+    """
+    An early stopping callback
+    """
+
+    def check_if_metric_value(self, args, state, control, metric_value):
+        # best_metric is set by code for load_best_model
+        operator = np.greater if args.greater_is_better else np.less
+        if (
+            state.best_metric is None or (
+                operator(metric_value, state.best_metric)
+                and abs(metric_value - state.best_metric) > args.early_stopping_threshold
+            )
+        ):
+            state.early_stopping_patience_counter = 0
+        else:
+            state.early_stopping_patience_counter += 1
+
+    def on_best_metric_check(self, args, state, control, metric_value, **kwargs):
+        self.check_if_metric_value(args, state, control, metric_value)
+        print(state.early_stopping_patience_counter)
+        print(args.early_stopping_patience)
+        if (
+            args.early_stopping_patience is not None
+            and state.early_stopping_patience_counter >= args.early_stopping_patience
+        ):
+            control.should_training_stop = True
