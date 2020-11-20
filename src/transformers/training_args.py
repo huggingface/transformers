@@ -35,10 +35,8 @@ def default_logdir() -> str:
 class TrainingArguments:
     """
     TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop
-    itself**.
-
-    Using :class:`~transformers.HfArgumentParser` we can turn this class into argparse arguments to be able to specify
-    them on the command line.
+    itself**. Using :class:`~transformers.HfArgumentParser` we can turn this class into argparse arguments to be able
+    to specify them on the command line.
 
     Parameters:
         output_dir (:obj:`str`):
@@ -66,7 +64,6 @@ class TrainingArguments:
                 * :obj:`"no"`: No evaluation is done during training.
                 * :obj:`"steps"`: Evaluation is done (and logged) every :obj:`eval_steps`.
                 * :obj:`"epoch"`: Evaluation is done at the end of each epoch.
-
         prediction_loss_only (:obj:`bool`, `optional`, defaults to `False`):
             When performing evaluation and predictions, only returns the loss.
         per_device_train_batch_size (:obj:`int`, `optional`, defaults to 8):
@@ -74,13 +71,10 @@ class TrainingArguments:
         per_device_eval_batch_size (:obj:`int`, `optional`, defaults to 8):
             The batch size per GPU/TPU core/CPU for evaluation.
         gradient_accumulation_steps (:obj:`int`, `optional`, defaults to 1):
-            Number of updates steps to accumulate the gradients for, before performing a backward/update pass.
-
-            .. warning::
-
-                When using gradient accumulation, one step is counted as one step with backward pass. Therefore,
-                logging, evaluation, save will be conducted every ``gradient_accumulation_steps * xxx_step`` training
-                examples.
+            Number of updates steps to accumulate the gradients for, before performing a backward/update pass. ..
+            warning:: When using gradient accumulation, one step is counted as one step with backward pass. Therefore,
+            logging, evaluation, save will be conducted every ``gradient_accumulation_steps * xxx_step`` training
+            examples.
         eval_accumulation_steps (:obj:`int`, `optional`):
             Number of predictions steps to accumulate the output tensors for, before moving the results to the CPU. If
             left unset, the whole predictions are accumulated on GPU/TPU before being moved to the CPU (faster but
@@ -148,37 +142,26 @@ class TrainingArguments:
             to warn or lower (default), :obj:`False` otherwise.
         remove_unused_columns (:obj:`bool`, `optional`, defaults to :obj:`True`):
             If using `nlp.Dataset` datasets, whether or not to automatically remove the columns unused by the model
-            forward method.
-
-            (Note that this behavior is not implemented for :class:`~transformers.TFTrainer` yet.)
+            forward method. (Note that this behavior is not implemented for :class:`~transformers.TFTrainer` yet.)
         label_names (:obj:`List[str]`, `optional`):
-            The list of keys in your dictionary of inputs that correspond to the labels.
-
-            Will eventually default to :obj:`["labels"]` except if the model used is one of the
-            :obj:`XxxForQuestionAnswering` in which case it will default to :obj:`["start_positions",
-            "end_positions"]`.
+            The list of keys in your dictionary of inputs that correspond to the labels. Will eventually default to
+            :obj:`["labels"]` except if the model used is one of the :obj:`XxxForQuestionAnswering` in which case it
+            will default to :obj:`["start_positions", "end_positions"]`.
         load_best_model_at_end (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to load the best model found during training at the end of training.
-
-            .. note::
-
-                When set to :obj:`True`, the parameters :obj:`save_steps` will be ignored and the model will be saved
-                after each evaluation.
+            Whether or not to load the best model found during training at the end of training. .. note:: When set to
+            :obj:`True`, the parameters :obj:`save_steps` will be ignored and the model will be saved after each
+            evaluation.
         metric_for_best_model (:obj:`str`, `optional`):
             Use in conjunction with :obj:`load_best_model_at_end` to specify the metric to use to compare two different
             models. Must be the name of a metric returned by the evaluation with or without the prefix :obj:`"eval_"`.
             Will default to :obj:`"loss"` if unspecified and :obj:`load_best_model_at_end=True` (to use the evaluation
-            loss).
-
-            If you set this value, :obj:`greater_is_better` will default to :obj:`True`. Don't forget to set it to
-            :obj:`False` if your metric is better when lower.
+            loss). If you set this value, :obj:`greater_is_better` will default to :obj:`True`. Don't forget to set it
+            to :obj:`False` if your metric is better when lower.
         greater_is_better (:obj:`bool`, `optional`):
             Use in conjunction with :obj:`load_best_model_at_end` and :obj:`metric_for_best_model` to specify if better
-            models should have a greater metric or not. Will default to:
-
-            - :obj:`True` if :obj:`metric_for_best_model` is set to a value that isn't :obj:`"loss"` or
-              :obj:`"eval_loss"`.
-            - :obj:`False` if :obj:`metric_for_best_model` is not set, or set to :obj:`"loss"` or :obj:`"eval_loss"`.
+            models should have a greater metric or not. Will default to: - :obj:`True` if :obj:`metric_for_best_model`
+            is set to a value that isn't :obj:`"loss"` or :obj:`"eval_loss"`. - :obj:`False` if
+            :obj:`metric_for_best_model` is not set, or set to :obj:`"loss"` or :obj:`"eval_loss"`.
     """
 
     output_dir: str = field(
@@ -197,6 +180,16 @@ class TrainingArguments:
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
     do_eval: bool = field(default=None, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
+    model_parallel: bool = field(
+        default=False,
+        metadata={
+            "help": "If there are more than one devices, whether to use model parallelism to distribute the model's modules across devices."
+        },
+    )
+    evaluate_during_training: bool = field(
+        default=False,
+        metadata={"help": "Run evaluation during training at each logging step."},
+    )
     evaluation_strategy: EvaluationStrategy = field(
         default="no",
         metadata={"help": "Run evaluation during training at each logging step."},
@@ -362,7 +355,11 @@ class TrainingArguments:
                 "version. Using `--per_device_train_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_train_batch_size or self.per_device_train_batch_size
-        return per_device_batch_size * max(1, self.n_gpu)
+        if not self.model_parallel:
+            train_batch_size = per_device_batch_size * max(1, self.n_gpu)
+        else:
+            train_batch_size = per_device_batch_size
+        return train_batch_size
 
     @property
     def eval_batch_size(self) -> int:
@@ -375,7 +372,11 @@ class TrainingArguments:
                 "version. Using `--per_device_eval_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_eval_batch_size or self.per_device_eval_batch_size
-        return per_device_batch_size * max(1, self.n_gpu)
+        if not self.model_parallel:
+            eval_batch_size = per_device_batch_size * max(1, self.n_gpu)
+        else:
+            eval_batch_size = per_device_batch_size
+        return eval_batch_size
 
     @cached_property
     @torch_required
@@ -420,11 +421,8 @@ class TrainingArguments:
     @torch_required
     def n_gpu(self):
         """
-        The number of GPUs used by this process.
-
-        Note:
-            This will only be greater than one when you have multiple GPUs available but are not using distributed
-            training. For distributed training, it will always be 1.
+        The number of GPUs used by this process. Note: This will only be greater than one when you have multiple GPUs
+        available but are not using distributed training. For distributed training, it will always be 1.
         """
         return self._setup_devices[1]
 
