@@ -172,8 +172,8 @@ class HfLargefilesTest(HfApiCommonTest):
         subprocess.run(["git", "lfs", "track", "*.pdf"], cwd=WORKING_REPO_DIR)
         subprocess.run(["git", "lfs", "track", "*.epub"], cwd=WORKING_REPO_DIR)
         subprocess.run(["wget", LARGE_FILE_18MB], check=True, capture_output=True, cwd=WORKING_REPO_DIR)
-        subprocess.run(["git", "add", "*"], cwd=WORKING_REPO_DIR)
-        subprocess.run(["git", "commit", "-m", "commit message"], cwd=WORKING_REPO_DIR)
+        subprocess.run(["git", "add", "*"], check=True, cwd=WORKING_REPO_DIR)
+        subprocess.run(["git", "commit", "-m", "commit message"], check=True, cwd=WORKING_REPO_DIR)
 
         # This will fail as we haven't set up our custom transfer agent yet.
         with self.assertRaises(subprocess.CalledProcessError) as context:
