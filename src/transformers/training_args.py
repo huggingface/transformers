@@ -42,6 +42,7 @@ class TrainingArguments:
 
 
 
+
     Parameters:
         output_dir (:obj:`str`):
             The output directory where the model predictions and checkpoints will be written.
@@ -204,7 +205,8 @@ class TrainingArguments:
         metadata={
             "help": (
                 "If there are more than one devices, whether to use model parallelism to distribute the "
-                "model's modules across devices.")
+                "model's modules across devices."
+            )
         },
     )
     evaluation_strategy: EvaluationStrategy = field(
