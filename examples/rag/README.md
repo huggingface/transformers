@@ -133,17 +133,17 @@ python examples/rag/eval_rag.py \
 
 # Use your own knowledge source
 
-RAG uses by default the enghlish wikipedia as a knowledge source, known as the 'wiki_dpr' dataset.
-You can build your own knowledge source using the `use_custom_knowledge_dataset.py` and use it for RAG.
+By default, RAG uses the English Wikipedia as a knowledge source, known as the 'wiki_dpr' dataset.
+With `use_custom_knowledge_dataset.py` you can build your own knowledge source, *e.g.* for RAG.
 
-Let's say you have documents in tab-separated csv files with columns "title" and "text", then you can run for example:
+For instance, if documents are serialized as tab-separated csv files with the columns "title" and "text", one can use `use_own_knowledge_dataset.py` as follows:
 ```bash
 python examples/rag/use_own_knowledge_dataset.py \
     --csv_path path/to/my_csv \
     --output_dir path/to/my_knowledge_dataset \
 ```
 
-To use it in the RAG finetuning script you can then do:
+The created outputs in `path/to/my_knowledge_dataset` can then be used to finetune RAG as follows:
 ```bash
 python examples/rag/finetune_rag.py \
     --data_dir $DATA_DIR \

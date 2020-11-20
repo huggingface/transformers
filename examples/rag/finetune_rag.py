@@ -446,8 +446,7 @@ class GenerativeQAModule(BaseTransformer):
             "--use_dummy_dataset",
             type=bool,
             default=False,
-            help="If True, use the dummy version of the dataset index. More info about custom indexes in the RagRetriever documentation as well as in `examples/rag/use_own_knowledge_dataset.py`",
-        )
+            help="Whether to use the dummy version of the dataset index. More info about custom indexes in the RagRetriever documentation as well as in `examples/rag/use_own_knowledge_dataset.py`",        )
         return parser
 
 
