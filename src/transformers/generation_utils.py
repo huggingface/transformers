@@ -557,8 +557,7 @@ class GenerationMixin:
                 length_penalty=length_penalty,
                 do_early_stopping=early_stopping,
                 num_beam_hyps_to_keep=num_return_sequences,
-                beam_groups=beam_groups,
-                diversity_penalty=diversity_penalty
+                beam_groups=beam_groups
             )
             # interleave with `num_beams`
             input_ids, model_kwargs = self._expand_inputs_for_generation(
@@ -858,7 +857,7 @@ class GenerationMixin:
 
         return input_ids
 
-    def beam_search(
+    def diverse_beam_search(
         self,
         input_ids: torch.LongTensor,
         beam_scorer: BeamScorer,
@@ -1024,7 +1023,6 @@ class GenerationMixin:
                 # stateless
                 beam_outputs = beam_scorer.process(
                     group_input_ids,
-                    group_size,
                     next_token_scores,
                     next_tokens,
                     next_indices,

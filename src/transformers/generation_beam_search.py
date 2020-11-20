@@ -146,9 +146,6 @@ class BeamSearchScorer(BeamScorer):
             Number of groups to divide :obj:`num_beams` into in order to ensure diversity among different groups
             of beams. See `this paper
             <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
-        diversity_penalty (:obj:`float`, `optional`, defaults to 0.0):
-            This value is subtracted from a beam's score if it generates a token same as any beam from other group
-            at a particular time.
     """
 
     def __init__(
@@ -161,7 +158,6 @@ class BeamSearchScorer(BeamScorer):
         do_early_stopping: Optional[bool] = False,
         num_beam_hyps_to_keep: Optional[int] = 1,
         beam_groups: Optional[int] = 1,
-        diversity_penalty: Optional[float] = 0.0
     ):
         self.max_length = max_length
         self.num_beams = num_beams
@@ -170,7 +166,6 @@ class BeamSearchScorer(BeamScorer):
         self.do_early_stopping = do_early_stopping
         self.num_beam_hyps_to_keep = num_beam_hyps_to_keep
         self.beam_groups = beam_groups  # when beam_groups=1 it is same as normal beam search
-        self.diversity_penalty = diversity_penalty
 
         self._is_init = False
         self._beam_hyps = [
@@ -196,13 +191,13 @@ class BeamSearchScorer(BeamScorer):
     def process(
         self,
         input_ids: torch.LongTensor,
-        group_size: int,
         next_scores: torch.FloatTensor,
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
         pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[int] = None,
+        eos_token_id: Optional[int] = None
     ) -> Tuple[torch.Tensor]:
+        group_size = self.num_beams // self.beam_groups
         cur_len = input_ids.shape[-1]
         batch_size = len(self._beam_hyps)
         assert batch_size == (input_ids.shape[0] // group_size)
