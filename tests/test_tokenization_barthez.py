@@ -54,3 +54,25 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual((2, 12), batch.attention_mask.shape)
         result = batch.input_ids.tolist()[0]
         self.assertListEqual(expected_src_tokens, result)
+
+    def test_rust_and_python_full_tokenizers(self):
+        if not self.test_rust_tokenizer:
+            return
+
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        sequence = "I was born in 92000, and this is falsé."
+
+        tokens = tokenizer.tokenize(sequence)
+        rust_tokens = rust_tokenizer.tokenize(sequence)
+        self.assertListEqual(tokens, rust_tokens)
+
+        ids = tokenizer.encode(sequence, add_special_tokens=False)
+        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
+        self.assertListEqual(ids, rust_ids)
+
+        rust_tokenizer = self.get_rust_tokenizer()
+        ids = tokenizer.encode(sequence)
+        rust_ids = rust_tokenizer.encode(sequence)
+        self.assertListEqual(ids, rust_ids)

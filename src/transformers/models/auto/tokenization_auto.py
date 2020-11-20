@@ -120,6 +120,7 @@ else:
 if is_tokenizers_available():
     from ..albert.tokenization_albert_fast import AlbertTokenizerFast
     from ..bart.tokenization_bart_fast import BartTokenizerFast
+    from ..barthez.tokenization_barthez_fast import BarthezTokenizerFast
     from ..bert.tokenization_bert_fast import BertTokenizerFast
     from ..camembert.tokenization_camembert_fast import CamembertTokenizerFast
     from ..distilbert.tokenization_distilbert_fast import DistilBertTokenizerFast
@@ -145,6 +146,7 @@ if is_tokenizers_available():
 else:
     AlbertTokenizerFast = None
     BartTokenizerFast = None
+    BarthezTokenizerFast = None
     BertTokenizerFast = None
     CamembertTokenizerFast = None
     DistilBertTokenizerFast = None
@@ -185,7 +187,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (MarianConfig, (MarianTokenizer, None)),
         (BlenderbotConfig, (BlenderbotSmallTokenizer, None)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
-        (BartConfig, (BarthezTokenizer, None)),
+        (BartConfig, (BarthezTokenizer, BarthezTokenizerFast)),
         (BartConfig, (BartTokenizer, BartTokenizerFast)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
         (RobertaConfig, (BertweetTokenizer, None)),
