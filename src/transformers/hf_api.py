@@ -233,17 +233,23 @@ class HfApi:
         d = r.json()
         return [RepoObj(**x) for x in d]
 
-    def create_repo(self, token: str, name: str, organization: Optional[str] = None) -> str:
+    def create_repo(self, token: str, name: str, organization: Optional[str] = None, lfsmultipartthresh: Optional[int] = None) -> str:
         """
         HuggingFace git-based system, used for models.
 
         Call HF API to create a whole repo.
+
+        Params:
+            lfsmultipartthresh: Optional: internal param for testing purposes.
         """
         path = "{}/api/repos/create".format(self.endpoint)
+        json = {"name": name, "organization": organization}
+        if lfsmultipartthresh is not None:
+            json["lfsmultipartthresh"] = lfsmultipartthresh
         r = requests.post(
             path,
             headers={"authorization": "Bearer {}".format(token)},
-            json={"name": name, "organization": organization},
+            json=json,
         )
         r.raise_for_status()
         d = r.json()

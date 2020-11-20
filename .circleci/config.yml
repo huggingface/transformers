@@ -109,7 +109,7 @@ jobs:
                   paths:
                       - '~/.cache/pip'
             # - run: python -m pytest -n 8 --dist=loadfile -s --make-reports=tests_torch ./tests/ | tee tests_output.txt
-            - run: python -m pytest -sv ./tests/test_hf_api.py
+            - run: python -m pytest -sv ./tests/test_hf_api.py -k "HfLargefilesTest"
 
     run_tests_tf:
         working_directory: ~/transformers

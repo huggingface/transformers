@@ -15,11 +15,14 @@
 
 
 import os
+import shutil
+import subprocess
 import time
 import unittest
 
 import requests
 from requests.exceptions import HTTPError
+
 from transformers.hf_api import HfApi, HfFolder, ModelInfo, PresignedUrl, RepoObj, S3Obj
 
 
@@ -35,14 +38,15 @@ FILES = [
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/empty.txt"),
     ),
 ]
-ENDPOINT_STAGING = "https://moon-staging.huggingface.co"
-# ENDPOINT_STAGING = "http://localhost:5564"
+# ENDPOINT_STAGING = "https://moon-staging.huggingface.co"
+ENDPOINT_STAGING = "https://moon-gibbon.ngrok.io"
+ENDPOINT_STAGING_BASIC_AUTH = f"https://{USER}:{PASS}@moon-gibbon.ngrok.io"
 
 REPO_NAME = "my-model-{}".format(int(time.time()))
 REPO_NAME_LARGE_FILE = "my-model-largefiles-{}".format(int(time.time()))
+WORKING_REPO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/working_repo")
 LARGE_FILE_14MB = "https://cdn-media.huggingface.co/lfs-largefiles/progit.epub"
 LARGE_FILE_18MB = "https://cdn-media.huggingface.co/lfs-largefiles/progit.pdf"
-
 
 class HfApiCommonTest(unittest.TestCase):
     _api = HfApi(endpoint=ENDPOINT_STAGING)
@@ -144,3 +148,37 @@ class HfFolderTest(unittest.TestCase):
         # ^^ not an error, we test that the
         # second call does not fail.
         self.assertEqual(HfFolder.get_token(), None)
+
+
+class HfLargefilesTest(HfApiCommonTest):
+    @classmethod
+    def setUpClass(cls):
+        """
+        Share this valid token in all tests below.
+        """
+        cls._token = cls._api.login(username=USER, password=PASS)
+
+    def setUp(self):
+        try:
+            shutil.rmtree(WORKING_REPO_DIR)
+        except FileNotFoundError:
+            pass
+
+    def test_end_to_end_5M(self):
+        REMOTE_URL = self._api.create_repo(token=self._token, name=REPO_NAME, lfsmultipartthresh=5 * 10**9)
+        REMOTE_URL_AUTH = REMOTE_URL.replace(ENDPOINT_STAGING, ENDPOINT_STAGING_BASIC_AUTH)
+        x = subprocess.run(["git", "clone", REMOTE_URL_AUTH, WORKING_REPO_DIR], check=True, capture_output=True)
+        subprocess.run(["git", "lfs", "env"], cwd=WORKING_REPO_DIR)
+        subprocess.run(["git", "lfs", "track", "*.pdf"], cwd=WORKING_REPO_DIR)
+        subprocess.run(["git", "lfs", "track", "*.epub"], cwd=WORKING_REPO_DIR)
+        subprocess.run(["wget", LARGE_FILE_18MB], check=True, capture_output=True, cwd=WORKING_REPO_DIR)
+        subprocess.run(["git", "add", "*"], cwd=WORKING_REPO_DIR)
+        subprocess.run(["git", "commit", "-m", "commit message"], cwd=WORKING_REPO_DIR)
+
+        # This will fail as we haven't set up our custom transfer agent yet.
+        with self.assertRaises(subprocess.CalledProcessError) as context:
+            subprocess.run(["git", "push"], check=True, cwd=WORKING_REPO_DIR)
+
+        print()
+
+        
