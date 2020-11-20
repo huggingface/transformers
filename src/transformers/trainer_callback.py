@@ -490,8 +490,8 @@ class EarlyStoppingCallback(TrainerCallback):
             Use with TrainingAruments :obj:`metric_for_best_model` and :obj:`early_stopping_patience` to denote how
             much the specified metric must improve to satisfy early stopping conditions. `
 
-    This callback depends on :class:`~transformers.TrainingArguments` argument `load_best_model_at_end` functionality to
-    set best_metric in :class:`~transformers.TrainerState`.
+    This callback depends on :class:`~transformers.TrainingArguments` argument `load_best_model_at_end` functionality
+    to set best_metric in :class:`~transformers.TrainerState`.
     """
 
     def __init__(self, early_stopping_patience: int = 1, early_stopping_threshold: Optional[float] = 0.0):
@@ -513,9 +513,12 @@ class EarlyStoppingCallback(TrainerCallback):
 
     def on_train_begin(self, args, state, control, **kwargs):
         assert args.load_best_model_at_end == True, "EarlyStoppingCallback requires load_best_model_at_end = True"
-        assert args.metric_for_best_model is not None, "EarlyStoppingCallback requires metric_for_best_model is defined"
-        assert args.evaluation_strategy != EvaluationStrategy.NO, "EarlyStoppingCallback requires EvaluationStrategy of steps or epoch"
-
+        assert (
+            args.metric_for_best_model is not None
+        ), "EarlyStoppingCallback requires metric_for_best_model is defined"
+        assert (
+            args.evaluation_strategy != EvaluationStrategy.NO
+        ), "EarlyStoppingCallback requires EvaluationStrategy of steps or epoch"
 
     def on_evaluate(self, args, state, control, metrics, **kwargs):
         metric_to_check = args.metric_for_best_model
