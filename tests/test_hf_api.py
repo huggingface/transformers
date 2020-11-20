@@ -172,6 +172,9 @@ class HfLargefilesTest(HfApiCommonTest):
         except FileNotFoundError:
             pass
 
+    def tearDown(self):
+        self._api.delete_repo(token=self._token, name=REPO_NAME_LARGE_FILE)
+
     def setup_local_clone(self, REMOTE_URL):
         REMOTE_URL_AUTH = REMOTE_URL.replace(ENDPOINT_STAGING, ENDPOINT_STAGING_BASIC_AUTH)
         subprocess.run(["git", "clone", REMOTE_URL_AUTH, WORKING_REPO_DIR], check=True, capture_output=True)
