@@ -44,7 +44,7 @@ from ...modeling_utils import (
     prune_conv1d_layer,
 )
 from ...utils import logging
-from ...utils import model_parallel_utils
+from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_gpt2 import GPT2Config
 
 
@@ -538,9 +538,9 @@ class GPT2Model(GPT2PreTrainedModel):
     def parallelize(self, device_map=None):
         # Check validity of device_map
         self.device_map = (
-            model_parallel_utils.get_device_map(len(self.h), range(torch.cuda.device_count())) if device_map is None else device_map
+            get_device_map(len(self.h), range(torch.cuda.device_count())) if device_map is None else device_map
         )
-        model_parallel_utils.assert_device_map(self.device_map, len(self.h))
+        assert_device_map(self.device_map, len(self.h))
         self.model_parallel = True
         self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
         self.last_device = "cuda:" + str(max(self.device_map.keys()))
@@ -792,11 +792,11 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
         self.device_map = (
-            model_parallel_utils.get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
+            get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
             if device_map is None
             else device_map
         )
-        model_parallel_utils.assert_device_map(self.device_map, len(self.transformer.h))
+        assert_device_map(self.device_map, len(self.transformer.h))
         self.transformer.parallelize(self.device_map)
         self.lm_head = self.lm_head.to(self.transformer.first_device)
         self.model_parallel = True
