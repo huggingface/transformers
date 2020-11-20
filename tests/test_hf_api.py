@@ -35,8 +35,13 @@ FILES = [
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/empty.txt"),
     ),
 ]
-REPO_NAME = "my-model-{}".format(int(time.time()))
 ENDPOINT_STAGING = "https://moon-staging.huggingface.co"
+# ENDPOINT_STAGING = "http://localhost:5564"
+
+REPO_NAME = "my-model-{}".format(int(time.time()))
+REPO_NAME_LARGE_FILE = "my-model-largefiles-{}".format(int(time.time()))
+LARGE_FILE_14MB = "https://cdn-media.huggingface.co/lfs-largefiles/progit.epub"
+LARGE_FILE_18MB = "https://cdn-media.huggingface.co/lfs-largefiles/progit.pdf"
 
 
 class HfApiCommonTest(unittest.TestCase):
@@ -64,7 +69,7 @@ class HfApiEndpointsTest(HfApiCommonTest):
     @classmethod
     def tearDownClass(cls):
         for FILE_KEY, FILE_PATH in FILES:
-            cls._api.delete_obj(token=cls._token, filename=FILE_KEY)
+            cls._api.delete_obj(token=cls._token, filetype="datasets", filename=FILE_KEY)
 
     def test_whoami(self):
         user, orgs = self._api.whoami(token=self._token)
@@ -73,21 +78,21 @@ class HfApiEndpointsTest(HfApiCommonTest):
 
     def test_presign_invalid_org(self):
         with self.assertRaises(HTTPError):
-            _ = self._api.presign(token=self._token, filename="nested/fake_org.txt", organization="fake")
+            _ = self._api.presign(token=self._token, filetype="datasets", filename="nested/fake_org.txt", organization="fake")
 
     def test_presign_valid_org(self):
-        urls = self._api.presign(token=self._token, filename="nested/valid_org.txt", organization="valid_org")
+        urls = self._api.presign(token=self._token, filetype="datasets", filename="nested/valid_org.txt", organization="valid_org")
         self.assertIsInstance(urls, PresignedUrl)
 
     def test_presign(self):
         for FILE_KEY, FILE_PATH in FILES:
-            urls = self._api.presign(token=self._token, filename=FILE_KEY)
+            urls = self._api.presign(token=self._token, filetype="datasets", filename=FILE_KEY)
             self.assertIsInstance(urls, PresignedUrl)
             self.assertEqual(urls.type, "text/plain")
 
     def test_presign_and_upload(self):
         for FILE_KEY, FILE_PATH in FILES:
-            access_url = self._api.presign_and_upload(token=self._token, filename=FILE_KEY, filepath=FILE_PATH)
+            access_url = self._api.presign_and_upload(token=self._token, filetype="datasets", filename=FILE_KEY, filepath=FILE_PATH)
             self.assertIsInstance(access_url, str)
             with open(FILE_PATH, "r") as f:
                 body = f.read()
@@ -95,7 +100,7 @@ class HfApiEndpointsTest(HfApiCommonTest):
             self.assertEqual(r.text, body)
 
     def test_list_objs(self):
-        objs = self._api.list_objs(token=self._token)
+        objs = self._api.list_objs(token=self._token, filetype="datasets")
         self.assertIsInstance(objs, list)
         if len(objs) > 0:
             o = objs[-1]
@@ -108,7 +113,6 @@ class HfApiEndpointsTest(HfApiCommonTest):
             o = objs[-1]
             self.assertIsInstance(o, RepoObj)
 
-    @unittest.skip("Until @julien-c or @pierrci debugs")
     def test_create_and_delete_repo(self):
         self._api.create_repo(token=self._token, name=REPO_NAME)
         self._api.delete_repo(token=self._token, name=REPO_NAME)
