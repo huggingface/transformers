@@ -206,3 +206,21 @@ class HfLargefilesTest(HfApiCommonTest):
         subprocess.run(["wget", pdf_url, "-O", DEST_FILENAME], check=True, capture_output=True, cwd=WORKING_REPO_DIR)
         dest_filesize = os.stat(os.path.join(WORKING_REPO_DIR, DEST_FILENAME)).st_size
         self.assertEqual(dest_filesize, 18685041)
+
+    def test_end_to_end_thresh_16M(self):
+        # Here we'll push one multipart and one non-multipart file in the same commit, and see what happens
+        REMOTE_URL = self._api.create_repo(
+            token=self._token, name=REPO_NAME_LARGE_FILE, lfsmultipartthresh=16 * 10 ** 6
+        )
+        self.setup_local_clone(REMOTE_URL)
+
+        subprocess.run(["wget", LARGE_FILE_18MB], check=True, capture_output=True, cwd=WORKING_REPO_DIR)
+        subprocess.run(["wget", LARGE_FILE_14MB], check=True, capture_output=True, cwd=WORKING_REPO_DIR)
+        subprocess.run(["git", "add", "*"], check=True, cwd=WORKING_REPO_DIR)
+        subprocess.run(["git", "commit", "-m", "both files in same commit"], check=True, cwd=WORKING_REPO_DIR)
+
+        subprocess.run(["transformers-cli", "lfs-enable-largefiles", WORKING_REPO_DIR], check=True)
+
+        start_time = time.time()
+        subprocess.run(["git", "push"], check=True, cwd=WORKING_REPO_DIR)
+        print("took", time.time() - start_time)
