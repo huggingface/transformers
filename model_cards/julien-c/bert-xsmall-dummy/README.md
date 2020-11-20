@@ -2,11 +2,7 @@
 
 
 ```python
-from transformers.configuration_bert import BertConfig
-from transformers.modeling_bert import BertForMaskedLM
-from transformers.modeling_tf_bert import TFBertForMaskedLM
-from transformers.tokenization_bert import BertTokenizer
-
+from transformers BertConfig, BertForMaskedLM, BertTokenizer, TFBertForMaskedLM
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
 DIRNAME = "./bert-xsmall-dummy"

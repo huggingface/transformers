@@ -19,7 +19,6 @@ import copy
 import json
 import os
 
-from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .file_utils import (
     CONFIG_NAME,
     MODEL_CARD_NAME,
@@ -29,6 +28,7 @@ from .file_utils import (
     hf_bucket_url,
     is_remote_url,
 )
+from .models.auto.configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
 from .utils import logging
 
 
@@ -87,10 +87,9 @@ class ModelCard:
         Parameters:
             pretrained_model_name_or_path: either:
 
-                - a string with the `shortcut name` of a pre-trained model card to load from cache or download, e.g.:
-                  ``bert-base-uncased``.
-                - a string with the `identifier name` of a pre-trained model card that was user-uploaded to our S3,
-                  e.g.: ``dbmdz/bert-base-german-cased``.
+                - a string, the `model id` of a pretrained model card hosted inside a model repo on huggingface.co.
+                  Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under a
+                  user or organization name, like ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing a model card file saved using the
                   :func:`~transformers.ModelCard.save_pretrained` method, e.g.: ``./my_model_directory/``.
                 - a path or url to a saved model card JSON `file`, e.g.: ``./my_model_directory/modelcard.json``.
@@ -124,7 +123,7 @@ class ModelCard:
 
         Examples::
 
-            modelcard = ModelCard.from_pretrained('bert-base-uncased')    # Download model card from S3 and cache.
+            modelcard = ModelCard.from_pretrained('bert-base-uncased')    # Download model card from huggingface.co and cache.
             modelcard = ModelCard.from_pretrained('./test/saved_model/')  # E.g. model card was saved using `save_pretrained('./test/saved_model/')`
             modelcard = ModelCard.from_pretrained('./test/saved_model/modelcard.json')
             modelcard = ModelCard.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
@@ -144,9 +143,7 @@ class ModelCard:
         elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             model_card_file = pretrained_model_name_or_path
         else:
-            model_card_file = hf_bucket_url(
-                pretrained_model_name_or_path, filename=MODEL_CARD_NAME, use_cdn=False, mirror=None
-            )
+            model_card_file = hf_bucket_url(pretrained_model_name_or_path, filename=MODEL_CARD_NAME, mirror=None)
 
         if find_from_standard_name or pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
             model_card_file = model_card_file.replace(CONFIG_NAME, MODEL_CARD_NAME)
@@ -156,8 +153,6 @@ class ModelCard:
         try:
             # Load from URL or cache if already cached
             resolved_model_card_file = cached_path(model_card_file, cache_dir=cache_dir, proxies=proxies)
-            if resolved_model_card_file is None:
-                raise EnvironmentError
             if resolved_model_card_file == model_card_file:
                 logger.info("loading model card file {}".format(model_card_file))
             else:

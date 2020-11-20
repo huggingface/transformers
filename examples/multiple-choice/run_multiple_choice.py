@@ -23,6 +23,7 @@ from typing import Dict, Optional
 
 import numpy as np
 
+import transformers
 from transformers import (
     AutoConfig,
     AutoModelForMultipleChoice,
@@ -33,6 +34,7 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
+from transformers.trainer_utils import is_main_process
 from utils_multiple_choice import MultipleChoiceDataset, Split, processors
 
 
@@ -59,7 +61,8 @@ class ModelArguments:
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
     cache_dir: Optional[str] = field(
-        default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
+        default=None,
+        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
     )
 
 
@@ -115,6 +118,11 @@ def main():
         bool(training_args.local_rank != -1),
         training_args.fp16,
     )
+    # Set the verbosity to info of the Transformers logger (on main process only):
+    if is_main_process(training_args.local_rank):
+        transformers.utils.logging.set_verbosity_info()
+        transformers.utils.logging.enable_default_handler()
+        transformers.utils.logging.enable_explicit_format()
     logger.info("Training/evaluation parameters %s", training_args)
 
     # Set seed

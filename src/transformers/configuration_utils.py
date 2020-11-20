@@ -43,6 +43,8 @@ class PretrainedConfig(object):
         - **is_composition** (:obj:`bool`): Whether the config class is composed of multiple sub-configs. In this case
           the config has to be initialized from two or more configs of type :class:`~transformers.PretrainedConfig`
           like: :class:`~transformers.EncoderDecoderConfig` or :class:`~RagConfig`.
+        - **keys_to_ignore_at_inference** (:obj:`List[str]`): A list of keys to ignore by default when looking at
+          dictionary outputs of the model during inference.
 
     Args:
         name_or_path (:obj:`str`, `optional`, defaults to :obj:`""`):
@@ -55,7 +57,7 @@ class PretrainedConfig(object):
             Whether or not the model should returns all attentions.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        return_dict (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        return_dict (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return a :class:`~transformers.file_utils.ModelOutput` instead of a plain
             tuple.
         is_encoder_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -163,7 +165,7 @@ class PretrainedConfig(object):
 
     def __init__(self, **kwargs):
         # Attributes with defaults
-        self.return_dict = kwargs.pop("return_dict", False)
+        self.return_dict = kwargs.pop("return_dict", True)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
         self.output_attentions = kwargs.pop("output_attentions", False)
         self.use_cache = kwargs.pop("use_cache", True)  # Not used by all models
@@ -291,10 +293,9 @@ class PretrainedConfig(object):
             pretrained_model_name_or_path (:obj:`str`):
                 This can be either:
 
-                - the `shortcut name` of a pretrained model configuration to load from cache or download, e.g.,
-                  ``bert-base-uncased``.
-                - the `identifier name` of a pretrained model configuration that was uploaded to our S3 by any user,
-                  e.g., ``dbmdz/bert-base-german-cased``.
+                - a string, the `model id` of a pretrained model configuration hosted inside a model repo on
+                  huggingface.co. Valid model ids can be located at the root-level, like ``bert-base-uncased``, or
+                  namespaced under a user or organization name, like ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing a configuration file saved using the
                   :func:`~transformers.PretrainedConfig.save_pretrained` method, e.g., ``./my_model_directory/``.
                 - a path or url to a saved configuration JSON `file`, e.g.,
@@ -311,6 +312,10 @@ class PretrainedConfig(object):
             proxies (:obj:`Dict[str, str]`, `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+                identifier allowed by git.
             return_unused_kwargs (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 If :obj:`False`, then this function returns just the final configuration object.
 
@@ -329,7 +334,7 @@ class PretrainedConfig(object):
 
             # We can't instantiate directly the base class `PretrainedConfig` so let's show the examples on a
             # derived class: BertConfig
-            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from S3 and cache.
+            config = BertConfig.from_pretrained('bert-base-uncased')    # Download configuration from huggingface.co and cache.
             config = BertConfig.from_pretrained('./test/saved_model/')  # E.g. config (or model) was saved using `save_pretrained('./test/saved_model/')`
             config = BertConfig.from_pretrained('./test/saved_model/my_configuration.json')
             config = BertConfig.from_pretrained('bert-base-uncased', output_attentions=True, foo=False)
@@ -362,6 +367,7 @@ class PretrainedConfig(object):
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         local_files_only = kwargs.pop("local_files_only", False)
+        revision = kwargs.pop("revision", None)
 
         if os.path.isdir(pretrained_model_name_or_path):
             config_file = os.path.join(pretrained_model_name_or_path, CONFIG_NAME)
@@ -369,7 +375,7 @@ class PretrainedConfig(object):
             config_file = pretrained_model_name_or_path
         else:
             config_file = hf_bucket_url(
-                pretrained_model_name_or_path, filename=CONFIG_NAME, use_cdn=False, mirror=None
+                pretrained_model_name_or_path, filename=CONFIG_NAME, revision=revision, mirror=None
             )
 
         try:
@@ -383,11 +389,10 @@ class PretrainedConfig(object):
                 local_files_only=local_files_only,
             )
             # Load config dict
-            if resolved_config_file is None:
-                raise EnvironmentError
             config_dict = cls._dict_from_json_file(resolved_config_file)
 
-        except EnvironmentError:
+        except EnvironmentError as err:
+            logger.error(err)
             msg = (
                 f"Can't load config for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
                 f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"

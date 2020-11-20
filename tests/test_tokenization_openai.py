@@ -19,8 +19,8 @@ import os
 import unittest
 
 from transformers import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
+from transformers.models.openai.tokenization_openai import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
-from transformers.tokenization_openai import VOCAB_FILES_NAMES
 
 from .test_tokenization_common import TokenizerTesterMixin
 

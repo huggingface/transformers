@@ -57,10 +57,10 @@ BertTokenizerFast
 Bert specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.modeling_bert.BertForPreTrainingOutput
+.. autoclass:: transformers.models.bert.modeling_bert.BertForPreTrainingOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_bert.TFBertForPreTrainingOutput
+.. autoclass:: transformers.models.bert.modeling_tf_bert.TFBertForPreTrainingOutput
     :members:
 
 
@@ -188,3 +188,10 @@ TFBertForQuestionAnswering
 
 .. autoclass:: transformers.TFBertForQuestionAnswering
     :members: call
+
+
+FlaxBertModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxBertModel
+    :members: __call__

@@ -48,9 +48,7 @@ Evaluated on the SQuAD 2.0 dev set with the [official eval script](https://works
 
 ### In Transformers
 ```python
-from transformers.pipelines import pipeline
-from transformers.modeling_auto import AutoModelForQuestionAnswering
-from transformers.tokenization_auto import AutoTokenizer
+from transformers import AutoModelForQuestionAnswering, AutoTokenizer, pipeline
 
 model_name = "deepset/roberta-base-squad2-v2"
 
@@ -90,9 +88,9 @@ tokenizer = Tokenizer.load(model_name)
 ### In haystack
 For doing QA at scale (i.e. many docs instead of single paragraph), you can load the model also in [haystack](https://github.com/deepset-ai/haystack/):
 ```python
-reader = FARMReader(model_name_or_path="deepset/roberta-base-squad2")
+reader = FARMReader(model_name_or_path="deepset/roberta-base-squad2-v2")
 # or 
-reader = TransformersReader(model="deepset/roberta-base-squad2",tokenizer="deepset/roberta-base-squad2")
+reader = TransformersReader(model_name_or_path="deepset/roberta-base-squad2-v2",tokenizer="deepset/roberta-base-squad2-v2")
 ```
 
 

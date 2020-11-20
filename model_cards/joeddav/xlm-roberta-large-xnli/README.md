@@ -24,7 +24,7 @@ widget:
 
 This model takes [xlm-roberta-large](https://huggingface.co/xlm-roberta-large) and fine-tunes it on a combination of NLI data in 15 languages. It is intended to be used for zero-shot text classification, such as with the Hugging Face [ZeroShotClassificationPipeline](https://huggingface.co/transformers/master/main_classes/pipelines.html#transformers.ZeroShotClassificationPipeline).
 
-## Inteded Usage
+## Intended Usage
 
 This model is intended to be used for zero-shot text classification, especially in languages other than English. It is fine-tuned on XNLI, which is a multilingual NLI dataset. The model can therefore be used with any of the languages in the XNLI corpus:
 

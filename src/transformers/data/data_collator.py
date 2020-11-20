@@ -261,7 +261,7 @@ class DataCollatorForLanguageModeling:
                 batch["input_ids"], special_tokens_mask=special_tokens_mask
             )
         else:
-            labels = batch["input_ids"]
+            labels = batch["input_ids"].clone()
             if self.tokenizer.pad_token_id is not None:
                 labels[labels == self.tokenizer.pad_token_id] = -100
             batch["labels"] = labels
@@ -579,7 +579,7 @@ class DataCollatorForPermutationLanguageModeling:
             masked_indices.masked_fill_(padding_mask, value=0.0)
 
         # Mask indicating non-functional tokens, where functional tokens are [SEP], [CLS], padding, etc.
-        non_func_mask = ~(padding_mask & special_tokens_mask)
+        non_func_mask = ~(padding_mask | special_tokens_mask)
 
         inputs[masked_indices] = self.tokenizer.mask_token_id
         labels[~masked_indices] = -100  # We only compute loss on masked tokens

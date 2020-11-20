@@ -1,0 +1,10 @@
+{
+  "modelname": "TFEncoderBERT",
+  "uppercase_modelname": "TF_ENCODER_BERT",
+  "lowercase_modelname": "tf_encoder_bert",
+  "camelcase_modelname": "TfEncoderBert",
+  "authors": "The HuggingFace Team",
+  "checkpoint_identifier": "brand-new-bert-base-cased",
+  "tokenizer_type": "Based on BERT",
+  "generate_tensorflow_and_pytorch": "TensorFlow"
+}
