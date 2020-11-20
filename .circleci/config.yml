@@ -102,6 +102,7 @@ jobs:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get install git-lfs
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing]
             - save_cache:
