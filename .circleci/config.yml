@@ -98,15 +98,21 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: sudo apt-get install git-lfs
-            - run: |
-                git config --global user.email "ci@dummy.com"
-                git config --global user.name "ci"
+            - restore_cache:
+                  keys:
+                      - v0.4-torch-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[testing]
-            # - run: python -m pytest -n 8 --dist=loadfile -s --make-reports=tests_torch ./tests/ | tee tests_output.txt
-            - run: python -m pytest -sv ./tests/test_hf_api.py -k "HfLargefilesTest"
-
+            - run: pip install .[sklearn,torch,testing,sentencepiece]
+            - save_cache:
+                  key: v0.4-torch-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: python -m pytest -n 8 --dist=loadfile -s --make-reports=tests_torch ./tests/ | tee tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
     run_tests_tf:
         working_directory: ~/transformers
         docker:
@@ -263,6 +269,22 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/reports
 
+    run_tests_git_lfs:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - run: sudo apt-get install git-lfs
+            - run: |
+                git config --global user.email "ci@dummy.com"
+                git config --global user.name "ci"
+            - run: pip install --upgrade pip
+            - run: pip install .[testing]
+            - run: RUN_GIT_LFS_TESTS=1 python -m pytest -sv ./tests/test_hf_api.py -k "HfLargefilesTest"
+
     build_doc:
         working_directory: ~/transformers
         docker:
@@ -385,11 +407,12 @@ workflows:
             # - run_examples_torch
             # - run_tests_custom_tokenizers
             # - run_tests_torch_and_tf
-            - run_tests_torch
+            # - run_tests_torch
             # - run_tests_tf
             # - run_tests_flax
             # - run_tests_pipelines_torch
             # - run_tests_pipelines_tf
+            - run_tests_git_lfs
             # - build_doc
             # - deploy_doc: *workflow_filters
     tpu_testing_jobs:

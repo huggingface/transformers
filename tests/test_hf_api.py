@@ -150,6 +150,7 @@ class HfFolderTest(unittest.TestCase):
         self.assertEqual(HfFolder.get_token(), None)
 
 
+@require_git_lfs
 class HfLargefilesTest(HfApiCommonTest):
     @classmethod
     def setUpClass(cls):
@@ -179,9 +180,9 @@ class HfLargefilesTest(HfApiCommonTest):
         subprocess.run(["git", "commit", "-m", "commit message"], check=True, cwd=WORKING_REPO_DIR)
 
         # This will fail as we haven't set up our custom transfer agent yet.
-        # failed_process = subprocess.run(["git", "push"], capture_output=True, cwd=WORKING_REPO_DIR)
-        # self.assertEquals(failed_process.returncode, 1)
-        # self.assertIn("transformers-cli lfs-enable-largefiles", failed_process.stderr.decode())
+        failed_process = subprocess.run(["git", "push"], capture_output=True, cwd=WORKING_REPO_DIR)
+        self.assertEqual(failed_process.returncode, 1)
+        self.assertIn("transformers-cli lfs-enable-largefiles", failed_process.stderr.decode())
         # ^ Instructions on how to fix this are included in the error message.
 
 
@@ -197,6 +198,5 @@ class HfLargefilesTest(HfApiCommonTest):
         DEST_FILENAME = "uploaded.pdf"
         subprocess.run(["wget", pdf_url, "-O", DEST_FILENAME], check=True, capture_output=True, cwd=WORKING_REPO_DIR)
         dest_filesize = os.stat(os.path.join(WORKING_REPO_DIR, DEST_FILENAME)).st_size
-        self.assertEquals(dest_filesize, 18685041)
+        self.assertEqual(dest_filesize, 18685041)
 
-        
