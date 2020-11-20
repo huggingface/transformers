@@ -1173,14 +1173,20 @@ class T5Model(T5PreTrainedModel):
         return_dict=None,
     ):
         r"""
-
         Returns:
-        Example:: >>> from transformers import T5Tokenizer, T5Model >>> tokenizer =
-        T5Tokenizer.from_pretrained('t5-small') >>> model = T5Model.from_pretrained('t5-small') >>> input_ids =
-        tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids # Batch
-        size 1 >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids # Batch size 1 >>>
-        outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids) >>> last_hidden_states =
-        outputs.last_hidden_state
+
+        Example::
+
+            >>> from transformers import T5Tokenizer, T5Model
+
+            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = T5Model.from_pretrained('t5-small')
+
+            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
+            >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+
+            >>> last_hidden_states = outputs.last_hidden_state
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1342,18 +1348,28 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`): Labels for computing the sequence
-        classification/regression loss. Indices should be in :obj:`[-100, 0, ..., config.vocab_size - 1]`. All labels
-        set to ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size]``
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[-100, 0, ...,
+            config.vocab_size - 1]`. All labels set to ``-100`` are ignored (masked), the loss is only computed for
+            labels in ``[0, ..., config.vocab_size]``
 
         Returns:
-        Examples:: >>> from transformers import T5Tokenizer, T5ForConditionalGeneration >>> tokenizer =
-        T5Tokenizer.from_pretrained('t5-small') >>> model = T5ForConditionalGeneration.from_pretrained('t5-small') >>>
-        input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids >>> labels
-        = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2> </s>', return_tensors='pt').input_ids >>>
-        outputs = model(input_ids=input_ids, labels=labels) >>> loss = outputs.loss >>> logits = outputs.logits >>>
-        input_ids = tokenizer("summarize: studies have shown that owning a dog is good for you ",
-        return_tensors="pt").input_ids # Batch size 1 >>> outputs = model.generate(input_ids)
+
+        Examples::
+
+            >>> from transformers import T5Tokenizer, T5ForConditionalGeneration
+
+            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = T5ForConditionalGeneration.from_pretrained('t5-small')
+
+            >>> input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids
+            >>> labels = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2> </s>', return_tensors='pt').input_ids
+            >>> outputs = model(input_ids=input_ids, labels=labels)
+            >>> loss = outputs.loss
+            >>> logits = outputs.logits
+
+            >>> input_ids = tokenizer("summarize: studies have shown that owning a dog is good for you ", return_tensors="pt").input_ids  # Batch size 1
+            >>> outputs = model.generate(input_ids)
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
