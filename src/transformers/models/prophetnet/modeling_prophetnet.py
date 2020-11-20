@@ -162,6 +162,7 @@ def ngram_attention_bias(sequence_length, ngram, device, dtype):
     This function computes the bias for the predict stream
     """
     bias_array = np.ones((ngram, sequence_length, 2 * sequence_length), dtype=np.float) * np.float("-inf")
+
     # create bias
     for stream_idx in range(ngram):
         for i in range(sequence_length):
