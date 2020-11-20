@@ -19,7 +19,6 @@ logger = logging.getLogger()
 
 
 class RagFinetuneExampleTests(TestCasePlus):
-
     def _create_dummy_data(self, data_dir):
         os.makedirs(data_dir, exist_ok=True)
         contents = {"source": "What is love ?", "target": "life"}
