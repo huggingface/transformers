@@ -40,6 +40,7 @@ class TrainingArguments:
     Using :class:`~transformers.HfArgumentParser` we can turn this class into argparse arguments to be able to specify
     them on the command line.
 
+
     Parameters:
         output_dir (:obj:`str`):
             The output directory where the model predictions and checkpoints will be written.
@@ -200,7 +201,8 @@ class TrainingArguments:
     model_parallel: bool = field(
         default=False,
         metadata={
-            "help": "If there are more than one devices, whether to use model parallelism to distribute the model's modules across devices."},
+            "help": "If there are more than one devices, whether to use model parallelism to distribute the model's modules across devices."
+        },
     )
     evaluation_strategy: EvaluationStrategy = field(
         default="no",
