@@ -169,6 +169,8 @@ class TapasTokenizer(PreTrainedTokenizer):
         mask_token (:obj:`str`, `optional`, defaults to :obj:`"[MASK]"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
+        empty_token (:obj:`str`, `optional`, defaults to :obj:`"[EMPTY]"`):
+            The token used for empty cell values in a table. Empty cell values include "", "n/a", "nan" and "?".
         tokenize_chinese_chars (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to tokenize Chinese characters. This should likely be deactivated for Japanese (see this
             `issue <https://github.com/huggingface/transformers/issues/328>`__).
@@ -207,6 +209,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         pad_token="[PAD]",
         cls_token="[CLS]",
         mask_token="[MASK]",
+        empty_token="[EMPTY]",
         tokenize_chinese_chars=True,
         strip_accents=None,
         cell_trim_length: int = -1,
@@ -234,6 +237,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             strip_column_names=strip_column_names,
             update_answer_coordinates=update_answer_coordinates,
             drop_rows_to_fit=drop_rows_to_fit,
+            additional_special_tokens=[empty_token],
             **kwargs,
         )
 
@@ -274,6 +278,8 @@ class TapasTokenizer(PreTrainedTokenizer):
         return dict(self.vocab, **self.added_tokens_encoder)
 
     def _tokenize(self, text):
+        if format_text(text) == EMPTY_TEXT:
+            return [self.additional_special_tokens[0]]
         split_tokens = []
         if self.do_basic_tokenize:
             for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
@@ -2422,7 +2428,6 @@ _SortKeyFn = Callable[[NumericValue], Tuple[float, Ellipsis]]
 _DATE_TUPLE_SIZE = 3
 
 EMPTY_TEXT = 'EMPTY'
-_EMPTY = '[EMPTY]'
 
 NUMBER_TYPE = "number"
 DATE_TYPE = "date"
