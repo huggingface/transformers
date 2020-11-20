@@ -7,8 +7,8 @@ to the retriever to extract relevant context documents. The documents are then p
 Such contextualized inputs are passed to the generator.
 
 Read more about RAG  at https://arxiv.org/abs/2005.11401.
-# Finetuning
 
+# Finetuning
 
 Our finetuning logic is based on scripts from [`examples/seq2seq`](https://github.com/huggingface/transformers/tree/master/examples/seq2seq). We accept training data in the same format as specified there - we expect a directory consisting of 6 text files:
 ```bash
@@ -20,10 +20,10 @@ test.source
 test.target
 ```
 
-A sample finetuning command (run ` ./examples/rag/finetune.py --help` to list all available options):
+A sample finetuning command (run ` ./examples/rag/finetune_rag.py --help` to list all available options):
 
 ```bash
-python examples/rag/finetune.py \
+python examples/rag/finetune_rag.py \
     --data_dir $DATA_DIR \
     --output_dir $OUTPUT_DIR \
     --model_name_or_path $MODEL_NAME_OR_PATH \
@@ -45,7 +45,7 @@ python examples/rag/consolidate_rag_checkpoint.py \
     --question_encoder_name_or_path facebook/dpr-question_encoder-single-nq-base \
     --dest path/to/checkpoint
 ```
-You will then be able to pass `path/to/checkpoint` as `model_name_or_path` to the `finetune.py` script.
+You will then be able to pass `path/to/checkpoint` as `model_name_or_path` to the `finetune_rag.py` script.
 
 
 # Evaluation
@@ -129,4 +129,30 @@ python examples/rag/eval_rag.py \
     --n_docs 5 \ # You can experiment with retrieving different number of documents at evaluation time
     --print_predictions \
     --recalculate \ # adding this parameter will force recalculating predictions even if predictions_path already exists
+```
+
+# Use your own knowledge source
+
+By default, RAG uses the English Wikipedia as a knowledge source, known as the 'wiki_dpr' dataset.
+With `use_custom_knowledge_dataset.py` you can build your own knowledge source, *e.g.* for RAG.
+
+For instance, if documents are serialized as tab-separated csv files with the columns "title" and "text", one can use `use_own_knowledge_dataset.py` as follows:
+```bash
+python examples/rag/use_own_knowledge_dataset.py \
+    --csv_path path/to/my_csv \
+    --output_dir path/to/my_knowledge_dataset \
+```
+
+The created outputs in `path/to/my_knowledge_dataset` can then be used to finetune RAG as follows:
+```bash
+python examples/rag/finetune_rag.py \
+    --data_dir $DATA_DIR \
+    --output_dir $OUTPUT_DIR \
+    --model_name_or_path $MODEL_NAME_OR_PATH \
+    --model_type rag_sequence \
+    --fp16 \
+    --gpus 8
+    --index_name custom
+    --passages_path path/to/data/my_knowledge_dataset
+    --index_path path/to/my_knowledge_dataset_hnsw_index.faiss
 ```

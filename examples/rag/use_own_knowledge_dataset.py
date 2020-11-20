@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 from typing import List, Optional
 
 import torch
-from datasets import load_dataset
+from datasets import Features, Sequence, Value, load_dataset
 
 import faiss
 from transformers import (
@@ -82,10 +82,14 @@ def main(
     # And compute the embeddings
     ctx_encoder = DPRContextEncoder.from_pretrained(rag_example_args.dpr_ctx_encoder_model_name).to(device=device)
     ctx_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained(rag_example_args.dpr_ctx_encoder_model_name)
+    new_features = Features(
+        {"text": Value("string"), "title": Value("string"), "embeddings": Sequence(Value("float32"))}
+    )  # optional, save as float32 instead of float64 to save space
     dataset = dataset.map(
         partial(embed, ctx_encoder=ctx_encoder, ctx_tokenizer=ctx_tokenizer),
         batched=True,
         batch_size=processing_args.batch_size,
+        features=new_features,
     )
 
     # And finally save your dataset
