@@ -95,7 +95,6 @@ class BeamScorer(ABC):
     def process(
         self,
         input_ids: torch.LongTensor,
-        group_size: int,
         next_scores: torch.FloatTensor,
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
