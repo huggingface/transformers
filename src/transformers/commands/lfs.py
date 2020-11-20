@@ -116,9 +116,9 @@ class FileSlice(AbstractContextManager):
         if self.n_seen >= self.read_limit:
             return b""
         remaining_amount = self.read_limit - self.n_seen
-        data = self.f.read(remaining_amount if n < 0 else min(n, remaining_amount))
-        self.n_seen += len(data)
-        return data
+        n_to_read = remaining_amount if n < 0 else min(n, remaining_amount)
+        self.n_seen += n_to_read
+        return self.f.read(n_to_read)
 
     def __iter__(self):
         yield self.read(n=io.DEFAULT_BUFFER_SIZE)
