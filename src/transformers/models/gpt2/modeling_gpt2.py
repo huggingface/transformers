@@ -820,6 +820,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             input_ids = input_ids[:, -1].unsqueeze(-1)
             if token_type_ids is not None:
                 token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
+
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
 
@@ -865,10 +866,10 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`): Labels for language
-        modeling. Note that the labels **are shifted** inside the model, i.e. you can set ``labels = input_ids``
-        Indices are selected in ``[-100, 0, ..., config.vocab_size]`` All labels set to ``-100`` are ignored (masked),
-        the loss is only computed for labels in ``[0, ..., config.vocab_size]``
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
+            ``labels = input_ids`` Indices are selected in ``[-100, 0, ..., config.vocab_size]`` All labels set to
+            ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size]``
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -948,8 +949,10 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             input_ids = input_ids[:, -1].unsqueeze(-1)
             if token_type_ids is not None:
                 token_type_ids = token_type_ids[:, -1].unsqueeze(-1)
+
         attention_mask = kwargs.get("attention_mask", None)
         position_ids = kwargs.get("position_ids", None)
+
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
@@ -958,6 +961,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
                 position_ids = position_ids[:, -1].unsqueeze(-1)
         else:
             position_ids = None
+
         return {
             "input_ids": input_ids,
             "past_key_values": past,
@@ -988,27 +992,44 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
         **kwargs,
     ):
         r"""
-        mc_token_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index
-        of the last token of the input): Index of the classification token in each input sequence. Selected in the
-        range ``[0, input_ids.size(-1) - 1[``. labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,
-        sequence_length)`, `optional`): Labels for language modeling. Note that the labels **are shifted** inside the
-        model, i.e. you can set ``labels = input_ids`` Indices are selected in ``[-1, 0, ..., config.vocab_size]`` All
-        labels set to ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ...,
-        config.vocab_size]`` mc_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size)`, `optional`): Labels for
-        computing the multiple choice classification loss. Indices should be in ``[0, ..., num_choices]`` where
-        `num_choices` is the size of the second dimension of the input tensors. (see `input_ids` above)
+        mc_token_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input):
+            Index of the classification token in each input sequence. Selected in the range ``[0, input_ids.size(-1) -
+            1[``.
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
+            ``labels = input_ids`` Indices are selected in ``[-1, 0, ..., config.vocab_size]`` All labels set to
+            ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size]``
+        mc_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size)`, `optional`):
+            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+            num_choices]`` where `num_choices` is the size of the second dimension of the input tensors. (see
+            `input_ids` above)
 
         Return:
-        Example:: >>> import torch >>> from transformers import GPT2Tokenizer, GPT2DoubleHeadsModel >>> tokenizer =
-        GPT2Tokenizer.from_pretrained('gpt2') >>> model = GPT2DoubleHeadsModel.from_pretrained('gpt2') >>> # Add a
-        [CLS] to the vocabulary (we should train it also!) >>> num_added_tokens =
-        tokenizer.add_special_tokens({'cls_token': '[CLS]'}) >>> embedding_layer =
-        model.resize_token_embeddings(len(tokenizer)) # Update the model embeddings with the new vocabulary size >>>
-        choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"] >>> encoded_choices =
-        [tokenizer.encode(s) for s in choices] >>> cls_token_location = [tokens.index(tokenizer.cls_token_id) for
-        tokens in encoded_choices] >>> input_ids = torch.tensor(encoded_choices).unsqueeze(0) # Batch size: 1, number
-        of choices: 2 >>> mc_token_ids = torch.tensor([cls_token_location]) # Batch size: 1 >>> outputs =
-        model(input_ids, mc_token_ids=mc_token_ids) >>> lm_logits = outputs.lm_logits >>> mc_logits = outputs.mc_logits
+        
+        Example::
+
+            >>> import torch
+            >>> from transformers import GPT2Tokenizer, GPT2DoubleHeadsModel
+
+            >>> tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+            >>> model = GPT2DoubleHeadsModel.from_pretrained('gpt2')
+
+            >>> # Add a [CLS] to the vocabulary (we should train it also!)
+            >>> num_added_tokens = tokenizer.add_special_tokens({'cls_token': '[CLS]'})
+
+            >>> embedding_layer = model.resize_token_embeddings(len(tokenizer))  # Update the model embeddings with the new vocabulary size
+
+            >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
+            >>> encoded_choices = [tokenizer.encode(s) for s in choices]
+            >>> cls_token_location = [tokens.index(tokenizer.cls_token_id) for tokens in encoded_choices]
+
+            >>> input_ids = torch.tensor(encoded_choices).unsqueeze(0)  # Batch size: 1, number of choices: 2
+            >>> mc_token_ids = torch.tensor([cls_token_location])  # Batch size: 1
+
+            >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
+            >>> lm_logits = outputs.lm_logits
+            >>> mc_logits = outputs.mc_logits
+
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1062,12 +1083,15 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
 @add_start_docstrings(
     """
     The GPT2 Model transformer with a sequence classification head on top (linear layer).
+
     :class:`~transformers.GPT2ForSequenceClassification` uses the last token in order to do the classification, as
-    other causal models (e.g. GPT-1) do. Since it does classification on the last token, it requires to know the
-    position of the last token. If a :obj:`pad_token_id` is defined in the configuration, it finds the last token that
-    is not a padding token in each row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each
-    row of the batch. Since it cannot guess the padding tokens when :obj:`inputs_embeds` are passed instead of
-    :obj:`input_ids`, it does the same (take the last value in each row of the batch).
+    other causal models (e.g. GPT-1) do.
+
+    Since it does classification on the last token, it requires to know the position of the last token. If a
+    :obj:`pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each
+    row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot
+    guess the padding tokens when :obj:`inputs_embeds` are passed instead of :obj:`input_ids`, it does the same (take
+    the last value in each row of the batch).
     """,
     GPT2_START_DOCSTRING,
 )
@@ -1105,10 +1129,10 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
         return_dict=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`): Labels for computing the sequence
-        classification/regression loss. Indices should be in :obj:`[0, ..., config.num_labels - 1]`. If
-        :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss), If :obj:`config.num_labels > 1`
-        a classification loss is computed (Cross-Entropy).
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
