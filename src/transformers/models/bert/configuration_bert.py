@@ -92,10 +92,12 @@ class BertConfig(PretrainedConfig):
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         position_embedding_type (:obj:`str`, `optional`, defaults to :obj:`"absolute"`):
-            Position embedding type. :obj:`"absolute"`, BERT default absolute position embedding,
-            :obj:`"relative_key"`, position embedding in Shaw et al. Self-Attention with Relative Position
-            Representations, https://arxiv.org/abs/1803.02155, :obj:`"relative_key_query"`: Method 4 in Huang et al.
-            Improve Transformer Models with Better Relative Position Embeddings, https://arxiv.org/abs/2009.13658
+            Type of position embedding. Choose one of :obj:`"absolute"`, :obj:`"relative_key"`,
+            :obj:`"relative_key_query"`. For positional embeddings use :obj:`"absolute"`. For more information on
+            :obj:`"relative_key"`, please refer to `Self-Attention with Relative Position Representations (Shaw et al.)
+            <https://arxiv.org/abs/1803.02155>`__. For more information on :obj:`"relative_key_query"`, please refer to
+            `Method 4` in `Improve Transformer Models with Better Relative Position Embeddings (Huang et al.)
+            <https://arxiv.org/abs/2009.13658>`__.
 
     Examples::
 
