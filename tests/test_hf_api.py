@@ -22,8 +22,8 @@ import unittest
 
 import requests
 from requests.exceptions import HTTPError
-from testing_utils import require_git_lfs
 from transformers.hf_api import HfApi, HfFolder, ModelInfo, PresignedUrl, RepoObj, S3Obj
+from transformers.testing_utils import require_git_lfs
 
 
 USER = "__DUMMY_TRANSFORMERS_USER__"
