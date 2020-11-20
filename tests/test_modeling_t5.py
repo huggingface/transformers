@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Mesh TensorFlow authors, T5 Authors and HuggingFace Inc. team.
+# Copyright 2018 Google T5 Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,1470 +12,759 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch T5 model. """
 
 
 import copy
-import math
-import os
+import tempfile
+import unittest
 
-import torch
-import torch.nn.functional as F
-from torch import nn
-from torch.nn import CrossEntropyLoss
+from transformers import is_torch_available
+from transformers.file_utils import cached_property
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
-from ...activations import ACT2FN
-from ...file_utils import (
-    DUMMY_INPUTS,
-    DUMMY_MASK,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
-from ...modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPastAndCrossAttentions,
-    Seq2SeqLMOutput,
-    Seq2SeqModelOutput,
-)
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import logging
-from ...utils.model_parallel_utils import assert_device_map, get_device_map
-from .configuration_t5 import T5Config
+from .test_configuration_common import ConfigTester
+from .test_generation_utils import GenerationTesterMixin
+from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
-logger = logging.get_logger(__name__)
+if is_torch_available():
+    import torch
 
-_CONFIG_FOR_DOC = "T5Config"
-_TOKENIZER_FOR_DOC = "T5Tokenizer"
-
-####################################################
-# This dict contains ids and associated url
-# for the pretrained weights provided with the models
-####################################################
-T5_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "t5-small",
-    "t5-base",
-    "t5-large",
-    "t5-3b",
-    "t5-11b",
-    # See all T5 models at https://huggingface.co/models?filter=t5
-]
+    from transformers import T5Config, T5ForConditionalGeneration, T5Model, T5Tokenizer
+    from transformers.models.t5.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
-####################################################
-# This is a conversion method from TF 1.0 to PyTorch
-# More details: https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28
-####################################################
-def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch model."""
-    try:
-        import re
+class T5ModelTester:
+    def __init__(
+        self,
+        parent,
+        vocab_size=99,
+        n_positions=14,
+        batch_size=13,
+        encoder_seq_length=7,
+        decoder_seq_length=9,
+        # For common tests
+        is_training=True,
+        use_attention_mask=True,
+        use_labels=True,
+        hidden_size=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        d_ff=37,
+        relative_attention_num_buckets=8,
+        dropout_rate=0.1,
+        initializer_factor=0.002,
+        eos_token_id=1,
+        pad_token_id=0,
+        decoder_start_token_id=0,
+        scope=None,
+        decoder_layers=None,
+    ):
 
-        import numpy as np
-        import tensorflow as tf
-    except ImportError:
-        logger.error(
-            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions."
+        self.parent = parent
+        self.batch_size = batch_size
+        self.encoder_seq_length = encoder_seq_length
+        self.decoder_seq_length = decoder_seq_length
+        # For common tests
+        self.seq_length = self.decoder_seq_length
+        self.is_training = is_training
+        self.use_attention_mask = use_attention_mask
+        self.use_labels = use_labels
+        self.vocab_size = vocab_size
+        self.n_positions = n_positions
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.d_ff = d_ff
+        self.relative_attention_num_buckets = relative_attention_num_buckets
+        self.dropout_rate = dropout_rate
+        self.initializer_factor = initializer_factor
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.scope = None
+        self.decoder_layers = decoder_layers
+
+    def get_large_model_config(self):
+        return T5Config.from_pretrained("t5-base")
+
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
+        decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+
+        attention_mask = None
+        decoder_attention_mask = None
+        if self.use_attention_mask:
+            attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
+            decoder_attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
+
+        lm_labels = None
+        if self.use_labels:
+            lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
+
+        config = T5Config(
+            vocab_size=self.vocab_size,
+            n_positions=self.n_positions,
+            d_model=self.hidden_size,
+            d_ff=self.d_ff,
+            d_kv=self.hidden_size // self.num_attention_heads,
+            num_layers=self.num_hidden_layers,
+            num_decoder_layers=self.decoder_layers,
+            num_heads=self.num_attention_heads,
+            relative_attention_num_buckets=self.relative_attention_num_buckets,
+            dropout_rate=self.dropout_rate,
+            initializer_factor=self.initializer_factor,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.pad_token_id,
+            pad_token_id=self.pad_token_id,
+            decoder_start_token_id=self.decoder_start_token_id,
         )
-        raise
-    tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
-    names = []
-    tf_weights = {}
-    for name, shape in init_vars:
-        logger.info("Loading TF weight {} with shape {}".format(name, shape))
-        array = tf.train.load_variable(tf_path, name)
-        names.append(name)
-        tf_weights[name] = array
 
-    for txt_name in names:
-        name = txt_name.split("/")
-        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-        # which are not required for using pretrained model
-        if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
-            for n in name
-        ):
-            logger.info("Skipping {}".format("/".join(name)))
-            tf_weights.pop(txt_name, None)
-            continue
-        if "_slot_" in name[-1]:
-            logger.info("Skipping {}".format("/".join(name)))
-            tf_weights.pop(txt_name, None)
-            continue
-        pointer = model
-        array = tf_weights[txt_name]
+        return (
+            config,
+            input_ids,
+            decoder_input_ids,
+            attention_mask,
+            decoder_attention_mask,
+            lm_labels,
+        )
 
-        for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
-                scope_names = re.split(r"_(\d+)", m_name)
+    def check_prepare_lm_labels_via_shift_left(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = T5Model(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        # make sure that lm_labels are correctly padded from the right
+        lm_labels.masked_fill_((lm_labels == self.decoder_start_token_id), self.eos_token_id)
+
+        # add casaul pad token mask
+        triangular_mask = torch.tril(lm_labels.new_ones(lm_labels.shape)).logical_not()
+        lm_labels.masked_fill_(triangular_mask, self.pad_token_id)
+        decoder_input_ids = model._shift_right(lm_labels)
+
+        for i, (decoder_input_ids_slice, lm_labels_slice) in enumerate(zip(decoder_input_ids, lm_labels)):
+            # first item
+            self.parent.assertEqual(decoder_input_ids_slice[0].item(), self.decoder_start_token_id)
+            if i < decoder_input_ids_slice.shape[-1]:
+                if i < decoder_input_ids.shape[-1] - 1:
+                    # items before diagonal
+                    self.parent.assertListEqual(
+                        decoder_input_ids_slice[1 : i + 1].tolist(), lm_labels_slice[:i].tolist()
+                    )
+                # pad items after diagonal
+                if i < decoder_input_ids.shape[-1] - 2:
+                    self.parent.assertListEqual(
+                        decoder_input_ids_slice[i + 2 :].tolist(), lm_labels_slice[i + 1 : -1].tolist()
+                    )
             else:
-                scope_names = [m_name]
-            if scope_names[0] in ["kernel", "scale", "embedding"]:
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "self_attention":
-                pointer = getattr(pointer, "layer")
-                pointer = pointer[0]
-            elif scope_names[0] == "enc_dec_attention":
-                pointer = getattr(pointer, "layer")
-                pointer = pointer[1]
-            elif scope_names[0] == "dense_relu_dense":
-                pointer = getattr(pointer, "layer")
-                pointer = pointer[2]
-            elif scope_names[0] == "rms_norm":
-                if hasattr(pointer, "layer_norm"):
-                    pointer = getattr(pointer, "layer_norm")
-                elif hasattr(pointer, "final_layer_norm"):
-                    pointer = getattr(pointer, "final_layer_norm")
-            elif scope_names[0] == "scale":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
-                pointer = getattr(pointer, "bias")
-            elif scope_names[0] == "squad":
-                pointer = getattr(pointer, "classifier")
-            elif scope_names[0] == "decoder" and name[1] == "logits":
-                continue
-            elif scope_names[0] == "logits":
-                pointer = getattr(pointer, "lm_head")
-            elif scope_names[0] == "wi" and len(scope_names) > 1 and scope_names[1].isdigit():
-                pointer = getattr(pointer, f"wi_{scope_names[1]}")
-                continue
-            else:
-                try:
-                    pointer = getattr(pointer, scope_names[0])
-                except AttributeError:
-                    logger.info("Skipping {}".format("/".join(name)))
-                    continue
-            if len(scope_names) >= 2:
-                num = int(scope_names[1])
-                pointer = pointer[num]
-        if scope_names[0] not in ["kernel", "scale", "embedding"]:
-            pointer = getattr(pointer, "weight")
-        if scope_names[0] != "embedding":
-            logger.info("Transposing numpy weight of shape {} for {}".format(array.shape, name))
-            array = np.transpose(array)
-        try:
-            assert (
-                pointer.shape == array.shape
-            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
-        except AssertionError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
-        logger.info("Initialize PyTorch weight {}".format(name))
-        pointer.data = torch.from_numpy(array.astype(np.float32))
-        tf_weights.pop(txt_name, None)
+                # all items after square
+                self.parent.assertListEqual(decoder_input_ids_slice[1:].tolist(), lm_labels_slice[:-1].tolist())
 
-    logger.info("Weights not copied to PyTorch model: {}".format(", ".join(tf_weights.keys())))
-    return model
-
-
-####################################################
-# PyTorch Models are constructed by sub-classing
-# - torch.nn.Module for the layers and
-# - PreTrainedModel for the models (it-self a sub-class of torch.nn.Module)
-####################################################
-PARALLELIZE_DOCSTRING = r"""
-    Uses a device map to distribute attention modules of the model across several devices. If no device map is given,
-    it will evenly distribute blocks across all devices.
-
-    Args:
-        device_map (:obj:`Dict[int, list]`, optional, defaults to None):
-            A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
-            automatically mapped to the first device (for esoteric reasons). That means that the first device should
-            have fewer attention modules mapped to it than other devices. For reference, the t5 models have the
-            following number of attention modules:
-
-                - t5-small: 6
-                - t5-base: 12
-                - t5-large: 24
-                - t5-3b: 24
-                - t5-11b: 24
-
-    Example::
-        Here is an example of a device map on a machine with 4 GPUs using t5-3b, which has a total of 24 attention modules:
-            model = T5ForConditionalGeneration.from_pretrained('t5-3b')
-            device_map = {0: [0, 1, 2],
-
-                         1: [3, 4, 5, 6, 7, 8, 9],
-                         2: [10, 11, 12, 13, 14, 15, 16],
-                         3: [17, 18, 19, 20, 21, 22, 23]}
-            model.parallelize(device_map)
-"""
-DEPARALLELIZE_DOCSTRING = r"""
-    Moves the model to cpu from a model parallel state.
-
-    Example::
-        On a 4 GPU machine with t5-3b:
-        model = T5ForConditionalGeneration.from_pretrained('t5-3b')
-        device_map = {0: [0, 1, 2],
-
-                     1: [3, 4, 5, 6, 7, 8, 9],
-                     2: [10, 11, 12, 13, 14, 15, 16],
-                     3: [17, 18, 19, 20, 21, 22, 23]}
-        model.parallelize(device_map) # Splits the model across several devices
-        model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
-"""
-
-
-class T5LayerNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        Construct a layernorm module in the T5 style No bias and no subtraction of mean.
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        # layer norm should always be calculated in float32
-        variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-
-        # convert into float16 if necessary
-        if self.weight.dtype == torch.float16:
-            hidden_states = hidden_states.to(torch.float16)
-        return self.weight * hidden_states
-
-
-class T5DenseReluDense(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.wi = nn.Linear(config.d_model, config.d_ff, bias=False)
-        self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
-        self.dropout = nn.Dropout(config.dropout_rate)
-
-    def forward(self, hidden_states):
-        hidden_states = self.wi(hidden_states)
-        hidden_states = F.relu(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.wo(hidden_states)
-        return hidden_states
-
-
-class T5DenseGatedGeluDense(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.wi_0 = nn.Linear(config.d_model, config.d_ff, bias=False)
-        self.wi_1 = nn.Linear(config.d_model, config.d_ff, bias=False)
-        self.wo = nn.Linear(config.d_ff, config.d_model, bias=False)
-        self.dropout = nn.Dropout(config.dropout_rate)
-        self.gelu_act = ACT2FN["gelu_new"]
-
-    def forward(self, hidden_states):
-        hidden_gelu = self.gelu_act(self.wi_0(hidden_states))
-        hidden_linear = self.wi_1(hidden_states)
-        hidden_states = hidden_gelu * hidden_linear
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.wo(hidden_states)
-        return hidden_states
-
-
-class T5LayerFF(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        if config.feed_forward_proj == "relu":
-            self.DenseReluDense = T5DenseReluDense(config)
-        elif config.feed_forward_proj == "gated-gelu":
-            self.DenseReluDense = T5DenseGatedGeluDense(config)
-        else:
-            raise ValueError(
-                f"{self.config.feed_forward_proj} is not supported. Choose between `relu` and `gated-gelu`"
-            )
-
-        self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
-        self.dropout = nn.Dropout(config.dropout_rate)
-
-    def forward(self, hidden_states):
-        forwarded_states = self.layer_norm(hidden_states)
-        forwarded_states = self.DenseReluDense(forwarded_states)
-        hidden_states = hidden_states + self.dropout(forwarded_states)
-        return hidden_states
-
-
-class T5Attention(nn.Module):
-    def __init__(self, config: T5Config, has_relative_attention_bias=False):
-        super().__init__()
-        self.is_decoder = config.is_decoder
-        self.has_relative_attention_bias = has_relative_attention_bias
-
-        self.relative_attention_num_buckets = config.relative_attention_num_buckets
-        self.d_model = config.d_model
-        self.key_value_proj_dim = config.d_kv
-        self.n_heads = config.num_heads
-        self.dropout = config.dropout_rate
-        self.inner_dim = self.n_heads * self.key_value_proj_dim
-
-        # Mesh TensorFlow initialization to avoid scaling before softmax
-        self.q = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
-        self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
-
-        if self.has_relative_attention_bias:
-            self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.n_heads, self.key_value_proj_dim, self.pruned_heads
-        )
-        # Prune linear layers
-        self.q = prune_linear_layer(self.q, index)
-        self.k = prune_linear_layer(self.k, index)
-        self.v = prune_linear_layer(self.v, index)
-        self.o = prune_linear_layer(self.o, index, dim=1)
-        # Update hyper params
-        self.n_heads = self.n_heads - len(heads)
-        self.inner_dim = self.key_value_proj_dim * self.n_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    @staticmethod
-    def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
-        """
-        Adapted from Mesh Tensorflow:
-        https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
-        Translate relative position to a bucket number for relative attention. The relative position is defined as
-        memory_position - query_position, i.e. the distance in tokens from the attending position to the attended-to
-        position. If bidirectional=False, then positive relative positions are invalid. We use smaller buckets for
-        small absolute relative_position and larger buckets for larger absolute relative_positions. All relative
-        positions >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket.
-        This should allow for more graceful generalization to longer sequences than the model has been trained on
-
-        Args:
-            relative_position: an int32 Tensor
-            bidirectional: a boolean - whether the attention is bidirectional
-            num_buckets: an integer
-            max_distance: an integer
-
-        Returns:
-            a Tensor with the same shape as relative_position, containing int32 values in the range [0, num_buckets)
-        """
-        relative_buckets = 0
-        if bidirectional:
-            num_buckets //= 2
-            relative_buckets += (relative_position > 0).to(torch.long) * num_buckets
-            relative_position = torch.abs(relative_position)
-        else:
-            relative_position = -torch.min(relative_position, torch.zeros_like(relative_position))
-        # now relative_position is in the range [0, inf)
-
-        # half of the buckets are for exact increments in positions
-        max_exact = num_buckets // 2
-        is_small = relative_position < max_exact
-
-        # The other half of the buckets are for logarithmically bigger bins in positions up to max_distance
-        relative_postion_if_large = max_exact + (
-            torch.log(relative_position.float() / max_exact)
-            / math.log(max_distance / max_exact)
-            * (num_buckets - max_exact)
-        ).to(torch.long)
-        relative_postion_if_large = torch.min(
-            relative_postion_if_large, torch.full_like(relative_postion_if_large, num_buckets - 1)
-        )
-
-        relative_buckets += torch.where(is_small, relative_position, relative_postion_if_large)
-        return relative_buckets
-
-    def compute_bias(self, query_length, key_length):
-        """ Compute binned relative position bias """
-        context_position = torch.arange(query_length, dtype=torch.long)[:, None]
-        memory_position = torch.arange(key_length, dtype=torch.long)[None, :]
-        relative_position = memory_position - context_position  # shape (query_length, key_length)
-        relative_position_bucket = self._relative_position_bucket(
-            relative_position,  # shape (query_length, key_length)
-            bidirectional=(not self.is_decoder),
-            num_buckets=self.relative_attention_num_buckets,
-        )
-        relative_position_bucket = relative_position_bucket.to(self.relative_attention_bias.weight.device)
-        values = self.relative_attention_bias(relative_position_bucket)  # shape (query_length, key_length, num_heads)
-        values = values.permute([2, 0, 1]).unsqueeze(0)  # shape (1, num_heads, query_length, key_length)
-        return values
-
-    def forward(
+    def create_and_check_model(
         self,
-        hidden_states,
-        mask=None,
-        key_value_states=None,
-        position_bias=None,
-        past_key_value=None,
-        head_mask=None,
-        query_length=None,
-        use_cache=False,
-        output_attentions=False,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
     ):
-        """
-        Self-attention (if key_value_states is None) or attention over source sentence (provided by key_value_states).
-        """
-        # Input is (batch_size, seq_length, dim)
-        # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
-        # past_key_value[0] is (batch_size, n_heads, q_len - 1, dim_per_head)
-        batch_size, seq_length = hidden_states.shape[:2]
-
-        real_seq_length = seq_length
-
-        if past_key_value is not None:
-            assert (
-                len(past_key_value) == 2
-            ), "past_key_value should have 2 past states: keys and values. Got {} past states".format(
-                len(past_key_value)
-            )
-            real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
-
-        key_length = real_seq_length if key_value_states is None else key_value_states.shape[1]
-
-        def shape(states):
-            """  projection """
-            return states.view(batch_size, -1, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
-
-        def unshape(states):
-            """  reshape """
-            return states.transpose(1, 2).contiguous().view(batch_size, -1, self.inner_dim)
-
-        def project(hidden_states, proj_layer, key_value_states, past_key_value):
-            """ projects hidden states correctly to key/query states """
-            if key_value_states is None:
-                # self-attn
-                # (batch_size, n_heads, seq_length, dim_per_head)
-                hidden_states = shape(proj_layer(hidden_states))
-            elif past_key_value is None:
-                # cross-attn
-                # (batch_size, n_heads, seq_length, dim_per_head)
-                hidden_states = shape(proj_layer(key_value_states))
-
-            if past_key_value is not None:
-                if key_value_states is None:
-                    # self-attn
-                    # (batch_size, n_heads, key_length, dim_per_head)
-                    hidden_states = torch.cat([past_key_value, hidden_states], dim=2)
-                else:
-                    # cross-attn
-                    hidden_states = past_key_value
-            return hidden_states
-
-        # get query states
-        query_states = shape(self.q(hidden_states))  # (batch_size, n_heads, seq_length, dim_per_head)
-
-        # get key/value states
-        key_states = project(
-            hidden_states, self.k, key_value_states, past_key_value[0] if past_key_value is not None else None
-        )
-        value_states = project(
-            hidden_states, self.v, key_value_states, past_key_value[1] if past_key_value is not None else None
-        )
-
-        # compute scores
-        scores = torch.matmul(
-            query_states, key_states.transpose(3, 2)
-        )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
-
-        if position_bias is None:
-            if not self.has_relative_attention_bias:
-                position_bias = torch.zeros(
-                    (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
-                )
-            else:
-                position_bias = self.compute_bias(real_seq_length, key_length)
-
-            # if key and values are already calculated
-            # we want only the last query position bias
-            if past_key_value is not None:
-                position_bias = position_bias[:, :, -seq_length:, :]
-
-            if mask is not None:
-                position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
-
-        scores += position_bias
-        attn_weights = F.softmax(scores.float(), dim=-1).type_as(
-            scores
-        )  # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = F.dropout(
-            attn_weights, p=self.dropout, training=self.training
-        )  # (batch_size, n_heads, seq_length, key_length)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attn_weights = attn_weights * head_mask
-
-        attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
-        attn_output = self.o(attn_output)
-
-        present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
-        outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
-
-        if output_attentions:
-            outputs = outputs + (attn_weights,)
-        return outputs
-
-
-class T5LayerSelfAttention(nn.Module):
-    def __init__(self, config, has_relative_attention_bias=False):
-        super().__init__()
-        self.SelfAttention = T5Attention(config, has_relative_attention_bias=has_relative_attention_bias)
-        self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
-        self.dropout = nn.Dropout(config.dropout_rate)
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        position_bias=None,
-        head_mask=None,
-        past_key_value=None,
-        use_cache=False,
-        output_attentions=False,
-    ):
-        normed_hidden_states = self.layer_norm(hidden_states)
-        attention_output = self.SelfAttention(
-            normed_hidden_states,
-            mask=attention_mask,
-            position_bias=position_bias,
-            head_mask=head_mask,
-            past_key_value=past_key_value,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-        )
-        hidden_states = hidden_states + self.dropout(attention_output[0])
-        outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
-        return outputs
-
-
-class T5LayerCrossAttention(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.EncDecAttention = T5Attention(config, has_relative_attention_bias=False)
-        self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
-        self.dropout = nn.Dropout(config.dropout_rate)
-
-    def forward(
-        self,
-        hidden_states,
-        key_value_states,
-        attention_mask=None,
-        position_bias=None,
-        head_mask=None,
-        past_key_value=None,
-        use_cache=False,
-        query_length=None,
-        output_attentions=False,
-    ):
-        normed_hidden_states = self.layer_norm(hidden_states)
-        attention_output = self.EncDecAttention(
-            normed_hidden_states,
-            mask=attention_mask,
-            key_value_states=key_value_states,
-            position_bias=position_bias,
-            head_mask=head_mask,
-            past_key_value=past_key_value,
-            use_cache=use_cache,
-            query_length=query_length,
-            output_attentions=output_attentions,
-        )
-        layer_output = hidden_states + self.dropout(attention_output[0])
-        outputs = (layer_output,) + attention_output[1:]  # add attentions if we output them
-        return outputs
-
-
-class T5Block(nn.Module):
-    def __init__(self, config, has_relative_attention_bias=False):
-        super().__init__()
-        self.is_decoder = config.is_decoder
-        self.layer = nn.ModuleList()
-        self.layer.append(T5LayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias))
-        if self.is_decoder:
-            self.layer.append(T5LayerCrossAttention(config))
-
-        self.layer.append(T5LayerFF(config))
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        position_bias=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        encoder_decoder_position_bias=None,
-        head_mask=None,
-        past_key_value=None,
-        use_cache=False,
-        output_attentions=False,
-        return_dict=True,
-    ):
-
-        if past_key_value is not None:
-            assert self.is_decoder, "Only decoder can use `past_key_values`"
-            expected_num_past_key_values = 2 if encoder_hidden_states is None else 4
-
-            error_message = "There should be {} past states. 2 (past / key) for self attention.{} Got {} past key / value states".format(
-                expected_num_past_key_values,
-                "2 (past / key) for cross attention" if expected_num_past_key_values == 4 else "",
-                len(past_key_value),
-            )
-            assert len(past_key_value) == expected_num_past_key_values, error_message
-
-            self_attn_past_key_value = past_key_value[:2]
-            cross_attn_past_key_value = past_key_value[2:]
-        else:
-            self_attn_past_key_value, cross_attn_past_key_value = None, None
-
-        self_attention_outputs = self.layer[0](
-            hidden_states,
+        model = T5Model(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids=input_ids,
+            decoder_input_ids=decoder_input_ids,
             attention_mask=attention_mask,
-            position_bias=position_bias,
-            head_mask=head_mask,
-            past_key_value=self_attn_past_key_value,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
+            decoder_attention_mask=decoder_attention_mask,
         )
-        hidden_states, present_key_value_state = self_attention_outputs[:2]
-        attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
+        result = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+        decoder_output = result.last_hidden_state
+        decoder_past = result.past_key_values
+        encoder_output = result.encoder_last_hidden_state
 
-        do_cross_attention = self.is_decoder and encoder_hidden_states is not None
-        if do_cross_attention:
-            # the actual query length is unknown for cross attention
-            # if using past key value states. Need to inject it here
-            if present_key_value_state is not None:
-                query_length = present_key_value_state[0].shape[2]
-            else:
-                query_length = None
+        self.parent.assertEqual(encoder_output.size(), (self.batch_size, self.encoder_seq_length, self.hidden_size))
+        self.parent.assertEqual(decoder_output.size(), (self.batch_size, self.decoder_seq_length, self.hidden_size))
+        # There should be `num_layers` key value embeddings stored in decoder_past
+        self.parent.assertEqual(len(decoder_past), config.num_layers)
+        # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
+        self.parent.assertEqual(len(decoder_past[0]), 4)
 
-            cross_attention_outputs = self.layer[1](
-                hidden_states,
-                key_value_states=encoder_hidden_states,
-                attention_mask=encoder_attention_mask,
-                position_bias=encoder_decoder_position_bias,
-                head_mask=head_mask,
-                past_key_value=cross_attn_past_key_value,
-                query_length=query_length,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-            )
-            hidden_states = cross_attention_outputs[0]
-            # Combine self attn and cross attn key value states
-            if present_key_value_state is not None:
-                present_key_value_state = present_key_value_state + cross_attention_outputs[1]
-
-            # Keep cross-attention outputs and relative position weights
-            attention_outputs = attention_outputs + cross_attention_outputs[2:]
-
-        # Apply Feed Forward layer
-        hidden_states = self.layer[-1](hidden_states)
-        outputs = (hidden_states,)
-
-        outputs = outputs + (present_key_value_state,) + attention_outputs
-        return outputs  # hidden-states, present_key_value_states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
-
-
-class T5PreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = T5Config
-    load_tf_weights = load_tf_weights_in_t5
-    base_model_prefix = "transformer"
-
-    @property
-    def dummy_inputs(self):
-        input_ids = torch.tensor(DUMMY_INPUTS)
-        input_mask = torch.tensor(DUMMY_MASK)
-        dummy_inputs = {
-            "decoder_input_ids": input_ids,
-            "input_ids": input_ids,
-            "decoder_attention_mask": input_mask,
-        }
-        return dummy_inputs
-
-    def _init_weights(self, module):
-        """ Initialize the weights """
-        factor = self.config.initializer_factor  # Used for testing weights initialization
-        if isinstance(module, T5LayerNorm):
-            module.weight.data.fill_(factor * 1.0)
-        elif isinstance(module, (T5Model, T5ForConditionalGeneration)):
-            # Mesh TensorFlow embeddings initialization
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
-            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
-        elif isinstance(module, T5DenseReluDense):
-            # Mesh TensorFlow FF initialization
-            # See https://github.com/tensorflow/mesh/blob/master/mesh_tensorflow/transformer/transformer_layers.py#L56
-            # and https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L89
-            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi, "bias") and module.wi.bias is not None:
-                module.wi.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
-            if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
-        elif isinstance(module, T5DenseGatedGeluDense):
-            module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
-                module.wi_0.bias.data.zero_()
-            module.wi_1.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
-            if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
-                module.wi_1.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
-            if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
-        elif isinstance(module, T5Attention):
-            # Mesh TensorFlow attention initialization to avoid scaling before softmax
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/attention.py#L136
-            d_model = self.config.d_model
-            key_value_proj_dim = self.config.d_kv
-            n_heads = self.config.num_heads
-            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model ** -0.5))
-            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model ** -0.5))
-            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
-            if module.has_relative_attention_bias:
-                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
-
-    def _shift_right(self, input_ids):
-        decoder_start_token_id = self.config.decoder_start_token_id
-        pad_token_id = self.config.pad_token_id
-
-        assert (
-            decoder_start_token_id is not None
-        ), "self.model.config.decoder_start_token_id has to be defined. In T5 it is usually set to the pad_token_id. See T5 docs for more information"
-
-        # shift inputs to the right
-        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
-        shifted_input_ids[..., 0] = decoder_start_token_id
-
-        assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
-        # replace possible -100 values in labels by `pad_token_id`
-        shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
-
-        assert torch.all(shifted_input_ids >= 0).item(), "Verify that `shifted_input_ids` has only positive values"
-
-        return shifted_input_ids
-
-
-class T5Stack(T5PreTrainedModel):
-    def __init__(self, config, embed_tokens=None):
-        super().__init__(config)
-
-        self.embed_tokens = embed_tokens
-        self.is_decoder = config.is_decoder
-
-        self.block = nn.ModuleList(
-            [T5Block(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
-        )
-        self.final_layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
-        self.dropout = nn.Dropout(config.dropout_rate)
-
-        self.init_weights()
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        # Check validity of device_map
-        self.device_map = (
-            get_device_map(len(self.block), torch.cuda.device_count()) if device_map is None else device_map
-        )
-        assert_device_map(self.device_map, len(self.block))
-        self.model_parallel = True
-        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
-        self.last_device = "cuda:" + str(max(self.device_map.keys()))
-        # Load onto devices
-        for k, v in self.device_map.items():
-            for layer in v:
-                cuda_device = "cuda:" + str(k)
-                self.block[layer] = self.block[layer].to(cuda_device)
-
-        # Set embed_tokens to first layer
-        self.embed_tokens = self.embed_tokens.to(self.first_device)
-        # Set final layer norm to last device
-        self.final_layer_norm = self.final_layer_norm.to(self.last_device)
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.model_parallel = False
-        self.device_map = None
-        self.first_device = "cpu"
-        self.last_device = "cpu"
-        for i in range(len(self.block)):
-            self.block[i] = self.block[i].to("cpu")
-        self.embed_tokens = self.embed_tokens.to("cpu")
-        self.final_layer_norm = self.final_layer_norm.to("cpu")
-        torch.cuda.empty_cache()
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def get_output_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, new_embeddings):
-        self.embed_tokens = new_embeddings
-
-    def forward(
+    def create_and_check_with_lm_head(
         self,
-        input_ids=None,
-        attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        inputs_embeds=None,
-        head_mask=None,
-        past_key_values=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
     ):
-        # Model parallel
-        if self.model_parallel:
-            torch.cuda.set_device(self.first_device)
-            self.embed_tokens = self.embed_tokens.to(self.first_device)
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        model = T5ForConditionalGeneration(config=config).to(torch_device).eval()
+        outputs = model(
+            input_ids=input_ids,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            labels=lm_labels,
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        self.parent.assertEqual(len(outputs), 4)
+        self.parent.assertEqual(outputs["logits"].size(), (self.batch_size, self.decoder_seq_length, self.vocab_size))
+        self.parent.assertEqual(outputs["loss"].size(), ())
 
-        if input_ids is not None and inputs_embeds is not None:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
-            raise ValueError(
-                f"You cannot specify both {err_msg_prefix}inputs and {err_msg_prefix}inputs_embeds at the same time"
-            )
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            err_msg_prefix = "decoder_" if self.is_decoder else ""
-            raise ValueError(f"You have to specify either {err_msg_prefix}inputs or {err_msg_prefix}inputs_embeds")
-
-        if inputs_embeds is None:
-            assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
-            inputs_embeds = self.embed_tokens(input_ids)
-
-        batch_size, seq_length = input_shape
-
-        # required mask seq length can be calculated via length of past
-        mask_seq_length = past_key_values[0][0].shape[2] + seq_length if past_key_values is not None else seq_length
-
-        if use_cache is True:
-            assert self.is_decoder, ":obj:`use_cache` can only be set to `True` if {} is used as a decoder".format(
-                self
-            )
-
-        if attention_mask is None:
-            attention_mask = torch.ones(batch_size, mask_seq_length).to(inputs_embeds.device)
-        if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
-            encoder_seq_length = encoder_hidden_states.shape[1]
-            encoder_attention_mask = torch.ones(
-                batch_size, encoder_seq_length, device=inputs_embeds.device, dtype=torch.long
-            )
-
-        # initialize past_key_values with `None` if past does not exist
-        if past_key_values is None:
-            past_key_values = [None] * len(self.block)
-
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, inputs_embeds.device)
-
-        if self.is_decoder and encoder_attention_mask is not None:
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_extended_attention_mask = None
-
-        # Prepare head mask if needed
-        head_mask = self.get_head_mask(head_mask, self.config.num_layers)
-        present_key_value_states = () if use_cache else None
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and self.is_decoder) else None
-        position_bias = None
-        encoder_decoder_position_bias = None
-
-        hidden_states = self.dropout(inputs_embeds)
-
-        for i, (layer_module, past_key_value) in enumerate(zip(self.block, past_key_values)):
-            # Model parallel
-            if self.model_parallel:
-                torch.cuda.set_device(hidden_states.device)
-                # Ensure that attention_mask is always on the same device as hidden_states
-                if attention_mask is not None:
-                    attention_mask = attention_mask.to(hidden_states.device)
-                if position_bias is not None:
-                    position_bias = position_bias.to(hidden_states.device)
-                if encoder_hidden_states is not None:
-                    encoder_hidden_states = encoder_hidden_states.to(hidden_states.device)
-                if encoder_extended_attention_mask is not None:
-                    encoder_extended_attention_mask = encoder_extended_attention_mask.to(hidden_states.device)
-                if encoder_decoder_position_bias is not None:
-                    encoder_decoder_position_bias = encoder_decoder_position_bias.to(hidden_states.device)
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = layer_module(
-                hidden_states,
-                attention_mask=extended_attention_mask,
-                position_bias=position_bias,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_extended_attention_mask,
-                encoder_decoder_position_bias=encoder_decoder_position_bias,
-                head_mask=head_mask[i],
-                past_key_value=past_key_value,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-            )
-            # layer_outputs is a tuple with:
-            # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
-            hidden_states, present_key_value_state = layer_outputs[:2]
-
-            # We share the position biases between the layers - the first layer store them
-            # layer_outputs = hidden-states, key-value-states (self-attention weights),
-            # (self-attention position bias), (cross-attention weights), (cross-attention position bias)
-            position_bias = layer_outputs[2]
-            if self.is_decoder and encoder_hidden_states is not None:
-                encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
-            # append next layer key value states
-            if use_cache:
-                present_key_value_states = present_key_value_states + (present_key_value_state,)
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[3],)
-                if self.is_decoder:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
-
-            # Model Parallel: If it's the last layer for that device, put things on the next device
-            if self.model_parallel:
-                for k, v in self.device_map.items():
-                    if i == v[-1] and "cuda:" + str(k) != self.last_device:
-                        hidden_states = hidden_states.to("cuda:" + str(k + 1))
-
-        hidden_states = self.final_layer_norm(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        # Add last layer
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    present_key_value_states,
-                    all_hidden_states,
-                    all_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
-            )
-        return BaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=hidden_states,
-            past_key_values=present_key_value_states,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
-            cross_attentions=all_cross_attentions,
-        )
-
-
-T5_START_DOCSTRING = r"""
-    The T5 model was proposed in `Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer
-    <https://arxiv.org/abs/1910.10683>`__ by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan Narang,
-    Michael Matena, Yanqi Zhou, Wei Li, Peter J. Liu. It's an encoder decoder transformer pre-trained in a text-to-text
-    denoising generative setting. This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass
-    documentation for the generic methods the library implements for all its model (such as downloading or saving,
-    resizing the input embeddings, pruning heads etc.) This model is also a PyTorch `torch.nn.Module
-    <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ subclass. Use it as a regular PyTorch Module and refer
-    to the PyTorch documentation for all matter related to general usage and behavior.
-
-    Parameters:
-        config (:class:`~transformers.T5Config`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
-"""
-
-T5_INPUTS_DOCSTRING = r"""
-
-    Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
-            should be able to pad the inputs on both the right and the left. Indices can be obtained using
-            :class:`~transformers.T5Tokenizer`. See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for detail. To know more on how to prepare
-            :obj:`input_ids` for pretraining take a look a `T5 Training <./t5.html#training>`__.
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``: - 1 for
-            tokens that are **not masked**, - 0 for tokens that are **masked**. `What are attention masks?
-            <../glossary.html#attention-mask>`__
-        decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Provide for sequence to sequence training. T5 uses the :obj:`pad_token_id` as the starting token for
-            :obj:`decoder_input_ids` generation. If :obj:`past_key_values` is used, optionally only the last
-            :obj:`decoder_input_ids` have to be input (see :obj:`past_key_values`). To know more on how to prepare
-            :obj:`decoder_input_ids` for pretraining take a look at `T5 Training <./t5.html#training>`__. If
-            :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both unset, :obj:`decoder_input_ids` takes
-            the value of :obj:`input_ids`.
-        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
-            Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
-            also be used by default.
-        encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
-            Tuple consists of (:obj:`last_hidden_state`, :obj:`optional`: `hidden_states`, :obj:`optional`:
-            `attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)` is a
-            sequence of hidden states at the output of the last layer of the encoder. Used in the cross-attention of
-            the decoder.
-        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
-            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``: - 1
-            indicates the head is **not masked**, - 0 indicates the head is **masked**.
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
-        decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded
-            representation. If :obj:`past_key_values` is used, optionally only the last :obj:`decoder_inputs_embeds`
-            have to be input (see :obj:`past_key_values`). This is useful if you want more control over how to convert
-            :obj:`decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
-            If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both unset, :obj:`decoder_inputs_embeds`
-            takes the value of :obj:`inputs_embeds`.
-        use_cache (:obj:`bool`, `optional`):
-            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
-            decoding (see :obj:`past_key_values`).
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare T5 Model transformer outputting raw hidden-states" "without any specific head on top.",
-    T5_START_DOCSTRING,
-)
-class T5Model(T5PreTrainedModel):
-    authorized_missing_keys = [
-        r"encoder\.embed_tokens\.weight",
-        r"decoder\.embed_tokens\.weight",
-        r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
-    ]
-
-    def __init__(self, config: T5Config):
-        super().__init__(config)
-        self.shared = nn.Embedding(config.vocab_size, config.d_model)
-
-        encoder_config = copy.deepcopy(config)
-        encoder_config.use_cache = False
-        encoder_config.is_encoder_decoder = False
-        self.encoder = T5Stack(encoder_config, self.shared)
-
-        decoder_config = copy.deepcopy(config)
-        decoder_config.is_decoder = True
-        decoder_config.is_encoder_decoder = False
-        decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = T5Stack(decoder_config, self.shared)
-
-        self.init_weights()
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        self.device_map = (
-            get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
-            if device_map is None
-            else device_map
-        )
-        assert_device_map(self.device_map, len(self.encoder.block))
-        self.encoder.parallelize(self.device_map)
-        self.decoder.parallelize(self.device_map)
-        self.model_parallel = True
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.encoder.deparallelize()
-        self.decoder.deparallelize()
-        self.encoder = self.encoder.to("cpu")
-        self.decoder = self.decoder.to("cpu")
-        self.model_parallel = False
-        self.device_map = None
-        torch.cuda.empty_cache()
-
-    def get_input_embeddings(self):
-        return self.shared
-
-    def set_input_embeddings(self, new_embeddings):
-        self.shared = new_embeddings
-        self.encoder.set_input_embeddings(new_embeddings)
-        self.decoder.set_input_embeddings(new_embeddings)
-
-    def get_encoder(self):
-        return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
-    @add_start_docstrings_to_model_forward(T5_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
+    def create_and_check_decoder_model_past(
         self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        head_mask=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
     ):
-        r"""
+        model = T5Model(config=config).get_decoder().to(torch_device).eval()
+        # first forward pass
+        outputs = model(input_ids, use_cache=True)
+        outputs_use_cache_conf = model(input_ids)
+        outputs_no_past = model(input_ids, use_cache=False)
 
-        Returns:
-        Example:: >>> from transformers import T5Tokenizer, T5Model >>> tokenizer =
-        T5Tokenizer.from_pretrained('t5-small') >>> model = T5Model.from_pretrained('t5-small') >>> input_ids =
-        tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids # Batch
-        size 1 >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids # Batch size 1 >>>
-        outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids) >>> last_hidden_states =
-        outputs.last_hidden_state
-        """
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
+        self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        # Encode if needed (training, first prediction pass)
-        if encoder_outputs is None:
-            encoder_outputs = self.encoder(
+        output, past_key_values = outputs.to_tuple()
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+
+        # append to next input_ids and
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+
+        output_from_no_past = model(next_input_ids)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+    def create_and_check_decoder_model_attention_mask_past(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = T5Model(config=config).get_decoder()
+        model.to(torch_device)
+        model.eval()
+
+        # create attention mask
+        attn_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
+
+        half_seq_length = input_ids.shape[-1] // 2
+        attn_mask[:, half_seq_length:] = 0
+
+        # first forward pass
+        output, past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True).to_tuple()
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+
+        # change a random masked slice from input_ids
+        random_seq_idx_to_change = ids_tensor((1,), half_seq_length).item() + 1
+        random_other_next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size).squeeze(-1)
+        input_ids[:, -random_seq_idx_to_change] = random_other_next_tokens
+
+        # append to next input_ids and attn_mask
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+        attn_mask = torch.cat(
+            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
+            dim=1,
+        )
+
+        # get two different outputs
+        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values, attention_mask=attn_mask)[
+            "last_hidden_state"
+        ]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+    def create_and_check_decoder_model_past_large_inputs(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = T5Model(config=config).get_decoder().to(torch_device).eval()
+        # first forward pass
+        outputs = model(input_ids, use_cache=True)
+
+        output, past_key_values = outputs.to_tuple()
+
+        # create hypothetical multiple next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+
+        # append to next input_ids and
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+
+        output_from_no_past = model(next_input_ids)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+
+        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+    def create_and_check_generate_with_past_key_values(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = T5ForConditionalGeneration(config=config).to(torch_device).eval()
+        torch.manual_seed(0)
+        output_without_past_cache = model.generate(
+            input_ids[:1], num_beams=2, max_length=5, do_sample=True, use_cache=False
+        )
+        torch.manual_seed(0)
+        output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
+        self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
+
+    def create_and_check_model_fp16_forward(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = T5Model(config=config).to(torch_device).half().eval()
+        output = model(input_ids, decoder_input_ids=input_ids, attention_mask=attention_mask)["last_hidden_state"]
+        self.parent.assertFalse(torch.isnan(output).any().item())
+
+    def create_and_check_encoder_decoder_shared_weights(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        for model_class in [T5Model, T5ForConditionalGeneration]:
+            torch.manual_seed(0)
+            model = model_class(config=config).to(torch_device).eval()
+            # load state dict copies weights but does not tie them
+            model.encoder.load_state_dict(model.decoder.state_dict(), strict=False)
+
+            torch.manual_seed(0)
+            tied_config = copy.deepcopy(config)
+            tied_config.tie_encoder_decoder = True
+            tied_model = model_class(config=tied_config).to(torch_device).eval()
+
+            model_result = model(
                 input_ids=input_ids,
+                decoder_input_ids=decoder_input_ids,
                 attention_mask=attention_mask,
-                inputs_embeds=inputs_embeds,
-                head_mask=head_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+                decoder_attention_mask=decoder_attention_mask,
             )
 
-        hidden_states = encoder_outputs[0]
-        if self.model_parallel:
-            torch.cuda.set_device(self.decoder.first_device)
-        # Set device for model parallelism
-        if self.model_parallel:
-            torch.cuda.set_device(self.decoder.first_device)
-            hidden_states = hidden_states.to(self.decoder.first_device)
-            if decoder_input_ids is not None:
-                decoder_input_ids = decoder_input_ids.to(self.decoder.first_device)
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(self.decoder.first_device)
-            if decoder_attention_mask is not None:
-                decoder_attention_mask = decoder_attention_mask.to(self.decoder.first_device)
-
-        # Decode
-        decoder_outputs = self.decoder(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
-            inputs_embeds=decoder_inputs_embeds,
-            past_key_values=past_key_values,
-            encoder_hidden_states=hidden_states,
-            encoder_attention_mask=attention_mask,
-            head_mask=head_mask,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
-
-        return Seq2SeqModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
-        )
-
-
-@add_start_docstrings("""T5 Model with a `language modeling` head on top. """, T5_START_DOCSTRING)
-class T5ForConditionalGeneration(T5PreTrainedModel):
-    authorized_missing_keys = [
-        r"encoder\.embed_tokens\.weight",
-        r"decoder\.embed_tokens\.weight",
-        r"lm_head\.weight",
-        r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
-    ]
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.model_dim = config.d_model
-
-        self.shared = nn.Embedding(config.vocab_size, config.d_model)
-
-        encoder_config = copy.deepcopy(config)
-        encoder_config.use_cache = False
-        encoder_config.is_encoder_decoder = False
-        self.encoder = T5Stack(encoder_config, self.shared)
-
-        decoder_config = copy.deepcopy(config)
-        decoder_config.is_decoder = True
-        decoder_config.is_encoder_decoder = False
-        decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = T5Stack(decoder_config, self.shared)
-
-        self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
-
-        self.init_weights()
-
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        self.device_map = (
-            get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
-            if device_map is None
-            else device_map
-        )
-        assert_device_map(self.device_map, len(self.encoder.block))
-        self.encoder.parallelize(self.device_map)
-        self.decoder.parallelize(self.device_map)
-        self.lm_head = self.lm_head.to(self.decoder.first_device)
-        self.model_parallel = True
-
-    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.encoder.deparallelize()
-        self.decoder.deparallelize()
-        self.encoder = self.encoder.to("cpu")
-        self.decoder = self.decoder.to("cpu")
-        self.lm_head = self.lm_head.to("cpu")
-        self.model_parallel = False
-        self.device_map = None
-        torch.cuda.empty_cache()
-
-    def get_input_embeddings(self):
-        return self.shared
-
-    def set_input_embeddings(self, new_embeddings):
-        self.shared = new_embeddings
-        self.encoder.set_input_embeddings(new_embeddings)
-        self.decoder.set_input_embeddings(new_embeddings)
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def get_encoder(self):
-        return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
-
-    @add_start_docstrings_to_model_forward(T5_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        head_mask=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`): Labels for computing the sequence
-        classification/regression loss. Indices should be in :obj:`[-100, 0, ..., config.vocab_size - 1]`. All labels
-        set to ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size]``
-
-        Returns:
-        Examples:: >>> from transformers import T5Tokenizer, T5ForConditionalGeneration >>> tokenizer =
-        T5Tokenizer.from_pretrained('t5-small') >>> model = T5ForConditionalGeneration.from_pretrained('t5-small') >>>
-        input_ids = tokenizer('The <extra_id_0> walks in <extra_id_1> park', return_tensors='pt').input_ids >>> labels
-        = tokenizer('<extra_id_0> cute dog <extra_id_1> the <extra_id_2> </s>', return_tensors='pt').input_ids >>>
-        outputs = model(input_ids=input_ids, labels=labels) >>> loss = outputs.loss >>> logits = outputs.logits >>>
-        input_ids = tokenizer("summarize: studies have shown that owning a dog is good for you ",
-        return_tensors="pt").input_ids # Batch size 1 >>> outputs = model.generate(input_ids)
-        """
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # Encode if needed (training, first prediction pass)
-        if encoder_outputs is None:
-            # Convert encoder inputs in embeddings if needed
-            encoder_outputs = self.encoder(
+            tied_model_result = tied_model(
                 input_ids=input_ids,
+                decoder_input_ids=decoder_input_ids,
                 attention_mask=attention_mask,
-                inputs_embeds=inputs_embeds,
-                head_mask=head_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+                decoder_attention_mask=decoder_attention_mask,
             )
 
-        hidden_states = encoder_outputs[0]
+            # check that models has less parameters
+            self.parent.assertLess(
+                sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
+            )
+            random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
-        if self.model_parallel:
-            torch.cuda.set_device(self.decoder.first_device)
+            # check that outputs are equal
+            self.parent.assertTrue(
+                torch.allclose(
+                    model_result[0][0, :, random_slice_idx], tied_model_result[0][0, :, random_slice_idx], atol=1e-4
+                )
+            )
 
-        if labels is not None and decoder_input_ids is None and decoder_inputs_embeds is None:
-            # get decoder inputs from shifting lm labels to the right
-            decoder_input_ids = self._shift_right(labels)
+            # check that outputs after saving and loading are equal
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                tied_model.save_pretrained(tmpdirname)
+                tied_model = model_class.from_pretrained(tmpdirname)
+                tied_model.to(torch_device)
+                tied_model.eval()
 
-        # If decoding with past key value states, only the last tokens
-        # should be given as an input
-        if past_key_values is not None:
-            assert labels is None, "Decoder should not use cached key value states when training."
-            if decoder_input_ids is not None:
-                decoder_input_ids = decoder_input_ids[:, -1:]
-            if decoder_inputs_embeds is not None:
-                decoder_inputs_embeds = decoder_inputs_embeds[:, -1:]
+                # check that models has less parameters
+                self.parent.assertLess(
+                    sum(p.numel() for p in tied_model.parameters()), sum(p.numel() for p in model.parameters())
+                )
+                random_slice_idx = ids_tensor((1,), model_result[0].shape[-1]).item()
 
-        # Set device for model parallelism
-        if self.model_parallel:
-            torch.cuda.set_device(self.decoder.first_device)
-            hidden_states = hidden_states.to(self.decoder.first_device)
-            if decoder_input_ids is not None:
-                decoder_input_ids = decoder_input_ids.to(self.decoder.first_device)
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(self.decoder.first_device)
-            if decoder_attention_mask is not None:
-                decoder_attention_mask = decoder_attention_mask.to(self.decoder.first_device)
-
-        # Decode
-        decoder_outputs = self.decoder(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
-            inputs_embeds=decoder_inputs_embeds,
-            past_key_values=past_key_values,
-            encoder_hidden_states=hidden_states,
-            encoder_attention_mask=attention_mask,
-            head_mask=head_mask,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = decoder_outputs[0]
-
-        # Set device for model parallelism
-        if self.model_parallel:
-            torch.cuda.set_device(self.encoder.first_device)
-            self.lm_head = self.lm_head.to(self.encoder.first_device)
-            sequence_output = sequence_output.to(self.lm_head.weight.device)
-
-        if self.config.tie_word_embeddings:
-            # Rescale output before projecting on vocab
-            # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
-            sequence_output = sequence_output * (self.model_dim ** -0.5)
-        lm_logits = self.lm_head(sequence_output)
-
-        loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss(ignore_index=-100)
-            loss = loss_fct(lm_logits.view(-1, lm_logits.size(-1)), labels.view(-1))
-            # TODO(thom): Add z_loss https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L666
-
-        if not return_dict:
-            output = (lm_logits,) + decoder_outputs[1:] + encoder_outputs
-            return ((loss,) + output) if loss is not None else output
-
-        return Seq2SeqLMOutput(
-            loss=loss,
-            logits=lm_logits,
-            past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
-        )
-
-    def prepare_inputs_for_generation(
-        self, input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
-    ):
-
-        # cut decoder_input_ids if past is used
-        if past is not None:
-            input_ids = input_ids[:, -1:]
-
-        return {
-            "decoder_input_ids": input_ids,
-            "past_key_values": past,
-            "encoder_outputs": encoder_outputs,
-            "attention_mask": attention_mask,
-            "use_cache": use_cache,
-        }
-
-    def _reorder_cache(self, past, beam_idx):
-        # if decoder past is not included in output
-        # speedy decoding is disabled and no need to reorder
-        if past is None:
-            logger.warning("You might want to consider setting `use_cache=True` to speed up decoding")
-            return past
-
-        reordered_decoder_past = ()
-        for layer_past_states in past:
-            # get the correct batch idx from layer past batch dim
-            # batch dim of `past` is at 2nd position
-            reordered_layer_past_states = ()
-            for layer_past_state in layer_past_states:
-                # need to set correct `past` for each of the four key / value states
-                reordered_layer_past_states = reordered_layer_past_states + (
-                    layer_past_state.index_select(0, beam_idx),
+                tied_model_result = tied_model(
+                    input_ids=input_ids,
+                    decoder_input_ids=decoder_input_ids,
+                    attention_mask=attention_mask,
+                    decoder_attention_mask=decoder_attention_mask,
                 )
 
-            assert reordered_layer_past_states[0].shape == layer_past_states[0].shape
-            assert len(reordered_layer_past_states) == len(layer_past_states)
+                # check that outputs are equal
+                self.parent.assertTrue(
+                    torch.allclose(
+                        model_result[0][0, :, random_slice_idx],
+                        tied_model_result[0][0, :, random_slice_idx],
+                        atol=1e-4,
+                    )
+                )
 
-            reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
-        return reordered_decoder_past
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            decoder_input_ids,
+            attention_mask,
+            decoder_attention_mask,
+            lm_labels,
+        ) = config_and_inputs
+
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "decoder_input_ids": decoder_input_ids,
+            "decoder_attention_mask": decoder_attention_mask,
+            "use_cache": False,
+        }
+        return config, inputs_dict
+
+
+@require_torch
+class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+
+    all_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
+    all_generative_model_classes = (T5ForConditionalGeneration,) if is_torch_available() else ()
+    all_parallelizable_model_classes = (
+        (
+            T5Model,
+            T5ForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
+    test_pruning = False
+    test_torchscript = True
+    test_resize_embeddings = False
+    test_model_parallel = True
+    is_encoder_decoder = True
+
+    def setUp(self):
+        self.model_tester = T5ModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=T5Config, d_model=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_shift_right(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_prepare_lm_labels_via_shift_left(*config_and_inputs)
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_v1_1(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        # check that gated gelu feed forward and different word embeddings work
+        config = config_and_inputs[0]
+        config.tie_word_embeddings = False
+        config.feed_forward_proj = "gated-gelu"
+        self.model_tester.create_and_check_model(config, *config_and_inputs[1:])
+
+    def test_with_lm_head(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_with_lm_head(*config_and_inputs)
+
+    def test_decoder_model_past(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_decoder_model_past(*config_and_inputs)
+
+    def test_decoder_model_past_with_attn_mask(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
+
+    def test_decoder_model_past_with_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_generate_with_past_key_values(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_generate_with_past_key_values(*config_and_inputs)
+
+    def test_encoder_decoder_shared_weights(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_encoder_decoder_shared_weights(*config_and_inputs)
+
+    @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
+    def test_model_fp16_forward(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
+
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in T5_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = T5Model.from_pretrained(model_name)
+            self.assertIsNotNone(model)
+
+    def test_export_to_onnx(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        model = T5Model(config_and_inputs[0]).to(torch_device)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            torch.onnx.export(
+                model,
+                (config_and_inputs[1], config_and_inputs[3], config_and_inputs[2]),
+                f"{tmpdirname}/t5_test.onnx",
+                export_params=True,
+                opset_version=9,
+                input_names=["input_ids", "decoder_input_ids"],
+            )
+
+
+def use_task_specific_params(model, task):
+    model.config.update(model.config.task_specific_params[task])
+
+
+@require_torch
+@require_sentencepiece
+@require_tokenizers
+class T5ModelIntegrationTests(unittest.TestCase):
+    @cached_property
+    def model(self):
+        return T5ForConditionalGeneration.from_pretrained("t5-base").to(torch_device)
+
+    @cached_property
+    def tokenizer(self):
+        return T5Tokenizer.from_pretrained("t5-base")
+
+    @slow
+    def test_small_integration_test(self):
+        """
+        For comparision run:
+        >>> import t5  # pip install t5==0.7.1
+        >>> from t5.data.sentencepiece_vocabulary import SentencePieceVocabulary
+
+        >>> path_to_mtf_small_t5_checkpoint = '<fill_in>'
+        >>> path_to_mtf_small_spm_model_path = '<fill_in>'
+        >>> t5_model = t5.models.MtfModel(model_dir=path_to_mtf_small_t5_checkpoint, batch_size=1, tpu=None)
+        >>> vocab = SentencePieceVocabulary(path_to_mtf_small_spm_model_path, extra_ids=100)
+        >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
+        """
+
+        model = T5ForConditionalGeneration.from_pretrained("t5-small").to(torch_device)
+        tokenizer = T5Tokenizer.from_pretrained("t5-small")
+
+        input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
+        labels = tokenizer("Hi I am", return_tensors="pt").input_ids
+
+        loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
+        mtf_score = -(labels.shape[-1] * loss.item())
+
+        EXPECTED_SCORE = -19.0845
+        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+
+    @slow
+    def test_small_v1_1_integration_test(self):
+        """
+        For comparision run:
+        >>> import t5  # pip install t5==0.7.1
+        >>> from t5.data.sentencepiece_vocabulary import SentencePieceVocabulary
+
+        >>> path_to_mtf_small_t5_v1_1_checkpoint = '<fill_in>'
+        >>> path_to_mtf_small_spm_model_path = '<fill_in>'
+        >>> t5_model = t5.models.MtfModel(model_dir=path_to_mtf_small_t5_v1_1_checkpoint, batch_size=1, tpu=None)
+        >>> vocab = SentencePieceVocabulary(path_to_mtf_small_spm_model_path, extra_ids=100)
+        >>> score = t5_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
+        """
+
+        model = T5ForConditionalGeneration.from_pretrained("google/t5-v1_1-small").to(torch_device)
+        tokenizer = T5Tokenizer.from_pretrained("google/t5-v1_1-small")
+
+        input_ids = tokenizer("Hello there", return_tensors="pt").input_ids
+        labels = tokenizer("Hi I am", return_tensors="pt").input_ids
+
+        loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
+        mtf_score = -(labels.shape[-1] * loss.item())
+
+        EXPECTED_SCORE = -59.0293
+        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+
+    @slow
+    def test_summarization(self):
+        model = self.model
+        tok = self.tokenizer
+
+        FRANCE_ARTICLE = 'Marseille, France (CNN)The French prosecutor leading an investigation into the crash of Germanwings Flight 9525 insisted Wednesday that he was not aware of any video footage from on board the plane. Marseille prosecutor Brice Robin told CNN that "so far no videos were used in the crash investigation." He added, "A person who has such a video needs to immediately give it to the investigators." Robin\'s comments follow claims by two magazines, German daily Bild and French Paris Match, of a cell phone video showing the harrowing final seconds from on board Germanwings Flight 9525 as it crashed into the French Alps. All 150 on board were killed. Paris Match and Bild reported that the video was recovered from a phone at the wreckage site. The two publications described the supposed video, but did not post it on their websites. The publications said that they watched the video, which was found by a source close to the investigation. "One can hear cries of \'My God\' in several languages," Paris Match reported. "Metallic banging can also be heard more than three times, perhaps of the pilot trying to open the cockpit door with a heavy object.  Towards the end, after a heavy shake, stronger than the others, the screaming intensifies. Then nothing." "It is a very disturbing scene," said Julian Reichelt, editor-in-chief of Bild online. An official with France\'s accident investigation agency, the BEA, said the agency is not aware of any such video. Lt. Col. Jean-Marc Menichini, a French Gendarmerie spokesman in charge of communications on rescue efforts around the Germanwings crash site, told CNN that the reports were "completely wrong" and "unwarranted." Cell phones have been collected at the site, he said, but that they "hadn\'t been exploited yet." Menichini said he believed the cell phones would need to be sent to the Criminal Research Institute in Rosny sous-Bois, near Paris, in order to be analyzed by specialized technicians working hand-in-hand with investigators. But none of the cell phones found so far have been sent to the institute, Menichini said. Asked whether staff involved in the search could have leaked a memory card to the media, Menichini answered with a categorical "no." Reichelt told "Erin Burnett: Outfront" that he had watched the video and stood by the report, saying Bild and Paris Match are "very confident" that the clip is real. He noted that investigators only revealed they\'d recovered cell phones from the crash site after Bild and Paris Match published their reports. "That is something we did not know before. ... Overall we can say many things of the investigation weren\'t revealed by the investigation at the beginning," he said. What was mental state of Germanwings co-pilot? German airline Lufthansa confirmed Tuesday that co-pilot Andreas Lubitz had battled depression years before he took the controls of Germanwings Flight 9525, which he\'s accused of deliberately crashing last week in the French Alps. Lubitz told his Lufthansa flight training school in 2009 that he had a "previous episode of severe depression," the airline said Tuesday. Email correspondence between Lubitz and the school discovered in an internal investigation, Lufthansa said, included medical documents he submitted in connection with resuming his flight training. The announcement indicates that Lufthansa, the parent company of Germanwings, knew of Lubitz\'s battle with depression, allowed him to continue training and ultimately put him in the cockpit. Lufthansa, whose CEO Carsten Spohr previously said Lubitz was 100% fit to fly, described its statement Tuesday as a "swift and seamless clarification" and said it was sharing the information and documents -- including training and medical records -- with public prosecutors. Spohr traveled to the crash site Wednesday, where recovery teams have been working for the past week to recover human remains and plane debris scattered across a steep mountainside. He saw the crisis center set up in Seyne-les-Alpes, laid a wreath in the village of Le Vernet, closer to the crash site, where grieving families have left flowers at a simple stone memorial. Menichini told CNN late Tuesday that no visible human remains were left at the site but recovery teams would keep searching. French President Francois Hollande, speaking Tuesday, said that it should be possible to identify all the victims using DNA analysis by the end of the week, sooner than authorities had previously suggested. In the meantime, the recovery of the victims\' personal belongings will start Wednesday, Menichini said. Among those personal belongings could be more cell phones belonging to the 144 passengers and six crew on board. Check out the latest from our correspondents . The details about Lubitz\'s correspondence with the flight school during his training were among several developments as investigators continued to delve into what caused the crash and Lubitz\'s possible motive for downing the jet. A Lufthansa spokesperson told CNN on Tuesday that Lubitz had a valid medical certificate, had passed all his examinations and "held all the licenses required." Earlier, a spokesman for the prosecutor\'s office in Dusseldorf, Christoph Kumpa, said medical records reveal Lubitz suffered from suicidal tendencies at some point before his aviation career and underwent psychotherapy before he got his pilot\'s license. Kumpa emphasized there\'s no evidence suggesting Lubitz was suicidal or acting aggressively before the crash. Investigators are looking into whether Lubitz feared his medical condition would cause him to lose his pilot\'s license, a European government official briefed on the investigation told CNN on Tuesday. While flying was "a big part of his life," the source said, it\'s only one theory being considered. Another source, a law enforcement official briefed on the investigation, also told CNN that authorities believe the primary motive for Lubitz to bring down the plane was that he feared he would not be allowed to fly because of his medical problems. Lubitz\'s girlfriend told investigators he had seen an eye doctor and a neuropsychologist, both of whom deemed him unfit to work recently and concluded he had psychological issues, the European government official said. But no matter what details emerge about his previous mental health struggles, there\'s more to the story, said Brian Russell, a forensic psychologist. "Psychology can explain why somebody would turn rage inward on themselves about the fact that maybe they weren\'t going to keep doing their job and they\'re upset about that and so they\'re suicidal," he said. "But there is no mental illness that explains why somebody then feels entitled to also take that rage and turn it outward on 149 other people who had nothing to do with the person\'s problems." Germanwings crash compensation: What we know . Who was the captain of Germanwings Flight 9525? CNN\'s Margot Haddad reported from Marseille and Pamela Brown from Dusseldorf, while Laura Smith-Spark wrote from London. CNN\'s Frederik Pleitgen, Pamela Boykoff, Antonia Mortensen, Sandrine Amiel and Anna-Maja Rappard contributed to this report.'  # @noqa
+        SHORTER_ARTICLE = '(CNN)The Palestinian Authority officially became the 123rd member of the International Criminal Court on Wednesday, a step that gives the court jurisdiction over alleged crimes in Palestinian territories. The formal accession was marked with a ceremony at The Hague, in the Netherlands, where the court is based. The Palestinians signed the ICC\'s founding Rome Statute in January, when they also accepted its jurisdiction over alleged crimes committed "in the occupied Palestinian territory, including East Jerusalem, since June 13, 2014." Later that month, the ICC opened a preliminary examination into the situation in Palestinian territories, paving the way for possible war crimes investigations against Israelis. As members of the court, Palestinians may be subject to counter-charges as well. Israel and the United States, neither of which is an ICC member, opposed the Palestinians\' efforts to join the body. But Palestinian Foreign Minister Riad al-Malki, speaking at Wednesday\'s ceremony, said it was a move toward greater justice. "As Palestine formally becomes a State Party to the Rome Statute today, the world is also a step closer to ending a long era of impunity and injustice," he said, according to an ICC news release. "Indeed, today brings us closer to our shared goals of justice and peace." Judge Kuniko Ozaki, a vice president of the ICC, said acceding to the treaty was just the first step for the Palestinians. "As the Rome Statute today enters into force for the State of Palestine, Palestine acquires all the rights as well as responsibilities that come with being a State Party to the Statute. These are substantive commitments, which cannot be taken lightly," she said. Rights group Human Rights Watch welcomed the development. "Governments seeking to penalize Palestine for joining the ICC should immediately end their pressure, and countries that support universal acceptance of the court\'s treaty should speak out to welcome its membership," said Balkees Jarrah, international justice counsel for the group. "What\'s objectionable is the attempts to undermine international justice, not Palestine\'s decision to join a treaty to which over 100 countries around the world are members." In January, when the preliminary ICC examination was opened, Israeli Prime Minister Benjamin Netanyahu described it as an outrage, saying the court was overstepping its boundaries. The United States also said it "strongly" disagreed with the court\'s decision. "As we have said repeatedly, we do not believe that Palestine is a state and therefore we do not believe that it is eligible to join the ICC," the State Department said in a statement. It urged the warring sides to resolve their differences through direct negotiations. "We will continue to oppose actions against Israel at the ICC as counterproductive to the cause of peace," it said. But the ICC begs to differ with the definition of a state for its purposes and refers to the territories as "Palestine." While a preliminary examination is not a formal investigation, it allows the court to review evidence and determine whether to investigate suspects on both sides. Prosecutor Fatou Bensouda said her office would "conduct its analysis in full independence and impartiality." The war between Israel and Hamas militants in Gaza last summer left more than 2,000 people dead. The inquiry will include alleged war crimes committed since June. The International Criminal Court was set up in 2002 to prosecute genocide, crimes against humanity and war crimes. CNN\'s Vasco Cotovio, Kareem Khadder and Faith Karimi contributed to this report.'
+        IRAN_ARTICLE = "(CNN)The United States and its negotiating partners reached a very strong framework agreement with Iran in Lausanne, Switzerland, on Thursday that limits Iran's nuclear program in such a way as to effectively block it from building a nuclear weapon. Expect pushback anyway, if the recent past is any harbinger. Just last month, in an attempt to head off such an agreement, House Speaker John Boehner invited Israeli Prime Minister Benjamin Netanyahu to preemptively blast it before Congress, and 47 senators sent a letter to the Iranian leadership warning them away from a deal. The debate that has already begun since the announcement of the new framework will likely result in more heat than light. It will not be helped by the gathering swirl of dubious assumptions and doubtful assertions. Let us address some of these: . The most misleading assertion, despite universal rejection by experts, is that the negotiations' objective at the outset was the total elimination of any nuclear program in Iran. That is the position of Netanyahu and his acolytes in the U.S. Congress. But that is not and never was the objective. If it had been, there would have been no Iranian team at the negotiating table. Rather, the objective has always been to structure an agreement or series of agreements so that Iran could not covertly develop a nuclear arsenal before the United States and its allies could respond. The new framework has exceeded expectations in achieving that goal. It would reduce Iran's low-enriched uranium stockpile, cut by two-thirds its number of installed centrifuges and implement a rigorous inspection regime. Another dubious assumption of opponents is that the Iranian nuclear program is a covert weapons program. Despite sharp accusations by some in the United States and its allies, Iran denies having such a program, and U.S. intelligence contends that Iran has not yet made the decision to build a nuclear weapon. Iran's continued cooperation with International Atomic Energy Agency inspections is further evidence on this point, and we'll know even more about Iran's program in the coming months and years because of the deal. In fact, the inspections provisions that are part of this agreement are designed to protect against any covert action by the Iranians. What's more, the rhetoric of some members of Congress has implied that the negotiations have been between only the United States and Iran (i.e., the 47 senators' letter warning that a deal might be killed by Congress or a future president). This of course is not the case. The talks were between Iran and the five permanent members of the U.N. Security Council (United States, United Kingdom, France, China and Russia) plus Germany, dubbed the P5+1. While the United States has played a leading role in the effort, it negotiated the terms alongside its partners. If the agreement reached by the P5+1 is rejected by Congress, it could result in an unraveling of the sanctions on Iran and threaten NATO cohesion in other areas. Another questionable assertion is that this agreement contains a sunset clause, after which Iran will be free to do as it pleases. Again, this is not the case. Some of the restrictions on Iran's nuclear activities, such as uranium enrichment, will be eased or eliminated over time, as long as 15 years. But most importantly, the framework agreement includes Iran's ratification of the Additional Protocol, which allows IAEA inspectors expanded access to nuclear sites both declared and nondeclared. This provision will be permanent. It does not sunset. Thus, going forward, if Iran decides to enrich uranium to weapons-grade levels, monitors will be able to detect such a move in a matter of days and alert the U.N. Security Council. Many in Congress have said that the agreement should be a formal treaty requiring the Senate to \"advise and consent.\" But the issue is not suited for a treaty. Treaties impose equivalent obligations on all signatories. For example, the New START treaty limits Russia and the United States to 1,550 deployed strategic warheads. But any agreement with Iran will not be so balanced.  The restrictions and obligations in the final framework agreement will be imposed almost exclusively on Iran. The P5+1 are obligated only to ease and eventually remove most but not all economic sanctions, which were imposed as leverage to gain this final deal. Finally some insist that any agreement must address Iranian missile programs, human rights violations or support for Hamas or Hezbollah.  As important as these issues are, and they must indeed be addressed, they are unrelated to the most important aim of a nuclear deal: preventing a nuclear Iran.  To include them in the negotiations would be a poison pill. This agreement should be judged on its merits and on how it affects the security of our negotiating partners and allies, including Israel. Those judgments should be fact-based, not based on questionable assertions or dubious assumptions."
+        ARTICLE_SUBWAY = 'New York (CNN)When Liana Barrientos was 23 years old, she got married in Westchester County, New York. A year later, she got married again in Westchester County, but to a different man and without divorcing her first husband.  Only 18 days after that marriage, she got hitched yet again. Then, Barrientos declared "I do" five more times, sometimes only within two weeks of each other. In 2010, she married once more, this time in the Bronx. In an application for a marriage license, she stated it was her "first and only" marriage. Barrientos, now 39, is facing two criminal counts of "offering a false instrument for filing in the first degree," referring to her false statements on the 2010 marriage license application, according to court documents. Prosecutors said the marriages were part of an immigration scam. On Friday, she pleaded not guilty at State Supreme Court in the Bronx, according to her attorney, Christopher Wright, who declined to comment further. After leaving court, Barrientos was arrested and charged with theft of service and criminal trespass for allegedly sneaking into the New York subway through an emergency exit, said Detective Annette Markowski, a police spokeswoman. In total, Barrientos has been married 10 times, with nine of her marriages occurring between 1999 and 2002.  All occurred either in Westchester County, Long Island, New Jersey or the Bronx. She is believed to still be married to four men, and at one time, she was married to eight men at once, prosecutors say. Prosecutors said the immigration scam involved some of her husbands, who filed for permanent residence status shortly after the marriages.  Any divorces happened only after such filings were approved. It was unclear whether any of the men will be prosecuted. The case was referred to the Bronx District Attorney\'s Office by Immigration and Customs Enforcement and the Department of Homeland Security\'s Investigation Division. Seven of the men are from so-called "red-flagged" countries, including Egypt, Turkey, Georgia, Pakistan and Mali. Her eighth husband, Rashid Rajput, was deported in 2006 to his native Pakistan after an investigation by the Joint Terrorism Task Force. If convicted, Barrientos faces up to four years in prison.  Her next court appearance is scheduled for May 18.'
+
+        expected_summaries = [
+            'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found a cell phone video of the final seconds . "one can hear cries of \'My God\' in several languages," one magazine says .',
+            "the formal accession was marked by a ceremony at The Hague, in the Netherlands . the ICC opened a preliminary examination into the situation in the occupied Palestinian territory . as members of the court, Palestinians may be subject to counter-charges as well .",
+            "the u.s. and its negotiating partners reached a very strong framework agreement with Iran . aaron miller: the debate that has already begun since the announcement of the new framework will likely result in more heat than light . the deal would reduce Iran's low-enriched uranium stockpile, cut centrifuges and implement a rigorous inspection regime .",
+            'prosecutors say the marriages were part of an immigration scam . if convicted, barrientos faces two criminal counts of "offering a false instrument for filing in the first degree" she has been married 10 times, with nine of her marriages occurring between 1999 and 2002 .',
+        ]
+
+        use_task_specific_params(model, "summarization")
+
+        dct = tok(
+            [model.config.prefix + x for x in [FRANCE_ARTICLE, SHORTER_ARTICLE, IRAN_ARTICLE, ARTICLE_SUBWAY]],
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt",
+        ).to(torch_device)
+        self.assertEqual(512, dct["input_ids"].shape[1])
+
+        hypotheses_batch = model.generate(
+            **dct,
+            num_beams=4,
+            length_penalty=2.0,
+            max_length=142,
+            min_length=56,
+            no_repeat_ngram_size=3,
+            do_sample=False,
+            early_stopping=True,
+        )
+
+        decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        self.assertListEqual(
+            expected_summaries,
+            decoded,
+        )
+
+    @slow
+    def test_translation_en_to_de(self):
+        model = self.model
+        tok = self.tokenizer
+        use_task_specific_params(model, "translation_en_to_de")
+
+        en_text = '"Luigi often said to me that he never wanted the brothers to end up in court", she wrote.'
+        expected_translation = (
+            '"Luigi sagte mir oft, dass er nie wollte, dass die Brüder am Gericht sitzen", schrieb sie.'
+        )
+
+        input_ids = tok.encode(model.config.prefix + en_text, return_tensors="pt")
+        input_ids = input_ids.to(torch_device)
+        output = model.generate(input_ids)
+        translation = tok.decode(output[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        self.assertEqual(translation, expected_translation)
+
+    @slow
+    def test_translation_en_to_fr(self):
+        model = self.model  # t5-base
+        tok = self.tokenizer
+        use_task_specific_params(model, "translation_en_to_fr")
+
+        en_text = ' This image section from an infrared recording by the Spitzer telescope shows a "family portrait" of countless generations of stars: the oldest stars are seen as blue dots. '
+
+        input_ids = tok.encode(model.config.prefix + en_text, return_tensors="pt")
+        input_ids = input_ids.to(torch_device)
+
+        output = model.generate(
+            input_ids=input_ids,
+            num_beams=4,
+            length_penalty=2.0,
+            max_length=100,
+            no_repeat_ngram_size=3,
+            do_sample=False,
+            early_stopping=True,
+        )
+        translation = tok.decode(output[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        new_truncated_translation = (
+            "Cette section d'images provenant de l'enregistrement infrarouge effectué par le télescope Spitzer montre "
+            "un "
+            "« portrait familial » de générations innombrables d’étoiles : les plus anciennes sont observées "
+            "sous forme "
+            "de points bleus."
+        )
+
+        self.assertEqual(translation, new_truncated_translation)
+
+    @slow
+    def test_translation_en_to_ro(self):
+        model = self.model
+        tok = self.tokenizer
+        use_task_specific_params(model, "translation_en_to_ro")
+        en_text = "Taco Bell said it plans to add 2,000 locations in the US by 2022."
+        expected_translation = "Taco Bell a declarat că intenţionează să adauge 2 000 de locaţii în SUA până în 2022."
+
+        inputs = tok(model.config.prefix + en_text, return_tensors="pt").to(torch_device)
+        output = model.generate(**inputs)
+        translation = tok.decode(output[0], skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        self.assertEqual(translation, expected_translation)
+
+
+@require_torch
+class TestAsymmetricT5(unittest.TestCase):
+    def build_model_and_check_forward_pass(self, **kwargs):
+        tester = T5ModelTester(self, **kwargs)
+        config, *inputs = tester.prepare_config_and_inputs()
+        (
+            input_ids,
+            decoder_input_ids,
+            attention_mask,
+            decoder_attention_mask,
+            lm_labels,
+        ) = inputs
+        model = T5ForConditionalGeneration(config=config).to(torch_device).eval()
+        outputs = model(
+            input_ids=input_ids,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            labels=lm_labels,
+        )
+        # outputs = model(*inputs)
+        assert len(outputs) == 4
+        assert outputs["logits"].size() == (tester.batch_size, tester.decoder_seq_length, tester.vocab_size)
+        assert outputs["loss"].size() == ()
+        return model
+
+    def test_small_decoder(self):
+        # num_hidden_layers is passed to T5Config as num_layers
+        model = self.build_model_and_check_forward_pass(decoder_layers=1, num_hidden_layers=2)
+        assert len(model.encoder.block) == 2
+        assert len(model.decoder.block) == 1
+
+    def test_defaulting_to_symmetry(self):
+        # num_hidden_layers is passed to T5Config as num_layers
+        model = self.build_model_and_check_forward_pass(num_hidden_layers=2)
+        assert len(model.decoder.block) == len(model.encoder.block) == 2
