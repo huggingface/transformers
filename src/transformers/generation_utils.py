@@ -1253,6 +1253,9 @@ class GenerationMixin:
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
                 :obj:`torch.LongTensor` of shape :obj:`(1,)`.
+            diversity_penalty (:obj:`float`):
+                This value is subtracted from a beam's score if it generates a token same as any beam from other group
+                at a particular time.
             beam_scorer (:obj:`BeamScorer`):
                 An derived instance of :class:`~transformers.BeamScorer` that defines how beam hypotheses are
                 constructed, stored and sorted during generation. For more information, the documentation of
@@ -1341,6 +1344,8 @@ class GenerationMixin:
         ), "Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
 
         beam_scores = torch.full((batch_size, num_beams), -1e9, dtype=torch.float, device=input_ids.device)
+        # initialise score of first beam of each group with 0 and the rest with 1e-9. This ensures that the beams in
+        # the same group don't produce same tokens everytime.
         beam_scores[:, ::num_sub_beams] = 0
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
@@ -1379,10 +1384,8 @@ class GenerationMixin:
                 for batch_idx in range(batch_size):
                     # predicted tokens of last time step of previous groups
                     previous_group_tokens = recent_tokens[batch_idx * num_beams: batch_idx * num_beams + group_start_idx]
-                    token_frequency = torch.zeros(vocab_size)
-                    for token in previous_group_tokens:
-                        token_frequency[token.item()] += 1
-                    next_token_scores[batch_idx * group_size : (batch_idx + 1)*group_size] = next_token_scores[batch_idx * group_size : (batch_idx + 1)*group_size] - diversity_penalty * token_frequency
+                    token_frequency = torch.bincount(previous_group_tokens, minlength=vocab_size)
+                    next_token_scores[batch_idx * group_size: (batch_idx + 1) * group_size] -= diversity_penalty * token_frequency
 
                 next_token_scores = logits_processor(group_input_ids, next_token_scores)
                 next_token_scores = next_token_scores + beam_scores[batch_group_indices].unsqueeze(-1).expand_as(next_token_scores)
