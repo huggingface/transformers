@@ -214,7 +214,7 @@ These implementations have been tested on several datasets (see the example scri
 
 ## Citation
 
-We now have a [paper](https://arxiv.org/abs/1910.03771) you can cite for the 🤗 Transformers library:
+We now have a [paper](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) you can cite for the 🤗 Transformers library:
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
