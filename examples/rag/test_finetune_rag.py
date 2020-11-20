@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-import finetune
+import finetune_rag
 from transformers.file_utils import is_apex_available
 from transformers.testing_utils import (
     TestCasePlus,
@@ -67,7 +67,7 @@ class RagFinetuneExampleTests(TestCasePlus):
             testargs.append("--distributed_backend=ddp_cpu")
             testargs.append("--num_processes=2")
 
-        cmd = [sys.executable, str(Path(finetune.__file__).resolve())] + testargs
+        cmd = [sys.executable, str(Path(finetune_rag.__file__).resolve())] + testargs
         execute_subprocess_async(cmd, env=self.get_env())
 
         metrics_save_path = os.path.join(output_dir, "metrics.json")
