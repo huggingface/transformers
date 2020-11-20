@@ -61,9 +61,13 @@ class LfsEnableCommand:
         if not os.path.isdir(local_path):
             print("This does not look like a valid git repo")
             exit(1)
-        subprocess.run("git config lfs.customtransfer.multipart.path transformers-cli".split(), check=True, cwd=local_path)
         subprocess.run(
-            f"git config lfs.customtransfer.multipart.args {LFS_MULTIPART_UPLOAD_COMMAND}".split(), check=True, cwd=local_path
+            "git config lfs.customtransfer.multipart.path transformers-cli".split(), check=True, cwd=local_path
+        )
+        subprocess.run(
+            f"git config lfs.customtransfer.multipart.args {LFS_MULTIPART_UPLOAD_COMMAND}".split(),
+            check=True,
+            cwd=local_path,
         )
         print("Local repo set up for largefiles")
 
@@ -121,7 +125,7 @@ class FileSlice(AbstractContextManager):
         return data
 
     def __iter__(self):
-        yield self.read(n=4*1024*1024)
+        yield self.read(n=4 * 1024 * 1024)
 
     def __exit__(self, *args):
         self.f.close()

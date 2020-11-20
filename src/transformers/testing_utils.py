@@ -134,8 +134,8 @@ def require_git_lfs(test_case):
     """
     Decorator marking a test that requires git-lfs.
 
-    git-lfs requires additional dependencies, and tests are skipped by default. Set the RUN_GIT_LFS_TESTS
-    environment variable to a truthy value to run them.
+    git-lfs requires additional dependencies, and tests are skipped by default. Set the RUN_GIT_LFS_TESTS environment
+    variable to a truthy value to run them.
     """
     if not _run_git_lfs_tests:
         return unittest.skip("test of git lfs workflow")(test_case)

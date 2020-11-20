@@ -103,7 +103,7 @@ jobs:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[sklearn,torch,testing,sentencepiece]
+            - run: pip install .[sklearn,torch,testing]
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
@@ -113,6 +113,7 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
+
     run_tests_tf:
         working_directory: ~/transformers
         docker:

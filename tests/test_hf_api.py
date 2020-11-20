@@ -22,7 +22,7 @@ import unittest
 
 import requests
 from requests.exceptions import HTTPError
-
+from testing_utils import require_git_lfs
 from transformers.hf_api import HfApi, HfFolder, ModelInfo, PresignedUrl, RepoObj, S3Obj
 
 
@@ -47,6 +47,7 @@ REPO_NAME_LARGE_FILE = "my-model-largefiles-{}".format(int(time.time()))
 WORKING_REPO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/working_repo")
 LARGE_FILE_14MB = "https://cdn-media.huggingface.co/lfs-largefiles/progit.epub"
 LARGE_FILE_18MB = "https://cdn-media.huggingface.co/lfs-largefiles/progit.pdf"
+
 
 class HfApiCommonTest(unittest.TestCase):
     _api = HfApi(endpoint=ENDPOINT_STAGING)
@@ -82,10 +83,14 @@ class HfApiEndpointsTest(HfApiCommonTest):
 
     def test_presign_invalid_org(self):
         with self.assertRaises(HTTPError):
-            _ = self._api.presign(token=self._token, filetype="datasets", filename="nested/fake_org.txt", organization="fake")
+            _ = self._api.presign(
+                token=self._token, filetype="datasets", filename="nested/fake_org.txt", organization="fake"
+            )
 
     def test_presign_valid_org(self):
-        urls = self._api.presign(token=self._token, filetype="datasets", filename="nested/valid_org.txt", organization="valid_org")
+        urls = self._api.presign(
+            token=self._token, filetype="datasets", filename="nested/valid_org.txt", organization="valid_org"
+        )
         self.assertIsInstance(urls, PresignedUrl)
 
     def test_presign(self):
@@ -96,7 +101,9 @@ class HfApiEndpointsTest(HfApiCommonTest):
 
     def test_presign_and_upload(self):
         for FILE_KEY, FILE_PATH in FILES:
-            access_url = self._api.presign_and_upload(token=self._token, filetype="datasets", filename=FILE_KEY, filepath=FILE_PATH)
+            access_url = self._api.presign_and_upload(
+                token=self._token, filetype="datasets", filename=FILE_KEY, filepath=FILE_PATH
+            )
             self.assertIsInstance(access_url, str)
             with open(FILE_PATH, "r") as f:
                 body = f.read()
@@ -172,7 +179,9 @@ class HfLargefilesTest(HfApiCommonTest):
         subprocess.run(["git", "lfs", "track", "*.epub"], check=True, cwd=WORKING_REPO_DIR)
 
     def test_end_to_end_thresh_6M(self):
-        REMOTE_URL = self._api.create_repo(token=self._token, name=REPO_NAME_LARGE_FILE, lfsmultipartthresh=6 * 10**6)
+        REMOTE_URL = self._api.create_repo(
+            token=self._token, name=REPO_NAME_LARGE_FILE, lfsmultipartthresh=6 * 10 ** 6
+        )
         self.setup_local_clone(REMOTE_URL)
 
         subprocess.run(["wget", LARGE_FILE_18MB], check=True, capture_output=True, cwd=WORKING_REPO_DIR)
@@ -185,18 +194,15 @@ class HfLargefilesTest(HfApiCommonTest):
         self.assertIn("transformers-cli lfs-enable-largefiles", failed_process.stderr.decode())
         # ^ Instructions on how to fix this are included in the error message.
 
-
         subprocess.run(["transformers-cli", "lfs-enable-largefiles", WORKING_REPO_DIR], check=True)
 
         start_time = time.time()
         subprocess.run(["git", "push"], check=True, cwd=WORKING_REPO_DIR)
         print("took", time.time() - start_time)
 
-        
         # To be 100% sure, let's download the resolved file
         pdf_url = f"{REMOTE_URL}/resolve/main/progit.pdf"
         DEST_FILENAME = "uploaded.pdf"
         subprocess.run(["wget", pdf_url, "-O", DEST_FILENAME], check=True, capture_output=True, cwd=WORKING_REPO_DIR)
         dest_filesize = os.stat(os.path.join(WORKING_REPO_DIR, DEST_FILENAME)).st_size
         self.assertEqual(dest_filesize, 18685041)
-

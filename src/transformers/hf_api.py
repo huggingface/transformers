@@ -151,7 +151,9 @@ class HfApi:
         d = r.json()
         return PresignedUrl(**d)
 
-    def presign_and_upload(self, token: str, filetype: str, filename: str, filepath: str, organization: Optional[str] = None) -> str:
+    def presign_and_upload(
+        self, token: str, filetype: str, filename: str, filepath: str, organization: Optional[str] = None
+    ) -> str:
         """
         HuggingFace S3-based system, used for datasets and metrics.
 
@@ -233,7 +235,9 @@ class HfApi:
         d = r.json()
         return [RepoObj(**x) for x in d]
 
-    def create_repo(self, token: str, name: str, organization: Optional[str] = None, lfsmultipartthresh: Optional[int] = None) -> str:
+    def create_repo(
+        self, token: str, name: str, organization: Optional[str] = None, lfsmultipartthresh: Optional[int] = None
+    ) -> str:
         """
         HuggingFace git-based system, used for models.
 
