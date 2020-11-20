@@ -78,7 +78,7 @@ class TFDPRContextEncoderOutput(ModelOutput):
             heads.
     """
 
-    pooler_output: tf.Tensor
+    pooler_output: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
 
@@ -106,7 +106,7 @@ class TFDPRQuestionEncoderOutput(ModelOutput):
             heads.
     """
 
-    pooler_output: tf.Tensor
+    pooler_output: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
 
@@ -137,7 +137,7 @@ class TFDPRReaderOutput(ModelOutput):
             heads.
     """
 
-    start_logits: tf.Tensor
+    start_logits: tf.Tensor = None
     end_logits: tf.Tensor = None
     relevance_logits: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
@@ -237,12 +237,13 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
 
     def call(
         self,
-        input_ids: tf.Tensor = None,
-        attention_mask: tf.Tensor = None,
+        input_ids: tf.Tensor,
+        attention_mask: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
-        output_attentions: bool = None,
-        output_hidden_states: bool = None,
-        return_dict: bool = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = False,
         training: bool = False,
         **kwargs,
     ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
@@ -254,6 +255,7 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
             func=self.call,
             input_ids=input_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -267,6 +269,7 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
         outputs = self.encoder(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
@@ -669,6 +672,7 @@ class TFDPRReader(TFDPRPretrainedReader):
         self,
         input_ids=None,
         attention_mask: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
         output_attentions: bool = None,
         output_hidden_states: bool = None,
@@ -700,6 +704,7 @@ class TFDPRReader(TFDPRPretrainedReader):
             func=self.call,
             input_ids=input_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -729,9 +734,13 @@ class TFDPRReader(TFDPRPretrainedReader):
         if inputs["attention_mask"] is None:
             inputs["attention_mask"] = tf.ones(input_shape, dtype=tf.dtypes.int32)
 
+        if token_type_ids is None:
+            token_type_ids = tf.zeros(input_shape, dtype=tf.dtypes.int32)
+
         return self.span_predictor(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

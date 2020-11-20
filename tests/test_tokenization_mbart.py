@@ -1,14 +1,7 @@
 import tempfile
 import unittest
 
-from transformers import (
-    SPIECE_UNDERLINE,
-    AutoTokenizer,
-    BatchEncoding,
-    MBartTokenizer,
-    MBartTokenizerFast,
-    is_torch_available,
-)
+from transformers import SPIECE_UNDERLINE, BatchEncoding, MBartTokenizer, MBartTokenizerFast, is_torch_available
 from transformers.testing_utils import (
     _sentencepiece_available,
     require_sentencepiece,
@@ -138,7 +131,7 @@ class MBartEnroIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.tokenizer: MBartTokenizer = AutoTokenizer.from_pretrained(cls.checkpoint_name)
+        cls.tokenizer: MBartTokenizer = MBartTokenizer.from_pretrained(cls.checkpoint_name)
         cls.pad_token_id = 1
         return cls
 

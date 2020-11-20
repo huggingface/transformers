@@ -5,7 +5,7 @@ datasets:
 - wikipedia
 ---
 
-# BERT multilingual base model (uncased)
+# BERT multilingual base model (cased)
 
 Pretrained model on the top 104 languages with the largest Wikipedia using a masked language modeling (MLM) objective.
 It was introduced in [this paper](https://arxiv.org/abs/1810.04805) and first released in
