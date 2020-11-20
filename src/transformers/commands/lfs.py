@@ -65,7 +65,7 @@ class LfsEnableCommand:
         subprocess.run(
             f"git config lfs.customtransfer.multipart.args {LFS_MULTIPART_UPLOAD_COMMAND}".split(), check=True, cwd=local_path
         )
-        print("Done")
+        print("Local repo set up for largefiles")
 
 
 def write_msg(msg: Dict):
@@ -121,7 +121,7 @@ class FileSlice(AbstractContextManager):
         return self.f.read(n_to_read)
 
     def __iter__(self):
-        yield self.read(n=io.DEFAULT_BUFFER_SIZE)
+        yield self.read(n=4*1024*1024)
 
     def __exit__(self, *args):
         self.f.close()
@@ -166,9 +166,11 @@ class LfsUploadCommand:
 
             parts = []
             for i, presigned_url in enumerate(presigned_urls):
-                with FileSlice(filepath, seek_from=i * chunk_size, read_limit=chunk_size) as data:
+                # with FileSlice(filepath, seek_from=i * chunk_size, read_limit=chunk_size) as data:
+                with open(filepath, "rb") as data:
                     r = requests.put(presigned_url, data=data)
                     r.raise_for_status()
+                    logger.warning(f"kiki {i}")
                     parts.append(
                         {
                             "etag": r.headers.get("etag"),

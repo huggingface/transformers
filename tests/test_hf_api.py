@@ -164,21 +164,29 @@ class HfLargefilesTest(HfApiCommonTest):
         except FileNotFoundError:
             pass
 
-    def test_end_to_end_5M(self):
-        REMOTE_URL = self._api.create_repo(token=self._token, name=REPO_NAME, lfsmultipartthresh=5 * 10**9)
+    def test_end_to_end_thresh_5M(self):
+        REMOTE_URL = self._api.create_repo(token=self._token, name=REPO_NAME_LARGE_FILE, lfsmultipartthresh=5 * 10**6)
         REMOTE_URL_AUTH = REMOTE_URL.replace(ENDPOINT_STAGING, ENDPOINT_STAGING_BASIC_AUTH)
-        x = subprocess.run(["git", "clone", REMOTE_URL_AUTH, WORKING_REPO_DIR], check=True, capture_output=True)
-        subprocess.run(["git", "lfs", "env"], cwd=WORKING_REPO_DIR)
-        subprocess.run(["git", "lfs", "track", "*.pdf"], cwd=WORKING_REPO_DIR)
-        subprocess.run(["git", "lfs", "track", "*.epub"], cwd=WORKING_REPO_DIR)
+        subprocess.run(["git", "clone", REMOTE_URL_AUTH, WORKING_REPO_DIR], check=True, capture_output=True)
+        subprocess.run(["git", "lfs", "track", "*.pdf"], check=True, cwd=WORKING_REPO_DIR)
+        subprocess.run(["git", "lfs", "track", "*.epub"], check=True, cwd=WORKING_REPO_DIR)
         subprocess.run(["wget", LARGE_FILE_18MB], check=True, capture_output=True, cwd=WORKING_REPO_DIR)
         subprocess.run(["git", "add", "*"], check=True, cwd=WORKING_REPO_DIR)
         subprocess.run(["git", "commit", "-m", "commit message"], check=True, cwd=WORKING_REPO_DIR)
 
         # This will fail as we haven't set up our custom transfer agent yet.
-        with self.assertRaises(subprocess.CalledProcessError) as context:
-            subprocess.run(["git", "push"], check=True, cwd=WORKING_REPO_DIR)
+        # failed_process = subprocess.run(["git", "push"], capture_output=True, cwd=WORKING_REPO_DIR)
+        # self.assertEquals(failed_process.returncode, 1)
+        # self.assertIn("transformers-cli lfs-enable-largefiles", failed_process.stderr.decode())
+        # ^ Instructions on how to fix this are included in the error message.
 
+
+        subprocess.run(["transformers-cli", "lfs-enable-largefiles", WORKING_REPO_DIR], check=True)
+
+        start_time = time.time()
+        subprocess.run(["git", "push"], check=True, cwd=WORKING_REPO_DIR)
+        print("took", time.time() - start_time)
+        
         print()
 
         
