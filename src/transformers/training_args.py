@@ -201,7 +201,8 @@ class TrainingArguments:
     model_parallel: bool = field(
         default=False,
         metadata={
-            "help": "If there are more than one devices, whether to use model parallelism to distribute the model's modules across devices."
+            "help": ("If there are more than one devices, whether to use model parallelism to distribute the "
+                "model's modules across devices.")
         },
     )
     evaluation_strategy: EvaluationStrategy = field(

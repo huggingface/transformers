@@ -17,11 +17,13 @@ def assert_device_map(device_map, num_blocks):
     extra_blocks = [i for i in device_map_blocks if i not in blocks]
 
     assert len(duplicate_blocks) == 0, (
-        "Duplicate attention blocks specified in device_map. Attention blocks must be specified to one device. These attention blocks were specified more than once: "
+        "Duplicate attention blocks specified in device_map. Attention blocks must be specified to one device. These "
+        "attention blocks were specified more than once: "
         + str(duplicate_blocks)
     )
     assert len(missing_blocks) == 0, (
-        "There are attention blocks for this model that are not specified in the device_map. Add these attention_blocks to a device on the device_map:"
+        "There are attention blocks for this model that are not specified in the device_map. Add these attention "
+        "blocks to a device on the device_map: "
         + str(missing_blocks)
     )
     assert (
