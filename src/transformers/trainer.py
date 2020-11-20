@@ -241,7 +241,10 @@ class Trainer:
         self.hp_name = None
         if model is None and model_init is not None:
             model = self.call_model_init()
-        self.model = model.to(args.device) if model is not None else None
+        # Model parallel
+        self.model = model if model is not None else None
+        if not self.args.model_parallel and self.model is not None:
+            self.model = self.model.to(args.device)
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
@@ -578,7 +581,8 @@ class Trainer:
 
             model = self.call_model_init(trial)
 
-            self.model = model.to(self.args.device)
+            if not self.args.model_parallel:
+                self.model = model.to(self.args.device)
 
             # Reinitializes optimizer and scheduler
             self.optimizer, self.lr_scheduler = None, None
@@ -625,7 +629,7 @@ class Trainer:
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
 
         # Multi-gpu training (should be after apex fp16 initialization)
-        if self.args.n_gpu > 1:
+        if self.args.n_gpu > 1 and not self.args.model_parallel:
             model = torch.nn.DataParallel(model)
 
         # Distributed training (should be after apex fp16 initialization)
@@ -805,7 +809,8 @@ class Trainer:
             )
             if isinstance(model, PreTrainedModel):
                 self.model = model.from_pretrained(self.state.best_model_checkpoint)
-                self.model = self.model.to(self.args.device)
+                if not self.args.model_parallel:
+                    self.model = model.to(self.args.device)
             else:
                 state_dict = torch.load(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME))
                 self.model.load_state_dict(state_dict)
@@ -1074,7 +1079,7 @@ class Trainer:
         else:
             loss = self.compute_loss(model, inputs)
 
-        if self.args.n_gpu > 1:
+        if self.args.n_gpu > 1 and not self.args.model_parallel:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
         if self.args.gradient_accumulation_steps > 1:
@@ -1323,7 +1328,7 @@ class Trainer:
 
         model = self.model
         # multi-gpu eval
-        if self.args.n_gpu > 1:
+        if self.args.n_gpu > 1 and not self.args.model_parallel:
             model = torch.nn.DataParallel(model)
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
