@@ -1,14 +1,18 @@
+import json
 import logging
+import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import finetune
 from transformers.file_utils import is_apex_available
-from transformers.testing_utils import TestCasePlus, require_torch_gpu, require_torch_multi_gpu
-
-
-sys.path.append(str(Path(__file__).parent.resolve()))
-import finetune  # noqa
+from transformers.testing_utils import (
+    TestCasePlus,
+    execute_subprocess_async,
+    require_torch_gpu,
+    require_torch_multi_gpu,
+)
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -21,10 +25,10 @@ class RagFinetuneExampleTests(TestCasePlus):
         logger.addHandler(stream_handler)
 
         tmp_dir = self.get_auto_remove_tmp_dir()
+        output_dir = tmp_dir
         data_dir = Path(__file__).parent / "test_data" / "dummy_seq2seq"
         data_dir = str(data_dir.resolve())
         testargs = f"""
-            finetune.py \
                 --data_dir {data_dir} \
                 --output_dir {tmp_dir} \
                 --model_name_or_path facebook/rag-sequence-base \
@@ -50,7 +54,7 @@ class RagFinetuneExampleTests(TestCasePlus):
                 --num_train_epochs 1 \
                 --warmup_steps 4 \
                 --gradient_accumulation_steps 1 \
-                --distributed-port 8888 \
+                --distributed-port 8989 \
                 --use_dummy_dataset 1 \
             """.split()
 
@@ -63,16 +67,20 @@ class RagFinetuneExampleTests(TestCasePlus):
             testargs.append("--distributed_backend=ddp_cpu")
             testargs.append("--num_processes=2")
 
-        with patch.object(sys, "argv", testargs):
-            result = finetune.main()[0]
-            return result
+        cmd = [sys.executable, str(Path(finetune.__file__).resolve())] + testargs
+        execute_subprocess_async(cmd, env=self.get_env())
+
+        metrics_save_path = os.path.join(output_dir, "metrics.json")
+        with open(metrics_save_path) as f:
+            result = json.load(f)
+        return result
 
     @require_torch_gpu
     def test_finetune_gpu(self):
         result = self._run_finetune(gpus=1)
-        self.assertGreaterEqual(result["test_em"], 0.2)
+        self.assertGreaterEqual(result["test"][0]["test_avg_em"], 0.2)
 
     @require_torch_multi_gpu
     def test_finetune_multigpu(self):
         result = self._run_finetune(gpus=2)
-        self.assertGreaterEqual(result["test_em"], 0.2)
+        self.assertGreaterEqual(result["test"][0]["test_avg_em"], 0.2)

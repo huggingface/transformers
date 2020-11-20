@@ -504,7 +504,8 @@ def main(args=None, model=None) -> GenerativeQAModule:
         return model
 
     # test() without a model tests using the best checkpoint automatically
-    return trainer.test()
+    trainer.test()
+    return model
 
 
 if __name__ == "__main__":
