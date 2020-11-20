@@ -1079,7 +1079,7 @@ class Trainer:
         else:
             loss = self.compute_loss(model, inputs)
 
-        if self.args.n_gpu > 1 and not self.args.model_parallel:
+        if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
         if self.args.gradient_accumulation_steps > 1:
