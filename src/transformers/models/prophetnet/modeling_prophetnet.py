@@ -16,6 +16,7 @@
 
 import copy
 import math
+import numpy as np
 import warnings
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
@@ -160,12 +161,13 @@ def ngram_attention_bias(sequence_length, ngram, device, dtype):
     """
     This function computes the bias for the predict stream
     """
-    bias = torch.ones((ngram, sequence_length, 2 * sequence_length), device=device, dtype=dtype) * float("-inf")
+    bias_array = np.ones((ngram, sequence_length, 2 * sequence_length), dtype=np.float) * np.float("-inf")
     # create bias
     for stream_idx in range(ngram):
         for i in range(sequence_length):
-            bias[stream_idx, i, sequence_length + i] = 0
-            bias[stream_idx, i, : max(i - stream_idx, 0) + 1] = 0
+            bias_array[stream_idx, i, sequence_length + i] = 0
+            bias_array[stream_idx, i, : max(i - stream_idx, 0) + 1] = 0
+    bias = torch.from_numpy(bias_array)
     return bias
 
 
@@ -1507,7 +1509,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         seq_length, batch_size = hidden_states.shape[:2]
 
         # get causal mask
-        causal_mask = hidden_states.new(seq_length, seq_length).float().fill_(-float("inf"))
+        causal_mask = torch.full((seq_length, seq_length), -float("inf"))
         causal_mask = torch.triu(causal_mask, 1)
         extended_causal_mask = causal_mask[:seq_length, :seq_length][None, :, :].expand(
             (batch_size,) + causal_mask.shape
