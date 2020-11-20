@@ -972,10 +972,7 @@ class TFBartModel(TFPretrainedBartModel):
             )
         else:
             decoder_padding_mask, causal_mask = None, None
-        # Replace by proper TF asserts
-        # assert (
-        #    isinstance(inputs["encoder_outputs"], TFBaseModelOutput) or inputs["encoder_outputs"] is None
-        # ), f"got unexpected encoder outputs type {type(inputs['encoder_outputs'])}"
+        
         if inputs["encoder_outputs"] is None:
             inputs["encoder_outputs"] = self.encoder(
                 input_ids=inputs["input_ids"],
