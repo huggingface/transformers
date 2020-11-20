@@ -37,6 +37,7 @@ class TFTrainer:
     """
     TFTrainer is a simple but feature-complete training and eval loop for TensorFlow, optimized for 🤗 Transformers.
 
+
     Args:
         model (:class:`~transformers.TFPreTrainedModel`):
             The model to train, evaluate or use for predictions.
@@ -146,6 +147,7 @@ class TFTrainer:
         """
         Returns the evaluation :class:`~tf.data.Dataset`.
 
+
         Args:
             eval_dataset (:class:`~tf.data.Dataset`, `optional`):
                 If provided, will override `self.eval_dataset`. The dataset should yield tuples of ``(features,
@@ -178,6 +180,7 @@ class TFTrainer:
     def get_test_tfdataset(self, test_dataset: tf.data.Dataset) -> tf.data.Dataset:
         """
         Returns a test :class:`~tf.data.Dataset`.
+
 
         Args:
             test_dataset (:class:`~tf.data.Dataset`):
@@ -364,6 +367,7 @@ class TFTrainer:
 
         Subclass and override this method to inject custom behavior.
 
+
         Args:
             logs (:obj:`Dict[str, float]`):
                 The values to log.
@@ -397,6 +401,7 @@ class TFTrainer:
         The calling script will be responsible for providing a method to compute metrics, as they are task-dependent
         (pass it to the init :obj:`compute_metrics` argument).
 
+
         Args:
             eval_dataset (:class:`~tf.data.Dataset`, `optional`):
                 Pass a dataset if you wish to override :obj:`self.eval_dataset`. The dataset should yield tuples of
@@ -404,6 +409,7 @@ class TFTrainer:
                 ``labels`` is a tensor, the loss is calculated by the model by calling ``model(features,
                 labels=labels)``. If ``labels`` is a dict, such as when using a QuestionAnswering head model with
                 multiple targets, the loss is instead calculated by calling ``model(features, **labels)``.
+
 
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
@@ -694,10 +700,12 @@ class TFTrainer:
 
         Subclass and override this method if you want to inject some custom behavior.
 
+
         Args:
             features (:obj:`tf.Tensor`): A batch of input features.
             labels (:obj:`tf.Tensor`): A batch of labels.
             training (:obj:`bool`): Whether or not to run the model in training mode.
+
 
         Returns:
             A tuple of two :obj:`tf.Tensor`: The loss and logits.
@@ -724,6 +732,7 @@ class TFTrainer:
 
         Depending on the dataset and your use case, your test dataset may contain labels. In that case, this method
         will also return metrics, like in :obj:`evaluate()`.
+
 
         Args:
             test_dataset (:class:`~tf.data.Dataset`):
