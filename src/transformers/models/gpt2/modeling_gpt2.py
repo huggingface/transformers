@@ -462,8 +462,8 @@ PARALLELIZE_DOCSTRING = r"""
     Uses a device map to distribute attention modules of the model across several devices. If no device map is given,
     it will evenly distribute blocks across all devices.
 
-    Args:   
-        device_map (:obj:`Dict[int, list]`, optional, defaults to None):    
+    Args:
+        device_map (:obj:`Dict[int, list]`, optional, defaults to None):
             A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
             automatically mapped to the first device (for esoteric reasons). That means that the first device should
             have fewer attention modules mapped to it than other devices. For reference, the gpt2 models have the
@@ -474,29 +474,27 @@ PARALLELIZE_DOCSTRING = r"""
                 - gpt2-large: 36
                 - gpt2-xl: 48
 
-    Example::   
-        Here is an example of a device map on a machine with 4 GPUs using gpt2-xl, which has a total of 48 attention modules:   
-            model = GPT2LMHeadModel.from_pretrained('gpt2-xl')  
-            device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7, 8],   
-
-                          1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],   
-                          2: [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],  
-                          3: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]}  
-            model.parallelize(device_map)   
+    Example::
+        Here is an example of a device map on a machine with 4 GPUs using gpt2-xl, which has a total of 48 attention modules:
+            model = GPT2LMHeadModel.from_pretrained('gpt2-xl')
+            device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+                          1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+                          2: [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],
+                          3: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]}
+            model.parallelize(device_map)
 """
 DEPARALLELIZE_DOCSTRING = r"""
     Moves the model to cpu from a model parallel state.
 
-    Example::   
-        On a 4 GPU machine with gpt2-large: 
-        model = GPT2LMHeadModel.from_pretrained('gpt2-large')   
-        device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7],  
-
-                    1: [8, 9, 10, 11, 12, 13, 14, 15],  
-                    2: [16, 17, 18, 19, 20, 21, 22, 23],    
-                    3: [24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]}    
-        model.parallelize(device_map) # Splits the model across several devices 
-        model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache() 
+    Example::
+        On a 4 GPU machine with gpt2-large:
+        model = GPT2LMHeadModel.from_pretrained('gpt2-large')
+        device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7],
+                    1: [8, 9, 10, 11, 12, 13, 14, 15],
+                    2: [16, 17, 18, 19, 20, 21, 22, 23],
+                    3: [24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]}
+        model.parallelize(device_map) # Splits the model across several devices
+        model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
 """
 
 
