@@ -485,8 +485,6 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-@require_sentencepiece
-@require_tokenizers
 @require_torch
 class BertModelIntegrationTest(unittest.TestCase):
     @slow

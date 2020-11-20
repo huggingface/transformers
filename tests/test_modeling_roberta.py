@@ -401,8 +401,6 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
 
-@require_sentencepiece
-@require_tokenizers
 @require_torch
 class RobertaModelIntegrationTest(unittest.TestCase):
     @slow
