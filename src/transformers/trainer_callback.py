@@ -490,16 +490,14 @@ class EarlyStoppingCallback(TrainerCallback):
             Use with TrainingAruments :obj:`metric_for_best_model` and :obj:`early_stopping_patience` to denote how
             much the specified metric must improve to satisfy early stopping conditions. `
 
-    Internal State: early_stopping_patience_counter (:obj:`int`): The number of times validation metrics failed to
-    improve.
-
-    This callback depends on :class:`~transformers.TrainingArguments` argument load_best_model_at_end functionality to
+    This callback depends on :class:`~transformers.TrainingArguments` argument `load_best_model_at_end` functionality to
     set best_metric in :class:`~transformers.TrainerState`.
     """
 
     def __init__(self, early_stopping_patience: int = 1, early_stopping_threshold: Optional[float] = 0.0):
         self.early_stopping_patience = early_stopping_patience
         self.early_stopping_threshold = early_stopping_threshold
+        # early_stopping_patience_counter denotes the number of times validation metrics failed to improve.
         self.early_stopping_patience_counter = 0
 
     def check_metric_value(self, args, state, control, metric_value):
@@ -513,10 +511,13 @@ class EarlyStoppingCallback(TrainerCallback):
         else:
             self.early_stopping_patience_counter += 1
 
-    def on_evaluate(self, args, state, control, metrics, **kwargs):
-        # Ensure state.best_metric gets set in later steps
-        args.load_best_model_at_end = True
+    def on_train_begin(self, args, state, control, **kwargs):
+        assert args.load_best_model_at_end == True, "EarlyStoppingCallback requires load_best_model_at_end = True"
+        assert args.metric_for_best_model is not None, "EarlyStoppingCallback requires metric_for_best_model is defined"
+        assert args.evaluation_strategy != EvaluationStrategy.NO, "EarlyStoppingCallback requires EvaluationStrategy of steps or epoch"
 
+
+    def on_evaluate(self, args, state, control, metrics, **kwargs):
         metric_to_check = args.metric_for_best_model
         if not metric_to_check.startswith("eval_"):
             metric_to_check = f"eval_{metric_to_check}"
