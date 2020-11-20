@@ -989,9 +989,6 @@ class ModelTesterMixin:
             del model
             torch.cuda.empty_cache()
 
-            # Retrieve memory after emptied cache (should be close to 0)
-            empty_cache = get_current_gpu_memory_use()
-
             # The memory use on that device should be higher than it was initially.
             self.assertGreater(memory_after_model_load[0], initial_memory[0])
 
