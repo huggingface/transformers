@@ -166,13 +166,13 @@ logger = logging.get_logger(__name__)
 class Trainer:
     """
     Trainer is a simple but feature-complete training and eval loop for PyTorch, optimized for 🤗 Transformers.
+
     Args:
         model (:class:`~transformers.PreTrainedModel` or :obj:`torch.nn.Module`, `optional`):
-            The model to train, evaluate or use for predictions. If not provided, a ``model_init`` must be passed.
-            .. note::
-                :class:`~transformers.Trainer` is optimized to work with the :class:`~transformers.PreTrainedModel`
-                provided by the library. You can still use your own models defined as :obj:`torch.nn.Module` as long as
-                they work the same way as the 🤗 Transformers models.
+            The model to train, evaluate or use for predictions. If not provided, a ``model_init`` must be passed. ..
+            note:: :class:`~transformers.Trainer` is optimized to work with the :class:`~transformers.PreTrainedModel`
+            provided by the library. You can still use your own models defined as :obj:`torch.nn.Module` as long as
+            they work the same way as the 🤗 Transformers models.
         args (:class:`~transformers.TrainingArguments`, `optional`):
             The arguments to tweak for training. Will default to a basic instance of
             :class:`~transformers.TrainingArguments` with the ``output_dir`` set to a directory named `tmp_trainer` in
@@ -202,12 +202,14 @@ class Trainer:
             :class:`~transformers.EvalPrediction` and return a dictionary string to metric values.
         callbacks (List of :obj:`~transformers.TrainerCallback`, `optional`):
             A list of callbacks to customize the training loop. Will add those to the list of default callbacks
-            detailed in :doc:`here <callback>`.
-            If you want to remove one of the default callbacks used, use the :meth:`Trainer.remove_callback` method.
+            detailed in :doc:`here <callback>`. If you want to remove one of the default callbacks used, use the
+            :meth:`Trainer.remove_callback` method.
         optimizers (:obj:`Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR`, `optional`): A tuple
             containing the optimizer and the scheduler to use. Will default to an instance of
             :class:`~transformers.AdamW` on your model and a scheduler given by
             :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
+        kwargs:
+            Deprecated keyword arguments.
     """
 
     def __init__(
