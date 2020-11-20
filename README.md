@@ -218,28 +218,7 @@ We now have a [paper](https://www.aclweb.org/anthology/2020.emnlp-demos.6/) you 
 ```bibtex
 @inproceedings{wolf-etal-2020-transformers,
     title = "Transformers: State-of-the-Art Natural Language Processing",
-    author = "Wolf, Thomas  and
-      Debut, Lysandre  and
-      Sanh, Victor  and
-      Chaumond, Julien  and
-      Delangue, Clement  and
-      Moi, Anthony  and
-      Cistac, Pierric  and
-      Rault, Tim  and
-      Louf, Remi  and
-      Funtowicz, Morgan  and
-      Davison, Joe  and
-      Shleifer, Sam  and
-      von Platen, Patrick  and
-      Ma, Clara  and
-      Jernite, Yacine  and
-      Plu, Julien  and
-      Xu, Canwen  and
-      Le Scao, Teven  and
-      Gugger, Sylvain  and
-      Drame, Mariama  and
-      Lhoest, Quentin  and
-      Rush, Alexander",
+    author = "Thomas Wolf and Lysandre Debut and Victor Sanh and Julien Chaumond and Clement Delangue and Anthony Moi and Pierric Cistac and Tim Rault and Rémi Louf and Morgan Funtowicz and Joe Davison and Sam Shleifer and Patrick von Platen and Clara Ma and Yacine Jernite and Julien Plu and Canwen Xu and Teven Le Scao and Sylvain Gugger and Mariama Drame and Quentin Lhoest and Alexander M. Rush",
     booktitle = "Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing: System Demonstrations",
     month = oct,
     year = "2020",
