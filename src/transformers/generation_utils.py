@@ -1297,8 +1297,8 @@ class GenerationMixin:
             >>> encoder_input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
 
 
-            >>> # lets run beam search using 3 beams
-            >>> num_beams = 3
+            >>> # lets run diverse beam search using 6 beams
+            >>> num_beams = 6
             >>> # define decoder start token ids
             >>> input_ids = torch.ones((num_beams, 1), device=model.device, dtype=torch.long)
             >>> input_ids = input_ids * model.config.decoder_start_token_id
@@ -1314,6 +1314,7 @@ class GenerationMixin:
             ...     max_length=model.config.max_length,
             ...     num_beams=num_beams,
             ...     device=model.device,
+            ...     beam_groups=3
             ... )
 
             >>> # instantiate logits processors
@@ -1321,7 +1322,7 @@ class GenerationMixin:
             ...     MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id),
             ... ])
 
-            >>> outputs = model.beam_search(input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs)
+            >>> outputs = model.diverse_beam_search(input_ids, 5.5, beam_scorer, logits_processor=logits_processor, **model_kwargs)
 
             >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         """
@@ -1353,6 +1354,9 @@ class GenerationMixin:
         while cur_len < max_length:
             # predicted tokens in cur_len step
             recent_tokens = torch.zeros(batch_size * num_beams, dtype=input_ids.dtype, device=device)
+
+            # indices which will form the beams in the next time step
+            reordering_indices = torch.zeros(batch_size * num_beams, dtype=torch.long, device=device)
 
             # do one decoder step on all beams of all sentences in batch
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -1418,11 +1422,15 @@ class GenerationMixin:
                 group_input_ids = torch.cat([group_input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
                 recent_tokens[batch_group_indices] = group_input_ids[:, -1]
 
+                # (beam_idx // group_size) -> batch_idx
+                # (beam_idx % group_size) -> offset of idx inside the group
+                reordering_indices[batch_group_indices] = num_beams * (beam_idx // group_size) + group_start_idx + (beam_idx % group_size)
+
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past"] is not None:
-                model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
+                model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], reordering_indices)
 
             input_ids = torch.cat([input_ids, recent_tokens.unsqueeze(-1)], dim=-1)
             cur_len = cur_len + 1
