@@ -252,6 +252,7 @@ def input_processing(func, input_ids, **kwargs):
     signature.pop("kwargs", None)
     parameter_names = list(signature.keys())
     output = {}
+    allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict)
 
     if "inputs" in kwargs["kwargs_call"]:
         warnings.warn(
@@ -274,7 +275,7 @@ def input_processing(func, input_ids, **kwargs):
         )
 
     for k, v in kwargs.items():
-        if isinstance(v, (tf.Tensor, bool, int, ModelOutput, tuple, list, dict)) or v is None:
+        if isinstance(v, allowed_types) or v is None:
             output[k] = v
         else:
             raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
@@ -293,7 +294,7 @@ def input_processing(func, input_ids, **kwargs):
                     raise ValueError(
                         f"The tensor named {input.name} does not belong to the authorized list of names {parameter_names}."
                     )
-            elif isinstance(input, (tf.Tensor, bool, int, ModelOutput, tuple, list, dict)) or input is None:
+            elif isinstance(input, allowed_types) or input is None:
                 output[parameter_names[i]] = input
             else:
                 raise ValueError(
@@ -316,7 +317,7 @@ def input_processing(func, input_ids, **kwargs):
             output["past_key_values"] = input_ids.pop("decoder_cached_states")
 
         for k, v in dict(input_ids).items():
-            if not isinstance(v, (tf.Tensor, bool, int, ModelOutput, tuple, list, dict)):
+            if not isinstance(v, allowed_types):
                 raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
             else:
                 output[k] = v
