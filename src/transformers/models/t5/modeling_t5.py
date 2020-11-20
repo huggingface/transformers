@@ -40,7 +40,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
-from ...utils.model_parallel_utils import assert_device_map, get_device_map
+from ...utils import model_parallel_utils
 from .configuration_t5 import T5Config
 
 
@@ -779,9 +779,9 @@ class T5Stack(T5PreTrainedModel):
     def parallelize(self, device_map=None):
         # Check validity of device_map
         self.device_map = (
-            get_device_map(len(self.block), torch.cuda.device_count()) if device_map is None else device_map
+            model_parallel_utils.get_device_map(len(self.block), torch.cuda.device_count()) if device_map is None else device_map
         )
-        assert_device_map(self.device_map, len(self.block))
+        model_parallel_utils.assert_device_map(self.device_map, len(self.block))
         self.model_parallel = True
         self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
         self.last_device = "cuda:" + str(max(self.device_map.keys()))
@@ -1116,11 +1116,11 @@ class T5Model(T5PreTrainedModel):
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
         self.device_map = (
-            get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
+            model_parallel_utils.get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
             if device_map is None
             else device_map
         )
-        assert_device_map(self.device_map, len(self.encoder.block))
+        model_parallel_utils.assert_device_map(self.device_map, len(self.encoder.block))
         self.encoder.parallelize(self.device_map)
         self.decoder.parallelize(self.device_map)
         self.model_parallel = True
@@ -1293,11 +1293,11 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
         self.device_map = (
-            get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
+            model_parallel_utils.get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
             if device_map is None
             else device_map
         )
-        assert_device_map(self.device_map, len(self.encoder.block))
+        model_parallel_utils.assert_device_map(self.device_map, len(self.encoder.block))
         self.encoder.parallelize(self.device_map)
         self.decoder.parallelize(self.device_map)
         self.lm_head = self.lm_head.to(self.decoder.first_device)
