@@ -961,11 +961,14 @@ class Trainer:
         """
         Launch an hyperparameter search using ``optuna`` or ``Ray Tune``. The optimized quantity is determined by
         :obj:`compute_objectie`, which defaults to a function returning the evaluation loss when no metric is provided,
-        the sum of all metrics otherwise. .. warning:: To use this method, you need to have provided a ``model_init``
-        when initializing your :class:`~transformers.Trainer`: we need to reinitialize the model at each new run. This
-        is incompatible with the ``optimizers`` argument, so you need to subclass :class:`~transformers.Trainer` and
-        override the method :meth:`~transformers.Trainer.create_optimizer_and_scheduler` for custom
-        optimizer/scheduler.
+        the sum of all metrics otherwise.
+
+        .. warning::
+
+            To use this method, you need to have provided a ``model_init`` when initializing your
+            :class:`~transformers.Trainer`: we need to reinitialize the model at each new run. This is incompatible
+            with the ``optimizers`` argument, so you need to subclass :class:`~transformers.Trainer` and override the
+            method :meth:`~transformers.Trainer.create_optimizer_and_scheduler` for custom optimizer/scheduler.
 
         Args:
             hp_space (:obj:`Callable[["optuna.Trial"], Dict[str, float]]`, `optional`):
@@ -986,10 +989,12 @@ class Trainer:
                 one is installed. If both are installed, will default to optuna.
             kwargs:
                 Additional keyword arguments passed along to :obj:`optuna.create_study` or :obj:`ray.tune.run`. For
-                more information see: - the documentation of `optuna.create_study
-                <https://optuna.readthedocs.io/en/stable/reference/alias_generated/optuna.create_study.html#optuna.create_study>`__
+                more information see:
+
+                - the documentation of `optuna.create_study
+                  <https://optuna.readthedocs.io/en/stable/reference/alias_generated/optuna.create_study.html#optuna.create_study>`__
                 - the documentation of `tune.run
-                <https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run>`__
+                  <https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run>`__
 
         Returns:
             :class:`transformers.trainer_utils.BestRun`: All the information about the best run.
