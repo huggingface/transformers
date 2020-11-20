@@ -31,13 +31,13 @@ from transformers import (
 from transformers import logging as transformers_logging
 
 
-from callbacks import (  # noqa: E402 # isort:skipq
+from callbacks_rag import (  # noqa: E402 # isort:skipq
     get_checkpoint_callback,
     get_early_stopping_callback,
     Seq2SeqLoggingCallback,
 )
 from distributed_retriever import RagPyTorchDistributedRetriever  # noqa: E402 # isort:skip
-from utils import (  # noqa: E402 # isort:skip
+from utils_rag import (  # noqa: E402 # isort:skip
     calculate_exact_match,
     flatten_list,
     get_git_info,
