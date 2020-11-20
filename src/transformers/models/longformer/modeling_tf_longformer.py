@@ -2272,7 +2272,7 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
     )
     def call(
         self,
-        inputs=None,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -2283,48 +2283,11 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
         return_dict=None,
         labels=None,
         training=False,
+        **kwargs,
     ):
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if isinstance(inputs, (tuple, list)):
-            input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
-            position_ids = inputs[3] if len(inputs) > 3 else position_ids
-            global_attention_mask = inputs[4] if len(inputs) > 4 else global_attention_mask
-            inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
-            output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
-            output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
-            return_dict = inputs[8] if len(inputs) > 8 else return_dict
-            labels = inputs[9] if len(inputs) > 9 else labels
-            assert len(inputs) <= 10, "Too many inputs."
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            input_ids = inputs.get("input_ids")
-            attention_mask = inputs.get("attention_mask", attention_mask)
-            global_attention_mask = inputs.get("global_attention_mask", global_attention_mask)
-            token_type_ids = inputs.get("token_type_ids", token_type_ids)
-            position_ids = inputs.get("position_ids", position_ids)
-            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            labels = inputs.get("labels", labels)
-            output_attentions = inputs.get("output_attentions", output_attentions)
-            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            return_dict = inputs.get("return_dict", return_dict)
-            assert len(inputs) <= 10, "Too many inputs."
-        else:
-            input_ids = inputs
-
-        if global_attention_mask is None and input_ids is not None:
-            logger.info("Initializing global attention on CLS token...")
-            # global attention on cls token
-            global_attention_mask = tf.zeros_like(input_ids)
-            global_attention_mask = tf.tensor_scatter_nd_update(
-                global_attention_mask,
-                [[i, 0] for i in range(input_ids.shape[0])],
-                [1 for _ in range(input_ids.shape[0])],
-            )
-
-        outputs = self.longformer(
-            input_ids,
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             global_attention_mask=global_attention_mask,
             token_type_ids=token_type_ids,
@@ -2333,11 +2296,38 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            labels=labels,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.longformer.return_dict
+
+        if inputs["global_attention_mask"] is None and inputs["input_ids"] is not None:
+            logger.info("Initializing global attention on CLS token...")
+            # global attention on cls token
+            inputs["global_attention_mask"] = tf.zeros_like(inputs["input_ids"])
+            inputs["global_attention_mask"] = tf.tensor_scatter_nd_update(
+                inputs["global_attention_mask"],
+                [[i, 0] for i in range(inputs["input_ids"].shape[0])],
+                [1 for _ in range(inputs["input_ids"].shape[0])],
+            )
+
+        outputs = self.longformer(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            global_attention_mask=inputs["global_attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            position_ids=inputs["position_ids"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
         )
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
 
-        loss = None if labels is None else self.compute_loss(labels, logits)
+        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -2387,7 +2377,7 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
     )
     def call(
         self,
-        inputs,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -2398,6 +2388,7 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         return_dict=None,
         labels=None,
         training=False,
+        **kwargs,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -2405,54 +2396,48 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
             num_choices]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
             :obj:`input_ids` above)
         """
-        if isinstance(inputs, (tuple, list)):
-            input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
-            position_ids = inputs[3] if len(inputs) > 3 else position_ids
-            global_attention_mask = inputs[4] if len(inputs) > 4 else global_attention_mask
-            inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
-            output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
-            output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
-            return_dict = inputs[8] if len(inputs) > 8 else return_dict
-            labels = inputs[9] if len(inputs) > 9 else labels
-            assert len(inputs) <= 10, "Too many inputs."
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            input_ids = inputs.get("input_ids")
-            attention_mask = inputs.get("attention_mask", attention_mask)
-            global_attention_mask = inputs.get("global_attention_mask", global_attention_mask)
-            token_type_ids = inputs.get("token_type_ids", token_type_ids)
-            position_ids = inputs.get("position_ids", position_ids)
-            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            labels = inputs.get("labels", labels)
-            output_attentions = inputs.get("output_attentions", output_attentions)
-            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            return_dict = inputs.get("return_dict", return_dict)
-            assert len(inputs) <= 10, "Too many inputs."
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            global_attention_mask=global_attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            labels=labels,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.longformer.return_dict
+
+        if inputs["input_ids"] is not None:
+            num_choices = shape_list(inputs["input_ids"])[1]
+            seq_length = shape_list(inputs["input_ids"])[2]
         else:
-            input_ids = inputs
+            num_choices = shape_list(inputs["inputs_embeds"])[1]
+            seq_length = shape_list(inputs["inputs_embeds"])[2]
 
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        if input_ids is not None:
-            num_choices = shape_list(input_ids)[1]
-            seq_length = shape_list(input_ids)[2]
-        else:
-            num_choices = shape_list(inputs_embeds)[1]
-            seq_length = shape_list(inputs_embeds)[2]
-
-        flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
-        flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
-        flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
-        flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
+        flat_input_ids = tf.reshape(inputs["input_ids"], (-1, seq_length)) if inputs["input_ids"] is not None else None
+        flat_attention_mask = (
+            tf.reshape(inputs["attention_mask"], (-1, seq_length)) if inputs["attention_mask"] is not None else None
+        )
+        flat_token_type_ids = (
+            tf.reshape(inputs["token_type_ids"], (-1, seq_length)) if inputs["token_type_ids"] is not None else None
+        )
+        flat_position_ids = (
+            tf.reshape(inputs["position_ids"], (-1, seq_length)) if inputs["position_ids"] is not None else None
+        )
         flat_global_attention_mask = (
-            tf.reshape(global_attention_mask, (-1, global_attention_mask.shape[-1]))
-            if global_attention_mask is not None
+            tf.reshape(inputs["global_attention_mask"], (-1, inputs["global_attention_mask"].shape[-1]))
+            if inputs["global_attention_mask"] is not None
             else None
         )
         flat_inputs_embeds = (
-            tf.reshape(inputs_embeds, (-1, seq_length, shape_list(inputs_embeds)[3]))
-            if inputs_embeds is not None
+            tf.reshape(inputs["inputs_embeds"], (-1, seq_length, shape_list(inputs["inputs_embeds"])[3]))
+            if inputs["inputs_embeds"] is not None
             else None
         )
 
@@ -2466,6 +2451,7 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=inputs["training"],
         )
         pooled_output = outputs[1]
 
@@ -2473,7 +2459,7 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         logits = self.classifier(pooled_output)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
 
-        loss = None if labels is None else self.compute_loss(labels, reshaped_logits)
+        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], reshaped_logits)
 
         if not return_dict:
             output = (reshaped_logits,) + outputs[2:]
@@ -2518,7 +2504,7 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
     )
     def call(
         self,
-        inputs=None,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -2529,23 +2515,16 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
         return_dict=None,
         labels=None,
         training=False,
+        **kwargs,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
             1]``.
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        if isinstance(inputs, (tuple, list)):
-            labels = inputs[9] if len(inputs) > 9 else labels
-            if len(inputs) > 9:
-                inputs = inputs[:9]
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            labels = inputs.pop("labels", labels)
-
-        outputs = self.longformer(
-            inputs,
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             global_attention_mask=global_attention_mask,
             token_type_ids=token_type_ids,
@@ -2554,11 +2533,27 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            labels=labels,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.longformer.return_dict
+        outputs = self.longformer(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            global_attention_mask=inputs["global_attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            position_ids=inputs["position_ids"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
         )
         sequence_output = outputs[0]
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
-        loss = None if labels is None else self.compute_loss(labels, logits)
+        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
