@@ -15,7 +15,6 @@
 """ Tokenization classes for the BARThez model."""
 
 
-import json
 import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
@@ -30,18 +29,13 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"sentence_piece_model": "sentencepiece.bpe.model", "vocab_file": "vocab.json"}
+VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "sentence_piece_model": {
+    "vocab_file": {
         "moussaKam/barthez": "https://huggingface.co/moussaKam/barthez/resolve/main/sentencepiece.bpe.model",
         "moussaKam/barthez-orangesum-title": "https://huggingface.co/moussaKam/barthez-orangesum-title/resolve/main/sentencepiece.bpe.model",
         "moussaKam/mbarthez": "https://huggingface.co/moussaKam/mbarthez/resolve/main/sentencepiece.bpe.model",
-    },
-    "vocab_file": {
-        "moussaKam/barthez": "https://huggingface.co/moussaKam/barthez/resolve/main/vocab.json",
-        "moussaKam/barthez-orangesum-title": "https://huggingface.co/moussaKam/barthez-orangesum-title/resolve/main/vocab.json",
-        "moussaKam/mbarthez": "https://huggingface.co/moussaKam/mbarthez/resolve/main/vocab.json",
     },
 }
 
@@ -104,13 +98,11 @@ class BarthezTokenizer(PreTrainedTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["attention_mask"]
 
     def __init__(
         self,
-        sentence_piece_model,
         vocab_file,
         bos_token="<s>",
         eos_token="</s>",
@@ -131,13 +123,15 @@ class BarthezTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             **kwargs,
         )
-        self.sentence_piece_model = sentence_piece_model
+
         self.vocab_file = vocab_file
         self.sp_model = spm.SentencePieceProcessor()
-        self.sp_model.Load(str(self.sentence_piece_model))
-        with open(self.vocab_file, "r") as f:
-            self.tokens_to_ids = json.load(f)
-        self.ids_to_tokens = {v: k for k, v in self.tokens_to_ids.items()}
+        self.sp_model.Load(str(vocab_file))
+
+        self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
+
+        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) - 1
+        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -219,7 +213,7 @@ class BarthezTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        return len(self.tokens_to_ids)
+        return len(self.sp_model)
 
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
@@ -231,15 +225,17 @@ class BarthezTokenizer(PreTrainedTokenizer):
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str) in an id using the vocab. """
-        if token in self.tokens_to_ids:
-            return self.tokens_to_ids[token]
-        return self.tokens_to_ids[self.unk_token]
+        if token in self.fairseq_tokens_to_ids:
+            return self.fairseq_tokens_to_ids[token]
+        spm_id = self.sp_model.PieceToId(token)
+
+        return spm_id if spm_id else self.unk_token_id
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        if index in self.ids_to_tokens:
-            return self.ids_to_tokens[index]
-        return self.ids_to_tokens[self.unk_token_id]
+        if index in self.fairseq_ids_to_tokens:
+            return self.fairseq_ids_to_tokens[index]
+        return self.sp_model.IdToPiece(index)
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -249,7 +245,7 @@ class BarthezTokenizer(PreTrainedTokenizer):
     def __setstate__(self, d):
         self.__dict__ = d
         self.sp_model = spm.SentencePieceProcessor()
-        self.sp_model.Load(self.sentence_piece_model)
+        self.sp_model.Load(self.vocab_file)
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
@@ -260,23 +256,14 @@ class BarthezTokenizer(PreTrainedTokenizer):
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
             return
-        out_sentencepiece_file = os.path.join(
-            save_directory,
-            (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["sentence_piece_model"],
-        )
         out_vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
-        if os.path.abspath(self.sentence_piece_model) != os.path.abspath(out_sentencepiece_file):
-            copyfile(self.sentence_piece_model, out_sentencepiece_file)
 
-        return (
-            out_sentencepiece_file,
-            out_vocab_file,
-        )
+        return (out_vocab_file,)
 
     @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
     def prepare_seq2seq_batch(
