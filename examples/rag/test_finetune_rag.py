@@ -19,17 +19,29 @@ logger = logging.getLogger()
 
 
 class RagFinetuneExampleTests(TestCasePlus):
+
+    def _create_dummy_data(self, data_dir):
+        os.makedirs(data_dir, exist_ok=True)
+        contents = {"source": "What is love ?", "target": "life"}
+        n_lines = {"train": 12, "val": 2, "test": 2}
+        for split in ["train", "test", "val"]:
+            for field in ["source", "target"]:
+                content = "\n".join([contents[field]] * n_lines[split])
+                with open(os.path.join(data_dir, f"{split}.{field}"), "w") as f:
+                    f.write(content)
+
     def _run_finetune(self, gpus: int):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
         tmp_dir = self.get_auto_remove_tmp_dir()
-        output_dir = tmp_dir
-        data_dir = Path(__file__).parent / "test_data" / "dummy_seq2seq"
-        data_dir = str(data_dir.resolve())
+        output_dir = os.path.join(tmp_dir, "output")
+        data_dir = os.path.join(tmp_dir, "data")
+        self._create_dummy_data(data_dir=data_dir)
+
         testargs = f"""
                 --data_dir {data_dir} \
-                --output_dir {tmp_dir} \
+                --output_dir {output_dir} \
                 --model_name_or_path facebook/rag-sequence-base \
                 --model_type rag_sequence \
                 --do_train \
@@ -53,7 +65,7 @@ class RagFinetuneExampleTests(TestCasePlus):
                 --num_train_epochs 1 \
                 --warmup_steps 4 \
                 --gradient_accumulation_steps 1 \
-                --distributed-port 8989 \
+                --distributed-port 8787 \
                 --use_dummy_dataset 1 \
             """.split()
 
