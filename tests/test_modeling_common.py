@@ -19,19 +19,11 @@ import os.path
 import random
 import tempfile
 import unittest
-from typing import (
-    List,
-    Tuple,
-)
+from typing import List, Tuple
 
 from transformers import is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
-from transformers.testing_utils import (
-    require_torch,
-    require_torch_multi_gpu,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
 
 
 if is_torch_available():
