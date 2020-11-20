@@ -403,7 +403,7 @@ workflows:
     version: 2
     build_and_test:
         jobs:
-            # - check_code_quality
+            - check_code_quality
             # - check_repository_consistency
             # - run_examples_torch
             # - run_tests_custom_tokenizers
