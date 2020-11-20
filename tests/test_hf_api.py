@@ -164,12 +164,16 @@ class HfLargefilesTest(HfApiCommonTest):
         except FileNotFoundError:
             pass
 
-    def test_end_to_end_thresh_6M(self):
-        REMOTE_URL = self._api.create_repo(token=self._token, name=REPO_NAME_LARGE_FILE, lfsmultipartthresh=6 * 10**6)
+    def setup_local_clone(self, REMOTE_URL):
         REMOTE_URL_AUTH = REMOTE_URL.replace(ENDPOINT_STAGING, ENDPOINT_STAGING_BASIC_AUTH)
         subprocess.run(["git", "clone", REMOTE_URL_AUTH, WORKING_REPO_DIR], check=True, capture_output=True)
         subprocess.run(["git", "lfs", "track", "*.pdf"], check=True, cwd=WORKING_REPO_DIR)
         subprocess.run(["git", "lfs", "track", "*.epub"], check=True, cwd=WORKING_REPO_DIR)
+
+    def test_end_to_end_thresh_6M(self):
+        REMOTE_URL = self._api.create_repo(token=self._token, name=REPO_NAME_LARGE_FILE, lfsmultipartthresh=6 * 10**6)
+        self.setup_local_clone(REMOTE_URL)
+
         subprocess.run(["wget", LARGE_FILE_18MB], check=True, capture_output=True, cwd=WORKING_REPO_DIR)
         subprocess.run(["git", "add", "*"], check=True, cwd=WORKING_REPO_DIR)
         subprocess.run(["git", "commit", "-m", "commit message"], check=True, cwd=WORKING_REPO_DIR)
@@ -186,7 +190,13 @@ class HfLargefilesTest(HfApiCommonTest):
         start_time = time.time()
         subprocess.run(["git", "push"], check=True, cwd=WORKING_REPO_DIR)
         print("took", time.time() - start_time)
+
         
-        print()
+        # To be 100% sure, let's download the resolved file
+        pdf_url = f"{REMOTE_URL}/resolve/main/progit.pdf"
+        DEST_FILENAME = "uploaded.pdf"
+        subprocess.run(["wget", pdf_url, "-O", DEST_FILENAME], check=True, capture_output=True, cwd=WORKING_REPO_DIR)
+        dest_filesize = os.fstat(os.path.join(WORKING_REPO_DIR, DEST_FILENAME)).st_size
+        self.assertEquals(dest_filesize, 18685041)
 
         
