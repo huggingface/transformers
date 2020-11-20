@@ -694,16 +694,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         # todo: initializer range is not always passed in config.
         init_range = getattr(self.config, "initializer_range", 0.02)
         new_embeddings = self.add_weight(
-            "weight",
+            name=word_embeddings.name.split(":")[0],
             shape=[new_num_tokens, old_embedding_dim],
             initializer=get_initializer(init_range),
             dtype=tf.float32,
         )
-        init_weights = new_embeddings.numpy()
+
+        init_weights = tf.make_ndarray(tf.make_tensor_proto(new_embeddings.value()))
 
         # Copy token embeddings from the previous weights
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-        init_weights[:num_tokens_to_copy] = word_embeddings[:num_tokens_to_copy, :]
+        init_weights[:num_tokens_to_copy] = word_embeddings.value()[:num_tokens_to_copy, :]
         new_embeddings.assign(init_weights)
 
         return new_embeddings

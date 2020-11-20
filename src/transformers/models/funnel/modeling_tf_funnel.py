@@ -983,6 +983,15 @@ class TFFunnelMaskedLMHead(tf.keras.layers.Layer):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
         super().build(input_shape)
 
+    def resize_bias(self, new_num_tokens):
+        if new_num_tokens is not None:
+            num_tokens_to_copy = min(self.bias.shape[0], new_num_tokens)
+            init_bias = self.bias.value()[:num_tokens_to_copy]
+            self.bias = self.add_weight(
+                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=self.bias.name.split(":")[0]
+            )
+            self.bias.assign(init_bias)
+
     def call(self, hidden_states, training=False):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
         hidden_states = hidden_states + self.bias
@@ -1323,10 +1332,7 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
     def resize_token_embeddings(self, new_num_tokens):
         super().resize_token_embeddings(new_num_tokens=new_num_tokens)
 
-        if new_num_tokens is not None:
-            self.lm_head.bias = self.add_weight(
-                shape=(new_num_tokens,), initializer="zeros", trainable=True, name="bias"
-            )
+        self.lm_head.resize_bias(new_num_tokens)
 
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

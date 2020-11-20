@@ -509,6 +509,15 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
+    def resize_bias(self, new_num_tokens):
+        if new_num_tokens is not None:
+            num_tokens_to_copy = min(self.bias.shape[0], new_num_tokens)
+            init_bias = self.bias.value()[:num_tokens_to_copy]
+            self.bias = self.add_weight(
+                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=self.bias.name.split(":")[0]
+            )
+            self.bias.assign(init_bias)
+
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
@@ -896,10 +905,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
     def resize_token_embeddings(self, new_num_tokens):
         super().resize_token_embeddings(new_num_tokens=new_num_tokens)
 
-        if new_num_tokens is not None:
-            self.mlm.predictions.bias = self.add_weight(
-                shape=(new_num_tokens,), initializer="zeros", trainable=True, name="bias"
-            )
+        self.mlm.predictions.resize_bias(new_num_tokens)
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -1013,10 +1019,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     def resize_token_embeddings(self, new_num_tokens):
         super().resize_token_embeddings(new_num_tokens=new_num_tokens)
 
-        if new_num_tokens is not None:
-            self.mlm.predictions.bias = self.add_weight(
-                shape=(new_num_tokens,), initializer="zeros", trainable=True, name="bias"
-            )
+        self.mlm.predictions.resize_bias(new_num_tokens)
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1114,10 +1117,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
     def resize_token_embeddings(self, new_num_tokens):
         super().resize_token_embeddings(new_num_tokens=new_num_tokens)
 
-        if new_num_tokens is not None:
-            self.mlm.predictions.bias = self.add_weight(
-                shape=(new_num_tokens,), initializer="zeros", trainable=True, name="bias"
-            )
+        self.mlm.predictions.resize_bias(new_num_tokens)
 
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
