@@ -8,15 +8,15 @@ Spec is: github.com/git-lfs/git-lfs/blob/master/docs/custom-transfers.md
 
 To launch debugger while developing:
 
-```
-[lfs "customtransfer.multipart"]
+``` [lfs "customtransfer.multipart"]
 
 path = /path/to/transformers/.env/bin/python
 
-args = -m debugpy --listen 5678 --wait-for-client /path/to/transformers/src/transformers/commands/transformers_cli.py lfs-multipart-upload
-```
+args = -m debugpy --listen 5678 --wait-for-client /path/to/transformers/src/transformers/commands/transformers_cli.py
+lfs-multipart-upload ```
 """
 
+import io
 import json
 import os
 import subprocess
@@ -26,7 +26,6 @@ from contextlib import AbstractContextManager
 from typing import Dict, Optional
 
 import requests
-
 from transformers.commands import BaseTransformersCLICommand
 
 from ..utils import logging
@@ -41,11 +40,15 @@ LFS_MULTIPART_UPLOAD_COMMAND = "lfs-multipart-upload"
 class LfsCommands(BaseTransformersCLICommand):
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
-        enable_parser = parser.add_parser("lfs-enable-largefiles", help="Configure your repository to enable upload of files > 5GB")
+        enable_parser = parser.add_parser(
+            "lfs-enable-largefiles", help="Configure your repository to enable upload of files > 5GB"
+        )
         enable_parser.add_argument("path", type=str, help="Local path to repository you want to configure.")
         enable_parser.set_defaults(func=lambda args: LfsEnableCommand(args))
 
-        upload_parser = parser.add_parser(LFS_MULTIPART_UPLOAD_COMMAND, help="This will get called by git-lfs, do not call it directly.")
+        upload_parser = parser.add_parser(
+            LFS_MULTIPART_UPLOAD_COMMAND, help="This will get called by git-lfs, do not call it directly."
+        )
         upload_parser.set_defaults(func=lambda args: LfsUploadCommand(args))
 
 
@@ -60,7 +63,9 @@ class LfsEnableCommand:
             exit(1)
         print(local_path)
         subprocess.run("git config lfs.customtransfer.multipart.path transformers-cli".split(), cwd=local_path)
-        subprocess.run(f"git config lfs.customtransfer.multipart.args {LFS_MULTIPART_UPLOAD_COMMAND}".split(), cwd=local_path)
+        subprocess.run(
+            f"git config lfs.customtransfer.multipart.args {LFS_MULTIPART_UPLOAD_COMMAND}".split(), cwd=local_path
+        )
 
 
 def write_msg(msg: Dict):
@@ -86,19 +91,39 @@ def read_msg() -> Optional[Dict]:
 
 
 class FileSlice(AbstractContextManager):
-    def __init__(self, filepath: str, seek_from: int, max_size: int):
+    """
+    File-like object that only reads a slice of a file
+
+    Inspired by stackoverflow.com/a/29838711/593036
+    """
+
+    def __init__(self, filepath: str, seek_from: int, read_limit: int):
         self.filepath = filepath
         self.seek_from = seek_from
-        self.max_size = max_size
+        self.read_limit = read_limit
+        self.n_seen = 0
 
     def __enter__(self):
         self.f = open(self.filepath, "rb")
         self.f.seek(self.seek_from)
+        return self
+
+    def __len__(self):
+        total_length = os.fstat(self.f.fileno()).st_size
+        return min(self.read_limit, total_length - self.seek_from)
 
     def read(self, n=-1):
-        return self.f.read(n)
+        if self.n_seen >= self.read_limit:
+            return b""
+        remaining_amount = self.read_limit - self.n_seen
+        data = self.f.read(remaining_amount if n < 0 else min(n, remaining_amount))
+        self.n_seen += len(data)
+        return data
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __iter__(self):
+        yield self.read(n=io.DEFAULT_BUFFER_SIZE)
+
+    def __exit__(self, *args):
         self.f.close()
 
 
@@ -141,7 +166,7 @@ class LfsUploadCommand:
 
             parts = []
             for i, presigned_url in enumerate(presigned_urls):
-                with FileSlice(filepath, seek_from=i * chunk_size, max_size=chunk_size) as data:
+                with FileSlice(filepath, seek_from=i * chunk_size, read_limit=chunk_size) as data:
                     r = requests.put(presigned_url, data=data)
                     r.raise_for_status()
                     parts.append(
