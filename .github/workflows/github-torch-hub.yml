@@ -1,9 +1,9 @@
 name: Torch hub integration
 
-# on: 
-#   push:
-#     branches:
-#       - "*"
+on: 
+  push:
+    branches:
+      - "*"
 
 jobs:
   torch_hub_integration:

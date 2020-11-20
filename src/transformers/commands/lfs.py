@@ -16,16 +16,16 @@ args = -m debugpy --listen 5678 --wait-for-client /path/to/transformers/src/tran
 lfs-multipart-upload ```
 """
 
-import io
 import json
 import os
 import subprocess
 import sys
 from argparse import ArgumentParser
 from contextlib import AbstractContextManager
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import requests
+
 from transformers.commands import BaseTransformersCLICommand
 
 from ..utils import logging
