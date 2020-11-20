@@ -17,15 +17,14 @@
 
 import tensorflow as tf
 
-from .activations_tf import get_tf_activation
-from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Config
-from .file_utils import (
+from ...activations_tf import get_tf_activation
+from ...file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
 )
-from .modeling_tf_outputs import (
+from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPooling,
     TFMaskedLMOutput,
@@ -34,7 +33,7 @@ from .modeling_tf_outputs import (
     TFSequenceClassifierOutput,
     TFTokenClassifierOutput,
 )
-from .modeling_tf_utils import (
+from ...modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
@@ -46,8 +45,9 @@ from .modeling_tf_utils import (
     keras_serializable,
     shape_list,
 )
-from .tokenization_utils import BatchEncoding
-from .utils import logging
+from ...tokenization_utils import BatchEncoding
+from ...utils import logging
+from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Config
 
 
 logger = logging.get_logger(__name__)
@@ -61,7 +61,7 @@ TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.modeling_tf_bert.TFBertEmbeddings with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings with Bert->{{cookiecutter.camelcase_modelname}}
 class TF{{cookiecutter.camelcase_modelname}}Embeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -175,7 +175,7 @@ class TF{{cookiecutter.camelcase_modelname}}Embeddings(tf.keras.layers.Layer):
         return tf.reshape(logits, [batch_size, length, self.vocab_size])
 
 
-# Copied from transformers.modeling_tf_bert.TFBertSelfAttention with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->{{cookiecutter.camelcase_modelname}}
 class TF{{cookiecutter.camelcase_modelname}}SelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -247,7 +247,7 @@ class TF{{cookiecutter.camelcase_modelname}}SelfAttention(tf.keras.layers.Layer)
         return outputs
 
 
-# Copied from transformers.modeling_tf_bert.TFBertSelfOutput with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->{{cookiecutter.camelcase_modelname}}
 class TF{{cookiecutter.camelcase_modelname}}SelfOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -266,7 +266,7 @@ class TF{{cookiecutter.camelcase_modelname}}SelfOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.modeling_tf_bert.TFBertAttention with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->{{cookiecutter.camelcase_modelname}}
 class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -287,7 +287,7 @@ class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.modeling_tf_bert.TFBertIntermediate with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->{{cookiecutter.camelcase_modelname}}
 class TF{{cookiecutter.camelcase_modelname}}Intermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -308,7 +308,7 @@ class TF{{cookiecutter.camelcase_modelname}}Intermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.modeling_tf_bert.TFBertOutput with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->{{cookiecutter.camelcase_modelname}}
 class TF{{cookiecutter.camelcase_modelname}}Output(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -327,7 +327,7 @@ class TF{{cookiecutter.camelcase_modelname}}Output(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.modeling_tf_bert.TFBertLayer with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with Bert->{{cookiecutter.camelcase_modelname}}
 class TF{{cookiecutter.camelcase_modelname}}Layer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -391,7 +391,7 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
         )
 
 
-# Copied from transformers.modeling_tf_bert.TFBertPredictionHead with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHead with Bert->{{cookiecutter.camelcase_modelname}}
 class TF{{cookiecutter.camelcase_modelname}}PredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -415,7 +415,7 @@ class TF{{cookiecutter.camelcase_modelname}}PredictionHeadTransform(tf.keras.lay
         return hidden_states
 
 
-# Copied from transformers.modeling_tf_bert.TFBertLMPredictionHead with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert->{{cookiecutter.camelcase_modelname}}
 class TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
@@ -440,7 +440,7 @@ class TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(tf.keras.layers.Lay
         return hidden_states
 
 
-# Copied from transformers.modeling_tf_bert.TFBertMLMHead with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertMLMHead with Bert->{{cookiecutter.camelcase_modelname}}
 class TF{{cookiecutter.camelcase_modelname}}MLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
@@ -606,7 +606,7 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
         )
 
 
-# Copied from transformers.modeling_tf_bert.TFBertPreTrainedModel with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPreTrainedModel with Bert->{{cookiecutter.camelcase_modelname}}
 class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
     """An abstract class to handle weights initialization and
     a simple interface for downloading and loading pretrained models.

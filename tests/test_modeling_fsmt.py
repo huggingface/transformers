@@ -32,7 +32,7 @@ if is_torch_available():
     import torch
 
     from transformers import FSMTConfig, FSMTForConditionalGeneration, FSMTModel, FSMTTokenizer
-    from transformers.modeling_fsmt import (
+    from transformers.models.fsmt.modeling_fsmt import (
         SinusoidalPositionalEmbedding,
         _prepare_fsmt_decoder_inputs,
         invert_mask,
@@ -259,7 +259,6 @@ class FSMTHeadTests(unittest.TestCase):
             eos_token_id=2,
             pad_token_id=1,
             bos_token_id=0,
-            return_dict=True,
         )
 
     def _get_config_and_data(self):

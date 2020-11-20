@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from abc import ABC
-from typing import Iterable, List
+from typing import Callable, Iterable, List
 
 import numpy as np
 import torch
@@ -145,13 +146,13 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         self.penalty = penalty
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        for i in range(scores.shape[0]):
-            for previous_token in set(input_ids[i].tolist()):
-                # if score < 0 then repetition penalty has to be multiplied to reduce the previous token probability
-                if scores[i, previous_token] < 0:
-                    scores[i, previous_token] *= self.penalty
-                else:
-                    scores[i, previous_token] /= self.penalty
+        ranges = torch.arange(scores.shape[0])
+        score = scores[ranges[:, None], input_ids]
+
+        # if score < 0 then repetition penalty has to be multiplied to reduce the previous token probability
+        score = torch.where(score < 0, score * self.penalty, score / self.penalty)
+
+        scores[ranges[:, None], input_ids] = score
         return scores
 
 
@@ -372,3 +373,30 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
         )
         scores = scores.masked_fill(banned_mask, -float("inf"))
         return scores
+
+
+class PrefixConstrainedLogitsProcessor(LogitsProcessor):
+    r"""
+    :class:`transformers.LogitsProcessor` that enforces contrained generation and is useful for prefix-conditioned
+    constrained generation. See `Autoregressive Entity Retrieval <https://arxiv.org/abs/2010.00904>`__ for more
+    information.
+
+    Args:
+        prefix_allowed_tokens_fn: (:obj:`Callable[[int, torch.Tensor], List[int]]`):
+            This function constraints the beam search to allowed tokens only at each step. This function takes 2
+            arguments :obj:`inputs_ids` and the batch ID :obj:`batch_id`. It has to return a list with the allowed
+            tokens for the next generation step conditioned on the previously generated tokens :obj:`inputs_ids` and
+            the batch ID :obj:`batch_id`.
+    """
+
+    def __init__(self, prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]], num_beams: int):
+        self._prefix_allowed_tokens_fn = prefix_allowed_tokens_fn
+        self._num_beams = num_beams
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        mask = torch.full_like(scores, -math.inf)
+        for batch_id, beam_sent in enumerate(input_ids.view(-1, self._num_beams, input_ids.shape[-1])):
+            for beam_id, sent in enumerate(beam_sent):
+                mask[batch_id * self._num_beams + beam_id, self._prefix_allowed_tokens_fn(batch_id, sent)] = 0
+
+        return scores + mask

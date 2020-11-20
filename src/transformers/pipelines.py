@@ -30,13 +30,13 @@ from uuid import UUID
 
 import numpy as np
 
-from .configuration_auto import AutoConfig
 from .configuration_utils import PretrainedConfig
 from .data import SquadExample, SquadFeatures, squad_convert_examples_to_features
 from .file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from .modelcard import ModelCard
-from .tokenization_auto import AutoTokenizer
-from .tokenization_bert import BasicTokenizer
+from .models.auto.configuration_auto import AutoConfig
+from .models.auto.tokenization_auto import AutoTokenizer
+from .models.bert.tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import PaddingStrategy
 from .utils import logging
@@ -45,7 +45,7 @@ from .utils import logging
 if is_tf_available():
     import tensorflow as tf
 
-    from .modeling_tf_auto import (
+    from .models.auto.modeling_tf_auto import (
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -63,7 +63,7 @@ if is_tf_available():
 if is_torch_available():
     import torch
 
-    from .modeling_auto import (
+    from .models.auto.modeling_auto import (
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
@@ -1182,7 +1182,6 @@ class FillMaskPipeline(Pipeline):
         device: int = -1,
         top_k=5,
         task: str = "",
-        **kwargs
     ):
         super().__init__(
             model=model,
@@ -1196,15 +1195,7 @@ class FillMaskPipeline(Pipeline):
         )
 
         self.check_model_type(TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_MASKED_LM_MAPPING)
-
-        if "topk" in kwargs:
-            warnings.warn(
-                "The `topk` argument is deprecated and will be removed in a future version, use `top_k` instead.",
-                FutureWarning,
-            )
-            self.top_k = kwargs.pop("topk")
-        else:
-            self.top_k = top_k
+        self.top_k = top_k
 
     def ensure_exactly_one_mask_token(self, masked_index: np.ndarray):
         numel = np.prod(masked_index.shape)

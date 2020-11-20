@@ -66,10 +66,10 @@ Choose from 1, 2 [1]:
 Once the command has finished, you should have a total of 7 new files spread across the repository:
 ```
 docs/source/model_doc/<model_name>.rst
-src/transformers/configuration_<model_name>.py
-src/transformers/modeling_<model_name>.py
-src/transformers/modeling_tf_<model_name>.py
-src/transformers/tokenization_<model_name>.py
+src/transformers/models/<model_name>/configuration_<model_name>.py
+src/transformers/models/<model_name>/modeling_<model_name>.py
+src/transformers/models/<model_name>/modeling_tf_<model_name>.py
+src/transformers/models/<model_name>/tokenization_<model_name>.py
 tests/test_modeling_<model_name>.py
 tests/test_modeling_tf_<model_name>.py
 ```

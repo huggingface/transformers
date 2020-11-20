@@ -236,7 +236,7 @@ class BaseTransformer(pl.LightningModule):
             "--cache_dir",
             default="",
             type=str,
-            help="Where do you want to store the pre-trained models downloaded from s3",
+            help="Where do you want to store the pre-trained models downloaded from huggingface.co",
         )
         parser.add_argument(
             "--encoder_layerdrop",
@@ -384,6 +384,8 @@ def generic_train(
         train_params["distributed_backend"] = "ddp"
 
     train_params["accumulate_grad_batches"] = args.accumulate_grad_batches
+    train_params["accelerator"] = extra_train_kwargs.get("accelerator", None)
+    train_params["profiler"] = extra_train_kwargs.get("profiler", None)
 
     trainer = pl.Trainer.from_argparse_args(
         args,

@@ -53,6 +53,15 @@ if is_torch_available():
 if is_flax_available():
     import jax.numpy as jnp
 
+
+def _is_numpy(x):
+    return isinstance(x, np.ndarray)
+
+
+def _is_jax(x):
+    return isinstance(x, jnp.ndarray)
+
+
 if is_tokenizers_available():
     from tokenizers import AddedToken
     from tokenizers import Encoding as EncodingFast
@@ -705,16 +714,20 @@ class BatchEncoding(UserDict):
                     "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
                 )
             as_tensor = tf.constant
+            is_tensor = tf.is_tensor
         elif tensor_type == TensorType.PYTORCH:
             if not is_torch_available():
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             as_tensor = torch.tensor
+            is_tensor = torch.is_tensor
         elif tensor_type == TensorType.JAX:
             if not is_flax_available():
                 raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
             as_tensor = jnp.array
+            is_tensor = _is_jax
         else:
             as_tensor = np.asarray
+            is_tensor = _is_numpy
         # (mfuntowicz: This code is unreachable)
         # else:
         #     raise ImportError(
@@ -727,16 +740,17 @@ class BatchEncoding(UserDict):
                 if prepend_batch_axis:
                     value = [value]
 
-                tensor = as_tensor(value)
+                if not is_tensor(value):
+                    tensor = as_tensor(value)
 
-                # Removing this for now in favor of controlling the shape with `prepend_batch_axis`
-                # # at-least2d
-                # if tensor.ndim > 2:
-                #     tensor = tensor.squeeze(0)
-                # elif tensor.ndim < 2:
-                #     tensor = tensor[None, :]
+                    # Removing this for now in favor of controlling the shape with `prepend_batch_axis`
+                    # # at-least2d
+                    # if tensor.ndim > 2:
+                    #     tensor = tensor.squeeze(0)
+                    # elif tensor.ndim < 2:
+                    #     tensor = tensor[None, :]
 
-                self[key] = tensor
+                    self[key] = tensor
             except:  # noqa E722
                 if key == "overflowing_tokens":
                     raise ValueError(
@@ -1455,7 +1469,7 @@ PREPARE_SEQ2SEQ_BATCH_DOCSTRING = """
                   maximum acceptable input length for the model if that argument is not provided.
                 * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
                   different lengths).
-            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`, defaults to "pt"):
+            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
@@ -1533,18 +1547,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         super().__init__(**kwargs)
 
     @property
-    def max_len(self) -> int:
-        """
-        :obj:`int`: **Deprecated** Kept here for backward compatibility. Now renamed to :obj:`model_max_length` to
-        avoid ambiguity.
-        """
-        warnings.warn(
-            "The `max_len` attribute has been deprecated and will be removed in a future version, use `model_max_length` instead.",
-            FutureWarning,
-        )
-        return self.model_max_length
-
-    @property
     def max_len_single_sentence(self) -> int:
         """
         :obj:`int`: The maximum length of a sentence that can be fed to the model.
@@ -1615,10 +1617,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             pretrained_model_name_or_path (:obj:`str`):
                 Can be either:
 
-                - A string with the `shortcut name` of a predefined tokenizer to load from cache or download, e.g.,
-                  ``bert-base-uncased``.
-                - A string with the `identifier name` of a predefined tokenizer that was user-uploaded to our S3, e.g.,
-                  ``dbmdz/bert-base-german-cased``.
+                - A string, the `model id` of a predefined tokenizer hosted inside a model repo on huggingface.co.
+                  Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under a
+                  user or organization name, like ``dbmdz/bert-base-german-cased``.
                 - A path to a `directory` containing vocabulary files required by the tokenizer, for instance saved
                   using the :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.save_pretrained`
                   method, e.g., ``./my_model_directory/``.
@@ -1641,6 +1642,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
                 identifier allowed by git.
+            subfolder (:obj:`str`, `optional`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co (e.g. for
+                facebook/rag-token-base), specify it here.
             inputs (additional positional arguments, `optional`):
                 Will be passed along to the Tokenizer ``__init__`` method.
             kwargs (additional keyword arguments, `optional`):
@@ -1651,10 +1655,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         Examples::
 
             # We can't instantiate directly the base class `PreTrainedTokenizerBase` so let's show our examples on a derived class: BertTokenizer
-            # Download vocabulary from S3 and cache.
+            # Download vocabulary from huggingface.co and cache.
             tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
-            # Download vocabulary from S3 (user-uploaded) and cache.
+            # Download vocabulary from huggingface.co (user-uploaded) and cache.
             tokenizer = BertTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
 
             # If vocabulary files are in a directory (e.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`)
@@ -1676,6 +1680,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         proxies = kwargs.pop("proxies", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
+        subfolder = kwargs.pop("subfolder", None)
 
         s3_models = list(cls.max_model_input_sizes.keys())
         vocab_files = {}
@@ -1722,13 +1727,20 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 # Look for the tokenizer files
                 for file_id, file_name in {**cls.vocab_files_names, **additional_files_names}.items():
                     if os.path.isdir(pretrained_model_name_or_path):
-                        full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
+                        if subfolder is not None:
+                            full_file_name = os.path.join(pretrained_model_name_or_path, subfolder, file_name)
+                        else:
+                            full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
                         if not os.path.exists(full_file_name):
                             logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
                             full_file_name = None
                     else:
                         full_file_name = hf_bucket_url(
-                            pretrained_model_name_or_path, filename=file_name, revision=revision, mirror=None
+                            pretrained_model_name_or_path,
+                            filename=file_name,
+                            subfolder=subfolder,
+                            revision=revision,
+                            mirror=None,
                         )
 
                     vocab_files[file_id] = full_file_name
@@ -2774,15 +2786,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 Tokenized input ids of the second sequence. Can be obtained from a string by chaining the ``tokenize``
                 and ``convert_tokens_to_ids`` methods.
         """
-
-        if "return_lengths" in kwargs:
-            if verbose:
-                warnings.warn(
-                    "The PreTrainedTokenizerBase.prepare_for_model `return_lengths` parameter is deprecated. "
-                    "Please use `return_length` instead.",
-                    FutureWarning,
-                )
-            return_length = kwargs["return_lengths"]
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
