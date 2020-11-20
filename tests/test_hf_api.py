@@ -196,7 +196,7 @@ class HfLargefilesTest(HfApiCommonTest):
         pdf_url = f"{REMOTE_URL}/resolve/main/progit.pdf"
         DEST_FILENAME = "uploaded.pdf"
         subprocess.run(["wget", pdf_url, "-O", DEST_FILENAME], check=True, capture_output=True, cwd=WORKING_REPO_DIR)
-        dest_filesize = os.fstat(os.path.join(WORKING_REPO_DIR, DEST_FILENAME)).st_size
+        dest_filesize = os.stat(os.path.join(WORKING_REPO_DIR, DEST_FILENAME)).st_size
         self.assertEquals(dest_filesize, 18685041)
 
         
