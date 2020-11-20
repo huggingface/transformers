@@ -164,8 +164,8 @@ class HfLargefilesTest(HfApiCommonTest):
         except FileNotFoundError:
             pass
 
-    def test_end_to_end_thresh_5M(self):
-        REMOTE_URL = self._api.create_repo(token=self._token, name=REPO_NAME_LARGE_FILE, lfsmultipartthresh=5 * 10**6)
+    def test_end_to_end_thresh_6M(self):
+        REMOTE_URL = self._api.create_repo(token=self._token, name=REPO_NAME_LARGE_FILE, lfsmultipartthresh=6 * 10**6)
         REMOTE_URL_AUTH = REMOTE_URL.replace(ENDPOINT_STAGING, ENDPOINT_STAGING_BASIC_AUTH)
         subprocess.run(["git", "clone", REMOTE_URL_AUTH, WORKING_REPO_DIR], check=True, capture_output=True)
         subprocess.run(["git", "lfs", "track", "*.pdf"], check=True, cwd=WORKING_REPO_DIR)
