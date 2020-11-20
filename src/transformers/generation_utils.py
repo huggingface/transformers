@@ -1336,6 +1336,7 @@ class GenerationMixin:
         num_beams = beam_scorer.num_beams
         beam_groups = beam_scorer.beam_groups
         num_sub_beams = num_beams // beam_groups
+        device = input_ids.device
 
         batch_beam_size, cur_len = input_ids.shape
 
@@ -1343,7 +1344,7 @@ class GenerationMixin:
             num_beams * batch_size == batch_beam_size
         ), "Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
 
-        beam_scores = torch.full((batch_size, num_beams), -1e9, dtype=torch.float, device=input_ids.device)
+        beam_scores = torch.full((batch_size, num_beams), -1e9, dtype=torch.float, device=device)
         # initialise score of first beam of each group with 0 and the rest with 1e-9. This ensures that the beams in
         # the same group don't produce same tokens everytime.
         beam_scores[:, ::num_sub_beams] = 0
@@ -1351,7 +1352,7 @@ class GenerationMixin:
 
         while cur_len < max_length:
             # predicted tokens in cur_len step
-            recent_tokens = torch.zeros(batch_size * num_beams, dtype=input_ids.dtype)
+            recent_tokens = torch.zeros(batch_size * num_beams, dtype=input_ids.dtype, device=device)
 
             # do one decoder step on all beams of all sentences in batch
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -1384,7 +1385,7 @@ class GenerationMixin:
                 for batch_idx in range(batch_size):
                     # predicted tokens of last time step of previous groups
                     previous_group_tokens = recent_tokens[batch_idx * num_beams: batch_idx * num_beams + group_start_idx]
-                    token_frequency = torch.bincount(previous_group_tokens, minlength=vocab_size)
+                    token_frequency = torch.bincount(previous_group_tokens, minlength=vocab_size).to(device)
                     next_token_scores[batch_idx * group_size: (batch_idx + 1) * group_size] -= diversity_penalty * token_frequency
 
                 next_token_scores = logits_processor(group_input_ids, next_token_scores)
