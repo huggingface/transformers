@@ -20,7 +20,7 @@ import torch
 from torch.nn import functional as F
 
 from .file_utils import ModelOutput
-from .generation_beam_search import BeamScorer, BeamSearchScorer
+from .generation_beam_search import BeamScorer, BeamSearchScorer, DiverseBeamSearchScorer
 from .generation_logits_process import (
     LogitsProcessorList,
     MinLengthLogitsProcessor,
@@ -644,15 +644,15 @@ class GenerationMixin:
             if num_beams % beam_groups != 0:
                 raise ValueError("`num_beams` should be divisible by `beam_groups` for diverse beam search.")
 
-            beam_scorer = BeamSearchScorer(
+            diverse_beam_scorer = DiverseBeamSearchScorer(
                 batch_size=batch_size,
                 max_length=max_length,
                 num_beams=num_beams,
+                beam_groups=beam_groups,
                 device=self.device,
                 length_penalty=length_penalty,
                 do_early_stopping=early_stopping,
-                num_beam_hyps_to_keep=num_return_sequences,
-                beam_groups=beam_groups
+                num_beam_hyps_to_keep=num_return_sequences
             )
             # interleave with `num_beams`
             input_ids, model_kwargs = self._expand_inputs_for_generation(
@@ -661,7 +661,7 @@ class GenerationMixin:
             return self.diverse_beam_search(
                 input_ids,
                 diversity_penalty,
-                beam_scorer,
+                diverse_beam_scorer,
                 logits_processor=logits_processor,
                 max_length=max_length,
                 pad_token_id=pad_token_id,
@@ -1333,7 +1333,7 @@ class GenerationMixin:
             ... }
 
             >>> # instantiate beam scorer
-            >>> beam_scorer = BeamSearchScorer(
+            >>> beam_scorer = DiverseBeamSearchScorer(
             ...     batch_size=1,
             ...     max_length=model.config.max_length,
             ...     num_beams=num_beams,
