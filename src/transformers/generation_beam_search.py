@@ -350,7 +350,7 @@ class DiverseBeamSearchScorer(BeamScorer):
         device: torch.device,
         length_penalty: Optional[float] = 1.0,
         do_early_stopping: Optional[bool] = False,
-        num_beam_hyps_to_keep: Optional[int] = 1
+        num_beam_hyps_to_keep: Optional[int] = 1,
     ):
         self.max_length = max_length
         self.num_beams = num_beams
@@ -389,7 +389,7 @@ class DiverseBeamSearchScorer(BeamScorer):
         next_tokens: torch.LongTensor,
         next_indices: torch.LongTensor,
         pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[int] = None
+        eos_token_id: Optional[int] = None,
     ) -> Tuple[torch.Tensor]:
         cur_len = input_ids.shape[-1]
         batch_size = len(self._beam_hyps)

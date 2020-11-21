@@ -580,7 +580,7 @@ class GenerationMixin:
                 device=self.device,
                 length_penalty=length_penalty,
                 do_early_stopping=early_stopping,
-                num_beam_hyps_to_keep=num_return_sequences
+                num_beam_hyps_to_keep=num_return_sequences,
             )
             # interleave with `num_beams`
             input_ids, model_kwargs = self._expand_inputs_for_generation(
@@ -652,7 +652,7 @@ class GenerationMixin:
                 device=self.device,
                 length_penalty=length_penalty,
                 do_early_stopping=early_stopping,
-                num_beam_hyps_to_keep=num_return_sequences
+                num_beam_hyps_to_keep=num_return_sequences,
             )
             # interleave with `num_beams`
             input_ids, model_kwargs = self._expand_inputs_for_generation(
@@ -1394,7 +1394,9 @@ class GenerationMixin:
                 # indices of beams of current group among all sentences in batch
                 batch_group_indices = []
                 for batch_idx in range(batch_size):
-                    batch_group_indices.extend([batch_idx * num_beams + idx for idx in range(group_start_idx, group_end_idx)])
+                    batch_group_indices.extend(
+                        [batch_idx * num_beams + idx for idx in range(group_start_idx, group_end_idx)]
+                    )
                 group_input_ids = input_ids[batch_group_indices]
 
                 # select outputs of beams of current group only
@@ -1412,12 +1414,18 @@ class GenerationMixin:
                 # the same time step
                 for batch_idx in range(batch_size):
                     # predicted tokens of last time step of previous groups
-                    previous_group_tokens = recent_tokens[batch_idx * num_beams: batch_idx * num_beams + group_start_idx]
+                    previous_group_tokens = recent_tokens[
+                        batch_idx * num_beams : batch_idx * num_beams + group_start_idx
+                    ]
                     token_frequency = torch.bincount(previous_group_tokens, minlength=vocab_size).to(device)
-                    next_token_scores[batch_idx * group_size: (batch_idx + 1) * group_size] -= diversity_penalty * token_frequency
+                    next_token_scores[batch_idx * group_size : (batch_idx + 1) * group_size] -= (
+                        diversity_penalty * token_frequency
+                    )
 
                 next_token_scores = logits_processor(group_input_ids, next_token_scores)
-                next_token_scores = next_token_scores + beam_scores[batch_group_indices].unsqueeze(-1).expand_as(next_token_scores)
+                next_token_scores = next_token_scores + beam_scores[batch_group_indices].unsqueeze(-1).expand_as(
+                    next_token_scores
+                )
                 # reshape for beam search
 
                 next_token_scores = next_token_scores.view(batch_size, group_size * vocab_size)
@@ -1448,7 +1456,9 @@ class GenerationMixin:
 
                 # (beam_idx // group_size) -> batch_idx
                 # (beam_idx % group_size) -> offset of idx inside the group
-                reordering_indices[batch_group_indices] = num_beams * (beam_idx // group_size) + group_start_idx + (beam_idx % group_size)
+                reordering_indices[batch_group_indices] = (
+                    num_beams * (beam_idx // group_size) + group_start_idx + (beam_idx % group_size)
+                )
 
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
