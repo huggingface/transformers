@@ -324,9 +324,8 @@ class DiverseBeamSearchScorer(BeamScorer):
         num_beams (:obj:`int`):
             Number of beams for beam search.
         beam_groups (:obj:`int`):
-            Number of groups to divide :obj:`num_beams` into in order to ensure diversity among different groups
-            of beams. See `this paper
-            <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
+            Number of groups to divide :obj:`num_beams` into in order to ensure diversity among different groups of
+            beams. See `this paper <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
         device (:obj:`torch.device`):
             Defines the device type (*e.g.*, :obj:`"cpu"` or :obj:`"cuda"`) on which this instance of
             :obj:`BeamSearchScorer` will be allocated.
