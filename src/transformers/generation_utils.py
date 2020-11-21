@@ -507,7 +507,7 @@ class GenerationMixin:
         is_beam_sample_gen_mode = (num_beams > 1) and (beam_groups == 1) and do_sample is True
         is_diverse_beam_gen_mode = (num_beams > 1) and (beam_groups > 1)
         if beam_groups > num_beams:
-            raise ValueError(f"beam_groups has to be smaller or equal to num_beams")
+            raise ValueError("`beam_groups` has to be smaller or equal to `num_beams`")
 
         # set model_kwargs
         model_kwargs["use_cache"] = use_cache
