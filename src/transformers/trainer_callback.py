@@ -480,7 +480,7 @@ class PrinterCallback(TrainerCallback):
 
 class EarlyStoppingCallback(TrainerCallback):
     """
-    An early stopping callback
+    A :class:`~transformers.TrainerCallback` that handles early stopping.
 
     Args:
        early_stopping_patience (:obj:`int`):
