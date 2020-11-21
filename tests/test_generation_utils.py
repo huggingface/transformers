@@ -122,7 +122,7 @@ class GenerationTesterMixin:
             "length_penalty": 2.0,
             "num_beams": 2,
             "num_return_sequences": num_return_sequences,
-            "beam_groups": 2, # one beam per group
+            "beam_groups": 2,  # one beam per group
             "diversity_penalty": 1.0,
         }
         beam_scorer = DiverseBeamSearchScorer(
