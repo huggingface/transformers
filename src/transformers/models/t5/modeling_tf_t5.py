@@ -1410,3 +1410,124 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
         return past + (reordered_decoder_past,)
+
+    
+@add_start_docstrings(
+    "The bare T5 Model transformer outputting encoder's raw hidden-states" "without any specific head on top.",
+    T5_START_DOCSTRING,
+)
+class TFT5ModelEncoder(TFT5PreTrainedModel):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
+
+        # retrieve correct absolute scope for embed token wrapper
+        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
+            pass
+        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
+
+        encoder_config = copy.deepcopy(config)
+        encoder_config.use_cache = False
+        self.encoder = TFT5MainLayer(encoder_config, embed_tokens, name="encoder")
+
+    def get_input_embeddings(self):
+        return self.shared
+
+    def set_input_embeddings(self, new_embeddings):
+        self.shared.weight = new_embeddings
+        self.shared.vocab_size = self.shared.weight.shape[0]
+        # retrieve correct absolute scope for embed token wrapper
+        with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
+            pass
+        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
+        self.encoder.set_embed_tokens(embed_tokens)
+
+    def get_encoder(self):
+        return self.encoder
+
+    @add_start_docstrings_to_model_forward(T5_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFSeq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
+    def call(
+        self,
+        inputs,
+        attention_mask=None,
+        encoder_outputs=None,
+        past_key_values=None,
+        head_mask=None,
+        inputs_embeds=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False,
+        **kwargs,
+    ):
+        r"""
+        Returns:
+
+        Examples::
+
+            >>> from transformers import T5Tokenizer, TFT5Model
+
+            >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
+            >>> model = TFT5ModelEncoder.from_pretrained('t5-small')
+
+            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="tf").input_ids  # Batch size 1
+            >>> outputs = model(input_ids)
+
+
+        """
+        if isinstance(inputs, (tuple, list)):
+            input_ids = inputs[0]
+            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
+            encoder_outputs = inputs[4] if len(inputs) > 4 else encoder_outputs
+            past_key_values = inputs[5] if len(inputs) > 5 else head_mask
+            head_mask = inputs[6] if len(inputs) > 6 else head_mask
+            inputs_embeds = inputs[7] if len(inputs) > 7 else inputs_embeds
+            use_cache = inputs[9] if len(inputs) > 9 else use_cache
+            output_attentions = inputs[10] if len(inputs) > 10 else output_attentions
+            output_hidden_states = inputs[11] if len(inputs) > 11 else output_hidden_states
+            return_dict = inputs[12] if len(inputs) > 12 else return_dict
+            assert len(inputs) <= 13, "Too many inputs."
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            if "inputs" in inputs:
+                warnings.warn("Using `inputs` as a keyword argument is deprecated. Please use `input_ids` instead.")
+                input_ids = inputs.get("inputs")
+            input_ids = inputs.get("input_ids")
+            attention_mask = inputs.get("attention_mask", attention_mask)
+            encoder_outputs = inputs.get("encoder_outputs", encoder_outputs)
+            past_key_values = inputs.get("past_key_values", past_key_values)
+            head_mask = inputs.get("head_mask", head_mask)
+            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
+            use_cache = inputs.get("use_cache", use_cache)
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            assert len(inputs) <= 13, "Too many inputs."
+        else:
+            input_ids = inputs
+
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        output_attentions = output_attentions if output_attentions else self.config.output_attentions
+        output_hidden_states = output_hidden_states if output_hidden_states else self.config.output_hidden_states
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        # Encode if needed (training, first prediction pass)
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                input_ids,
+                attention_mask=attention_mask,
+                encoder_hidden_states=None,
+                encoder_attention_mask=None,
+                inputs_embeds=inputs_embeds,
+                head_mask=head_mask,
+                past_key_values=None,
+                use_cache=False,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                training=training,
+            )
+
+        return encoder_outputs
+  
