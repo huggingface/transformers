@@ -28,4 +28,5 @@ if is_tf_available():
         TFT5ForConditionalGeneration,
         TFT5Model,
         TFT5PreTrainedModel,
+        TFT5ModelEncoder,
     )
