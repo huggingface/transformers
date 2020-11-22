@@ -19,7 +19,7 @@ Transfer learning, where a model is first pre-trained on a data-rich task before
 
 ## Details of the Dataset 📚 
 
-Dataset ID: ```wikisql``` from  [HugginFace/NLP](https://huggingface.co/nlp/viewer/?dataset=wikisql)
+Dataset ID: ```wikisql``` from  [Huggingface/NLP](https://huggingface.co/nlp/viewer/?dataset=wikisql)
 
 | Dataset  | Split | # samples |
 | -------- | ----- | --------- |

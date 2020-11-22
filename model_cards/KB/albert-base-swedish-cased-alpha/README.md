@@ -4,7 +4,7 @@ language: sv
 
 # Swedish BERT Models
 
-The National Library of Sweden / KBLab releases three pretrained language models based on BERT and ALBERT. The models are trained on aproximately 15-20GB of text (200M sentences, 3000M tokens) from various sources (books, news, government publications, swedish wikipedia and internet forums) aiming to provide a representative BERT model for Swedish text. A more complete description will be published later on.
+The National Library of Sweden / KBLab releases three pretrained language models based on BERT and ALBERT. The models are trained on approximately 15-20GB of text (200M sentences, 3000M tokens) from various sources (books, news, government publications, swedish wikipedia and internet forums) aiming to provide a representative BERT model for Swedish text. A more complete description will be published later on.
 
 The following three models are currently available:
 
@@ -86,7 +86,7 @@ for token in nlp(text):
 print(l)
 ```
 
-Which should result in the following (though less cleanly formated):
+Which should result in the following (though less cleanly formatted):
 
 ```python
 [ { 'word': 'Engelbert',     'score': 0.99..., 'entity': 'PRS'},
@@ -104,7 +104,7 @@ Which should result in the following (though less cleanly formated):
 
 ### ALBERT base
 
-The easisest way to do this is, again, using Huggingface Transformers:
+The easiest way to do this is, again, using Huggingface Transformers:
 
 ```python
 from transformers import AutoModel,AutoTokenizer

@@ -44,7 +44,7 @@ The documentation is organized in five parts:
   and a glossary.
 - **USING 🤗 TRANSFORMERS** contains general tutorials on how to use the library.
 - **ADVANCED GUIDES** contains more advanced guides that are more specific to a given script or part of the library.
-- **RESEARCH** focuses on tutorials that have less to do with how to use the library but more about general resarch in
+- **RESEARCH** focuses on tutorials that have less to do with how to use the library but more about general research in
   transformers model
 - The three last section contain the documentation of each public class and function, grouped in:
 

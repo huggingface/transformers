@@ -530,7 +530,7 @@ Sequence-to-sequence model with the same encoder-decoder model architecture as B
 two self-supervised objective functions: Masked Language Modeling (MLM) and a novel summarization specific pre-training
 objective, called Gap Sentence Generation (GSG).
 
-  * MLM: encoder input tokens are randomely replaced by a mask tokens and have to be predicted by the encoder (like in
+  * MLM: encoder input tokens are randomly replaced by a mask tokens and have to be predicted by the encoder (like in
     BERT)
   * GSG: whole encoder input sentences are replaced by a second mask token and fed to the decoder, but which has a
     causal mask to hide the future words like a regular auto-regressive transformer decoder.

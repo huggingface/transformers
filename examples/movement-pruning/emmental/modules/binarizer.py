@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Binarizers take a (real value) matrice as input and produce a binary (values in {0,1}) mask of the same shape.
+Binarizers take a (real value) matrix as input and produce a binary (values in {0,1}) mask of the same shape.
 """
 
 import torch

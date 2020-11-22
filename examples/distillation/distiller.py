@@ -188,7 +188,7 @@ class Distiller:
 
     def prepare_batch_mlm(self, batch):
         """
-        Prepare the batch: from the token_ids and the lenghts, compute the attention mask and the masked label for MLM.
+        Prepare the batch: from the token_ids and the lengths, compute the attention mask and the masked label for MLM.
 
         Input:
         ------
@@ -200,7 +200,7 @@ class Distiller:
         -------
             token_ids: `torch.tensor(bs, seq_length)` - The token ids after the modifications for MLM.
             attn_mask: `torch.tensor(bs, seq_length)` - The attention mask for the self-attention.
-            mlm_labels: `torch.tensor(bs, seq_length)` - The masked languge modeling labels. There is a -100 where there is nothing to predict.
+            mlm_labels: `torch.tensor(bs, seq_length)` - The masked language modeling labels. There is a -100 where there is nothing to predict.
         """
         token_ids, lengths = batch
         token_ids, lengths = self.round_batch(x=token_ids, lengths=lengths)
@@ -253,7 +253,7 @@ class Distiller:
 
     def prepare_batch_clm(self, batch):
         """
-        Prepare the batch: from the token_ids and the lenghts, compute the attention mask and the labels for CLM.
+        Prepare the batch: from the token_ids and the lengths, compute the attention mask and the labels for CLM.
 
         Input:
         ------

@@ -54,7 +54,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class XLMRobertaTokenizer(PreTrainedTokenizer):
     """
-    Adapted from :class:`~transfomers.RobertaTokenizer` and class:`~transfomers.XLNetTokenizer`. Based on
+    Adapted from :class:`~transformers.RobertaTokenizer` and class:`~transformers.XLNetTokenizer`. Based on
     `SentencePiece <https://github.com/google/sentencepiece>`__.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.

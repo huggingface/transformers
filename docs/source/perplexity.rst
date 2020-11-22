@@ -62,7 +62,7 @@ sliding the context window so that the model has more context when making each p
 This is a closer approximation to the true decomposition of the sequence probability and will typically yield a more
 favorable score. The downside is that it requires a separate forward pass for each token in the corpus. A good
 practical compromise is to employ a strided sliding window, moving the context by larger strides rather than sliding by
-1 token a time. This allows computation to procede much faster while still giving the model a large context to make
+1 token a time. This allows computation to proceed much faster while still giving the model a large context to make
 predictions at each step.
 
 Example: Calculating perplexity with GPT-2 in 🤗 Transformers
