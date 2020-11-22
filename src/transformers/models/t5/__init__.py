@@ -15,10 +15,10 @@ if is_tokenizers_available():
 if is_torch_available():
     from .modeling_t5 import (
         T5_PRETRAINED_MODEL_ARCHIVE_LIST,
+        T5ModelEncoder,
         T5ForConditionalGeneration,
         T5Model,
         T5PreTrainedModel,
-        T5ModelEncoder,
         load_tf_weights_in_t5,
     )
 
