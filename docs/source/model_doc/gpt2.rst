@@ -114,3 +114,9 @@ TFGPT2DoubleHeadsModel
 
 .. autoclass:: transformers.TFGPT2DoubleHeadsModel
     :members: call
+
+TFGPT2ForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFGPT2ForSequenceClassification
+    :members: call
