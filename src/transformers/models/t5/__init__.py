@@ -18,6 +18,7 @@ if is_torch_available():
         T5ForConditionalGeneration,
         T5Model,
         T5PreTrainedModel,
+        T5ModelEncoder,
         load_tf_weights_in_t5,
     )
 
