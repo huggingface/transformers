@@ -1351,12 +1351,6 @@ class T5ModelEncoder(T5PreTrainedModel):
         encoder_config.is_encoder_decoder = False
         self.encoder = T5Stack(encoder_config, self.shared)
 
-        #decoder_config = copy.deepcopy(config)
-        #decoder_config.is_decoder = False
-        #decoder_config.is_encoder_decoder = False
-        #decoder_config.num_layers = config.num_decoder_layers
-        #self.decoder = T5Stack(decoder_config, self.shared)
-
         self.init_weights()
 
     def get_input_embeddings(self):
@@ -1365,14 +1359,10 @@ class T5ModelEncoder(T5PreTrainedModel):
     def set_input_embeddings(self, new_embeddings):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
-        #self.decoder.set_input_embeddings(new_embeddings)
 
     def get_encoder(self):
         return self.encoder
-
-    #def get_decoder(self):
-    #    return self.decoder
-
+    
     def _prune_heads(self, heads_to_prune):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
@@ -1387,13 +1377,10 @@ class T5ModelEncoder(T5PreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        #decoder_input_ids=None,
-        #decoder_attention_mask=None,
         encoder_outputs=None,
         past_key_values=None,
         head_mask=None,
         inputs_embeds=None,
-        #decoder_inputs_embeds=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1402,11 +1389,10 @@ class T5ModelEncoder(T5PreTrainedModel):
         r"""
         Returns:
         Example::
-            >>> from transformers import T5Tokenizer, T5Model
+            >>> from transformers import T5Tokenizer, T5ModelEncoder
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
             >>> model = T5ModelEncoder.from_pretrained('t5-small')
             >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
-            >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
             >>> outputs = model(input_ids=input_ids)
             >>> last_hidden_states = outputs.last_hidden_state
         """
@@ -1431,36 +1417,5 @@ class T5ModelEncoder(T5PreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        #hidden_states = encoder_outputs[0]
         return encoder_outputs
-        '''
-        # Decode
-        decoder_outputs = self.decoder(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
-            inputs_embeds=decoder_inputs_embeds,
-            past_key_values=past_key_values,
-            encoder_hidden_states=hidden_states,
-            encoder_attention_mask=attention_mask,
-            head_mask=head_mask,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
-
-        return Seq2SeqModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
-        )
-        '''
 
