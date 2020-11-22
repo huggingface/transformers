@@ -29,11 +29,16 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_tf_outputs import TFBaseModelOutputWithPast, TFCausalLMOutputWithPast
+from ...modeling_tf_outputs import (
+    TFBaseModelOutputWithPast,
+    TFCausalLMOutputWithPast,
+    TFSequenceClassifierOutputWithPast,
+)
 from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFConv1D,
     TFPreTrainedModel,
+    TFSequenceClassificationLoss,
     TFSequenceSummary,
     TFSharedEmbeddings,
     get_initializer,
@@ -807,6 +812,167 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         return TFGPT2DoubleHeadsModelOutput(
             logits=lm_logits,
             mc_logits=mc_logits,
+            past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    The GPT2 Model transformer with a sequence classification head on top (linear layer).
+
+    :class:`~transformers.TFGPT2ForSequenceClassification` uses the last token in order to do the classification, as
+    other causal models (e.g. GPT-1) do.
+
+    Since it does classification on the last token, it requires to know the position of the last token. If a
+    :obj:`pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each
+    row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot
+    guess the padding tokens when :obj:`inputs_embeds` are passed instead of :obj:`input_ids`, it does the same (take
+    the last value in each row of the batch).
+    """,
+    GPT2_START_DOCSTRING,
+)
+class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassificationLoss):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+        self.score = tf.keras.layers.Dense(
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="linear"
+        )
+        self.transformer = TFGPT2MainLayer(config, name="transformer")
+
+    def get_output_embeddings(self):
+        return self.transformer.wte
+
+    @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="microsoft/dialogrpt",
+        output_type=TFSequenceClassifierOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(
+        self,
+        inputs,
+        past=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the cross entropy classification loss. Indices should be in ``[0, ...,
+            config.vocab_size - 1]``.
+        """
+        if isinstance(inputs, (tuple, list)):
+            input_ids = inputs[0]
+            past = inputs[1] if len(inputs) > 1 else attention_mask
+            attention_mask = inputs[2] if len(inputs) > 2 else attention_mask
+            token_type_ids = inputs[3] if len(inputs) > 3 else token_type_ids
+            position_ids = inputs[4] if len(inputs) > 4 else position_ids
+            head_mask = inputs[5] if len(inputs) > 5 else head_mask
+            inputs_embeds = inputs[6] if len(inputs) > 6 else inputs_embeds
+            labels = inputs[7] if len(inputs) > 7 else labels
+            use_cache = inputs[8] if len(inputs) > 8 else use_cache
+            output_attentions = inputs[9] if len(inputs) > 9 else output_attentions
+            output_hidden_states = inputs[10] if len(inputs) > 10 else output_hidden_states
+            return_dict = inputs[11] if len(inputs) > 11 else return_dict
+            assert len(inputs) <= 12, "Too many inputs."
+        elif isinstance(inputs, (dict, BatchEncoding)):
+            input_ids = inputs.get("input_ids")
+            past = inputs.get("past", past)
+            attention_mask = inputs.get("attention_mask", attention_mask)
+            token_type_ids = inputs.get("token_type_ids", token_type_ids)
+            position_ids = inputs.get("position_ids", position_ids)
+            head_mask = inputs.get("head_mask", head_mask)
+            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
+            labels = inputs.get("labels", labels)
+            use_cache = inputs.get("use_cache", use_cache)
+            output_attentions = inputs.get("output_attentions", output_attentions)
+            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
+            return_dict = inputs.get("return_dict", return_dict)
+            assert len(inputs) <= 12, "Too many inputs."
+        else:
+            input_ids = inputs
+
+        return_dict = return_dict if return_dict is not None else self.transformer.return_dict
+
+        transformer_outputs = self.transformer(
+            input_ids,
+            past=past,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = transformer_outputs[0]
+        logits = self.score(hidden_states)
+
+        if self.config.pad_token_id is None:
+            sequence_lengths = -1
+        else:
+            if input_ids is not None:
+                sequence_lengths = (
+                    tf.reduce_sum(
+                        tf.cast(tf.math.not_equal(input_ids, self.config.pad_token_id), tf.int32), -1, keepdims=False
+                    )
+                    - 1
+                )
+            else:
+                sequence_lengths = -1
+                logger.warning(
+                    f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                    f"unexpected if using padding tokens in conjuction with `inputs_embeds.`"
+                )
+        loss = None
+        p_logits = None
+        if labels is not None:
+            if input_ids is not None:
+                batch_size, sequence_length = input_ids.shape[:2]
+            else:
+                batch_size, sequence_length = inputs_embeds.shape[:2]
+            assert (
+                self.config.pad_token_id is not None or batch_size == 1
+            ), "Cannot handle batch sizes > 1 if no padding token is defined."
+
+            if tf.is_tensor(sequence_lengths):
+
+                def get_seq_element(sequence_position, input_batch):
+                    return tf.strided_slice(
+                        input_batch, [sequence_position - 1, 0], [sequence_position, input_batch.shape[-1]], [1, 1]
+                    )
+
+                result = tf.map_fn(
+                    fn=lambda t: get_seq_element(t[0], t[1]), elems=[sequence_lengths, logits], dtype="float"
+                )
+                p_logits = tf.reshape(result, [result.shape[0], result.shape[-1]])
+            else:
+                p_logits = logits[0:batch_size, sequence_lengths]
+
+            loss = self.compute_loss(tf.reshape(labels, [-1]), tf.reshape(p_logits, [-1, self.num_labels]))
+        pooled_logits = p_logits if p_logits is not None else logits
+
+        if not return_dict:
+            output = (pooled_logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFSequenceClassifierOutputWithPast(
+            loss=loss,
+            logits=pooled_logits,
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
