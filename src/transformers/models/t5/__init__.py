@@ -25,8 +25,8 @@ if is_torch_available():
 if is_tf_available():
     from .modeling_tf_t5 import (
         TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFT5ModelEncoder,
         TFT5ForConditionalGeneration,
         TFT5Model,
         TFT5PreTrainedModel,
-        #TFT5ModelEncoder,
     )
