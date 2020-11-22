@@ -487,7 +487,7 @@ class EarlyStoppingCallback(TrainerCallback):
             Use with :obj:`metric_for_best_model` to stop training when the specified metric worsens for
             :obj:`early_stopping_patience` evaluation calls.
        early_stopping_threshold(:obj:`float`, `optional`):
-            Use with TrainingAruments :obj:`metric_for_best_model` and :obj:`early_stopping_patience` to denote how
+            Use with TrainingArguments :obj:`metric_for_best_model` and :obj:`early_stopping_patience` to denote how
             much the specified metric must improve to satisfy early stopping conditions. `
 
     This callback depends on :class:`~transformers.TrainingArguments` argument `load_best_model_at_end` functionality
