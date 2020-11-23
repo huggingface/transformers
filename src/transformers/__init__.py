@@ -253,6 +253,7 @@ else:
 # Trainer
 from .trainer_callback import (
     DefaultFlowCallback,
+    EarlyStoppingCallback,
     PrinterCallback,
     ProgressCallback,
     TrainerCallback,
