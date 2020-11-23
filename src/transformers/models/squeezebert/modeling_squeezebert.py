@@ -428,7 +428,7 @@ class SqueezeBertPreTrainedModel(PreTrainedModel):
 
     config_class = SqueezeBertConfig
     base_model_prefix = "transformer"
-    _keys_to_ignore_on_load = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -642,7 +642,7 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
 @add_start_docstrings("""SqueezeBERT Model with a `language modeling` head on top. """, SQUEEZEBERT_START_DOCSTRING)
 class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
 
-    _keys_to_ignore_on_load = [r"predictions.decoder.bias"]
+    _keys_to_ignore_on_load_missing = [r"predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)

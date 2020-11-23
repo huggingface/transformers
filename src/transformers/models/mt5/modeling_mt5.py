@@ -42,7 +42,7 @@ class MT5Model(T5Model):
     """
     model_type = "mt5"
     config_class = MT5Config
-    _keys_to_ignore_on_load = [
+    _keys_to_ignore_on_load_missing = [
         r"encoder\.embed_tokens\.weight",
         r"decoder\.embed_tokens\.weight",
         r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
@@ -71,7 +71,7 @@ class MT5ForConditionalGeneration(T5ForConditionalGeneration):
 
     model_type = "mt5"
     config_class = MT5Config
-    _keys_to_ignore_on_load = [
+    _keys_to_ignore_on_load_missing = [
         r"encoder\.embed_tokens\.weight",
         r"decoder\.embed_tokens\.weight",
         r"lm_head\.weight",

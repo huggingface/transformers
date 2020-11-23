@@ -509,7 +509,7 @@ class LayoutLMPreTrainedModel(PreTrainedModel):
 
     config_class = LayoutLMConfig
     base_model_prefix = "layoutlm"
-    _keys_to_ignore_on_load = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """

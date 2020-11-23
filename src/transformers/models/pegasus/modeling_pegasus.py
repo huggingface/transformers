@@ -46,7 +46,7 @@ class PegasusForConditionalGeneration(BartForConditionalGeneration):
     """
     # All the code is in src/transformers/models/bart/modeling_bart.py
     config_class = PegasusConfig
-    _keys_to_ignore_on_load = [
+    _keys_to_ignore_on_load_missing = [
         r"final_logits_bias",
         r"encoder\.version",
         r"decoder\.version",

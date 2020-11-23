@@ -843,7 +843,7 @@ class TFAlbertSOPHead(tf.keras.layers.Layer):
 @add_start_docstrings("""Albert Model with a `language modeling` head on top. """, ALBERT_START_DOCSTRING)
 class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss):
 
-    _keys_to_ignore_on_load = [r"pooler"]
+    _keys_to_ignore_on_load_missing = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1013,7 +1013,7 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
 )
 class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificationLoss):
 
-    _keys_to_ignore_on_load = [r"pooler"]
+    _keys_to_ignore_on_load_missing = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1100,7 +1100,7 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
 )
 class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringLoss):
 
-    _keys_to_ignore_on_load = [r"pooler"]
+    _keys_to_ignore_on_load_missing = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)

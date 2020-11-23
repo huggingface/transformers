@@ -216,7 +216,7 @@ class RagPreTrainedModel(PreTrainedModel):
     """
     config_class = RagConfig
     base_model_prefix = "rag"
-    _keys_to_ignore_on_load = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     @classmethod
     def from_pretrained_question_encoder_generator(

@@ -1005,7 +1005,7 @@ class FSMTModel(PretrainedFSMTModel):
 )
 class FSMTForConditionalGeneration(PretrainedFSMTModel):
     base_model_prefix = "model"
-    _keys_to_ignore_on_load = [
+    _keys_to_ignore_on_load_missing = [
         "model.encoder.embed_positions.weight",
         "model.decoder.embed_positions.weight",
     ]

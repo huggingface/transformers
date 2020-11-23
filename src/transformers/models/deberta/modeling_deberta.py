@@ -756,7 +756,7 @@ class DebertaPreTrainedModel(PreTrainedModel):
 
     config_class = DebertaConfig
     base_model_prefix = "deberta"
-    _keys_to_ignore_on_load = ["position_ids"]
+    _keys_to_ignore_on_load_missing = ["position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """

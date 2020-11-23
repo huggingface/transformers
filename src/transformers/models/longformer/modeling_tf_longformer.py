@@ -1961,7 +1961,7 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
 )
 class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModelingLoss):
 
-    _keys_to_ignore_on_load = [r"pooler"]
+    _keys_to_ignore_on_load_missing = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -2048,7 +2048,7 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
 )
 class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAnsweringLoss):
 
-    _keys_to_ignore_on_load = [r"pooler"]
+    _keys_to_ignore_on_load_missing = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -2199,7 +2199,7 @@ class TFLongformerClassificationHead(tf.keras.layers.Layer):
 )
 class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSequenceClassificationLoss):
 
-    _keys_to_ignore_on_load = [r"pooler"]
+    _keys_to_ignore_on_load_missing = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -2443,7 +2443,7 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
 )
 class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenClassificationLoss):
 
-    _keys_to_ignore_on_load = [r"pooler"]
+    _keys_to_ignore_on_load_missing = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)

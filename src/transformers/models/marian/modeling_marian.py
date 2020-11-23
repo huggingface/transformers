@@ -47,7 +47,7 @@ class MarianMTModel(BartForConditionalGeneration):
 
     """
     config_class = MarianConfig
-    _keys_to_ignore_on_load = [
+    _keys_to_ignore_on_load_missing = [
         "model.encoder.embed_positions.weight",
         "model.decoder.embed_positions.weight",
     ]

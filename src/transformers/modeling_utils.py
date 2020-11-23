@@ -404,7 +404,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.
-        - **_keys_to_ignore_on_load** (:obj:`Optional[List[str]]`) -- A list of re pattern of tensor names to ignore
+        - **_keys_to_ignore_on_load_missing** (:obj:`Optional[List[str]]`) -- A list of re pattern of tensor names to ignore
           when loading the model (and avoid unnecessary warnings).
         - **_keys_to_ignore_on_save** (:obj:`Optional[List[str]]`) -- A list of of tensor names to ignore when saving
           the model (useful for keys that aren't trained, but which are deterministic)
@@ -412,8 +412,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
     """
     config_class = None
     base_model_prefix = ""
-    _keys_to_ignore_on_load = None
-    authorized_unexpected_keys = None
+    _keys_to_ignore_on_load_missing = None
+    _keys_to_ignore_on_load_unexpected = None
     _keys_to_ignore_on_save = None
 
     @property
@@ -1034,12 +1034,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
             # Some models may have keys that are not in the state by design, removing them before needlessly warning
             # the user.
-            if cls._keys_to_ignore_on_load is not None:
-                for pat in cls._keys_to_ignore_on_load:
+            if cls._keys_to_ignore_on_load_missing is not None:
+                for pat in cls._keys_to_ignore_on_load_missing:
                     missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
 
-            if cls.authorized_unexpected_keys is not None:
-                for pat in cls.authorized_unexpected_keys:
+            if cls._keys_to_ignore_on_load_unexpected is not None:
+                for pat in cls._keys_to_ignore_on_load_unexpected:
                     unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
             if len(unexpected_keys) > 0:
