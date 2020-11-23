@@ -61,11 +61,22 @@ class PegasusTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         mask_token="<mask_2>",
         mask_token_sent="<mask_1>",
+        additional_special_tokens=[],
         **kwargs
     ):
         super().__init__(
-            pad_token=pad_token, eos_token=eos_token, unk_token=unk_token, mask_token=mask_token, **kwargs
+            eos_token=eos_token,
+            unk_token=unk_token,
+            mask_token=mask_token,
+            additional_special_tokens=additional_special_tokens,
+            pad_token=pad_token,
+            **kwargs,
         )
+
+        self.vocab_file = vocab_file
+        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model.Load(vocab_file)
+
         self.mask_token_sent = mask_token_sent
         # Don't use reserved words added_token_encoder, added_tokens_decoder because of
         # AssertionError: Non-consecutive added token '1' found. in from_pretrained
@@ -79,9 +90,32 @@ class PegasusTokenizer(PreTrainedTokenizer):
         self.encoder.update({i + 2: f"unk_{i}" for i in range(2, self.offset)})
         self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
 
-        self.vocab_file = vocab_file
+    @property
+    def vocab_size(self) -> int:
+        return len(self.sp_model) + self.offset
+
+    def get_vocab(self) -> Dict[str, int]:
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
+        return vocab
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["sp_model"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
         self.sp_model = spm.SentencePieceProcessor()
-        self.sp_model.Load(vocab_file)
+        self.sp_model.Load(self.vocab_file)
+
+    def _tokenize(self, text, sample=False):
+        """Take as input a string and return a list of strings (tokens) for words/sub-words"""
+        if not sample:
+            pieces = self.sp_model.EncodeAsPieces(text)
+        else:
+            pieces = self.sp_model.SampleEncodeAsPieces(text, 64, 0.1)
+        return pieces
 
     def _convert_token_to_id(self, token: str) -> int:
         """ Converts a token (str) to an id using the vocab. """
@@ -106,33 +140,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
         """ Converts a sequence of tokens (string) in a single string. """
         out_string = self.sp_model.decode_pieces(tokens)
         return out_string
-
-    def _tokenize(self, text, sample=False):
-        """Take as input a string and return a list of strings (tokens) for words/sub-words"""
-        if not sample:
-            pieces = self.sp_model.EncodeAsPieces(text)
-        else:
-            pieces = self.sp_model.SampleEncodeAsPieces(text, 64, 0.1)
-        return pieces
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["sp_model"] = None
-        return state
-
-    def __setstate__(self, d):
-        self.__dict__ = d
-        self.sp_model = spm.SentencePieceProcessor()
-        self.sp_model.Load(self.vocab_file)
-
-    @property
-    def vocab_size(self) -> int:
-        return len(self.sp_model) + self.offset
-
-    def get_vocab(self) -> Dict[str, int]:
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
-        vocab.update(self.added_tokens_encoder)
-        return vocab
 
     def num_special_tokens_to_add(self, pair=False):
         """Just EOS"""
