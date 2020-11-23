@@ -14,11 +14,14 @@
 # limitations under the License.
 """ Auto Tokenizer class. """
 
+import json
+import os
 
 from collections import OrderedDict
 
 from ...configuration_utils import PretrainedConfig
-from ...file_utils import is_sentencepiece_available, is_tokenizers_available
+from ...file_utils import is_sentencepiece_available, is_tokenizers_available, cached_path, hf_bucket_url, is_remote_url
+from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...utils import logging
 from ..bart.tokenization_bart import BartTokenizer
 from ..bert.tokenization_bert import BertTokenizer
@@ -219,6 +222,8 @@ NO_CONFIG_TOKENIZER = [
     PhobertTokenizer,
 ]
 
+class NoTokenizerClassAttribute(Exception):
+    pass
 
 SLOW_TOKENIZER_MAPPING = {
     k: (v[0] if v[0] is not None else v[1])
@@ -322,18 +327,70 @@ class AutoTokenizer:
 
         """
         config = kwargs.pop("config", None)
-        if not isinstance(config, PretrainedConfig):
-            config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        tokenizer_class_name = config.tokenizer_class if isinstance(config, PretrainedConfig) else None
+
+        if tokenizer_class_name is None:
+            # Try first to load a tokenizer_config.json file
+            # This logic is identical to the from_pretrained logic in configuration_utils.py
+            # We duplicate it because we don't have (yet?) a full class for tokenizer config, they are just simple dicts
+            cache_dir = kwargs.get("cache_dir", None)
+            force_download = kwargs.get("force_download", False)
+            resume_download = kwargs.get("resume_download", False)
+            proxies = kwargs.get("proxies", None)
+            local_files_only = kwargs.get("local_files_only", False)
+            revision = kwargs.get("revision", None)
+
+            if os.path.isdir(pretrained_model_name_or_path):
+                tokenizer_config_file = os.path.join(pretrained_model_name_or_path, TOKENIZER_CONFIG_FILE)
+            elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
+                tokenizer_config_file = pretrained_model_name_or_path
+            else:
+                tokenizer_config_file = hf_bucket_url(
+                    pretrained_model_name_or_path, filename=TOKENIZER_CONFIG_FILE, revision=revision, mirror=None
+                )
+
+            try:
+                # Load from URL or cache if already cached
+                resolved_tokenizer_config_file = cached_path(
+                    tokenizer_config_file,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
+                )
+                # Load config dict
+                with open(resolved_tokenizer_config_file, "r", encoding="utf-8") as reader:
+                    text = reader.read()
+                config = json.loads(text)
+
+                tokenizer_class_name = config.get("tokenizer_class_name", None)
+                if tokenizer_class_name is None:
+                    raise NoTokenizerClassAttribute
+
+            # If we cannot find the tokenizer_config file (EnvironmentError)
+            # or cannot decode it (json.JSONDecodeError)
+            # or it doesn't have a "tokenizer_class" attribute (NoTokenizerClassAttribute)
+            # We try to load the configuration for the model
+            except (EnvironmentError, json.JSONDecodeError, NoTokenizerClassAttribute):
+                # Here we are ok to raise the errors because we found no way to identify the tokenizer class
+                model_config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+                tokenizer_class_name = model_config.tokenizer_class
+
+                # We only overwrite the potentially provided config if it's None
+                # Since it can be used to detect class (see below the type(config) test)
+                if config is None:
+                    config = model_config
 
         use_fast = kwargs.pop("use_fast", True)
 
-        if config.tokenizer_class is not None:
+        if tokenizer_class_name is not None:
             tokenizer_class = None
-            if use_fast and not config.tokenizer_class.endswith("Fast"):
-                tokenizer_class_candidate = f"{config.tokenizer_class}Fast"
+            if use_fast and not tokenizer_class_name.endswith("Fast"):
+                tokenizer_class_candidate = f"{tokenizer_class_name}Fast"
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
             if tokenizer_class is None:
-                tokenizer_class_candidate = config.tokenizer_class
+                tokenizer_class_candidate = tokenizer_class_name
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
 
             if tokenizer_class is None:

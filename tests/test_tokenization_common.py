@@ -181,6 +181,8 @@ class TokenizerTesterMixin:
         signature = inspect.signature(self.tokenizer_class.__init__)
         tokenizer = self.get_tokenizer()
 
+        self.assertEqual(tokenizer.init_kwargs["tokenizer_class_name"], tokenizer.__class__.__name__)
+
         for parameter_name, parameter in signature.parameters.items():
             if parameter.default != inspect.Parameter.empty:
                 self.assertIn(parameter_name, tokenizer.init_kwargs)
@@ -191,6 +193,8 @@ class TokenizerTesterMixin:
 
         signature = inspect.signature(self.rust_tokenizer_class.__init__)
         tokenizer = self.get_rust_tokenizer()
+
+        self.assertEqual(tokenizer.init_kwargs["tokenizer_class_name"], tokenizer.__class__.__name__)
 
         for parameter_name, parameter in signature.parameters.items():
             if parameter.default != inspect.Parameter.empty:
