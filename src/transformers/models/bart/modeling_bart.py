@@ -358,11 +358,13 @@ class BartEncoder(nn.Module):
         # B x T x C -> T x B x C
         x = x.transpose(0, 1)
 
-        encoder_states = [] if output_hidden_states else None
+        encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         for encoder_layer in self.layers:
             if output_hidden_states:
-                encoder_states.append(x)
+                x = x.transpose(0, 1)  # T x B x C -> B x T x C
+                encoder_states = encoder_states + (x,)
+                x = x.transpose(0, 1)  # B x T x C -> T x B x C
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
@@ -375,13 +377,12 @@ class BartEncoder(nn.Module):
 
         if self.layer_norm:
             x = self.layer_norm(x)
-        if output_hidden_states:
-            encoder_states.append(x)
-            # T x B x C -> B x T x C
-            encoder_states = tuple(hidden_state.transpose(0, 1) for hidden_state in encoder_states)
 
         # T x B x C -> B x T x C
         x = x.transpose(0, 1)
+
+        if output_hidden_states:
+            encoder_states = encoder_states + (x,)
 
         if not return_dict:
             return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
