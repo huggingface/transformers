@@ -186,6 +186,9 @@ class TrainingArguments:
             - :obj:`True` if :obj:`metric_for_best_model` is set to a value that isn't :obj:`"loss"` or
               :obj:`"eval_loss"`.
             - :obj:`False` if :obj:`metric_for_best_model` is not set, or set to :obj:`"loss"` or :obj:`"eval_loss"`.
+        model_parallel (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If there are more than one devices, whether to use model parallelism to distribute the model's modules
+            across devices or not.
     """
 
     output_dir: str = field(
