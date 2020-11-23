@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers import BarthezTokenizer, BatchEncoding
+from transformers import BarthezTokenizer, BarthezTokenizerFast, BatchEncoding
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -27,12 +27,13 @@ from .test_tokenization_common import TokenizerTesterMixin
 class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BarthezTokenizer
-    test_rust_tokenizer = False
+    rust_tokenizer_class = BarthezTokenizerFast
+    test_rust_tokenizer = True
 
     def setUp(self):
         super().setUp()
 
-        tokenizer = BarthezTokenizer.from_pretrained("moussaKam/barthez")
+        tokenizer = BarthezTokenizer.from_pretrained("moussaKam/mbarthez")
         tokenizer.save_pretrained(self.tmpdirname)
         self.tokenizer = tokenizer
 
@@ -43,15 +44,15 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "Summary of the text.",
             "Another summary.",
         ]
-        expected_src_tokens = [0, 115, 768, 3591, 430, 193, 3929, 536, 49952, 68, 49922, 2]
+        expected_src_tokens = [0, 57, 3018, 70307, 91, 2]
 
         batch = self.tokenizer.prepare_seq2seq_batch(
             src_text, tgt_texts=tgt_text, max_length=len(expected_src_tokens), return_tensors="pt"
         )
         self.assertIsInstance(batch, BatchEncoding)
 
-        self.assertEqual((2, 12), batch.input_ids.shape)
-        self.assertEqual((2, 12), batch.attention_mask.shape)
+        self.assertEqual((2, 6), batch.input_ids.shape)
+        self.assertEqual((2, 6), batch.attention_mask.shape)
         result = batch.input_ids.tolist()[0]
         self.assertListEqual(expected_src_tokens, result)
 
