@@ -677,7 +677,7 @@ class MobileBertPreTrainedModel(PreTrainedModel):
     pretrained_model_archive_map = MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST
     load_tf_weights = load_tf_weights_in_mobilebert
     base_model_prefix = "mobilebert"
-    authorized_missing_keys = [r"position_ids"]
+    _keys_to_ignore_on_load = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """

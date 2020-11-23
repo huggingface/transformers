@@ -1303,7 +1303,7 @@ class LongformerPreTrainedModel(PreTrainedModel):
 
     config_class = LongformerConfig
     base_model_prefix = "longformer"
-    authorized_missing_keys = [r"position_ids"]
+    _keys_to_ignore_on_load = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """

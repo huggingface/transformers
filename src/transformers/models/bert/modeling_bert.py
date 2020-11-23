@@ -598,7 +598,7 @@ class BertPreTrainedModel(PreTrainedModel):
     config_class = BertConfig
     load_tf_weights = load_tf_weights_in_bert
     base_model_prefix = "bert"
-    authorized_missing_keys = [r"position_ids"]
+    _keys_to_ignore_on_load = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -970,7 +970,7 @@ class BertForPreTraining(BertPreTrainedModel):
 class BertLMHeadModel(BertPreTrainedModel):
 
     authorized_unexpected_keys = [r"pooler"]
-    authorized_missing_keys = [r"position_ids", r"predictions.decoder.bias"]
+    _keys_to_ignore_on_load = [r"position_ids", r"predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1088,7 +1088,7 @@ class BertLMHeadModel(BertPreTrainedModel):
 class BertForMaskedLM(BertPreTrainedModel):
 
     authorized_unexpected_keys = [r"pooler"]
-    authorized_missing_keys = [r"position_ids", r"predictions.decoder.bias"]
+    _keys_to_ignore_on_load = [r"position_ids", r"predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)

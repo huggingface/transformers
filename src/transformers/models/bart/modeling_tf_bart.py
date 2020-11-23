@@ -1020,7 +1020,7 @@ class TFBartModel(TFPretrainedBartModel):
 )
 class TFBartForConditionalGeneration(TFPretrainedBartModel):
     base_model_prefix = "model"
-    authorized_missing_keys = [
+    _keys_to_ignore_on_load = [
         r"final_logits_bias",
     ]
     authorized_unexpected_keys = [

@@ -343,14 +343,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
           :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.
-        - **authorized_missing_keys** (:obj:`List[str]`, `optional`) -- A list of re pattern of tensor names to ignore
+        - **_keys_to_ignore_on_load** (:obj:`List[str]`, `optional`) -- A list of re pattern of tensor names to ignore
           from the model when loading the model weights (and avoid unnecessary warnings).
         - **authorized_unexpected_keys** (:obj:`List[str]`, `optional`) -- A list of re pattern of tensor names to
           ignore from the weights when loading the model weights (and avoid unnecessary warnings).
     """
     config_class = None
     base_model_prefix = ""
-    authorized_missing_keys = None
+    _keys_to_ignore_on_load = None
     authorized_unexpected_keys = None
 
     @property
@@ -742,8 +742,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
         model(model.dummy_inputs, training=False)  # Make sure restore ops are run
 
-        if cls.authorized_missing_keys is not None:
-            for pat in cls.authorized_missing_keys:
+        if cls._keys_to_ignore_on_load is not None:
+            for pat in cls._keys_to_ignore_on_load:
                 missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
 
         if cls.authorized_unexpected_keys is not None:
