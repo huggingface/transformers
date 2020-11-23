@@ -63,9 +63,7 @@ Evaluated on German [XQuAD: xquad.de.json](https://github.com/deepmind/xquad)
 
 ### In Transformers
 ```python
-from transformers.pipelines import pipeline
-from transformers.modeling_auto import AutoModelForQuestionAnswering
-from transformers.tokenization_auto import AutoTokenizer
+from transformers import AutoModelForQuestionAnswering, AutoTokenizer, pipeline
 
 model_name = "deepset/xlm-roberta-large-squad2"
 

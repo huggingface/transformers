@@ -19,7 +19,7 @@ Transfer learning, where a model is first pre-trained on a data-rich task before
 
 ## Details of the downstream task (Intent Prediction) - Dataset 📚 
 
-Dataset ID: ```event2Mind``` from  [HugginFace/NLP](https://github.com/huggingface/nlp)
+Dataset ID: ```event2Mind``` from  [Huggingface/NLP](https://github.com/huggingface/nlp)
 
 | Dataset  | Split | # samples |
 | -------- | ----- | --------- |

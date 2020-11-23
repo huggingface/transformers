@@ -86,7 +86,7 @@ if __name__ == "__main__":
             compressed_sd[f"vocab_layer_norm.{w}"] = state_dict[f"cls.predictions.transform.LayerNorm.{w}"]
 
     print(f"N layers selected for distillation: {std_idx}")
-    print(f"Number of params transfered for distillation: {len(compressed_sd.keys())}")
+    print(f"Number of params transferred for distillation: {len(compressed_sd.keys())}")
 
-    print(f"Save transfered checkpoint to {args.dump_checkpoint}.")
+    print(f"Save transferred checkpoint to {args.dump_checkpoint}.")
     torch.save(compressed_sd, args.dump_checkpoint)

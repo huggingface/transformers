@@ -1,7 +1,6 @@
 import dataclasses
 import json
 import os
-import warnings
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
@@ -90,6 +89,10 @@ class TrainingArguments:
             The initial learning rate for Adam.
         weight_decay (:obj:`float`, `optional`, defaults to 0):
             The weight decay to apply (if not zero).
+        adam_beta1 (:obj:`float`, `optional`, defaults to 0.9):
+            The beta1 for the Adam optimizer.
+        adam_beta2 (:obj:`float`, `optional`, defaults to 0.999):
+            The beta2 for the Adam optimizer.
         adam_epsilon (:obj:`float`, `optional`, defaults to 1e-8):
             Epsilon for the Adam optimizer.
         max_grad_norm (:obj:`float`, `optional`, defaults to 1.0):
@@ -198,10 +201,6 @@ class TrainingArguments:
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
     do_eval: bool = field(default=None, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
-    evaluate_during_training: bool = field(
-        default=False,
-        metadata={"help": "Run evaluation during training at each logging step."},
-    )
     evaluation_strategy: EvaluationStrategy = field(
         default="no",
         metadata={"help": "Run evaluation during training at each logging step."},
@@ -340,12 +339,6 @@ class TrainingArguments:
     def __post_init__(self):
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
-        if self.evaluate_during_training is True:
-            self.evaluation_strategy = EvaluationStrategy.STEPS
-            warnings.warn(
-                "The `evaluate_during_training` argument is deprecated in favor of `evaluation_strategy` (which has more options)",
-                FutureWarning,
-            )
         self.evaluation_strategy = EvaluationStrategy(self.evaluation_strategy)
         if self.do_eval is False and self.evaluation_strategy != EvaluationStrategy.NO:
             self.do_eval = True

@@ -10,7 +10,7 @@ from parameterized import parameterized
 from save_len_file import save_len_file
 from test_seq2seq_examples import ARTICLES, BART_TINY, MARIAN_TINY, MBART_TINY, SUMMARIES, T5_TINY, make_test_data_dir
 from transformers import AutoTokenizer
-from transformers.modeling_bart import shift_tokens_right
+from transformers.models.bart.modeling_bart import shift_tokens_right
 from transformers.testing_utils import TestCasePlus, require_torch_non_multi_gpu_but_fix_me, slow
 from utils import FAIRSEQ_AVAILABLE, DistributedSortishSampler, LegacySeq2SeqDataset, Seq2SeqDataset
 
@@ -197,7 +197,7 @@ class TestAll(TestCasePlus):
     )
     @require_torch_non_multi_gpu_but_fix_me
     def test_dataset_kwargs(self, tok_name):
-        tokenizer = AutoTokenizer.from_pretrained(tok_name)
+        tokenizer = AutoTokenizer.from_pretrained(tok_name, use_fast=False)
         if tok_name == MBART_TINY:
             train_dataset = Seq2SeqDataset(
                 tokenizer,

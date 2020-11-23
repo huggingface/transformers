@@ -32,8 +32,14 @@ from torch.utils.data.distributed import DistributedSampler
 from tqdm import tqdm, trange
 
 import transformers
-from transformers import WEIGHTS_NAME, AdamW, AutoConfig, AutoTokenizer, get_linear_schedule_with_warmup
-from transformers.modeling_auto import AutoModelForMultipleChoice
+from transformers import (
+    WEIGHTS_NAME,
+    AdamW,
+    AutoConfig,
+    AutoModelForMultipleChoice,
+    AutoTokenizer,
+    get_linear_schedule_with_warmup,
+)
 from transformers.trainer_utils import is_main_process
 
 

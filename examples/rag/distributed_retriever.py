@@ -27,7 +27,7 @@ class RagPyTorchDistributedRetriever(RagRetriever):
             It is used to decode the question and then use the generator_tokenizer.
         generator_tokenizer (:class:`~transformers.PretrainedTokenizer`):
             The tokenizer used for the generator part of the RagModel.
-        index (:class:`~transformers.retrieval_rag.Index`, optional, defaults to the one defined by the configuration):
+        index (:class:`~transformers.models.rag.retrieval_rag.Index`, optional, defaults to the one defined by the configuration):
             If specified, use this index instead of the one built using the configuration
     """
 
@@ -40,7 +40,6 @@ class RagPyTorchDistributedRetriever(RagRetriever):
             generator_tokenizer=generator_tokenizer,
             index=index,
         )
-
         self.process_group = None
 
     def init_retrieval(self, distributed_port: int):

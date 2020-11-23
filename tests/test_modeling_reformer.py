@@ -174,7 +174,6 @@ class ReformerModelTester:
             attn_layers=self.attn_layers,
             pad_token_id=self.pad_token_id,
             hash_seed=self.hash_seed,
-            return_dict=True,
         )
 
         return (

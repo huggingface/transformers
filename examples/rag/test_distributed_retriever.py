@@ -11,16 +11,12 @@ import numpy as np
 from datasets import Dataset
 
 import faiss
-from transformers.configuration_bart import BartConfig
-from transformers.configuration_dpr import DPRConfig
-from transformers.configuration_rag import RagConfig
+from transformers import BartConfig, BartTokenizer, DPRConfig, DPRQuestionEncoderTokenizer, RagConfig
 from transformers.file_utils import is_datasets_available, is_faiss_available, is_psutil_available, is_torch_available
-from transformers.retrieval_rag import CustomHFIndex
+from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
+from transformers.models.rag.retrieval_rag import CustomHFIndex
+from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 from transformers.testing_utils import require_torch_non_multi_gpu_but_fix_me
-from transformers.tokenization_bart import BartTokenizer
-from transformers.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
-from transformers.tokenization_dpr import DPRQuestionEncoderTokenizer
-from transformers.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 
 
 sys.path.append(os.path.join(os.getcwd()))  # noqa: E402 # noqa: E402 # isort:skip
@@ -137,7 +133,7 @@ class RagRetrieverTest(TestCase):
             question_encoder=DPRConfig().to_dict(),
             generator=BartConfig().to_dict(),
         )
-        with patch("transformers.retrieval_rag.load_dataset") as mock_load_dataset:
+        with patch("transformers.models.rag.retrieval_rag.load_dataset") as mock_load_dataset:
             mock_load_dataset.return_value = dataset
             retriever = RagPyTorchDistributedRetriever(
                 config,
