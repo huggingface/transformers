@@ -406,8 +406,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
           derived classes of the same architecture adding modules on top of the base model.
         - **_keys_to_ignore_on_load** (:obj:`Optional[List[str]]`) -- A list of re pattern of tensor names to ignore
           when loading the model (and avoid unnecessary warnings).
-        - **_keys_to_ignore_on_save** (:obj:`Optional[List[str]]`) -- A list of of tensor names to ignore when saving the
-          model (useful for keys that aren't trained, but which are deterministic)
+        - **_keys_to_ignore_on_save** (:obj:`Optional[List[str]]`) -- A list of of tensor names to ignore when saving
+          the model (useful for keys that aren't trained, but which are deterministic)
 
     """
     config_class = None
