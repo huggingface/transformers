@@ -61,15 +61,22 @@ class PegasusTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         mask_token="<mask_2>",
         mask_token_sent="<mask_1>",
-        additional_special_tokens=[],
+        offset=101,
+        additional_special_tokens=None,
         **kwargs
     ):
+        # Add extra_ids to the special token list
+        if offset > 0 and additional_special_tokens is None:
+            additional_special_tokens = [mask_token_sent]
+            additional_special_tokens += [f"<unk_token_{i+2}>" for i in range(offset)]
+
         super().__init__(
             eos_token=eos_token,
             unk_token=unk_token,
             mask_token=mask_token,
-            additional_special_tokens=additional_special_tokens,
             pad_token=pad_token,
+            mask_token_sent=mask_token_sent,
+            additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
 
@@ -87,8 +94,9 @@ class PegasusTokenizer(PreTrainedTokenizer):
             3: self.mask_token_sent,
         }
         # entries 4-104 are only used for pretraining and called unk_2, ...unk_102
-        self.encoder.update({i + 2: f"unk_{i}" for i in range(2, self.offset)})
+        self.encoder.update({i: self.additional_special_tokens[i] for i in range(1, offset + 1)})
         self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
+        # import ipdb; ipdb.set_trace()
 
     @property
     def vocab_size(self) -> int:
@@ -148,7 +156,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
     def _special_token_mask(self, seq):
         all_special_ids = set(self.all_special_ids)  # call it once instead of inside list comp
         all_special_ids.remove(self.unk_token_id)  # <unk> is only sometimes special
-        assert all_special_ids == set([0, 1])
+        assert all_special_ids == set([0, 1, 2])
         return [1 if x in all_special_ids else 0 for x in seq]
 
     def get_special_tokens_mask(
