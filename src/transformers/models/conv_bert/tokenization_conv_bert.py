@@ -24,17 +24,17 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "brand-new-bert-base-cased": "https://huggingface.co/brand-new-bert-base-cased/resolve/main/vocab.txt",
+        "conv-bert-base-uncased": "https://huggingface.co/conv-bert-base-uncased/resolve/main/vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "brand-new-bert-base-cased": 512,
+    "conv-bert-base-uncased": 512,
 }
 
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "brand-new-bert-base-cased": {"do_lower_case": False},
+    "conv-bert-base-uncased": {"do_lower_case": False},
 }
 
 
