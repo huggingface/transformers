@@ -12,11 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Dict, List, Optional
+import os
+from shutil import copyfile
+from typing import Dict, List, Optional, Tuple
+
+import sentencepiece as spm
 
 from ...file_utils import add_start_docstrings
+from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncoding
-from ..reformer.tokenization_reformer import ReformerTokenizer
+from ...utils import logging
 
 
 SPIECE_UNDERLINE = "▁"
@@ -32,30 +37,51 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-class PegasusTokenizer(ReformerTokenizer):
+logger = logging.get_logger(__name__)
+
+
+class PegasusTokenizer(PreTrainedTokenizer):
     r"""
     Construct a Pegasus tokenizer.
 
     :class:`~transformers.PegasusTokenizer` is identical to :class:`~transformers.ReformerTokenizer` and adds a new
     :meth:`~transformers.PegasusTokenizer.prepare_seq2seq_batch`
-
-    Refer to superclass :class:`~transformers.ReformerTokenizer` for usage examples and documentation concerning the
-    initialization parameters and other methods.
     """
     offset = 103  # entries 2-104 are only used for pretraining
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["attention_mask"]
 
-    def __init__(self, *args, pad_token="<pad>", **kwargs):
-        super().__init__(*args, **kwargs, pad_token="<pad>")
+    def __init__(
+        self,
+        vocab_file,
+        pad_token="<pad>",
+        eos_token="</s>",
+        unk_token="<unk>",
+        mask_token="<mask_2>",
+        mask_token_sent="<mask_1>",
+        **kwargs
+    ):
+        super().__init__(
+            pad_token=pad_token, eos_token=eos_token, unk_token=unk_token, mask_token=mask_token, **kwargs
+        )
+        self.mask_token_sent = mask_token_sent
         # Don't use reserved words added_token_encoder, added_tokens_decoder because of
         # AssertionError: Non-consecutive added token '1' found. in from_pretrained
-        assert len(self.added_tokens_decoder) == 0
-        self.encoder: Dict[int, str] = {0: self.pad_token, 1: self.eos_token}
-        # entries 2-104 are only used for pretraining and called unk_2, ...unk_104
-        self.encoder.update({i: f"unk_{i}" for i in range(2, self.offset + 2)})
+        self.encoder: Dict[int, str] = {
+            0: self.pad_token,
+            1: self.eos_token,
+            2: self.mask_token,
+            3: self.mask_token_sent,
+        }
+        # entries 4-104 are only used for pretraining and called unk_2, ...unk_102
+        self.encoder.update({i + 2: f"unk_{i}" for i in range(2, self.offset)})
         self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
+
+        self.vocab_file = vocab_file
+        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model.Load(vocab_file)
 
     def _convert_token_to_id(self, token: str) -> int:
         """ Converts a token (str) to an id using the vocab. """
@@ -73,13 +99,40 @@ class PegasusTokenizer(ReformerTokenizer):
         elif index in self.added_tokens_encoder:
             return self.added_tokens_encoder[index]
         else:
-            # assert index > self.offset, f"cannot decode ids between 2 and {self.offset}. Got {index}"
             token = self.sp_model.IdToPiece(index - self.offset)
         return token
+
+    def convert_tokens_to_string(self, tokens):
+        """ Converts a sequence of tokens (string) in a single string. """
+        out_string = self.sp_model.decode_pieces(tokens)
+        return out_string
+
+    def _tokenize(self, text, sample=False):
+        """Take as input a string and return a list of strings (tokens) for words/sub-words"""
+        if not sample:
+            pieces = self.sp_model.EncodeAsPieces(text)
+        else:
+            pieces = self.sp_model.SampleEncodeAsPieces(text, 64, 0.1)
+        return pieces
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["sp_model"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model.Load(self.vocab_file)
 
     @property
     def vocab_size(self) -> int:
         return len(self.sp_model) + self.offset
+
+    def get_vocab(self) -> Dict[str, int]:
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     def num_special_tokens_to_add(self, pair=False):
         """Just EOS"""
@@ -156,3 +209,16 @@ class PegasusTokenizer(ReformerTokenizer):
         labels: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)["input_ids"]
         model_inputs["labels"] = labels
         return model_inputs
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        if not os.path.isdir(save_directory):
+            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            return
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
+
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+            copyfile(self.vocab_file, out_vocab_file)
+
+        return (out_vocab_file,)
