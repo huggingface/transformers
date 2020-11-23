@@ -68,6 +68,7 @@ class ModelTesterMixin:
     test_resize_embeddings = True
     test_head_masking = True
     test_missing_keys = True
+    test_model_parallel = False
     is_encoder_decoder = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -952,6 +953,97 @@ class ModelTesterMixin:
             model = torch.nn.DataParallel(model)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
+
+    @require_torch_multi_gpu
+    def test_model_parallelization(self):
+        if not self.test_model_parallel:
+            pass
+
+        import subprocess
+
+        def get_current_gpu_memory_use():
+            run_process = subprocess.Popen(
+                "nvidia-smi --query-gpu=memory.used --format=csv,nounits,noheader", shell=True, stdout=subprocess.PIPE
+            )
+
+            memory_usage = run_process.stdout.read().decode("utf-8").strip()
+            per_device_memory = [int(memory) for memory in memory_usage.split("\n")]
+            return per_device_memory
+
+        # Needs a large model to see the difference.
+        config = self.model_tester.get_large_model_config()
+
+        for model_class in self.all_parallelizable_model_classes:
+            torch.cuda.empty_cache()
+
+            # Retrieve initial memory usage (should be close to 0)
+            initial_memory = get_current_gpu_memory_use()
+
+            # Put model on device
+            model = model_class(config.from_pretrained("gpt2"))
+            model.to("cuda:0")
+
+            # Retrieve the memory after the model is put on the device
+            memory_after_model_load = get_current_gpu_memory_use()
+
+            del model
+            torch.cuda.empty_cache()
+
+            # The memory use on that device should be higher than it was initially.
+            self.assertGreater(memory_after_model_load[0], initial_memory[0])
+
+            # Spread model layers over multiple devices
+            model = model_class(config.from_pretrained("gpt2"))
+            model.parallelize()
+            memory_after_parallelization = get_current_gpu_memory_use()
+
+            # Assert that the memory use on all devices is higher than it was when loaded only on CPU
+            for n in range(torch.cuda.device_count()):
+                self.assertGreater(memory_after_parallelization[n], initial_memory[n])
+
+            # Assert that the memory use of the first device is lower than it was when the entire model was loaded on it
+            self.assertLess(memory_after_parallelization[0], memory_after_model_load[0])
+
+            # Assert that the memory use of the second device is higher than it was when the entire model was loaded
+            # on the other device.
+            self.assertGreater(memory_after_parallelization[1], memory_after_model_load[1])
+
+            del model
+            torch.cuda.empty_cache()
+
+    @require_torch_multi_gpu
+    def test_model_parallel_equal_results(self):
+        if not self.test_model_parallel:
+            pass
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_parallelizable_model_classes:
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+
+            model = model_class(config)
+            output = model(**inputs_dict)
+
+            model.parallelize()
+
+            def cast_to_gpu(dictionary):
+                output = {}
+                for k, v in dictionary.items():
+                    if isinstance(v, torch.Tensor):
+                        output[k] = v.to("cuda:0")
+                    else:
+                        output[k] = v
+
+                return output
+
+            parallel_output = model(**cast_to_gpu(inputs_dict))
+
+            for value, parallel_value in zip(output, parallel_output):
+                if isinstance(value, torch.Tensor):
+                    self.assertTrue(torch.allclose(value, parallel_value.to("cpu"), atol=1e-7))
+                elif isinstance(value, (Tuple, List)):
+                    for value_, parallel_value_ in zip(value, parallel_value):
+                        self.assertTrue(torch.allclose(value_, parallel_value_.to("cpu"), atol=1e-7))
 
 
 global_rng = random.Random()

@@ -85,6 +85,9 @@ class T5ModelTester:
         self.scope = None
         self.decoder_layers = decoder_layers
 
+    def get_large_model_config(self):
+        return T5Config.from_pretrained("t5-base")
+
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
         decoder_input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
@@ -470,9 +473,18 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (T5Model, T5ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (T5ForConditionalGeneration,) if is_torch_available() else ()
+    all_parallelizable_model_classes = (
+        (
+            T5Model,
+            T5ForConditionalGeneration,
+        )
+        if is_torch_available()
+        else ()
+    )
     test_pruning = False
     test_torchscript = True
     test_resize_embeddings = False
+    test_model_parallel = True
     is_encoder_decoder = True
 
     def setUp(self):
