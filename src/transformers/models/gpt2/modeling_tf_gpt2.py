@@ -413,6 +413,8 @@ class TFGPT2PreTrainedModel(TFPreTrainedModel):
 
     config_class = GPT2Config
     base_model_prefix = "transformer"
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    authorized_unexpected_keys = [r"h.\d+.attn.bias"]
 
 
 @dataclass
