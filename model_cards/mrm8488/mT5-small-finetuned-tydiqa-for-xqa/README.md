@@ -52,8 +52,8 @@ Authors: *Linting Xue, Noah Constant, Adam Roberts, Mihir Kale, Rami Al-Rfou, Ad
 from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-tokenizer = AutoTokenizer.from_pretrained("mrm8488/mT5-small-finetuned-multi-question-generation")
-model = AutoModelForCausalLM.from_pretrained("mrm8488/mT5-small-finetuned-multi-question-generation").to(device)
+tokenizer = AutoTokenizer.from_pretrained("mrm8488/mT5-small-finetuned-tydiqa-for-xqa")
+model = AutoModelForCausalLM.from_pretrained("mrm8488/mT5-small-finetuned-tydiqa-for-xqa").to(device)
 
 def get_response(question, context, max_length=32):
   input_text = 'question: %s  context: %s' % (question, context)
