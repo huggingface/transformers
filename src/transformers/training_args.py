@@ -40,6 +40,9 @@ class TrainingArguments:
     Using :class:`~transformers.HfArgumentParser` we can turn this class into argparse arguments to be able to specify
     them on the command line.
 
+
+
+
     Parameters:
         output_dir (:obj:`str`):
             The output directory where the model predictions and checkpoints will be written.
@@ -201,6 +204,15 @@ class TrainingArguments:
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
     do_eval: bool = field(default=None, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
+    model_parallel: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "If there are more than one devices, whether to use model parallelism to distribute the "
+                "model's modules across devices."
+            )
+        },
+    )
     evaluation_strategy: EvaluationStrategy = field(
         default="no",
         metadata={"help": "Run evaluation during training at each logging step."},
@@ -366,7 +378,11 @@ class TrainingArguments:
                 "version. Using `--per_device_train_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_train_batch_size or self.per_device_train_batch_size
-        return per_device_batch_size * max(1, self.n_gpu)
+        if not self.model_parallel:
+            train_batch_size = per_device_batch_size * max(1, self.n_gpu)
+        else:
+            train_batch_size = per_device_batch_size
+        return train_batch_size
 
     @property
     def eval_batch_size(self) -> int:
@@ -379,7 +395,11 @@ class TrainingArguments:
                 "version. Using `--per_device_eval_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_eval_batch_size or self.per_device_eval_batch_size
-        return per_device_batch_size * max(1, self.n_gpu)
+        if not self.model_parallel:
+            eval_batch_size = per_device_batch_size * max(1, self.n_gpu)
+        else:
+            eval_batch_size = per_device_batch_size
+        return eval_batch_size
 
     @cached_property
     @torch_required
