@@ -4,6 +4,10 @@ language: ar
 datasets: wikipedia
 
 license: apache-2.0
+
+widget:
+- text: "تقع سويسرا في [MASK] أوروبا"
+- text: "إسمي محمد وأسكن في [MASK]."
 ---
 
 # bert-base-ar-cased
@@ -24,6 +28,8 @@ tokenizer = AutoTokenizer.from_pretrained("Geotrend/bert-base-ar-cased")
 model = AutoModel.from_pretrained("Geotrend/bert-base-ar-cased")
 
 ```
+
+To generate other smaller versions of multilingual transformers please visit [our Github repo](https://github.com/Geotrend-research/smaller-transformers).
 
 ### How to cite
 
