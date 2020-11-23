@@ -584,7 +584,9 @@ class BartDecoder(nn.Module):
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
+                x = x.transpose(0, 1)
                 all_hidden_states += (x,)
+                x = x.transpose(0, 1)
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.layerdrop):
                 continue
@@ -612,8 +614,6 @@ class BartDecoder(nn.Module):
             x = self.layer_norm(x)
 
         # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
-        if output_hidden_states:
-            all_hidden_states = tuple(hidden_state.transpose(0, 1) for hidden_state in all_hidden_states)
         x = x.transpose(0, 1)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
