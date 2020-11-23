@@ -495,6 +495,7 @@ PARALLELIZE_DOCSTRING = r"""
         Here is an example of a device map on a machine with 4 GPUs using gpt2-xl, which has a total of 48 attention modules:
             model = GPT2LMHeadModel.from_pretrained('gpt2-xl')
             device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+
                           1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
                           2: [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],
                           3: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]}
@@ -507,6 +508,7 @@ DEPARALLELIZE_DOCSTRING = r"""
         On a 4 GPU machine with gpt2-large:
         model = GPT2LMHeadModel.from_pretrained('gpt2-large')
         device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7],
+
                     1: [8, 9, 10, 11, 12, 13, 14, 15],
                     2: [16, 17, 18, 19, 20, 21, 22, 23],
                     3: [24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]}
