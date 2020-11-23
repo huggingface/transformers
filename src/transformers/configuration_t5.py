@@ -69,6 +69,8 @@ class T5Config(PretrainedConfig):
         initializer_factor (:obj:`float`, `optional`, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not the model should return the last key/values attentions (not used by all models).
     """
     model_type = "t5"
 
@@ -86,6 +88,7 @@ class T5Config(PretrainedConfig):
         layer_norm_epsilon=1e-6,
         initializer_factor=1.0,
         is_encoder_decoder=True,
+        use_cache=True,
         pad_token_id=0,
         eos_token_id=1,
         **kwargs
@@ -109,6 +112,7 @@ class T5Config(PretrainedConfig):
         self.dropout_rate = dropout_rate
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor
+        self.use_cache = use_cache
 
     @property
     def hidden_size(self):
