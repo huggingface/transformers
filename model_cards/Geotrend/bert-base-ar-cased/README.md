@@ -4,6 +4,10 @@ language: ar
 datasets: wikipedia
 
 license: apache-2.0
+
+widget:
+- text: "تقع سويسرا في [MASK] أوروبا"
+- text: "إسمي محمد وأسكن في [MASK]."
 ---
 
 # bert-base-ar-cased
