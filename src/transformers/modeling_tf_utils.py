@@ -247,12 +247,83 @@ class TFNextSentencePredictionLoss:
         return loss_fn(next_sentence_label, next_sentence_reduced_logits)
 
 
-def input_processing(func, input_ids, **kwargs):
+def booleans_processing(config, **kwargs):
+    """
+    Process the input booleans of each model in order to be sure they are compliant with the execution mode (eager or
+    graph)
+
+    Args:
+        config (:class:`~transformers.PretrainedConfig`):
+            The config of the running model.
+        **kwargs:
+            The boolean parameters
+
+    Returns:
+        A dictionary with the proper values for each boolean
+    """
+    final_booleans = {}
+
+    if tf.executing_eagerly():
+        final_booleans["output_attentions"] = (
+            kwargs["output_attentions"] if kwargs["output_attentions"] is not None else config.output_attentions
+        )
+        final_booleans["output_hidden_states"] = (
+            kwargs["output_hidden_states"]
+            if kwargs["output_hidden_states"] is not None
+            else config.output_hidden_states
+        )
+
+        if "return_dict" in kwargs:
+            final_booleans["return_dict"] = (
+                kwargs["return_dict"] if kwargs["return_dict"] is not None else config.return_dict
+            )
+
+        if "use_cache" in kwargs:
+            final_booleans["use_cache"] = kwargs["use_cache"] if kwargs["use_cache"] is not None else config.use_cache
+    else:
+        if (
+            kwargs["output_attentions"] is not None
+            or kwargs["output_hidden_states"] is not None
+            or ("use_cache" in kwargs and kwargs["output_hidden_states"] is not None)
+            or ("return_dict" in kwargs and kwargs["return_dict"] is not None)
+        ):
+            logger.warn(
+                "Cannot update the boolean parameters behavior in graph mode and the return_dict parameter is always True in that mode."
+            )
+
+        final_booleans["output_attentions"] = config.output_attentions
+        final_booleans["output_hidden_states"] = config.output_hidden_states
+
+        if "return_dict" in kwargs:
+            final_booleans["return_dict"] = True
+
+        if "use_cache" in kwargs:
+            final_booleans["use_cache"] = config.use_cache
+
+    return final_booleans
+
+
+def input_processing(func, config, input_ids, **kwargs):
+    """
+    Process the input of each TensorFlow model including the booleans.
+
+    Args:
+        func (:obj:`callable`):
+            The callable function of the TensorFlow model.
+        config (:class:`~transformers.PretrainedConfig`):
+            The config of the running model.
+        **kwargs:
+            The inputs of the model.
+
+    Returns:
+        Two lists, one for the missing layers, and another one for the unexpected layers.
+    """
     signature = dict(inspect.signature(func).parameters)
     signature.pop("kwargs", None)
     parameter_names = list(signature.keys())
     output = {}
     allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict)
+    boolean_properties = ["return_dict", "output_attentions", "output_hidden_states", "use_cache"]
 
     if "inputs" in kwargs["kwargs_call"]:
         warnings.warn(
@@ -319,6 +390,11 @@ def input_processing(func, input_ids, **kwargs):
         for k, v in dict(input_ids).items():
             if not isinstance(v, allowed_types):
                 raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
+            elif k not in parameter_names:
+                logger.warn(
+                    f"The parameter {k} does not belongs to the parameter list {parameter_names} and will be ignored."
+                )
+                continue
             else:
                 output[k] = v
     else:
@@ -347,6 +423,15 @@ def input_processing(func, input_ids, **kwargs):
 
     if "kwargs" in output:
         del output["kwargs"]
+
+    boolean_dict = {k: v for k, v in output.items() if k in boolean_properties}
+
+    output.update(
+        booleans_processing(
+            config=config,
+            **boolean_dict,
+        )
+    )
 
     return output
 
