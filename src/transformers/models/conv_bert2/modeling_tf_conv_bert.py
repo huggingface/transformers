@@ -44,13 +44,13 @@ _CONFIG_FOR_DOC = "ConvBertConfig"
 _TOKENIZER_FOR_DOC = "ElectraTokenizer"
 
 TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/electra-small-generator",
-    "google/electra-base-generator",
-    "google/electra-large-generator",
-    "google/electra-small-discriminator",
-    "google/electra-base-discriminator",
-    "google/electra-large-discriminator",
-    # See all ELECTRA models at https://huggingface.co/models?filter=electra
+    "google/conv-bert-small-generator",
+    "google/conv-bert-base-generator",
+    "google/conv-bert-large-generator",
+    "google/conv-bert-small-discriminator",
+    "google/conv-bert-base-discriminator",
+    "google/conv-bert-large-discriminator",
+    # See all ELECTRA models at https://huggingface.co/models?filter=conv_bert
 ]
 
 
@@ -100,7 +100,7 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         )
 
         self.conv_kernel_layer = tf.keras.layers.Dense(
-            self.all_head_size,
+            self.num_attention_heads * self.conv_kernel_size,
             activation=None,
             name="conv_attn_kernel",
             kernel_initializer=get_initializer(config.initializer_range),
@@ -120,8 +120,8 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
     def reshape_for_conv(self, x, batch_size):
-        output_tensor = tf.reshape(x, [batch_size, -1, self.all_head_size])
-        return output_tensor
+        x = tf.reshape(x, [batch_size, -1, self.head_ratio * self.all_head_size])
+        return x
 
     def call(self, hidden_states, attention_mask, head_mask, output_attentions, training=False):
         batch_size = shape_list(hidden_states)[0]
@@ -129,16 +129,18 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         mixed_key_layer = self.key(hidden_states)
         mixed_value_layer = self.value(hidden_states)
         mixed_key_conv_attn_layer = self.key_conv_attn_layer(self.reshape_for_conv(hidden_states, batch_size))
+
         query_layer = self.transpose_for_scores(mixed_query_layer, batch_size)
         key_layer = self.transpose_for_scores(mixed_key_layer, batch_size)
-        value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
+
+        # TODO: remove after testing
+        # value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
 
         width = mixed_key_conv_attn_layer.shape[-1]
         mixed_key_conv_attn_layer = tf.reshape(mixed_key_conv_attn_layer, [-1, width])
         conv_attn_layer = tf.multiply(mixed_key_conv_attn_layer, mixed_query_layer)
 
         conv_kernel_layer = self.conv_kernel_layer(conv_attn_layer)
-        print(conv_kernel_layer.shape)
         conv_kernel_layer = tf.reshape(conv_kernel_layer, [-1, self.conv_kernel_size, 1])
         conv_kernel_layer = tf.nn.softmax(conv_kernel_layer, axis=1)
 
@@ -155,14 +157,15 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         conv_out_layer = self.conv_out_layer(hidden_states)
         conv_out_layer = tf.reshape(conv_out_layer, [batch_size, -1, self.all_head_size])
         conv_out_layer = tf.pad(conv_out_layer, paddings, "CONSTANT")
-        unfold_conv_out_layer = tf.stack(
-            [
-                tf.slice(conv_out_layer, [0, i, 0], [batch_size, -1, self.all_head_size])
-                for i in range(conv_kernel_size)
-            ],
-            -1,
-        )
+
+        slices = [
+            tf.slice(conv_out_layer, [0, i, 0], [batch_size, -1, self.all_head_size])
+            for i in range(self.conv_kernel_size)
+        ]
+
+        unfold_conv_out_layer = tf.stack(slices, axis=-1)
         conv_out_layer = tf.reshape(unfold_conv_out_layer, [-1, self.attention_head_size, self.conv_kernel_size])
+
         conv_out_layer = tf.matmul(conv_out_layer, conv_kernel_layer)
         conv_out_layer = tf.reshape(conv_out_layer, [-1, self.all_head_size])
 
@@ -188,6 +191,9 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
+        value_layer = tf.reshape(value_layer, [batch_size, -1, self.num_attention_heads, self.attention_head_size])
+        value_layer = tf.transpose(value_layer, [0, 2, 1, 3])
+
         context_layer = tf.matmul(attention_probs, value_layer)
         context_layer = tf.transpose(context_layer, perm=[0, 2, 1, 3])
 
@@ -195,7 +201,7 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
 
         context_layer = tf.concat([context_layer, conv_out], 2)
         context_layer = tf.reshape(
-            context_layer, (batch_size, -1, 2 * self.all_head_size)
+            context_layer, (batch_size, -1, self.head_ratio * self.all_head_size)
         )  # (batch_size, seq_len_q, all_head_size)
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
@@ -274,6 +280,7 @@ class TFConvBertIntermediate(tf.keras.layers.Layer):
                 config.intermediate_size,
                 num_groups=config.num_groups,
                 kernel_initializer=get_initializer(config.initializer_range),
+                name="dense",
             )
 
         if isinstance(config.hidden_act, str):
@@ -302,6 +309,7 @@ class TFConvBertOutput(tf.keras.layers.Layer):
                 config.intermediate_size,
                 num_groups=config.num_groups,
                 kernel_initializer=get_initializer(config.initializer_range),
+                name="dense",
             )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
@@ -560,7 +568,7 @@ class TFConvBertPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = ConvBertConfig
-    base_model_prefix = "electra"
+    base_model_prefix = "conv_bert"
 
 
 @keras_serializable
@@ -825,17 +833,17 @@ class TFConvBertModel(TFConvBertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.electra = TFConvBertMainLayer(config, name="electra")
+        self.conv_bert = TFConvBertMainLayer(config, name="conv_bert")
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/electra-small-discriminator",
+        checkpoint="google/conv-bert-small-discriminator",
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(self, inputs, **kwargs):
-        outputs = self.electra(inputs, **kwargs)
+        outputs = self.conv_bert(inputs, **kwargs)
 
         return outputs
 
@@ -854,7 +862,7 @@ class TFConvBertForPreTraining(TFConvBertPreTrainedModel):
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
 
-        self.electra = TFConvBertMainLayer(config, name="electra")
+        self.conv_bert = TFConvBertMainLayer(config, name="conv_bert")
         self.discriminator_predictions = TFConvBertDiscriminatorPredictions(config, name="discriminator_predictions")
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -881,13 +889,13 @@ class TFConvBertForPreTraining(TFConvBertPreTrainedModel):
             >>> import tensorflow as tf
             >>> from transformers import ElectraTokenizer, TFConvBertForPreTraining
 
-            >>> tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
-            >>> model = TFConvBertForPreTraining.from_pretrained('google/electra-small-discriminator')
+            >>> tokenizer = ElectraTokenizer.from_pretrained('google/conv-bert-small-discriminator')
+            >>> model = TFConvBertForPreTraining.from_pretrained('google/conv-bert-small-discriminator')
             >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
             >>> outputs = model(input_ids)
             >>> scores = outputs[0]
         """
-        return_dict = return_dict if return_dict is not None else self.electra.config.return_dict
+        return_dict = return_dict if return_dict is not None else self.conv_bert.config.return_dict
 
         if inputs is None and "input_ids" in kwargs and isinstance(kwargs["input_ids"], (dict, BatchEncoding)):
             warnings.warn(
@@ -895,7 +903,7 @@ class TFConvBertForPreTraining(TFConvBertPreTrainedModel):
             )
             inputs = kwargs["input_ids"]
 
-        discriminator_hidden_states = self.electra(
+        discriminator_hidden_states = self.conv_bert(
             inputs,
             attention_mask,
             token_type_ids,
@@ -953,7 +961,7 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
         super().__init__(config, **kwargs)
 
         self.vocab_size = config.vocab_size
-        self.electra = TFConvBertMainLayer(config, name="electra")
+        self.conv_bert = TFConvBertMainLayer(config, name="conv_bert")
         self.generator_predictions = TFConvBertGeneratorPredictions(config, name="generator_predictions")
 
         if isinstance(config.hidden_act, str):
@@ -961,7 +969,7 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
         else:
             self.activation = config.hidden_act
 
-        self.generator_lm_head = TFConvBertMaskedLMHead(config, self.electra.embeddings, name="generator_lm_head")
+        self.generator_lm_head = TFConvBertMaskedLMHead(config, self.conv_bert.embeddings, name="generator_lm_head")
 
     def get_output_embeddings(self):
         return self.generator_lm_head
@@ -969,7 +977,7 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/electra-small-generator",
+        checkpoint="google/conv-bert-small-generator",
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -994,7 +1002,7 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
             config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
         """
-        return_dict = return_dict if return_dict is not None else self.electra.config.return_dict
+        return_dict = return_dict if return_dict is not None else self.conv_bert.config.return_dict
 
         if inputs is None and "input_ids" in kwargs and isinstance(kwargs["input_ids"], (dict, BatchEncoding)):
             warnings.warn(
@@ -1010,7 +1018,7 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
         elif isinstance(inputs, (dict, BatchEncoding)):
             labels = inputs.pop("labels", labels)
 
-        generator_hidden_states = self.electra(
+        generator_hidden_states = self.conv_bert(
             inputs,
             attention_mask,
             token_type_ids,
@@ -1076,13 +1084,13 @@ class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceC
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
-        self.electra = TFConvBertMainLayer(config, name="electra")
+        self.conv_bert = TFConvBertMainLayer(config, name="conv_bert")
         self.classifier = TFConvBertClassificationHead(config, name="classifier")
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/electra-small-discriminator",
+        checkpoint="google/conv-bert-small-discriminator",
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1107,7 +1115,7 @@ class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceC
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.electra.config.return_dict
+        return_dict = return_dict if return_dict is not None else self.conv_bert.config.return_dict
 
         if inputs is None and "input_ids" in kwargs and isinstance(kwargs["input_ids"], (dict, BatchEncoding)):
             warnings.warn(
@@ -1123,7 +1131,7 @@ class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceC
         elif isinstance(inputs, (dict, BatchEncoding)):
             labels = inputs.pop("labels", labels)
 
-        outputs = self.electra(
+        outputs = self.conv_bert(
             inputs,
             attention_mask,
             token_type_ids,
@@ -1162,7 +1170,7 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.electra = TFConvBertMainLayer(config, name="electra")
+        self.conv_bert = TFConvBertMainLayer(config, name="conv_bert")
         self.sequence_summary = TFSequenceSummary(
             config, initializer_range=config.initializer_range, name="sequence_summary"
         )
@@ -1183,7 +1191,7 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/electra-small-discriminator",
+        checkpoint="google/conv-bert-small-discriminator",
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1234,7 +1242,7 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
         else:
             input_ids = inputs
 
-        return_dict = return_dict if return_dict is not None else self.electra.config.return_dict
+        return_dict = return_dict if return_dict is not None else self.conv_bert.config.return_dict
 
         if input_ids is not None:
             num_choices = shape_list(input_ids)[1]
@@ -1252,7 +1260,7 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
             if inputs_embeds is not None
             else None
         )
-        outputs = self.electra(
+        outputs = self.conv_bert(
             flat_input_ids,
             flat_attention_mask,
             flat_token_type_ids,
@@ -1294,7 +1302,7 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
 
-        self.electra = TFConvBertMainLayer(config, name="electra")
+        self.conv_bert = TFConvBertMainLayer(config, name="conv_bert")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
@@ -1303,7 +1311,7 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/electra-small-discriminator",
+        checkpoint="google/conv-bert-small-discriminator",
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1326,7 +1334,7 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
             Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
             1]``.
         """
-        return_dict = return_dict if return_dict is not None else self.electra.config.return_dict
+        return_dict = return_dict if return_dict is not None else self.conv_bert.config.return_dict
 
         if isinstance(inputs, (tuple, list)):
             labels = inputs[9] if len(inputs) > 9 else labels
@@ -1336,7 +1344,7 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
         elif isinstance(inputs, (dict, BatchEncoding)):
             labels = inputs.pop("labels", labels)
 
-        discriminator_hidden_states = self.electra(
+        discriminator_hidden_states = self.conv_bert(
             inputs,
             attention_mask,
             token_type_ids,
@@ -1378,7 +1386,7 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.electra = TFConvBertMainLayer(config, name="electra")
+        self.conv_bert = TFConvBertMainLayer(config, name="conv_bert")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
@@ -1386,7 +1394,7 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/electra-small-discriminator",
+        checkpoint="google/conv-bert-small-discriminator",
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1415,7 +1423,7 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
             Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.electra.config.return_dict
+        return_dict = return_dict if return_dict is not None else self.conv_bert.config.return_dict
 
         if isinstance(inputs, (tuple, list)):
             start_positions = inputs[9] if len(inputs) > 9 else start_positions
@@ -1427,7 +1435,7 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
             start_positions = inputs.pop("start_positions", start_positions)
             end_positions = inputs.pop("end_positions", start_positions)
 
-        discriminator_hidden_states = self.electra(
+        discriminator_hidden_states = self.conv_bert(
             inputs,
             attention_mask,
             token_type_ids,

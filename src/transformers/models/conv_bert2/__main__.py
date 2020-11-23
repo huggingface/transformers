@@ -6,15 +6,16 @@ import tensorflow as tf
 
 
 if __name__ == "__main__":
-    conf = ConvBertConfig.from_json_file("/home/abhishek/huggingface/models/convbert/config.json")
-    #
+    conf = ConvBertConfig.from_pretrained("/home/abhishek/huggingface/models/convbert/config.json")
+    print(conf)
     # ei = ElectraModel(conf)
     # x = torch.randint(0, 100, (4, 64))
     # print(ei(input_ids=x))
-    tokenizer = ConvBertTokenizer.from_pretrained("google/electra-small-discriminator")
-    model = TFConvBertModel(conf)
+    tokenizer = ConvBertTokenizer.from_pretrained("/home/abhishek/huggingface/models/convbert/")
+    model = TFConvBertModel.from_config(conf)
 
-    inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
+    inputs = tokenizer("Hello, my dog is a very cute dog", return_tensors="tf")
+    print(inputs)
     outputs = model(inputs)
 
     last_hidden_states = outputs.last_hidden_states
