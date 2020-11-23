@@ -114,7 +114,7 @@ class XLNetConfig(PretrainedConfig):
             Whether or not the model should make use of the recurrent memory mechanism in train mode.
 
             .. note::
-                For pre-training, it is recommended to set ``use_mems_train`` to :obj:`True`. For fine-tuning, it is
+                For pretraining, it is recommended to set ``use_mems_train`` to :obj:`True`. For fine-tuning, it is
                 recommended to set ``use_mems_train`` to :obj:`False` as discussed `here
                 <https://github.com/zihangdai/xlnet/issues/41#issuecomment-505102587>`__. If ``use_mems_train`` is set
                 to :obj:`True`, one has to make sure that the train batches are correctly pre-processed, `e.g.`

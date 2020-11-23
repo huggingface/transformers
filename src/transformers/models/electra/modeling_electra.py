@@ -867,7 +867,7 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Electra model with a binary classification head on top as used during pre-training for identifying generated
+    Electra model with a binary classification head on top as used during pretraining for identifying generated
     tokens.
 
     It is recommended to load the discriminator checkpoint into that model.

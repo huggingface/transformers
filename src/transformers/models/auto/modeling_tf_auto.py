@@ -213,7 +213,7 @@ TF_MODEL_MAPPING = OrderedDict(
 
 TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
-        # Model for pre-training mapping
+        # Model for pretraining mapping
         (LxmertConfig, TFLxmertForPreTraining),
         (T5Config, TFT5ForConditionalGeneration),
         (DistilBertConfig, TFDistilBertForMaskedLM),

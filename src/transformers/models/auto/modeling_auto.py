@@ -272,7 +272,7 @@ MODEL_MAPPING = OrderedDict(
 
 MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
     [
-        # Model for pre-training mapping
+        # Model for pretraining mapping
         (LayoutLMConfig, LayoutLMForMaskedLM),
         (RetriBertConfig, RetriBertModel),
         (T5Config, T5ForConditionalGeneration),
