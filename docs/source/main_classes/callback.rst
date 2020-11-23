@@ -44,6 +44,8 @@ Here is the list of the available :class:`~transformers.TrainerCallback` in the 
 
 .. autoclass:: transformers.ProgressCallback
 
+.. autoclass:: transformers.EarlyStoppingCallback
+
 .. autoclass:: transformers.integrations.TensorBoardCallback
 
 .. autoclass:: transformers.integrations.WandbCallback
