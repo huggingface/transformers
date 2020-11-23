@@ -76,8 +76,8 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         self.num_attention_heads = num_attention_heads
         self.conv_kernel_size = config.conv_kernel_size
 
-        assert config.hidden_size % num_attention_heads == 0
-        self.attention_head_size = int(config.hidden_size / num_attention_heads)
+        assert config.hidden_size % self.num_attention_heads == 0
+        self.attention_head_size = int(config.hidden_size / self.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.query = tf.keras.layers.Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"

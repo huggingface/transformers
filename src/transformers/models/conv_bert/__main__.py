@@ -12,10 +12,10 @@ if __name__ == "__main__":
     # x = torch.randint(0, 100, (4, 64))
     # print(ei(input_ids=x))
     tokenizer = ConvBertTokenizer.from_pretrained("/home/abhishek/huggingface/models/convbert/")
-    model = TFConvBertModel.from_config(conf)
+    model = TFConvBertModel(conf)
 
     inputs = tokenizer("Hello, my dog is a very cute dog", return_tensors="tf")
     print(inputs)
     outputs = model(inputs)
 
-    last_hidden_states = outputs.last_hidden_states
+    last_hidden_states = outputs.last_hidden_state
