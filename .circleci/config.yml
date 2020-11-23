@@ -221,7 +221,7 @@ jobs:
     run_tests_custom_tokenizers:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         environment:
             RUN_CUSTOM_TOKENIZERS: yes
         steps:
