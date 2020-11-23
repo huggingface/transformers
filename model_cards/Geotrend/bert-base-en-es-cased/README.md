@@ -29,6 +29,8 @@ model = AutoModel.from_pretrained("Geotrend/bert-base-en-es-cased")
 
 ```
 
+To generate other smaller versions of multilingual transformers please visit [our Github repo](https://github.com/Geotrend-research/smaller-transformers).
+
 ### How to cite
 
 ```bibtex
