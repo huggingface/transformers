@@ -16,8 +16,6 @@ from pytorch_lightning.cluster_environments import TorchElasticEnvironment
 
 import torch
 import torch.distributed as dist
-from pytorch_lightning.accelerators.ddp_accelerator import DDPAccelerator
-from pytorch_lightning.cluster_environments import TorchElasticEnvironment
 from torch.utils.data import DataLoader
 
 from transformers.file_utils import is_ray_available

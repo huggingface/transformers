@@ -29,7 +29,7 @@ class RagFinetuneExampleTests(TestCasePlus):
                 with open(os.path.join(data_dir, f"{split}.{field}"), "w") as f:
                     f.write(content)
 
-    def _run_finetune(self, gpus: int):
+    def _run_finetune(self, gpus: int, distributed_retriever: str):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
@@ -66,6 +66,7 @@ class RagFinetuneExampleTests(TestCasePlus):
                 --gradient_accumulation_steps 1 \
                 --distributed-port 8787 \
                 --use_dummy_dataset 1 \
+                --distributed_retriever {distributed_retriever} \
             """.split()
 
         if gpus > 0:
@@ -87,10 +88,12 @@ class RagFinetuneExampleTests(TestCasePlus):
 
     @require_torch_gpu
     def test_finetune_gpu(self):
-        result = self._run_finetune(gpus=1)
-        self.assertGreaterEqual(result["test"][0]["test_avg_em"], 0.2)
+        for distributed_retriever in ["pytorch", "ray"]:
+            result = self._run_finetune(gpus=1, distributed_retriever=distributed_retriever)
+            self.assertGreaterEqual(result["test"][0]["test_avg_em"], 0.2)
 
     @require_torch_multi_gpu
     def test_finetune_multigpu(self):
-        result = self._run_finetune(gpus=2)
-        self.assertGreaterEqual(result["test"][0]["test_avg_em"], 0.2)
+        for distributed_retriever in ["pytorch", "ray"]:
+            result = self._run_finetune(gpus=2, distributed_retriever=distributed_retriever)
+            self.assertGreaterEqual(result["test"][0]["test_avg_em"], 0.2)
