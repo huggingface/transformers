@@ -20,7 +20,7 @@ Fixes # (issue)
 - [ ] Did you read the [contributor guideline](https://github.com/huggingface/transformers/blob/master/CONTRIBUTING.md#start-contributing-pull-requests),
       Pull Request section?
 - [ ] Was this discussed/approved via a Github issue or the [forum](https://discuss.huggingface.co/)? Please add a link
-      to the it if that's the case.
+      to it if that's the case.
 - [ ] Did you make sure to update the documentation with your changes? Here are the
       [documentation guidelines](https://github.com/huggingface/transformers/tree/master/docs), and
       [here are tips on formatting docstrings](https://github.com/huggingface/transformers/tree/master/docs#writing-source-documentation).

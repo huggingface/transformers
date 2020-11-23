@@ -83,7 +83,7 @@ class AutoTokenizerTest(unittest.TestCase):
             else:
                 self.assertEqual(tokenizer.do_lower_case, False)
 
-            self.assertEqual(tokenizer.max_len, 512)
+            self.assertEqual(tokenizer.model_max_length, 512)
 
     @require_tokenizers
     def test_tokenizer_identifier_non_existent(self):

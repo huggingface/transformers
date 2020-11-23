@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "4.0.0-dev"
+__version__ = "4.0.0-rc-1"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -253,6 +253,7 @@ else:
 # Trainer
 from .trainer_callback import (
     DefaultFlowCallback,
+    EarlyStoppingCallback,
     PrinterCallback,
     ProgressCallback,
     TrainerCallback,
@@ -766,7 +767,10 @@ if is_tf_available():
     from .models.longformer import (
         TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFLongformerForMaskedLM,
+        TFLongformerForMultipleChoice,
         TFLongformerForQuestionAnswering,
+        TFLongformerForSequenceClassification,
+        TFLongformerForTokenClassification,
         TFLongformerModel,
         TFLongformerSelfAttention,
     )
@@ -883,7 +887,7 @@ else:
 
 if not is_tf_available() and not is_torch_available():
     logger.warning(
-        "Neither PyTorch nor TensorFlow >= 2.0 have been found."
-        "Models won't be available and only tokenizers, configuration"
+        "Neither PyTorch nor TensorFlow >= 2.0 have been found. "
+        "Models won't be available and only tokenizers, configuration "
         "and file/data utilities can be used."
     )

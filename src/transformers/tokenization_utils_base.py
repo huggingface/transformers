@@ -53,6 +53,15 @@ if is_torch_available():
 if is_flax_available():
     import jax.numpy as jnp
 
+
+def _is_numpy(x):
+    return isinstance(x, np.ndarray)
+
+
+def _is_jax(x):
+    return isinstance(x, jnp.ndarray)
+
+
 if is_tokenizers_available():
     from tokenizers import AddedToken
     from tokenizers import Encoding as EncodingFast
@@ -705,16 +714,20 @@ class BatchEncoding(UserDict):
                     "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
                 )
             as_tensor = tf.constant
+            is_tensor = tf.is_tensor
         elif tensor_type == TensorType.PYTORCH:
             if not is_torch_available():
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             as_tensor = torch.tensor
+            is_tensor = torch.is_tensor
         elif tensor_type == TensorType.JAX:
             if not is_flax_available():
                 raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
             as_tensor = jnp.array
+            is_tensor = _is_jax
         else:
             as_tensor = np.asarray
+            is_tensor = _is_numpy
         # (mfuntowicz: This code is unreachable)
         # else:
         #     raise ImportError(
@@ -727,16 +740,17 @@ class BatchEncoding(UserDict):
                 if prepend_batch_axis:
                     value = [value]
 
-                tensor = as_tensor(value)
+                if not is_tensor(value):
+                    tensor = as_tensor(value)
 
-                # Removing this for now in favor of controlling the shape with `prepend_batch_axis`
-                # # at-least2d
-                # if tensor.ndim > 2:
-                #     tensor = tensor.squeeze(0)
-                # elif tensor.ndim < 2:
-                #     tensor = tensor[None, :]
+                    # Removing this for now in favor of controlling the shape with `prepend_batch_axis`
+                    # # at-least2d
+                    # if tensor.ndim > 2:
+                    #     tensor = tensor.squeeze(0)
+                    # elif tensor.ndim < 2:
+                    #     tensor = tensor[None, :]
 
-                self[key] = tensor
+                    self[key] = tensor
             except:  # noqa E722
                 if key == "overflowing_tokens":
                     raise ValueError(
@@ -1455,7 +1469,7 @@ PREPARE_SEQ2SEQ_BATCH_DOCSTRING = """
                   maximum acceptable input length for the model if that argument is not provided.
                 * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
                   different lengths).
-            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`, defaults to "pt"):
+            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
@@ -1531,18 +1545,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         )  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
 
         super().__init__(**kwargs)
-
-    @property
-    def max_len(self) -> int:
-        """
-        :obj:`int`: **Deprecated** Kept here for backward compatibility. Now renamed to :obj:`model_max_length` to
-        avoid ambiguity.
-        """
-        warnings.warn(
-            "The `max_len` attribute has been deprecated and will be removed in a future version, use `model_max_length` instead.",
-            FutureWarning,
-        )
-        return self.model_max_length
 
     @property
     def max_len_single_sentence(self) -> int:
@@ -2784,15 +2786,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 Tokenized input ids of the second sequence. Can be obtained from a string by chaining the ``tokenize``
                 and ``convert_tokens_to_ids`` methods.
         """
-
-        if "return_lengths" in kwargs:
-            if verbose:
-                warnings.warn(
-                    "The PreTrainedTokenizerBase.prepare_for_model `return_lengths` parameter is deprecated. "
-                    "Please use `return_length` instead.",
-                    FutureWarning,
-                )
-            return_length = kwargs["return_lengths"]
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(

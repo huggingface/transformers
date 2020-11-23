@@ -141,4 +141,5 @@ class PegasusConfig(BartConfig):
     """
 
     model_type = "pegasus"
+    keys_to_ignore_at_inference = ["past_key_values"]
     # The implementation of the config object is in BartConfig

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
+import tempfile
 import unittest
 
 from transformers import is_tf_available
@@ -124,8 +123,6 @@ class TFDPRModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            # MODIFY
-            return_dict=False,
         )
         config = DPRConfig(projection_dim=self.projection_dim, **config.to_dict())
 
@@ -137,7 +134,7 @@ class TFDPRModelTester:
         model = TFDPRContextEncoder(config=config)
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids, return_dict=True)  # MODIFY
+        result = model(input_ids)
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.projection_dim or self.hidden_size))
 
     def create_and_check_dpr_question_encoder(
@@ -146,14 +143,14 @@ class TFDPRModelTester:
         model = TFDPRQuestionEncoder(config=config)
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids, return_dict=True)  # MODIFY
+        result = model(input_ids)
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.projection_dim or self.hidden_size))
 
     def create_and_check_dpr_reader(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFDPRReader(config=config)
-        result = model(input_ids, attention_mask=input_mask, return_dict=True)  # MODIFY
+        result = model(input_ids, attention_mask=input_mask)
 
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
@@ -214,27 +211,61 @@ class TFDPRModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFDPRContextEncoder.from_pretrained(model_name, from_pt=True)
+            model = TFDPRContextEncoder.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
         for model_name in TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFDPRContextEncoder.from_pretrained(model_name, from_pt=True)
+            model = TFDPRContextEncoder.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
         for model_name in TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFDPRQuestionEncoder.from_pretrained(model_name, from_pt=True)
+            model = TFDPRQuestionEncoder.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
         for model_name in TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFDPRReader.from_pretrained(model_name, from_pt=True)
+            model = TFDPRReader.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @slow
+    def test_saved_model_with_attentions_output(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_attentions = True
+
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+
+        for model_class in self.all_model_classes:
+            print(model_class)
+            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+            num_out = len(model(class_inputs_dict))
+            model._saved_model_inputs_spec = None
+            model._set_save_spec(class_inputs_dict)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                tf.saved_model.save(model, tmpdirname)
+                model = tf.keras.models.load_model(tmpdirname)
+                outputs = model(class_inputs_dict)
+
+                if self.is_encoder_decoder:
+                    output = outputs["encoder_attentions"] if isinstance(outputs, dict) else outputs[-1]
+                else:
+                    output = outputs["attentions"] if isinstance(outputs, dict) else outputs[-1]
+
+                attentions = [t.numpy() for t in output]
+                self.assertEqual(len(outputs), num_out)
+                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                )
 
 
 @require_tf
 class TFDPRModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        model = TFDPRQuestionEncoder.from_pretrained("facebook/dpr-question_encoder-single-nq-base", return_dict=False)
+        model = TFDPRQuestionEncoder.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
 
         input_ids = tf.constant(
             [[101, 7592, 1010, 2003, 2026, 3899, 10140, 1029, 102]]

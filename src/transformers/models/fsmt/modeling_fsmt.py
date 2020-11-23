@@ -29,7 +29,6 @@
 
 import math
 import random
-import warnings
 from typing import Any, Dict, List, Optional, Tuple
 
 import torch
@@ -618,7 +617,6 @@ class FSMTDecoder(nn.Module):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
-        **unused,
     ):
         """
         Includes several features from "Jointly Learning to Align and Translate with Transformer Models" (Garg et al.,
@@ -640,19 +638,6 @@ class FSMTDecoder(nn.Module):
                 - hidden states
                 - attentions
         """
-        if "decoder_cached_states" in unused:
-            warnings.warn(
-                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = unused.pop("decoder_cached_states")
-        if "decoder_past_key_values" in unused:
-            warnings.warn(
-                "The `decoder_past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = unused.pop("decoder_past_key_values")
-
         # check attention mask and invert
         if encoder_padding_mask is not None:
             encoder_padding_mask = invert_mask(encoder_padding_mask)
@@ -933,15 +918,7 @@ class FSMTModel(PretrainedFSMTModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs,
     ):
-        if "decoder_past_key_values" in kwargs:
-            warnings.warn(
-                "The `decoder_past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = kwargs.pop("decoder_past_key_values")
-
         if decoder_input_ids is None:
             use_cache = False
 
@@ -974,7 +951,7 @@ class FSMTModel(PretrainedFSMTModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOuput when return_dict=False
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=False
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
@@ -1028,11 +1005,11 @@ class FSMTModel(PretrainedFSMTModel):
 )
 class FSMTForConditionalGeneration(PretrainedFSMTModel):
     base_model_prefix = "model"
-    authorized_missing_keys = [
+    _keys_to_ignore_on_load_missing = [
         "model.encoder.embed_positions.weight",
         "model.decoder.embed_positions.weight",
     ]
-    keys_to_never_save = [
+    _keys_to_ignore_on_save = [
         "model.encoder.embed_positions.weight",
         "model.decoder.embed_positions.weight",
     ]
@@ -1071,7 +1048,6 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **unused,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
