@@ -47,26 +47,26 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
-from .configuration_electra import ElectraConfig
+from .configuration_conv_bert import ConvBertConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "ElectraConfig"
-_TOKENIZER_FOR_DOC = "ElectraTokenizer"
+_CONFIG_FOR_DOC = "ConvBertConfig"
+_TOKENIZER_FOR_DOC = "ConvBertTokenizer"
 
-ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/electra-small-generator",
-    "google/electra-base-generator",
-    "google/electra-large-generator",
-    "google/electra-small-discriminator",
-    "google/electra-base-discriminator",
-    "google/electra-large-discriminator",
-    # See all ELECTRA models at https://huggingface.co/models?filter=electra
+CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "google/conv_bert-small-generator",
+    "google/conv_bert-base-generator",
+    "google/conv_bert-large-generator",
+    "google/conv_bert-small-discriminator",
+    "google/conv_bert-base-discriminator",
+    "google/conv_bert-large-discriminator",
+    # See all ELECTRA models at https://huggingface.co/models?filter=conv_bert
 ]
 
 
-def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_or_generator="discriminator"):
+def load_tf_weights_in_conv_bert(model, config, tf_checkpoint_path, discriminator_or_generator="discriminator"):
     """Load tf checkpoints in a pytorch model."""
     try:
         import re
@@ -94,12 +94,12 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_
         original_name: str = name
 
         try:
-            if isinstance(model, ElectraForMaskedLM):
-                name = name.replace("electra/embeddings/", "generator/embeddings/")
+            if isinstance(model, ConvBertForMaskedLM):
+                name = name.replace("conv_bert/embeddings/", "generator/embeddings/")
 
             if discriminator_or_generator == "generator":
-                name = name.replace("electra/", "discriminator/")
-                name = name.replace("generator/", "electra/")
+                name = name.replace("conv_bert/", "discriminator/")
+                name = name.replace("generator/", "conv_bert/")
 
             name = name.replace("dense_1", "dense_prediction")
             name = name.replace("generator_predictions/output_bias", "generator_lm_head/bias")
@@ -167,7 +167,7 @@ class GroupedLinear(nn.Module):
         return outputs
 
 
-class ElectraEmbeddings(nn.Module):
+class ConvBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
@@ -210,8 +210,8 @@ class ElectraEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Electra
-class ElectraSelfAttention(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->ConvBert
+class ConvBertSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -265,7 +265,7 @@ class ElectraSelfAttention(nn.Module):
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in ElectraModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in ConvBertModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -290,7 +290,7 @@ class ElectraSelfAttention(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput
-class ElectraSelfOutput(nn.Module):
+class ConvBertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -304,12 +304,12 @@ class ElectraSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Electra
-class ElectraAttention(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->ConvBert
+class ConvBertAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.self = ElectraSelfAttention(config)
-        self.output = ElectraSelfOutput(config)
+        self.self = ConvBertSelfAttention(config)
+        self.output = ConvBertSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -353,7 +353,7 @@ class ElectraAttention(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate
-class ElectraIntermediate(nn.Module):
+class ConvBertIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = GroupedLinear(config.hidden_size, config.intermediate_size, config.num_groups)
@@ -373,7 +373,7 @@ class ElectraIntermediate(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput
-class ElectraOutput(nn.Module):
+class ConvBertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -387,20 +387,20 @@ class ElectraOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Electra
-class ElectraLayer(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->ConvBert
+class ConvBertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = ElectraAttention(config)
+        self.attention = ConvBertAttention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
-            self.crossattention = ElectraAttention(config)
-        self.intermediate = ElectraIntermediate(config)
-        self.output = ElectraOutput(config)
+            self.crossattention = ConvBertAttention(config)
+        self.intermediate = ConvBertIntermediate(config)
+        self.output = ConvBertOutput(config)
 
     def forward(
         self,
@@ -447,12 +447,12 @@ class ElectraLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Electra
-class ElectraEncoder(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->ConvBert
+class ConvBertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([ElectraLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([ConvBertLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(
         self,
@@ -522,7 +522,7 @@ class ElectraEncoder(nn.Module):
         )
 
 
-class ElectraDiscriminatorPredictions(nn.Module):
+class ConvBertDiscriminatorPredictions(nn.Module):
     """Prediction module for the discriminator, made up of two dense layers."""
 
     def __init__(self, config):
@@ -540,7 +540,7 @@ class ElectraDiscriminatorPredictions(nn.Module):
         return logits
 
 
-class ElectraGeneratorPredictions(nn.Module):
+class ConvBertGeneratorPredictions(nn.Module):
     """Prediction module for the generator, made up of two dense layers."""
 
     def __init__(self, config):
@@ -557,17 +557,17 @@ class ElectraGeneratorPredictions(nn.Module):
         return hidden_states
 
 
-class ElectraPreTrainedModel(PreTrainedModel):
+class ConvBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ElectraConfig
-    load_tf_weights = load_tf_weights_in_electra
-    base_model_prefix = "electra"
+    config_class = ConvBertConfig
+    load_tf_weights = load_tf_weights_in_conv_bert
+    base_model_prefix = "conv_bert"
     authorized_missing_keys = [r"position_ids"]
-    authorized_unexpected_keys = [r"electra\.embeddings_project\.weight", r"electra\.embeddings_project\.bias"]
+    authorized_unexpected_keys = [r"conv_bert\.embeddings_project\.weight", r"conv_bert\.embeddings_project\.bias"]
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
@@ -584,9 +584,9 @@ class ElectraPreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-class ElectraForPreTrainingOutput(ModelOutput):
+class ConvBertForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.ElectraForPreTraining`.
+    Output type of :class:`~transformers.ConvBertForPreTraining`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
@@ -623,7 +623,7 @@ ELECTRA_START_DOCSTRING = r"""
     general usage and behavior.
 
     Parameters:
-        config (:class:`~transformers.ElectraConfig`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.ConvBertConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
             weights.
@@ -634,7 +634,7 @@ ELECTRA_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.ElectraTokenizer`. See
+            Indices can be obtained using :class:`~transformers.ConvBertTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -691,22 +691,22 @@ ELECTRA_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Electra Model transformer outputting raw hidden-states without any specific head on top. Identical to "
+    "The bare ConvBert Model transformer outputting raw hidden-states without any specific head on top. Identical to "
     "the BERT model except that it uses an additional linear layer between the embedding layer and the encoder if the "
     "hidden size and embedding size are different."
     ""
     "Both the generator and discriminator checkpoints may be loaded into this model.",
     ELECTRA_START_DOCSTRING,
 )
-class ElectraModel(ElectraPreTrainedModel):
+class ConvBertModel(ConvBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.embeddings = ElectraEmbeddings(config)
+        self.embeddings = ConvBertEmbeddings(config)
 
         if config.embedding_size != config.hidden_size:
             self.embeddings_project = nn.Linear(config.embedding_size, config.hidden_size)
 
-        self.encoder = ElectraEncoder(config)
+        self.encoder = ConvBertEncoder(config)
         self.config = config
         self.init_weights()
 
@@ -727,7 +727,7 @@ class ElectraModel(ElectraPreTrainedModel):
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/electra-small-discriminator",
+        checkpoint="google/conv_bert-small-discriminator",
         output_type=BaseModelOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -787,7 +787,7 @@ class ElectraModel(ElectraPreTrainedModel):
         return hidden_states
 
 
-class ElectraClassificationHead(nn.Module):
+class ConvBertClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config):
@@ -800,7 +800,7 @@ class ElectraClassificationHead(nn.Module):
         x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
         x = self.dropout(x)
         x = self.dense(x)
-        x = get_activation("gelu")(x)  # although BERT uses tanh here, it seems Electra authors used gelu here
+        x = get_activation("gelu")(x)  # although BERT uses tanh here, it seems ConvBert authors used gelu here
         x = self.dropout(x)
         x = self.out_proj(x)
         return x
@@ -813,19 +813,19 @@ class ElectraClassificationHead(nn.Module):
     """,
     ELECTRA_START_DOCSTRING,
 )
-class ElectraForSequenceClassification(ElectraPreTrainedModel):
+class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.electra = ElectraModel(config)
-        self.classifier = ElectraClassificationHead(config)
+        self.conv_bert = ConvBertModel(config)
+        self.classifier = ConvBertClassificationHead(config)
 
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/electra-small-discriminator",
+        checkpoint="google/conv_bert-small-discriminator",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -850,7 +850,7 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        discriminator_hidden_states = self.electra(
+        discriminator_hidden_states = self.conv_bert(
             input_ids,
             attention_mask,
             token_type_ids,
@@ -889,23 +889,23 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Electra model with a binary classification head on top as used during pre-training for identifying generated
+    ConvBert model with a binary classification head on top as used during pre-training for identifying generated
     tokens.
 
     It is recommended to load the discriminator checkpoint into that model.
     """,
     ELECTRA_START_DOCSTRING,
 )
-class ElectraForPreTraining(ElectraPreTrainedModel):
+class ConvBertForPreTraining(ConvBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.electra = ElectraModel(config)
-        self.discriminator_predictions = ElectraDiscriminatorPredictions(config)
+        self.conv_bert = ConvBertModel(config)
+        self.discriminator_predictions = ConvBertDiscriminatorPredictions(config)
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=ElectraForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=ConvBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -931,18 +931,18 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import ElectraTokenizer, ElectraForPreTraining
+            >>> from transformers import ConvBertTokenizer, ConvBertForPreTraining
             >>> import torch
 
-            >>> tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
-            >>> model = ElectraForPreTraining.from_pretrained('google/electra-small-discriminator')
+            >>> tokenizer = ConvBertTokenizer.from_pretrained('google/conv_bert-small-discriminator')
+            >>> model = ConvBertForPreTraining.from_pretrained('google/conv_bert-small-discriminator')
 
             >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
             >>> logits = model(input_ids).logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        discriminator_hidden_states = self.electra(
+        discriminator_hidden_states = self.conv_bert(
             input_ids,
             attention_mask,
             token_type_ids,
@@ -972,7 +972,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
             output = (logits,) + discriminator_hidden_states[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return ElectraForPreTrainingOutput(
+        return ConvBertForPreTrainingOutput(
             loss=loss,
             logits=logits,
             hidden_states=discriminator_hidden_states.hidden_states,
@@ -982,19 +982,19 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Electra model with a language modeling head on top.
+    ConvBert model with a language modeling head on top.
 
     Even though both the discriminator and generator may be loaded into this model, the generator is the only model of
     the two to have been trained for the masked language modeling task.
     """,
     ELECTRA_START_DOCSTRING,
 )
-class ElectraForMaskedLM(ElectraPreTrainedModel):
+class ConvBertForMaskedLM(ConvBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.electra = ElectraModel(config)
-        self.generator_predictions = ElectraGeneratorPredictions(config)
+        self.conv_bert = ConvBertModel(config)
+        self.generator_predictions = ConvBertGeneratorPredictions(config)
 
         self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size)
         self.init_weights()
@@ -1005,7 +1005,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/electra-small-discriminator",
+        checkpoint="google/conv_bert-small-discriminator",
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1030,7 +1030,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        generator_hidden_states = self.electra(
+        generator_hidden_states = self.conv_bert(
             input_ids,
             attention_mask,
             token_type_ids,
@@ -1066,17 +1066,17 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Electra model with a token classification head on top.
+    ConvBert model with a token classification head on top.
 
     Both the discriminator and generator may be loaded into this model.
     """,
     ELECTRA_START_DOCSTRING,
 )
-class ElectraForTokenClassification(ElectraPreTrainedModel):
+class ConvBertForTokenClassification(ConvBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.electra = ElectraModel(config)
+        self.conv_bert = ConvBertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
         self.init_weights()
@@ -1084,7 +1084,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/electra-small-discriminator",
+        checkpoint="google/conv_bert-small-discriminator",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1108,7 +1108,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        discriminator_hidden_states = self.electra(
+        discriminator_hidden_states = self.conv_bert(
             input_ids,
             attention_mask,
             token_type_ids,
@@ -1155,15 +1155,15 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
     """,
     ELECTRA_START_DOCSTRING,
 )
-class ElectraForQuestionAnswering(ElectraPreTrainedModel):
-    config_class = ElectraConfig
-    base_model_prefix = "electra"
+class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
+    config_class = ConvBertConfig
+    base_model_prefix = "conv_bert"
 
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.electra = ElectraModel(config)
+        self.conv_bert = ConvBertModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
@@ -1171,7 +1171,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/electra-small-discriminator",
+        checkpoint="google/conv_bert-small-discriminator",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1201,7 +1201,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        discriminator_hidden_states = self.electra(
+        discriminator_hidden_states = self.conv_bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1259,11 +1259,11 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
     """,
     ELECTRA_START_DOCSTRING,
 )
-class ElectraForMultipleChoice(ElectraPreTrainedModel):
+class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.electra = ElectraModel(config)
+        self.conv_bert = ConvBertModel(config)
         self.sequence_summary = SequenceSummary(config)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
@@ -1272,7 +1272,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/electra-small-discriminator",
+        checkpoint="google/conv_bert-small-discriminator",
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1308,7 +1308,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
             else None
         )
 
-        discriminator_hidden_states = self.electra(
+        discriminator_hidden_states = self.conv_bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,

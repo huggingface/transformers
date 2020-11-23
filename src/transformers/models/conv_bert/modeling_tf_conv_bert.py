@@ -35,12 +35,12 @@ from ...modeling_tf_utils import (
 )
 from ...tokenization_utils import BatchEncoding
 from ...utils import logging
-from .configuration_electra import ElectraConfig
+from .configuration_conv_bert import ConvBertConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "ElectraConfig"
+_CONFIG_FOR_DOC = "ConvBertConfig"
 _TOKENIZER_FOR_DOC = "ElectraTokenizer"
 
 TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -55,7 +55,7 @@ TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention
-class TFElectraSelfAttention(tf.keras.layers.Layer):
+class TFConvBertSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -106,9 +106,9 @@ class TFElectraSelfAttention(tf.keras.layers.Layer):
             kernel_initializer=get_initializer(config.initializer_range),
         )
 
-        self.conv_out_layer = tf.layers.Dense(
+        self.conv_out_layer = tf.keras.layers.Dense(
             self.all_head_size,
-            activation=value_act,
+            activation=None,
             name="conv_attn_point",
             kernel_initializer=get_initializer(config.initializer_range),
         )
@@ -120,7 +120,7 @@ class TFElectraSelfAttention(tf.keras.layers.Layer):
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
     def reshape_for_conv(self, x, batch_size):
-        output_tensor = tf.reshape(x, [batch_size, -1, self.num_attention_heads * self.head_size])
+        output_tensor = tf.reshape(x, [batch_size, -1, self.all_head_size])
         return output_tensor
 
     def call(self, hidden_states, attention_mask, head_mask, output_attentions, training=False):
@@ -133,12 +133,15 @@ class TFElectraSelfAttention(tf.keras.layers.Layer):
         key_layer = self.transpose_for_scores(mixed_key_layer, batch_size)
         value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
 
-        # TODO: @abhishek look at this
-        # mixed_key_conv_attn_layer = reshape_to_matrix(mixed_key_conv_attn_layer)
-        conv_attn_layer = tf.multiply(mixed_key_conv_attn_layer, query_layer)
+        width = mixed_key_conv_attn_layer.shape[-1]
+        mixed_key_conv_attn_layer = tf.reshape(mixed_key_conv_attn_layer, [-1, width])
+        conv_attn_layer = tf.multiply(mixed_key_conv_attn_layer, mixed_query_layer)
+
         conv_kernel_layer = self.conv_kernel_layer(conv_attn_layer)
+        print(conv_kernel_layer.shape)
         conv_kernel_layer = tf.reshape(conv_kernel_layer, [-1, self.conv_kernel_size, 1])
         conv_kernel_layer = tf.nn.softmax(conv_kernel_layer, axis=1)
+
         paddings = tf.constant(
             [
                 [
@@ -200,7 +203,7 @@ class TFElectraSelfAttention(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput
-class TFElectraSelfOutput(tf.keras.layers.Layer):
+class TFConvBertSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -219,12 +222,12 @@ class TFElectraSelfOutput(tf.keras.layers.Layer):
 
 
 # Copied from from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->Electra
-class TFElectraAttention(tf.keras.layers.Layer):
+class TFConvBertAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.self_attention = TFElectraSelfAttention(config, name="self")
-        self.dense_output = TFElectraSelfOutput(config, name="output")
+        self.self_attention = TFConvBertSelfAttention(config, name="self")
+        self.dense_output = TFConvBertSelfOutput(config, name="output")
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -239,14 +242,39 @@ class TFElectraAttention(tf.keras.layers.Layer):
         return outputs
 
 
+class GroupedLinearLayer(tf.keras.layers.Layer):
+    def __init__(self, intermediate_size, num_groups, kernel_initializer, **kwargs):
+        super().__init__(**kwargs)
+        self.intermediate_size = intermediate_size
+        self.num_groups = num_groups
+        self.len_group_out = self.intermediate_size // self.num_groups
+        self.group_output = tf.keras.layers.Dense(self.len_group_out, kernel_initializer=kernel_initializer)
+
+    def call(self, inputs):
+        shape = inputs.shape.as_list()
+        grouped_input_shape = shape[:-1] + [self.num_groups, -1]
+        inputs = tf.transpose(tf.reshape(inputs, grouped_input_shape), [1, 0, 2])
+
+        outputs = tf.transpose(self.group_output(inputs), [1, 0, 2])
+        output_shape = shape[:-1] + [self.intermediate_size]
+        outputs = tf.reshape(outputs, output_shape)
+        return outputs
+
+
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate
-class TFElectraIntermediate(tf.keras.layers.Layer):
+class TFConvBertIntermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-
-        self.dense = tf.keras.layers.Dense(
-            config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
-        )
+        if config.num_groups == 1:
+            self.dense = tf.keras.layers.Dense(
+                config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            )
+        else:
+            self.dense = GroupedLinearLayer(
+                config.intermediate_size,
+                num_groups=config.num_groups,
+                kernel_initializer=get_initializer(config.initializer_range),
+            )
 
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = get_tf_activation(config.hidden_act)
@@ -261,13 +289,20 @@ class TFElectraIntermediate(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput
-class TFElectraOutput(tf.keras.layers.Layer):
+class TFConvBertOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
-            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
-        )
+        if config.num_groups == 1:
+            self.dense = tf.keras.layers.Dense(
+                config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            )
+        else:
+            self.dense = GroupedLinearLayer(
+                config.intermediate_size,
+                num_groups=config.num_groups,
+                kernel_initializer=get_initializer(config.initializer_range),
+            )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
@@ -280,13 +315,13 @@ class TFElectraOutput(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with Bert->Electra
-class TFElectraLayer(tf.keras.layers.Layer):
+class TFConvBertLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.attention = TFElectraAttention(config, name="attention")
-        self.intermediate = TFElectraIntermediate(config, name="intermediate")
-        self.bert_output = TFElectraOutput(config, name="output")
+        self.attention = TFConvBertAttention(config, name="attention")
+        self.intermediate = TFConvBertIntermediate(config, name="intermediate")
+        self.bert_output = TFConvBertOutput(config, name="output")
 
     def call(self, hidden_states, attention_mask, head_mask, output_attentions, training=False):
         attention_outputs = self.attention(
@@ -301,11 +336,11 @@ class TFElectraLayer(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertEncoder with Bert->Electra
-class TFElectraEncoder(tf.keras.layers.Layer):
+class TFConvBertEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.layer = [TFElectraLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
+        self.layer = [TFConvBertLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
 
     def call(
         self,
@@ -345,7 +380,7 @@ class TFElectraEncoder(tf.keras.layers.Layer):
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler
-class TFElectraPooler(tf.keras.layers.Layer):
+class TFConvBertPooler(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -365,7 +400,7 @@ class TFElectraPooler(tf.keras.layers.Layer):
         return pooled_output
 
 
-class TFElectraEmbeddings(tf.keras.layers.Layer):
+class TFConvBertEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config, **kwargs):
@@ -487,7 +522,7 @@ class TFElectraEmbeddings(tf.keras.layers.Layer):
         return tf.reshape(logits, [batch_size, length, self.vocab_size])
 
 
-class TFElectraDiscriminatorPredictions(tf.keras.layers.Layer):
+class TFConvBertDiscriminatorPredictions(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -503,7 +538,7 @@ class TFElectraDiscriminatorPredictions(tf.keras.layers.Layer):
         return logits
 
 
-class TFElectraGeneratorPredictions(tf.keras.layers.Layer):
+class TFConvBertGeneratorPredictions(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -518,29 +553,29 @@ class TFElectraGeneratorPredictions(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFElectraPreTrainedModel(TFPreTrainedModel):
+class TFConvBertPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ElectraConfig
+    config_class = ConvBertConfig
     base_model_prefix = "electra"
 
 
 @keras_serializable
-class TFElectraMainLayer(tf.keras.layers.Layer):
-    config_class = ElectraConfig
+class TFConvBertMainLayer(tf.keras.layers.Layer):
+    config_class = ConvBertConfig
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.embeddings = TFElectraEmbeddings(config, name="embeddings")
+        self.embeddings = TFConvBertEmbeddings(config, name="embeddings")
 
         if config.embedding_size != config.hidden_size:
             self.embeddings_project = tf.keras.layers.Dense(config.hidden_size, name="embeddings_project")
 
-        self.encoder = TFElectraEncoder(config, name="encoder")
+        self.encoder = TFConvBertEncoder(config, name="encoder")
         self.config = config
 
     def get_input_embeddings(self):
@@ -669,9 +704,9 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
 
 
 @dataclass
-class TFElectraForPreTrainingOutput(ModelOutput):
+class TFConvBertForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.TFElectraForPreTraining`.
+    Output type of :class:`~transformers.TFConvBertForPreTraining`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``tf.Tensor`` of shape :obj:`(1,)`):
@@ -726,7 +761,7 @@ ELECTRA_START_DOCSTRING = r"""
           :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
 
     Parameters:
-        config (:class:`~transformers.ElectraConfig`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.ConvBertConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
             weights.
@@ -786,11 +821,11 @@ ELECTRA_INPUTS_DOCSTRING = r"""
     "Both the generator and discriminator checkpoints may be loaded into this model.",
     ELECTRA_START_DOCSTRING,
 )
-class TFElectraModel(TFElectraPreTrainedModel):
+class TFConvBertModel(TFConvBertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.electra = TFElectraMainLayer(config, name="electra")
+        self.electra = TFConvBertMainLayer(config, name="electra")
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -815,15 +850,15 @@ class TFElectraModel(TFElectraPreTrainedModel):
     """,
     ELECTRA_START_DOCSTRING,
 )
-class TFElectraForPreTraining(TFElectraPreTrainedModel):
+class TFConvBertForPreTraining(TFConvBertPreTrainedModel):
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
 
-        self.electra = TFElectraMainLayer(config, name="electra")
-        self.discriminator_predictions = TFElectraDiscriminatorPredictions(config, name="discriminator_predictions")
+        self.electra = TFConvBertMainLayer(config, name="electra")
+        self.discriminator_predictions = TFConvBertDiscriminatorPredictions(config, name="discriminator_predictions")
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=TFElectraForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=TFConvBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         inputs,
@@ -844,10 +879,10 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
         Examples::
 
             >>> import tensorflow as tf
-            >>> from transformers import ElectraTokenizer, TFElectraForPreTraining
+            >>> from transformers import ElectraTokenizer, TFConvBertForPreTraining
 
             >>> tokenizer = ElectraTokenizer.from_pretrained('google/electra-small-discriminator')
-            >>> model = TFElectraForPreTraining.from_pretrained('google/electra-small-discriminator')
+            >>> model = TFConvBertForPreTraining.from_pretrained('google/electra-small-discriminator')
             >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
             >>> outputs = model(input_ids)
             >>> scores = outputs[0]
@@ -878,14 +913,14 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
         if not return_dict:
             return (logits,) + discriminator_hidden_states[1:]
 
-        return TFElectraForPreTrainingOutput(
+        return TFConvBertForPreTrainingOutput(
             logits=logits,
             hidden_states=discriminator_hidden_states.hidden_states,
             attentions=discriminator_hidden_states.attentions,
         )
 
 
-class TFElectraMaskedLMHead(tf.keras.layers.Layer):
+class TFConvBertMaskedLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
 
@@ -913,20 +948,20 @@ class TFElectraMaskedLMHead(tf.keras.layers.Layer):
     """,
     ELECTRA_START_DOCSTRING,
 )
-class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLoss):
+class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
 
         self.vocab_size = config.vocab_size
-        self.electra = TFElectraMainLayer(config, name="electra")
-        self.generator_predictions = TFElectraGeneratorPredictions(config, name="generator_predictions")
+        self.electra = TFConvBertMainLayer(config, name="electra")
+        self.generator_predictions = TFConvBertGeneratorPredictions(config, name="generator_predictions")
 
         if isinstance(config.hidden_act, str):
             self.activation = get_tf_activation(config.hidden_act)
         else:
             self.activation = config.hidden_act
 
-        self.generator_lm_head = TFElectraMaskedLMHead(config, self.electra.embeddings, name="generator_lm_head")
+        self.generator_lm_head = TFConvBertMaskedLMHead(config, self.electra.embeddings, name="generator_lm_head")
 
     def get_output_embeddings(self):
         return self.generator_lm_head
@@ -1005,7 +1040,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
         )
 
 
-class TFElectraClassificationHead(tf.keras.layers.Layer):
+class TFConvBertClassificationHead(tf.keras.layers.Layer):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config, **kwargs):
@@ -1037,12 +1072,12 @@ class TFElectraClassificationHead(tf.keras.layers.Layer):
     """,
     ELECTRA_START_DOCSTRING,
 )
-class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceClassificationLoss):
+class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
-        self.electra = TFElectraMainLayer(config, name="electra")
-        self.classifier = TFElectraClassificationHead(config, name="classifier")
+        self.electra = TFConvBertMainLayer(config, name="electra")
+        self.classifier = TFConvBertClassificationHead(config, name="classifier")
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1123,11 +1158,11 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
     """,
     ELECTRA_START_DOCSTRING,
 )
-class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss):
+class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.electra = TFElectraMainLayer(config, name="electra")
+        self.electra = TFConvBertMainLayer(config, name="electra")
         self.sequence_summary = TFSequenceSummary(
             config, initializer_range=config.initializer_range, name="sequence_summary"
         )
@@ -1255,11 +1290,11 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
     """,
     ELECTRA_START_DOCSTRING,
 )
-class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassificationLoss):
+class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
 
-        self.electra = TFElectraMainLayer(config, name="electra")
+        self.electra = TFConvBertMainLayer(config, name="electra")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
@@ -1338,12 +1373,12 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
     """,
     ELECTRA_START_DOCSTRING,
 )
-class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnsweringLoss):
+class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.electra = TFElectraMainLayer(config, name="electra")
+        self.electra = TFConvBertMainLayer(config, name="electra")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
