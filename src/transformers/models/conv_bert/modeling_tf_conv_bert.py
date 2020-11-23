@@ -116,11 +116,12 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x, batch_size):
+        print(self.attention_head_size, self.num_attention_heads, self.head_ratio)
         x = tf.reshape(x, (batch_size, -1, self.num_attention_heads, self.attention_head_size))
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
     def reshape_for_conv(self, x, batch_size):
-        x = tf.reshape(x, [batch_size, -1, self.head_ratio * self.all_head_size])
+        x = tf.reshape(x, [batch_size, -1, self.all_head_size])
         return x
 
     def call(self, hidden_states, attention_mask, head_mask, output_attentions, training=False):
@@ -129,6 +130,7 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         mixed_key_layer = self.key(hidden_states)
         mixed_value_layer = self.value(hidden_states)
         mixed_key_conv_attn_layer = self.key_conv_attn_layer(self.reshape_for_conv(hidden_states, batch_size))
+        # mixed_key_conv_attn_layer = self.key_conv_attn_layer(tf.transpose(hidden_states, (0, 2, 1)))
 
         query_layer = self.transpose_for_scores(mixed_query_layer, batch_size)
         key_layer = self.transpose_for_scores(mixed_key_layer, batch_size)
@@ -154,12 +156,14 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
                 [0, 0],
             ]
         )
+
         conv_out_layer = self.conv_out_layer(hidden_states)
         conv_out_layer = tf.reshape(conv_out_layer, [batch_size, -1, self.all_head_size])
         conv_out_layer = tf.pad(conv_out_layer, paddings, "CONSTANT")
+        print(conv_out_layer)
 
         slices = [
-            tf.slice(conv_out_layer, [0, i, 0], [batch_size, -1, self.all_head_size])
+            tf.slice(conv_out_layer, [0, i, 0], [batch_size, mixed_query_layer.shape[1], self.all_head_size])
             for i in range(self.conv_kernel_size)
         ]
 
@@ -191,7 +195,9 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
-        value_layer = tf.reshape(value_layer, [batch_size, -1, self.num_attention_heads, self.attention_head_size])
+        value_layer = tf.reshape(
+            mixed_value_layer, [batch_size, -1, self.num_attention_heads, self.attention_head_size]
+        )
         value_layer = tf.transpose(value_layer, [0, 2, 1, 3])
 
         context_layer = tf.matmul(attention_probs, value_layer)
@@ -253,6 +259,7 @@ class GroupedLinearLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.intermediate_size = intermediate_size
         self.num_groups = num_groups
+        self.group_in_dim = int(last_dim/self.num_groups)
         self.len_group_out = self.intermediate_size // self.num_groups
         self.group_output = tf.keras.layers.Dense(self.len_group_out, kernel_initializer=kernel_initializer)
 
