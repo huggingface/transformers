@@ -481,7 +481,7 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
 class TFAlbertMainLayer(tf.keras.layers.Layer):
     config_class = AlbertConfig
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config, add_pooling_layer=True, **kwargs):
         super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
         self.config = config
@@ -493,7 +493,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
             name="pooler",
-        )
+        ) if add_pooling_layer else None
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -601,7 +601,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
         )
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output[:, 0])
+        pooled_output = self.pooler(sequence_output[:, 0]) if self.pooler is not None else None
 
         if not inputs["return_dict"]:
             return (
@@ -807,6 +807,9 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
     ALBERT_START_DOCSTRING,
 )
 class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    authorized_unexpected_keys = [r"predictions.decoder.weight"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -914,13 +917,13 @@ class TFAlbertSOPHead(tf.keras.layers.Layer):
 
 @add_start_docstrings("""Albert Model with a `language modeling` head on top. """, ALBERT_START_DOCSTRING)
 class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    authorized_unexpected_keys = [r"pooler", r"predictions.decoder.weight"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.albert = TFAlbertMainLayer(config, name="albert")
+        self.albert = TFAlbertMainLayer(config, add_pooling_layer=False, name="albert")
         self.predictions = TFAlbertMLMHead(config, self.albert.embeddings, name="predictions")
 
     def get_output_embeddings(self):
@@ -1007,6 +1010,10 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
     ALBERT_START_DOCSTRING,
 )
 class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClassificationLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    authorized_unexpected_keys = [r"predictions"]
+    authorized_missing_keys = [r"dropout"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -1099,14 +1106,15 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
     ALBERT_START_DOCSTRING,
 )
 class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificationLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    authorized_unexpected_keys = [r"pooler", r"predictions"]
+    authorized_missing_keys = [r"dropout"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.albert = TFAlbertMainLayer(config, name="albert")
+        self.albert = TFAlbertMainLayer(config, add_pooling_layer=False, name="albert")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
@@ -1193,14 +1201,14 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
     ALBERT_START_DOCSTRING,
 )
 class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    authorized_unexpected_keys = [r"pooler", r"predictions"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.albert = TFAlbertMainLayer(config, name="albert")
+        self.albert = TFAlbertMainLayer(config, add_pooling_layer=False, name="albert")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
@@ -1301,6 +1309,10 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
     ALBERT_START_DOCSTRING,
 )
 class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    authorized_unexpected_keys = [r"pooler", r"predictions"]
+    authorized_missing_keys = [r"dropout"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 

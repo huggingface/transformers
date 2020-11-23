@@ -686,7 +686,7 @@ class TFMobileBertMLMHead(tf.keras.layers.Layer):
 class TFMobileBertMainLayer(tf.keras.layers.Layer):
     config_class = MobileBertConfig
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config, add_pooling_layer=True, **kwargs):
         super().__init__(**kwargs)
 
         self.config = config
@@ -697,7 +697,7 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
 
         self.embeddings = TFMobileBertEmbeddings(config, name="embeddings")
         self.encoder = TFMobileBertEncoder(config, name="encoder")
-        self.pooler = TFMobileBertPooler(config, name="pooler")
+        self.pooler = TFMobileBertPooler(config, name="pooler") if add_pooling_layer else None
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -801,7 +801,7 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
         )
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not inputs["return_dict"]:
             return (
@@ -1102,13 +1102,13 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
 
 @add_start_docstrings("""MobileBert Model with a `language modeling` head on top. """, MOBILEBERT_START_DOCSTRING)
 class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModelingLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    authorized_unexpected_keys = [r"pooler", r"seq_relationship___cls", r"predictions___cls", r"cls.seq_relationship"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
+        self.mobilebert = TFMobileBertMainLayer(config, add_pooling_layer=False, name="mobilebert")
         self.mlm = TFMobileBertMLMHead(config, name="mlm___cls")
 
     def get_output_embeddings(self):
@@ -1202,6 +1202,9 @@ class TFMobileBertOnlyNSPHead(tf.keras.layers.Layer):
     MOBILEBERT_START_DOCSTRING,
 )
 class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextSentencePredictionLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    authorized_unexpected_keys = [r"predictions___cls", r"cls.predictions"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1299,6 +1302,10 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
     MOBILEBERT_START_DOCSTRING,
 )
 class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSequenceClassificationLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    authorized_unexpected_keys = [r"predictions___cls", r"seq_relationship___cls", r"cls.predictions", r"cls.seq_relationship"]
+    authorized_missing_keys = [r"dropout"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -1392,14 +1399,14 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
     MOBILEBERT_START_DOCSTRING,
 )
 class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAnsweringLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    authorized_unexpected_keys = [r"pooler", r"predictions___cls", r"seq_relationship___cls", r"cls.predictions", r"cls.seq_relationship"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
+        self.mobilebert = TFMobileBertMainLayer(config, add_pooling_layer=False, name="mobilebert")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
@@ -1500,6 +1507,10 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
     MOBILEBERT_START_DOCSTRING,
 )
 class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoiceLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    authorized_unexpected_keys = [r"predictions___cls", r"seq_relationship___cls", r"cls.predictions", r"cls.seq_relationship"]
+    authorized_missing_keys = [r"dropout"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1627,14 +1638,15 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
     MOBILEBERT_START_DOCSTRING,
 )
 class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenClassificationLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    authorized_unexpected_keys = [r"pooler", r"predictions___cls", r"seq_relationship___cls", r"cls.predictions", r"cls.seq_relationship"]
+    authorized_missing_keys = [r"dropout"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
+        self.mobilebert = TFMobileBertMainLayer(config, add_pooling_layer=False, name="mobilebert")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
