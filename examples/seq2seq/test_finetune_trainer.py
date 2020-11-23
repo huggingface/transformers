@@ -4,13 +4,7 @@ from unittest.mock import patch
 
 from transformers import BertTokenizer, EncoderDecoderModel
 from transformers.file_utils import is_datasets_available
-from transformers.testing_utils import (
-    TestCasePlus,
-    execute_subprocess_async,
-    get_gpu_count,
-    require_torch_non_multi_gpu_but_fix_me,
-    slow,
-)
+from transformers.testing_utils import TestCasePlus, execute_subprocess_async, get_gpu_count, slow
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import set_seed
 
@@ -52,7 +46,6 @@ class TestFinetuneTrainer(TestCasePlus):
         assert "test_results.json" in contents
 
     @slow
-    @require_torch_non_multi_gpu_but_fix_me
     def test_finetune_bert2bert(self):
         if not is_datasets_available():
             return
