@@ -196,7 +196,7 @@ class HFIndexBase(Index):
         self.dataset = dataset
         self._index_initialized = index_initialized
         self._check_dataset_format(with_index=index_initialized)
-        dataset.set_format("numpy", columns=["embeddings"], output_all_columns=True)
+        dataset.set_format("numpy", columns=["embeddings"], output_all_columns=True, dtype="float32")
 
     def _check_dataset_format(self, with_index: bool):
         if not isinstance(self.dataset, Dataset):

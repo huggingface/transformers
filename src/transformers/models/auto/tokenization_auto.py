@@ -185,8 +185,6 @@ TOKENIZER_MAPPING = OrderedDict(
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
         (BartConfig, (BartTokenizer, BartTokenizerFast)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
-        (RobertaConfig, (BertweetTokenizer, None)),
-        (RobertaConfig, (PhobertTokenizer, None)),
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
         (ReformerConfig, (ReformerTokenizer, ReformerTokenizerFast)),
         (ElectraConfig, (ElectraTokenizer, ElectraTokenizerFast)),
@@ -195,7 +193,6 @@ TOKENIZER_MAPPING = OrderedDict(
         (LayoutLMConfig, (LayoutLMTokenizer, LayoutLMTokenizerFast)),
         (DPRConfig, (DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast)),
         (SqueezeBertConfig, (SqueezeBertTokenizer, SqueezeBertTokenizerFast)),
-        (BertConfig, (HerbertTokenizer, HerbertTokenizerFast)),
         (BertConfig, (BertTokenizer, BertTokenizerFast)),
         (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),
         (GPT2Config, (GPT2Tokenizer, GPT2TokenizerFast)),
@@ -213,11 +210,32 @@ TOKENIZER_MAPPING = OrderedDict(
     ]
 )
 
+# For tokenizers which are not directly mapped from a config
+NO_CONFIG_TOKENIZER = [
+    BertJapaneseTokenizer,
+    BertweetTokenizer,
+    HerbertTokenizer,
+    HerbertTokenizerFast,
+    PhobertTokenizer,
+]
+
+
 SLOW_TOKENIZER_MAPPING = {
     k: (v[0] if v[0] is not None else v[1])
     for k, v in TOKENIZER_MAPPING.items()
     if (v[0] is not None or v[1] is not None)
 }
+
+
+def tokenizer_class_from_name(class_name: str):
+    all_tokenizer_classes = (
+        [v[0] for v in TOKENIZER_MAPPING.values() if v[0] is not None]
+        + [v[1] for v in TOKENIZER_MAPPING.values() if v[1] is not None]
+        + NO_CONFIG_TOKENIZER
+    )
+    for c in all_tokenizer_classes:
+        if c.__name__ == class_name:
+            return c
 
 
 class AutoTokenizer:
@@ -250,10 +268,9 @@ class AutoTokenizer:
             pretrained_model_name_or_path (:obj:`str`):
                 Can be either:
 
-                    - A string with the `shortcut name` of a predefined tokenizer to load from cache or download, e.g.,
-                      ``bert-base-uncased``.
-                    - A string with the `identifier name` of a predefined tokenizer that was user-uploaded to our S3,
-                      e.g., ``dbmdz/bert-base-german-cased``.
+                    - A string, the `model id` of a predefined tokenizer hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
+                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing vocabulary files required by the tokenizer, for instance saved
                       using the :func:`~transformers.PreTrainedTokenizer.save_pretrained` method, e.g.,
                       ``./my_model_directory/``.
@@ -280,6 +297,9 @@ class AutoTokenizer:
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
                 identifier allowed by git.
+            subfolder (:obj:`str`, `optional`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co (e.g. for
+                facebook/rag-token-base), specify it here.
             use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to try to load the fast version of the tokenizer.
             kwargs (additional keyword arguments, `optional`):
@@ -291,10 +311,10 @@ class AutoTokenizer:
 
             >>> from transformers import AutoTokenizer
 
-            >>> # Download vocabulary from S3 and cache.
+            >>> # Download vocabulary from huggingface.co and cache.
             >>> tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
 
-            >>> # Download vocabulary from S3 (user-uploaded) and cache.
+            >>> # Download vocabulary from huggingface.co (user-uploaded) and cache.
             >>> tokenizer = AutoTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
 
             >>> # If vocabulary files are in a directory (e.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`)
@@ -305,17 +325,17 @@ class AutoTokenizer:
         if not isinstance(config, PretrainedConfig):
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-        if "bert-base-japanese" in str(pretrained_model_name_or_path):
-            return BertJapaneseTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-
         use_fast = kwargs.pop("use_fast", True)
 
         if config.tokenizer_class is not None:
+            tokenizer_class = None
             if use_fast and not config.tokenizer_class.endswith("Fast"):
                 tokenizer_class_candidate = f"{config.tokenizer_class}Fast"
-            else:
+                tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
+            if tokenizer_class is None:
                 tokenizer_class_candidate = config.tokenizer_class
-            tokenizer_class = globals().get(tokenizer_class_candidate)
+                tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
+
             if tokenizer_class is None:
                 raise ValueError(
                     "Tokenizer class {} does not exist or is not currently imported.".format(tokenizer_class_candidate)

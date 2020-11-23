@@ -89,9 +89,9 @@ class GenerationTesterMixin:
         warp_kwargs = {"top_k": 10, "top_p": 0.7, "temperature": 0.7}
         logits_warper = LogitsProcessorList(
             [
+                TemperatureLogitsWarper(warp_kwargs["temperature"]),
                 TopKLogitsWarper(top_k=warp_kwargs["top_k"], min_tokens_to_keep=(2 if num_beams > 1 else 1)),
                 TopPLogitsWarper(top_p=warp_kwargs["top_p"], min_tokens_to_keep=(2 if num_beams > 1 else 1)),
-                TemperatureLogitsWarper(warp_kwargs["temperature"]),
             ]
         )
         return warp_kwargs, logits_warper

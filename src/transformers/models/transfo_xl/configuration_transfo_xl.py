@@ -15,9 +15,6 @@
 # limitations under the License.
 """ Transformer XL configuration """
 
-
-import warnings
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -108,6 +105,7 @@ class TransfoXLConfig(PretrainedConfig):
     """
 
     model_type = "transfo-xl"
+    keys_to_ignore_at_inference = ["mems"]
 
     def __init__(
         self,
@@ -139,13 +137,6 @@ class TransfoXLConfig(PretrainedConfig):
         eos_token_id=0,
         **kwargs
     ):
-        if "tie_weight" in kwargs:
-            warnings.warn(
-                "The config parameter `tie_weight` is deprecated. Please use `tie_word_embeddings` instead.",
-                FutureWarning,
-            )
-            kwargs["tie_word_embeddings"] = kwargs["tie_weight"]
-
         super().__init__(eos_token_id=eos_token_id, **kwargs)
         self.vocab_size = vocab_size
         self.cutoffs = []

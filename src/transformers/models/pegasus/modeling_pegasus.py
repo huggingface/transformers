@@ -38,7 +38,7 @@ class PegasusForConditionalGeneration(BartForConditionalGeneration):
 
         >>> model = PegasusForConditionalGeneration.from_pretrained(mname)
         >>> tok = PegasusTokenizer.from_pretrained(mname)
-        >>> batch = tok.prepare_seq2seq_batch(src_texts=[PGE_ARTICLE])  # don't need tgt_text for inference
+        >>> batch = tok.prepare_seq2seq_batch(src_texts=[PGE_ARTICLE], return_tensors="pt")  # don't need tgt_text for inference
         >>> gen = model.generate(**batch)  # for forward pass: model(**batch)
         >>> summary: List[str] = tok.batch_decode(gen, skip_special_tokens=True)
         >>> assert summary == "California's largest electricity provider has turned off power to tens of thousands of customers."
@@ -46,14 +46,14 @@ class PegasusForConditionalGeneration(BartForConditionalGeneration):
     """
     # All the code is in src/transformers/models/bart/modeling_bart.py
     config_class = PegasusConfig
-    authorized_missing_keys = [
+    _keys_to_ignore_on_load_missing = [
         r"final_logits_bias",
         r"encoder\.version",
         r"decoder\.version",
         "model.encoder.embed_positions",
         "model.decoder.embed_positions",
     ]
-    keys_to_never_save = [
+    _keys_to_ignore_on_save = [
         "model.encoder.embed_positions.weight",
         "model.decoder.embed_positions.weight",
     ]

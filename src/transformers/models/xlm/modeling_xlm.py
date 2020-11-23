@@ -16,10 +16,8 @@
  PyTorch XLM model.
 """
 
-
 import itertools
 import math
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -401,7 +399,7 @@ XLM_INPUTS_DOCSTRING = r"""
     XLM_START_DOCSTRING,
 )
 class XLMModel(XLMPreTrainedModel):
-    authorized_missing_keys = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1228,10 +1226,9 @@ class XLMForMultipleChoice(XLMPreTrainedModel):
         )
 
         if lengths is not None:
-            warnings.warn(
+            logger.warn(
                 "The `lengths` parameter cannot be used with the XLM multiple choice models. Please use the "
-                "attention mask instead.",
-                FutureWarning,
+                "attention mask instead."
             )
             lengths = None
 

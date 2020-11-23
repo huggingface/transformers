@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 T5 Authors and The HuggingFace Inc. team.
+# Copyright 2020 T5 Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,6 +26,7 @@ import tensorflow as tf
 
 from transformers.modeling_tf_utils import TFWrappedEmbeddings
 
+from ...activations_tf import get_tf_activation
 from ...file_utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -103,10 +104,35 @@ class TFT5DenseReluDense(tf.keras.layers.Layer):
         return hidden_states
 
 
+class TFT5GatedGeluDense(tf.keras.layers.Layer):
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+        self.wi_0 = tf.keras.layers.Dense(config.d_ff, use_bias=False, name="wi_0")
+        self.wi_1 = tf.keras.layers.Dense(config.d_ff, use_bias=False, name="wi_1")
+        self.wo = tf.keras.layers.Dense(config.d_model, use_bias=False, name="wo")
+        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+        self.act = get_tf_activation("gelu_new")
+
+    def call(self, hidden_states, training=False):
+        hidden_gelu = self.act(self.wi_0(hidden_states))
+        hidden_linear = self.wi_1(hidden_states)
+        hidden_states = hidden_gelu * hidden_linear
+        hidden_states = self.dropout(hidden_states, training=training)
+        hidden_states = self.wo(hidden_states)
+        return hidden_states
+
+
 class TFT5LayerFF(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.DenseReluDense = TFT5DenseReluDense(config, name="DenseReluDense")
+        if config.feed_forward_proj == "relu":
+            self.DenseReluDense = TFT5DenseReluDense(config, name="DenseReluDense")
+        elif config.feed_forward_proj == "gated-gelu":
+            self.DenseReluDense = TFT5GatedGeluDense(config, name="DenseReluDense")
+        else:
+            raise ValueError(
+                f"{self.config.feed_forward_proj} is not supported. Choose between `relu` and `gated-gelu`"
+            )
         self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
 
@@ -547,9 +573,6 @@ class TFT5MainLayer(tf.keras.layers.Layer):
     def get_input_embeddings(self):
         return self.embed_tokens
 
-    def get_output_embeddings(self):
-        return self.embed_tokens
-
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
 
@@ -572,7 +595,6 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         output_attentions=None,
         output_hidden_states=None,
         training=False,
-        **kwargs,
     ) -> Tuple:
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
@@ -598,21 +620,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
             assert len(inputs) <= 10, "Too many inputs."
-
-            if "past_key_values" in inputs:
-                warnings.warn(
-                    "The `past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                    FutureWarning,
-                )
-                past_key_values = inputs.pop("past_key_values")
         else:
             input_ids = inputs
-            if "past_key_values" in kwargs:
-                warnings.warn(
-                    "The `past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                    FutureWarning,
-                )
-                past_key_values = kwargs.pop("past_key_values")
 
         output_attentions = output_attentions if output_attentions is not None else self.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
@@ -633,7 +642,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             raise ValueError(f"You have to specify either {err_msg_prefix}inputs or {err_msg_prefix}inputs_embeds")
 
         if inputs_embeds is None:
-            assert self.embed_tokens is not None, "You have to intialize the model with valid token embeddings"
+            assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
             inputs_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length = input_shape
@@ -970,9 +979,6 @@ class TFT5Model(TFT5PreTrainedModel):
     def get_input_embeddings(self):
         return self.shared
 
-    def get_output_embeddings(self):
-        return self.shared
-
     def set_input_embeddings(self, new_embeddings):
         self.shared.weight = new_embeddings
         self.shared.vocab_size = self.shared.weight.shape[0]
@@ -1058,22 +1064,8 @@ class TFT5Model(TFT5PreTrainedModel):
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
             assert len(inputs) <= 13, "Too many inputs."
-
-            if "past_key_value_states" in inputs:
-                warnings.warn(
-                    "The `past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                    FutureWarning,
-                )
-                past_key_values = inputs.pop("past_key_value_states")
         else:
             input_ids = inputs
-
-            if "past_key_value_states" in kwargs:
-                warnings.warn(
-                    "The `past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                    FutureWarning,
-                )
-                past_key_values = kwargs.pop("past_key_value_states")
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions else self.config.output_attentions
@@ -1165,11 +1157,17 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         decoder_config.is_decoder = True
         self.decoder = TFT5MainLayer(decoder_config, embed_tokens, name="decoder")
 
+        if not config.tie_word_embeddings:
+            self.lm_head = tf.keras.layers.Dense(config.vocab_size, use_bias=False, name="lm_head")
+
     def get_input_embeddings(self):
         return self.shared
 
     def get_output_embeddings(self):
-        return self.shared
+        if self.config.tie_word_embeddings:
+            return self.shared
+        else:
+            return self.lm_head
 
     def set_input_embeddings(self, new_embeddings):
         self.shared.weight = new_embeddings
@@ -1268,22 +1266,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
             return_dict = inputs.get("return_dict", return_dict)
             assert len(inputs) <= 14, "Too many inputs."
-
-            if "past_key_value_states" in inputs:
-                warnings.warn(
-                    "The `past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                    FutureWarning,
-                )
-                past_key_values = inputs.pop("past_key_value_states")
         else:
             input_ids = inputs
-
-            if "past_key_value_states" in kwargs:
-                warnings.warn(
-                    "The `past_key_value_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                    FutureWarning,
-                )
-                past_key_values = kwargs.pop("past_key_value_states")
 
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions else self.config.output_attentions
@@ -1331,9 +1315,14 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             training=training,
         )
 
-        sequence_output = decoder_outputs[0] * (self.model_dim ** -0.5)
-        embed_tokens = self.get_output_embeddings()
-        logits = embed_tokens(sequence_output, mode="linear")
+        sequence_output = decoder_outputs[0]
+
+        # T5v1.1 does not tie output word embeddings and thus does not require downscaling
+        if self.config.tie_word_embeddings:
+            sequence_output = sequence_output * (self.model_dim ** -0.5)
+            logits = self.get_output_embeddings()(sequence_output, mode="linear")
+        else:
+            logits = self.get_output_embeddings()(sequence_output)
 
         loss = None if labels is None else self.compute_loss(labels, logits)
 

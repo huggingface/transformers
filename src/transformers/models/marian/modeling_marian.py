@@ -41,17 +41,17 @@ class MarianMTModel(BartForConditionalGeneration):
 
         >>> model = MarianMTModel.from_pretrained(mname)
         >>> tok = MarianTokenizer.from_pretrained(mname)
-        >>> batch = tok.prepare_seq2seq_batch(src_texts=[sample_text])  # don't need tgt_text for inference
+        >>> batch = tok.prepare_seq2seq_batch(src_texts=[sample_text], return_tensors="pt")  # don't need tgt_text for inference
         >>> gen = model.generate(**batch)  # for forward pass: model(**batch)
         >>> words: List[str] = tok.batch_decode(gen, skip_special_tokens=True)  # returns "Where is the bus stop ?"
 
     """
     config_class = MarianConfig
-    authorized_missing_keys = [
+    _keys_to_ignore_on_load_missing = [
         "model.encoder.embed_positions.weight",
         "model.decoder.embed_positions.weight",
     ]
-    keys_to_never_save = [
+    _keys_to_ignore_on_save = [
         "model.encoder.embed_positions.weight",
         "model.decoder.embed_positions.weight",
     ]

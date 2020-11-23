@@ -236,9 +236,9 @@ class TFNextSentencePredictionLoss:
         return loss_fn(next_sentence_label, next_sentence_reduced_logits)
 
 
-def detect_tf_missing_unexpected_layers(model, resolved_archive_file):
+def load_tf_weights(model, resolved_archive_file):
     """
-    Detect missing and unexpected layers.
+    Detect missing and unexpected layers and load the TF weights accordingly to their names and shapes.
 
     Args:
         model (:obj:`tf.keras.models.Model`):
@@ -252,62 +252,60 @@ def detect_tf_missing_unexpected_layers(model, resolved_archive_file):
     missing_layers = []
     unexpected_layers = []
 
+    # Read the H5 file
     with h5py.File(resolved_archive_file, "r") as f:
-        saved_layer_names = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
-        model_layer_names = set(layer.name for layer in model.layers)
-        missing_layers = list(model_layer_names - saved_layer_names)
-        unexpected_layers = list(saved_layer_names - model_layer_names)
+        # Retrieve the name of each layer from the H5 file
+        saved_h5_model_layers_name = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
 
-        for layer in model.layers:
-            if layer.name in saved_layer_names:
-                g = f[layer.name]
-                saved_weight_names = hdf5_format.load_attributes_from_hdf5_group(g, "weight_names")
-                saved_weight_names_set = set(
-                    "/".join(weight_name.split("/")[2:]) for weight_name in saved_weight_names
-                )
-                symbolic_weights = layer.trainable_weights + layer.non_trainable_weights
-                symbolic_weights_names = set(
-                    "/".join(symbolic_weight.name.split("/")[2:]) for symbolic_weight in symbolic_weights
-                )
-                missing_layers.extend(list(symbolic_weights_names - saved_weight_names_set))
-                unexpected_layers.extend(list(saved_weight_names_set - symbolic_weights_names))
+        # Find the missing layers from the high level list of layers
+        missing_layers = list(set([layer.name for layer in model.layers]) - saved_h5_model_layers_name)
 
-    return missing_layers, unexpected_layers
-
-
-def load_tf_weights(model, resolved_archive_file):
-    """
-    Load the TF weights from a H5 file.
-
-    Args:
-        model (:obj:`tf.keras.models.Model`):
-            The model to load the weights into.
-        resolved_archive_file (:obj:`str`):
-            The location of the H5 file.
-    """
-    with h5py.File(resolved_archive_file, "r") as f:
-        saved_layer_names = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
+        # Find the unexpected layers from the high level list of layers
+        unexpected_layers = list(saved_h5_model_layers_name - set([layer.name for layer in model.layers]))
+        saved_weight_names_set = set()
+        symbolic_weights_names = set()
         weight_value_tuples = []
 
+        # Compute missing and unexpected sub layers
+        # Store the weights in list of tuples that looks like [(weight_object, value_of_weight),...]
         for layer in model.layers:
-            if layer.name in saved_layer_names:
-                g = f[layer.name]
-                saved_weight_names = hdf5_format.load_attributes_from_hdf5_group(g, "weight_names")
+            # if layer_name from the H5 file belongs to the layers from the instantiated model
+            if layer.name in saved_h5_model_layers_name:
+                # Get the H5 layer object from its name
+                h5_layer_object = f[layer.name]
+                # Get all the weights as a list from the layer object
                 symbolic_weights = layer.trainable_weights + layer.non_trainable_weights
-                saved_weight_names_values = {}
+                saved_weights = {}
 
-                for weight_name in saved_weight_names:
+                # Create a dict from the H5 saved model that looks like {"weight_name": weight_value}
+                # And a set with only the names
+                for weight_name in hdf5_format.load_attributes_from_hdf5_group(h5_layer_object, "weight_names"):
+                    # TF names always start with the model name so we ignore it
                     name = "/".join(weight_name.split("/")[1:])
-                    saved_weight_names_values[name] = np.asarray(g[weight_name])
+                    saved_weights[name] = np.asarray(h5_layer_object[weight_name])
 
+                    # Add the updated name to the final list for computing missing/unexpected values
+                    saved_weight_names_set.add(name)
+
+                # Loop over each weights from the instantiated model and compare with the weights from the H5 file
                 for symbolic_weight in symbolic_weights:
-                    splited_layers = symbolic_weight.name.split("/")[1:]
-                    symbolic_weight_name = "/".join(splited_layers)
+                    # TF names always start with the model name so we ignore it
+                    symbolic_weight_name = "/".join(symbolic_weight.name.split("/")[1:])
 
-                    if symbolic_weight_name in saved_weight_names_values:
-                        saved_weight_value = saved_weight_names_values[symbolic_weight_name]
+                    # here we check if the current weight is among the weights from the H5 file
+                    # If yes, get the weight_value of the corresponding weight from the H5 file
+                    # If not, make the value to None
+                    saved_weight_value = saved_weights.get(symbolic_weight_name, None)
 
+                    # Add the updated name to the final list for computing missing/unexpected values
+                    symbolic_weights_names.add(symbolic_weight_name)
+
+                    # If the current weight is found
+                    if saved_weight_value is not None:
+                        # Check if the shape of the current weight and the one from the H5 file are different
                         if K.int_shape(symbolic_weight) != saved_weight_value.shape:
+                            # If yes we reshape the weight from the H5 file accordingly to the current weight
+                            # If the two shapes are not compatible we raise an issue
                             try:
                                 array = np.reshape(saved_weight_value, K.int_shape(symbolic_weight))
                             except AssertionError as e:
@@ -316,9 +314,17 @@ def load_tf_weights(model, resolved_archive_file):
                         else:
                             array = saved_weight_value
 
+                        # We create the tuple that will be loaded and add it to the final list
                         weight_value_tuples.append((symbolic_weight, array))
 
+    # Load all the weights
     K.batch_set_value(weight_value_tuples)
+
+    # Compute the missing and unexpected layers
+    missing_layers.extend(list(symbolic_weights_names - saved_weight_names_set))
+    unexpected_layers.extend(list(saved_weight_names_set - symbolic_weights_names))
+
+    return missing_layers, unexpected_layers
 
 
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
@@ -337,15 +343,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
           :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.
-        - **authorized_missing_keys** (:obj:`List[str]`, `optional`) -- A list of re pattern of tensor names to ignore
-          from the model when loading the model weights (and avoid unnecessary warnings).
-        - **authorized_unexpected_keys** (:obj:`List[str]`, `optional`) -- A list of re pattern of tensor names to
-          ignore from the weights when loading the model weights (and avoid unnecessary warnings).
     """
     config_class = None
     base_model_prefix = ""
-    authorized_missing_keys = None
-    authorized_unexpected_keys = None
+    # a list of re pattern of tensor names to ignore from the model when loading the model weights
+    # (and avoid unnecessary warnings).
+    _keys_to_ignore_on_load_missing = None
+    # a list of re pattern of tensor names to ignore from the weights when loading the model weights
+    # (and avoid unnecessary warnings).
+    _keys_to_ignore_on_load_unexpected = None
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -544,10 +550,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             pretrained_model_name_or_path (:obj:`str`, `optional`):
                 Can be either:
 
-                    - A string with the `shortcut name` of a pretrained model to load from cache or download, e.g.,
-                      ``bert-base-uncased``.
-                    - A string with the `identifier name` of a pretrained model that was user-uploaded to our S3, e.g.,
-                      ``dbmdz/bert-base-german-cased``.
+                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
+                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing model weights saved using
                       :func:`~transformersTF.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
                     - A path or url to a `PyTorch state_dict save file` (e.g, ``./pt_model/pytorch_model.bin``). In
@@ -568,8 +573,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 Configuration for the model to use instead of an automatically loaded configuation. Configuration can
                 be automatically loaded when:
 
-                    - The model is a model provided by the library (loaded with the `shortcut name` string of a
-                      pretrained model).
+                    - The model is a model provided by the library (loaded with the `model id` string of a pretrained
+                      model).
                     - The model was saved using :func:`~transformers.TFPreTrainedModel.save_pretrained` and is reloaded
                       by supplying the save directory.
                     - The model is loaded by supplying a local directory as ``pretrained_model_name_or_path`` and a
@@ -618,7 +623,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         Examples::
 
             >>> from transformers import BertConfig, TFBertModel
-            >>> # Download model and configuration from S3 and cache.
+            >>> # Download model and configuration from huggingface.co and cache.
             >>> model = TFBertModel.from_pretrained('bert-base-uncased')
             >>> # Model was saved using `save_pretrained('./test/saved_model/')` (for example purposes, not runnable).
             >>> model = TFBertModel.from_pretrained('./test/saved_model/')
@@ -728,7 +733,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         # 'by_name' allow us to do transfer learning by skipping/adding layers
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
         try:
-            load_tf_weights(model, resolved_archive_file)
+            missing_keys, unexpected_keys = load_tf_weights(model, resolved_archive_file)
         except OSError:
             raise OSError(
                 "Unable to load weights from h5 file. "
@@ -737,14 +742,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
         model(model.dummy_inputs, training=False)  # Make sure restore ops are run
 
-        missing_keys, unexpected_keys = detect_tf_missing_unexpected_layers(model, resolved_archive_file)
-
-        if cls.authorized_missing_keys is not None:
-            for pat in cls.authorized_missing_keys:
+        if cls._keys_to_ignore_on_load_missing is not None:
+            for pat in cls._keys_to_ignore_on_load_missing:
                 missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
 
-        if cls.authorized_unexpected_keys is not None:
-            for pat in cls.authorized_unexpected_keys:
+        if cls._keys_to_ignore_on_load_unexpected is not None:
+            for pat in cls._keys_to_ignore_on_load_unexpected:
                 unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
         if len(unexpected_keys) > 0:
@@ -1034,18 +1037,18 @@ class TFSequenceSummary(tf.keras.layers.Layer):
         return output
 
 
-def shape_list(x: tf.Tensor) -> List[int]:
+def shape_list(tensor: tf.Tensor) -> List[int]:
     """
     Deal with dynamic shape in tensorflow cleanly.
 
     Args:
-        x (:obj:`tf.Tensor`): The tensor we want the shape of.
+        tensor (:obj:`tf.Tensor`): The tensor we want the shape of.
 
     Returns:
         :obj:`List[int]`: The shape of the tensor as a list.
     """
-    static = x.shape.as_list()
-    dynamic = tf.shape(x)
+    static = tensor.shape.as_list()
+    dynamic = tf.shape(tensor)
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 

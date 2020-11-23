@@ -211,8 +211,28 @@ except ImportError:
     _ray_available = False
 
 
-default_cache_path = os.path.join(torch_cache_home, "transformers")
+old_default_cache_path = os.path.join(torch_cache_home, "transformers")
+# New default cache, shared with the Datasets library
+hf_cache_home = os.path.expanduser(
+    os.getenv("HF_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "huggingface"))
+)
+default_cache_path = os.path.join(hf_cache_home, "transformers")
 
+# Onetime move from the old location to the new one if no ENV variable has been set.
+if (
+    os.path.isdir(old_default_cache_path)
+    and "PYTORCH_PRETRAINED_BERT_CACHE" not in os.environ
+    and "PYTORCH_TRANSFORMERS_CACHE" not in os.environ
+    and "TRANSFORMERS_CACHE" not in os.environ
+):
+    logger.warn(
+        "In Transformers v4.0.0, the default path to cache downloaded models changed from "
+        "'~/.cache/torch/transformers' to '~/.cache/huggingface/transformers'. Since you don't seem to have overridden "
+        "and '~/.cache/torch/transformers' is a directory that exists, we're moving it to "
+        "'~/.cache/huggingface/transformers' to avoid redownloading models you have already in the cache. You should "
+        "only see this message once."
+    )
+    shutil.move(old_default_cache_path, default_cache_path)
 
 PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
 PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
@@ -866,7 +886,9 @@ def is_remote_url(url_or_filename):
     return parsed.scheme in ("http", "https")
 
 
-def hf_bucket_url(model_id: str, filename: str, revision: Optional[str] = None, mirror=None) -> str:
+def hf_bucket_url(
+    model_id: str, filename: str, subfolder: Optional[str] = None, revision: Optional[str] = None, mirror=None
+) -> str:
     """
     Resolve a model identifier, a file name, and an optional revision id, to a huggingface.co-hosted url, redirecting
     to Cloudfront (a Content Delivery Network, or CDN) for large files.
@@ -883,6 +905,9 @@ def hf_bucket_url(model_id: str, filename: str, revision: Optional[str] = None, 
     its sha1 if stored in git, or its sha256 if stored in git-lfs. Files cached locally from transformers before v3.5.0
     are not shared with those new files, because the cached file's name contains a hash of the url (which changed).
     """
+    if subfolder is not None:
+        filename = f"{subfolder}/{filename}"
+
     if mirror:
         endpoint = PRESET_MIRROR_DICT.get(mirror, mirror)
         legacy_format = "/" not in model_id

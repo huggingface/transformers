@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2010, The T5 Authors and HuggingFace Inc.
+# Copyright 2020, The T5 Authors and HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -43,9 +43,6 @@ class T5Config(PretrainedConfig):
         vocab_size (:obj:`int`, `optional`, defaults to 32128):
             Vocabulary size of the T5 model. Defines the number of different tokens that can be represented by the
             :obj:`inputs_ids` passed when calling :class:`~transformers.T5Model` or :class:`~transformers.TFT5Model`.
-        n_positions (:obj:`int`, `optional`, defaults to 512):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
         d_model (:obj:`int`, `optional`, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (:obj:`int`, `optional`, defaults to 64):
@@ -69,8 +66,12 @@ class T5Config(PretrainedConfig):
         initializer_factor (:obj:`float`, `optional`, defaults to 1):
             A factor for initializing all weight matrices (should be kept to 1, used internally for initialization
             testing).
+        feed_forward_proj (:obj:`string`, `optional`, defaults to :obj:`"relu"`):
+            Type of feed forward layer to be used. Should be one of :obj:`"relu"` or :obj:`"gated-gelu"`. T5v1.1 uses
+            the :obj:`"gated-gelu"` feed forward projection. Original T5 uses :obj:`"relu"`.
     """
     model_type = "t5"
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
@@ -85,6 +86,7 @@ class T5Config(PretrainedConfig):
         dropout_rate=0.1,
         layer_norm_epsilon=1e-6,
         initializer_factor=1.0,
+        feed_forward_proj="relu",
         is_encoder_decoder=True,
         pad_token_id=0,
         eos_token_id=1,
@@ -109,6 +111,7 @@ class T5Config(PretrainedConfig):
         self.dropout_rate = dropout_rate
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor
+        self.feed_forward_proj = feed_forward_proj
 
     @property
     def hidden_size(self):

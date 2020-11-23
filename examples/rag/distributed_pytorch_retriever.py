@@ -39,7 +39,6 @@ class RagPyTorchDistributedRetriever(RagRetriever):
             index=index,
             init_retrieval=False
         )
-
         self.process_group = None
 
     def init_retrieval(self, distributed_port: int):

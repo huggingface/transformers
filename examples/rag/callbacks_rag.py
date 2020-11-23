@@ -8,7 +8,7 @@ import torch
 from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
 from pytorch_lightning.utilities import rank_zero_only
 
-from utils import save_json
+from utils_rag import save_json
 
 
 def count_trainable_parameters(model):
@@ -38,7 +38,7 @@ def get_checkpoint_callback(output_dir, metric):
         monitor=f"val_{metric}",
         mode="max",
         save_top_k=3,
-        period=0,  # maybe save a checkpoint every time val is run, not just end of epoch.
+        period=1,  # maybe save a checkpoint every time val is run, not just end of epoch.
     )
     return checkpoint_callback
 

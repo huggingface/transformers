@@ -17,7 +17,6 @@
  PyTorch Transformer XL model. Adapted from https://github.com/kimiyoung/transformer-xl. In particular
  https://github.com/kimiyoung/transformer-xl/blob/master/pytorch/mem_transformer.py
 """
-import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -668,9 +667,9 @@ class TransfoXLLMHeadModelOutput(ModelOutput):
 
     @property
     def logits(self):
-        # prediciton scores are the output of the adaptive softmax, see
+        # prediction scores are the output of the adaptive softmax, see
         # the file `modeling_transfo_xl_utilities`. Since the adaptive
-        # softmax returns the log softmax value, `self.prediciton_scores`
+        # softmax returns the log softmax value, `self.prediction_scores`
         # are strictly speaking not exactly `logits`, but behave the same
         # way logits do.
         return self.prediction_scores
@@ -887,7 +886,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
                 head_mask = head_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1)
             head_mask = head_mask.to(
                 dtype=next(self.parameters()).dtype
-            )  # switch to fload if need + fp16 compatibility
+            )  # switch to float if need + fp16 compatibility
         else:
             head_mask = [None] * self.n_layer
 
@@ -1009,13 +1008,6 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
                         self.crit.out_projs[i] = nn.Parameter(self.transformer.word_emb.emb_projs[i].clone())
                     else:
                         self.crit.out_projs[i] = self.transformer.word_emb.emb_projs[i]
-
-    def reset_length(self, tgt_len, ext_len, mem_len):
-        warnings.warn(
-            "The method `reset_length` is deprecated and will be removed in a future version, use `reset_memory_length` instead.",
-            FutureWarning,
-        )
-        self.transformer.reset_memory_length(mem_len)
 
     def reset_memory_length(self, mem_len):
         self.transformer.reset_memory_length(mem_len)

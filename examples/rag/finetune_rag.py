@@ -1,12 +1,10 @@
 """Finetuning script for RAG models. Adapted from examples.seq2seq.finetune.py"""
 
 import argparse
-import glob
 import logging
 import os
 import sys
 import time
-import warnings
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -18,6 +16,8 @@ from pytorch_lightning.cluster_environments import TorchElasticEnvironment
 
 import torch
 import torch.distributed as dist
+from pytorch_lightning.accelerators.ddp_accelerator import DDPAccelerator
+from pytorch_lightning.cluster_environments import TorchElasticEnvironment
 from torch.utils.data import DataLoader
 
 from transformers.file_utils import is_ray_available
@@ -31,23 +31,23 @@ from transformers import (
     AutoConfig,
     AutoTokenizer,
     BartForConditionalGeneration,
+    BatchEncoding,
     RagConfig,
     RagSequenceForGeneration,
     RagTokenForGeneration,
     RagTokenizer,
     T5ForConditionalGeneration,
-    get_linear_schedule_with_warmup,
 )
 from transformers import logging as transformers_logging
 
-from callbacks import (  # noqa: E402 # isort:skipq
+from callbacks_rag import (  # noqa: E402 # isort:skipq
     get_checkpoint_callback,
     get_early_stopping_callback,
     Seq2SeqLoggingCallback,
 )
-from distributed_pytorch_retriever import \
-    RagPyTorchDistributedRetriever  # noqa: E402 # isort:skip
-from utils import (  # noqa: E402 # isort:skip
+
+from distributed_pytorch_retriever import RagPyTorchDistributedRetriever  # noqa: E402 # isort:skip
+from utils_rag import (  # noqa: E402 # isort:skip
     calculate_exact_match,
     flatten_list,
     get_git_info,
@@ -91,8 +91,7 @@ class CustomAccel(DDPAccelerator):
         # Trainer is set later.
         super().__init__(trainer, **kwargs)
 
-    def init_ddp_connection(self, global_rank: int, world_size: int,
-                            is_slurm_managing_tasks: bool = True):
+    def init_ddp_connection(self, global_rank: int, world_size: int, is_slurm_managing_tasks: bool = True):
         logger.info("Custom init_ddp_connection.")
         module = self.trainer.model
         if self.cluster_environment is None:
@@ -135,17 +134,18 @@ class GenerativeQAModule(BaseTransformer):
         config = config_class.from_pretrained(hparams.model_name_or_path)
 
         # set retriever parameters
-        config.index_name = args.index_name or config.index_name
-        config.passages_path = args.passages_path or config.passages_path
-        config.index_path = args.index_path or config.index_path
+        config.index_name = hparams.index_name or config.index_name
+        config.passages_path = hparams.passages_path or config.passages_path
+        config.index_path = hparams.index_path or config.index_path
+        config.use_dummy_dataset = hparams.use_dummy_dataset
 
         # set extra_model_params for generator configs and load_model
         extra_model_params = (
         "encoder_layerdrop", "decoder_layerdrop", "attention_dropout",
         "dropout")
         if self.is_rag_model:
-            if args.prefix is not None:
-                config.generator.prefix = args.prefix
+            if hparams.prefix is not None:
+                config.generator.prefix = hparams.prefix
             config.label_smoothing = hparams.label_smoothing
             hparams, config.generator = set_extra_model_params(
                 extra_model_params, hparams, config.generator)
@@ -161,12 +161,10 @@ class GenerativeQAModule(BaseTransformer):
                 hparams.model_name_or_path, config=config, retriever=retriever)
             prefix = config.question_encoder.prefix
         else:
-            if args.prefix is not None:
-                config.prefix = args.prefix
-            hparams, config = set_extra_model_params(extra_model_params,
-                                                     hparams, config)
-            model = self.model_class.from_pretrained(
-                hparams.model_name_or_path, config=config)
+            if hparams.prefix is not None:
+                config.prefix = hparams.prefix
+            hparams, config = set_extra_model_params(extra_model_params, hparams, config)
+            model = self.model_class.from_pretrained(hparams.model_name_or_path, config=config)
             prefix = config.prefix
 
         tokenizer = (
@@ -215,7 +213,7 @@ class GenerativeQAModule(BaseTransformer):
 
         # For single GPU training, init_ddp_connection is not called.
         # So we need to initialize the retrievers here.
-        if hparams.gpus == 1:
+        if hparams.gpus <= 1:
             if hparams.distributed_retriever == "ray":
                 self.model.retriever.init_retrieval()
             elif hparams.distributed_retriever == "pytorch":
@@ -340,6 +338,7 @@ class GenerativeQAModule(BaseTransformer):
 
     def _generative_step(self, batch: dict) -> dict:
         start_time = time.time()
+        batch = BatchEncoding(batch).to(device=self.model.device)
         generated_ids = self.model.generate(
             batch["input_ids"],
             attention_mask=batch["attention_mask"],
@@ -394,25 +393,7 @@ class GenerativeQAModule(BaseTransformer):
         return dataloader
 
     def train_dataloader(self) -> DataLoader:
-        dataloader = self.get_dataloader("train",
-                                         batch_size=self.hparams.train_batch_size,
-                                         shuffle=True)
-        t_total = (
-                (len(dataloader.dataset) // (
-                            self.hparams.train_batch_size * max(1,
-                                                                self.hparams.gpus)))
-                // self.hparams.accumulate_grad_batches
-                * float(self.hparams.max_epochs)
-        )
-        # The following code doesn't work with PTL >v1.0.
-        # Commenting out for now.
-
-        # scheduler = get_linear_schedule_with_warmup(
-        #     self.opt, num_warmup_steps=self.hparams.warmup_steps, num_training_steps=t_total
-        # )
-        # if max(scheduler.get_last_lr()) > 0:
-        #     warnings.warn("All learning rates are 0")
-        # self.lr_scheduler = scheduler
+        dataloader = self.get_dataloader("train", batch_size=self.hparams.train_batch_size, shuffle=True)
         return dataloader
 
     def val_dataloader(self) -> DataLoader:
@@ -534,6 +515,13 @@ class GenerativeQAModule(BaseTransformer):
                  "and Ray handles the communication between the training "
                  "workers and the retrieval actors.",
         )
+        parser.add_argument(
+            "--use_dummy_dataset",
+            type=bool,
+            default=False,
+            help="Whether to use the dummy version of the dataset index. More info about custom indexes in the RagRetriever documentation as well as in `examples/rag/use_own_knowledge_dataset.py`",
+        )
+        return parser
 
         parser.add_argument(
             "--num_retrieval_workers",
@@ -546,7 +534,15 @@ class GenerativeQAModule(BaseTransformer):
 
         return parser
 
-def main(args, model=None) -> GenerativeQAModule:
+def main(args=None, model=None) -> GenerativeQAModule:
+
+    parser = argparse.ArgumentParser()
+    parser = pl.Trainer.add_argparse_args(parser)
+    parser = GenerativeQAModule.add_model_specific_args(parser, os.getcwd())
+    parser = GenerativeQAModule.add_retriever_specific_args(parser)
+
+    args = args or parser.parse_args()
+
     Path(args.output_dir).mkdir(exist_ok=True)
 
     named_actors = []
@@ -632,17 +628,8 @@ def main(args, model=None) -> GenerativeQAModule:
     if not args.do_predict:
         return model
 
-    model.hparams.test_checkpoint = ""
-    checkpoints = list(sorted(
-        glob.glob(os.path.join(args.output_dir, "*.ckpt"), recursive=True)))
-    if checkpoints:
-        model.hparams.test_checkpoint = checkpoints[-1]
-        trainer.resume_from_checkpoint = checkpoints[-1]  # best checkpoint
-    trainer.logger.log_hyperparams(model.hparams)
-
     # test() without a model tests using the best checkpoint automatically
     trainer.test()
-
     return model
 
 
