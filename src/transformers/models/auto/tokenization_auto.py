@@ -210,7 +210,7 @@ TOKENIZER_MAPPING = OrderedDict(
     ]
 )
 
-# For tokenizers that do not have a config
+# For tokenizers which are not directly mapped from a config
 NO_CONFIG_TOKENIZER = [
     BertJapaneseTokenizer,
     BertweetTokenizer,
