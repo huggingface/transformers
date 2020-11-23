@@ -279,7 +279,7 @@ class DPRPretrainedContextEncoder(PreTrainedModel):
     config_class = DPRConfig
     load_tf_weights = None
     base_model_prefix = "ctx_encoder"
-    authorized_missing_keys = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def init_weights(self):
         self.ctx_encoder.init_weights()
@@ -294,7 +294,7 @@ class DPRPretrainedQuestionEncoder(PreTrainedModel):
     config_class = DPRConfig
     load_tf_weights = None
     base_model_prefix = "question_encoder"
-    authorized_missing_keys = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def init_weights(self):
         self.question_encoder.init_weights()
@@ -309,7 +309,7 @@ class DPRPretrainedReader(PreTrainedModel):
     config_class = DPRConfig
     load_tf_weights = None
     base_model_prefix = "span_predictor"
-    authorized_missing_keys = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def init_weights(self):
         self.span_predictor.encoder.init_weights()

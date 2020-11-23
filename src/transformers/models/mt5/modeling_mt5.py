@@ -42,12 +42,12 @@ class MT5Model(T5Model):
     """
     model_type = "mt5"
     config_class = MT5Config
-    authorized_missing_keys = [
+    _keys_to_ignore_on_load_missing = [
         r"encoder\.embed_tokens\.weight",
         r"decoder\.embed_tokens\.weight",
         r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
     ]
-    keys_to_never_save = [
+    _keys_to_ignore_on_save = [
         r"encoder\.embed_tokens\.weight",
         r"decoder\.embed_tokens\.weight",
     ]
@@ -71,13 +71,13 @@ class MT5ForConditionalGeneration(T5ForConditionalGeneration):
 
     model_type = "mt5"
     config_class = MT5Config
-    authorized_missing_keys = [
+    _keys_to_ignore_on_load_missing = [
         r"encoder\.embed_tokens\.weight",
         r"decoder\.embed_tokens\.weight",
         r"lm_head\.weight",
         r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
     ]
-    keys_to_never_save = [
+    _keys_to_ignore_on_save = [
         r"encoder\.embed_tokens\.weight",
         r"decoder\.embed_tokens\.weight",
     ]
