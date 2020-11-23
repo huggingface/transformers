@@ -15,7 +15,10 @@
 """ DistilBERT model configuration """
 
 from ...configuration_utils import PretrainedConfig
+from ...modeling_performer_attention import PerformerAttentionConfig
 from ...utils import logging
+from typing import Union, Optional
+import copy
 
 
 logger = logging.get_logger(__name__)
@@ -64,6 +67,13 @@ class DistilBertConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
+        attention_type (:obj:`str`, `optional`, defaults to :obj:`'softmax'`):
+            The type of attention mechanism to use. Possibilities are :obj:`'softmax'` and :obj:`'performer'`, with the
+            latter referring to the linear-time FAVOR+ algorithm put forward in the paper "Rethinking Attention with
+            Performers".
+        performer_attention_config (:obj:`str`, `optional`, defaults to :obj:`None`):
+            An instance of FavorAttentionConfig carrying options for the FavorAttention module. Only used when
+            :obj:`attention_type` = :obj:`'favor'`.
         activation (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
@@ -101,7 +111,9 @@ class DistilBertConfig(PretrainedConfig):
         dim=768,
         hidden_dim=4 * 768,
         dropout=0.1,
+        attention_type='softmax',
         attention_dropout=0.1,
+        performer_attention_config: Optional[Union[dict, PerformerAttentionConfig]] = None,
         activation="gelu",
         initializer_range=0.02,
         qa_dropout=0.1,
@@ -118,7 +130,9 @@ class DistilBertConfig(PretrainedConfig):
         self.dim = dim
         self.hidden_dim = hidden_dim
         self.dropout = dropout
+        self.attention_type = attention_type
         self.attention_dropout = attention_dropout
+        self.performer_attention_config = performer_attention_config
         self.activation = activation
         self.initializer_range = initializer_range
         self.qa_dropout = qa_dropout
@@ -135,3 +149,13 @@ class DistilBertConfig(PretrainedConfig):
     @property
     def num_hidden_layers(self):
         return self.n_layers
+    
+    def to_dict(self):
+        output = super().to_dict()
+        
+        # Correct for the fact that PretrainedConfig doesn't call .__dict__ recursively on non-JSON primitives
+        performer_config = output['performer_attention_config']
+        if performer_config is not None:
+            output['performer_attention_config'] = copy.deepcopy(performer_config.__dict__)
+        
+        return output

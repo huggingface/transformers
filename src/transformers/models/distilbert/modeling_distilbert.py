@@ -33,6 +33,10 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
+from ...modeling_performer_attention import (
+    PerformerAttention,
+    PerformerAttentionConfig
+)
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -229,8 +233,22 @@ class TransformerBlock(nn.Module):
         super().__init__()
 
         assert config.dim % config.n_heads == 0
-
-        self.attention = MultiHeadSelfAttention(config)
+        
+        att_type = config.attention_type
+        if att_type == 'softmax':
+            self.attention = MultiHeadSelfAttention(config)
+        
+        # Use FAVOR+ attention, from the "Rethinking Attention with Performers" paper
+        elif att_type == 'performer':
+            performer_config = config.performer_attention_config or PerformerAttentionConfig()
+            performer_config.attention_dropout = config.attention_dropout
+            performer_config.dim = config.dim
+            performer_config.n_neads = config.n_heads
+            
+            self.attention = PerformerAttention(performer_config)
+        else:
+            raise ValueError(f"DistilBert: Invalid attention_type {att_type}")
+        
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
 
         self.ffn = FFN(config)

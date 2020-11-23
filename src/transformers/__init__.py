@@ -620,6 +620,12 @@ if is_torch_available():
         get_linear_schedule_with_warmup,
         get_polynomial_decay_schedule_with_warmup,
     )
+    
+    # Performer attention is shared across models
+    from .modeling_performer_attention import (
+        PerformerAttention,
+        PerformerAttentionConfig
+    )
 
     # Trainer
     from .trainer import Trainer
