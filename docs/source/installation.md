@@ -74,8 +74,8 @@ folder given by the shell environment variable ``TRANSFORMERS_CACHE``. The defau
 Face cache home followed by ``/transformers/``. This is (by order of priority):
 
   * shell environment variable ``HF_HOME`` 
-  * shell environment variable ``XDG_CACHE_HOME`` + ``/transformers/``
-  * default: ``~/.cache/transformers/``
+  * shell environment variable ``XDG_CACHE_HOME`` + ``/huggingface/``
+  * default: ``~/.cache/huggingface/``
 
 So if you don't have any specific environment variable set, the cache directory will be at
 ``~/.cache/huggingface/transformers/``.
