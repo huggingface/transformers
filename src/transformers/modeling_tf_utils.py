@@ -327,6 +327,7 @@ def input_processing(func, config, input_ids, **kwargs):
     parameter_names = list(signature.keys())
     output = {}
     allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict)
+    boolean_properties = ["return_dict", "output_attentions", "output_hidden_states", "use_cache"]
 
     if "inputs" in kwargs["kwargs_call"]:
         warnings.warn(
