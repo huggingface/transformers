@@ -4,7 +4,7 @@ language:
 tags:
 - ner
 metrics:
-- F-1
+- f1
 - accuracy
 - precision
 - recall
