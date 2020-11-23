@@ -4,6 +4,16 @@ language: multilingual
 datasets: wikipedia
 
 license: apache-2.0
+
+widget:
+- text: "Google generated 46 billion [MASK] in revenue."
+- text: "Paris is the capital of [MASK]."
+- text: "Algiers is the largest city in [MASK]."
+- text: "Paris est la [MASK] de la France."
+- text: "Paris est la capitale de la [MASK]."
+- text: "L'élection américaine a eu [MASK] en novembre 2020."
+- text: "تقع سويسرا في [MASK] أوروبا"
+- text: "إسمي محمد وأسكن في [MASK]."
 ---
 
 # bert-base-15lang-cased

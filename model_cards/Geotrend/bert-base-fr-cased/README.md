@@ -4,6 +4,11 @@ language: fr
 datasets: wikipedia
 
 license: apache-2.0
+
+widget:
+- text: "Paris est la [MASK] de la France."
+- text: "Paris est la capitale de la [MASK]."
+- text: "L'élection américaine a eu [MASK] en novembre 2020."
 ---
 
 # bert-base-fr-cased

@@ -4,6 +4,11 @@ language: multilingual
 datasets: wikipedia
 
 license: apache-2.0
+
+widget:
+- text: "Google generated 46 billion [MASK] in revenue."
+- text: "Paris is the capital of [MASK]."
+- text: "Algiers is the largest city in [MASK]."
 ---
 
 # bert-base-en-sw-cased
