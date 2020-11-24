@@ -16,11 +16,11 @@ The abstract from the paper is the following:
 better performance than pretraining approaches based on autoregressive language modeling. However, relying on
 corrupting the input with masks, BERT neglects dependency between the masked positions and suffers from a
 pretrain-finetune discrepancy. In light of these pros and cons, we propose XLNet, a generalized autoregressive
-pretraining method that (1) enables learning bidirectional contexts by maximizing the expected likelihood over
-all permutations of the factorization order and (2) overcomes the limitations of BERT thanks to its autoregressive
-formulation. Furthermore, XLNet integrates ideas from Transformer-XL, the state-of-the-art autoregressive model,
-into pretraining. Empirically, under comparable experiment settings, XLNet outperforms BERT on 20 tasks, often by
-a large margin, including question answering, natural language inference, sentiment analysis, and document ranking.*
+pretraining method that (1) enables learning bidirectional contexts by maximizing the expected likelihood over all
+permutations of the factorization order and (2) overcomes the limitations of BERT thanks to its autoregressive
+formulation. Furthermore, XLNet integrates ideas from Transformer-XL, the state-of-the-art autoregressive model, into
+pretraining. Empirically, under comparable experiment settings, XLNet outperforms BERT on 20 tasks, often by a large
+margin, including question answering, natural language inference, sentiment analysis, and document ranking.*
 
 Tips:
 
@@ -53,43 +53,43 @@ XLNetTokenizer
 XLNet specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.modeling_xlnet.XLNetModelOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetModelOutput
     :members:
 
-.. autoclass:: transformers.modeling_xlnet.XLNetLMHeadModelOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetLMHeadModelOutput
     :members:
 
-.. autoclass:: transformers.modeling_xlnet.XLNetForSequenceClassificationOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetForSequenceClassificationOutput
     :members:
 
-.. autoclass:: transformers.modeling_xlnet.XLNetForMultipleChoiceOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetForMultipleChoiceOutput
     :members:
 
-.. autoclass:: transformers.modeling_xlnet.XLNetForTokenClassificationOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetForTokenClassificationOutput
     :members:
 
-.. autoclass:: transformers.modeling_xlnet.XLNetForQuestionAnsweringSimpleOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetForQuestionAnsweringSimpleOutput
     :members:
 
-.. autoclass:: transformers.modeling_xlnet.XLNetForQuestionAnsweringOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetForQuestionAnsweringOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetModelOutput
+.. autoclass:: transformers.models.xlnet.modeling_tf_xlnet.TFXLNetModelOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetLMHeadModelOutput
+.. autoclass:: transformers.models.xlnet.modeling_tf_xlnet.TFXLNetLMHeadModelOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForSequenceClassificationOutput
+.. autoclass:: transformers.models.xlnet.modeling_tf_xlnet.TFXLNetForSequenceClassificationOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForMultipleChoiceOutput
+.. autoclass:: transformers.models.xlnet.modeling_tf_xlnet.TFXLNetForMultipleChoiceOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForTokenClassificationOutput
+.. autoclass:: transformers.models.xlnet.modeling_tf_xlnet.TFXLNetForTokenClassificationOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForQuestionAnsweringSimpleOutput
+.. autoclass:: transformers.models.xlnet.modeling_tf_xlnet.TFXLNetForQuestionAnsweringSimpleOutput
     :members:
 
 

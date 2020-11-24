@@ -24,7 +24,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .activations import gelu, gelu_new, swish
+from .activations import ACT2FN
 from .configuration_mpnet import MPNetConfig
 from .file_utils import (
     add_code_sample_docstrings,
@@ -61,13 +61,6 @@ _TOKENIZER_FOR_DOC = "MPNetTokenizer"
 
 
 MPNET_PRETRAINED_MODEL_ARCHIVE_MAP = {"mpnet-base": ""}
-
-
-def mish(x):
-    return x * torch.tanh(nn.functional.softplus(x))
-
-
-ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
 
 
 class MPNetPreTrainedModel(PreTrainedModel):
@@ -718,10 +711,10 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
         input_ids=None,
         token_type_ids=None,
         attention_mask=None,
-        labels=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_tuple=None,

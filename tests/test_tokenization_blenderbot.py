@@ -20,7 +20,11 @@ import os
 import unittest
 
 from transformers.file_utils import cached_property
-from transformers.tokenization_blenderbot import VOCAB_FILES_NAMES, BlenderbotSmallTokenizer, BlenderbotTokenizer
+from transformers.models.blenderbot.tokenization_blenderbot import (
+    VOCAB_FILES_NAMES,
+    BlenderbotSmallTokenizer,
+    BlenderbotTokenizer,
+)
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -74,6 +78,15 @@ class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         decoded = tok.batch_decode(encoded, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         assert src_text != decoded  # I wish it did!
         assert decoded == "i am a small frog ."
+
+    def test_empty_word_small_tok(self):
+        tok = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot-90M")
+        src_text = "I am a small frog ."
+        src_text_dot = "."
+        encoded = tok(src_text)["input_ids"]
+        encoded_dot = tok(src_text_dot)["input_ids"]
+
+        assert encoded[-1] == encoded_dot[0]
 
 
 class Blenderbot3BTokenizerTests(unittest.TestCase):

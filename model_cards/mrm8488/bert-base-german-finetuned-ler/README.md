@@ -18,7 +18,7 @@ Court decisions from 2017 and 2018 were selected for the dataset, published onli
 | Train                  | 1657048 |
 | Eval                    | 500000 |
 
-- Training script: [Fine-tuning script for NER provided by Huggingface](https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner.py)
+- Training script: [Fine-tuning script for NER provided by Huggingface](https://github.com/huggingface/transformers/blob/master/examples/token-classification/run_ner_old.py)
 Colab: [How to fine-tune a model for NER using HF scripts](https://colab.research.google.com/drive/156Qrd7NsUHwA3nmQ6gXdZY0NzOvqk9AT?usp=sharing)
 
 - Labels covered (and its distribution):

@@ -19,8 +19,8 @@ import os
 import unittest
 
 from transformers.file_utils import cached_property
+from transformers.models.fsmt.tokenization_fsmt import VOCAB_FILES_NAMES, FSMTTokenizer
 from transformers.testing_utils import slow
-from transformers.tokenization_fsmt import VOCAB_FILES_NAMES, FSMTTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -144,12 +144,19 @@ class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # for src_text, _ in targets: print(f"""[\n"{src_text}",\n {model.encode(src_text).tolist()}\n],""")
 
         for src_text, tgt_input_ids in targets:
-            input_ids = tokenizer_enc.encode(src_text, return_tensors="pt")[0].tolist()
-            self.assertListEqual(input_ids, tgt_input_ids)
+            encoded_ids = tokenizer_enc.encode(src_text, return_tensors=None)
+            self.assertListEqual(encoded_ids, tgt_input_ids)
 
             # and decode backward, using the reversed languages model
-            decoded_text = tokenizer_dec.decode(input_ids, skip_special_tokens=True)
+            decoded_text = tokenizer_dec.decode(encoded_ids, skip_special_tokens=True)
             self.assertEqual(decoded_text, src_text)
+
+    @slow
+    def test_tokenizer_lower(self):
+        tokenizer = FSMTTokenizer.from_pretrained("facebook/wmt19-ru-en", do_lower_case=True)
+        tokens = tokenizer.tokenize("USA is United States of America")
+        expected = ["us", "a</w>", "is</w>", "un", "i", "ted</w>", "st", "ates</w>", "of</w>", "am", "er", "ica</w>"]
+        self.assertListEqual(tokens, expected)
 
     @unittest.skip("FSMTConfig.__init__  requires non-optional args")
     def test_torch_encode_plus_sent_to_model(self):

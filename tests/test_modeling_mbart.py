@@ -4,7 +4,6 @@ from transformers import is_torch_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
-from .test_modeling_bart import TOLERANCE, _long_tensor, assert_tensors_close
 from .test_modeling_common import ModelTesterMixin
 
 
@@ -38,7 +37,6 @@ class ModelTester:
             decoder_ffn_dim=32,
             max_position_embeddings=48,
             add_final_layer_norm=True,
-            return_dict=True,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -49,7 +47,7 @@ class ModelTester:
 class SelectiveCommonTest(unittest.TestCase):
     all_model_classes = (MBartForConditionalGeneration,) if is_torch_available() else ()
 
-    test_save_load_keys_to_never_save = ModelTesterMixin.test_save_load_keys_to_never_save
+    test_save_load__keys_to_ignore_on_save = ModelTesterMixin.test_save_load__keys_to_ignore_on_save
 
     def setUp(self):
         self.model_tester = ModelTester(self)
@@ -64,7 +62,7 @@ class AbstractSeq2SeqIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.tokenizer = AutoTokenizer.from_pretrained(cls.checkpoint_name)
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.checkpoint_name, use_fast=False)
         return cls
 
     @cached_property
@@ -92,35 +90,9 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
     expected_src_tokens = [8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, EN_CODE]
 
     @slow
-    @unittest.skip("This has been failing since June 20th at least.")
-    def test_enro_forward(self):
-        model = self.model
-        net_input = {
-            "input_ids": _long_tensor(
-                [
-                    [3493, 3060, 621, 104064, 1810, 100, 142, 566, 13158, 6889, 5, 2, 250004],
-                    [64511, 7, 765, 2837, 45188, 297, 4049, 237, 10, 122122, 5, 2, 250004],
-                ]
-            ),
-            "decoder_input_ids": _long_tensor(
-                [
-                    [250020, 31952, 144, 9019, 242307, 21980, 55749, 11, 5, 2, 1, 1],
-                    [250020, 884, 9019, 96, 9, 916, 86792, 36, 18743, 15596, 5, 2],
-                ]
-            ),
-        }
-        net_input["attention_mask"] = net_input["input_ids"].ne(1)
-        with torch.no_grad():
-            logits, *other_stuff = model(**net_input)
-
-        expected_slice = torch.tensor([9.0078, 10.1113, 14.4787], device=logits.device, dtype=logits.dtype)
-        result_slice = logits[0, 0, :3]
-        assert_tensors_close(expected_slice, result_slice, atol=TOLERANCE)
-
-    @slow
     def test_enro_generate_one(self):
         batch: BatchEncoding = self.tokenizer.prepare_seq2seq_batch(
-            ["UN Chief Says There Is No Military Solution in Syria"]
+            ["UN Chief Says There Is No Military Solution in Syria"], return_tensors="pt"
         ).to(torch_device)
         translated_tokens = self.model.generate(**batch)
         decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
@@ -128,8 +100,10 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
         # self.assertEqual(self.tgt_text[1], decoded[1])
 
     @slow
-    def test_enro_generate(self):
-        batch: BatchEncoding = self.tokenizer.prepare_seq2seq_batch(self.src_text).to(torch_device)
+    def test_enro_generate_batch(self):
+        batch: BatchEncoding = self.tokenizer.prepare_seq2seq_batch(self.src_text, return_tensors="pt").to(
+            torch_device
+        )
         translated_tokens = self.model.generate(**batch)
         decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
         assert self.tgt_text == decoded
@@ -159,7 +133,6 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
             decoder_ffn_dim=32,
             max_position_embeddings=48,
             add_final_layer_norm=True,
-            return_dict=True,
         )
         lm_model = MBartForConditionalGeneration(config).to(torch_device)
         context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long().to(torch_device)
@@ -182,7 +155,7 @@ class MBartCC25IntegrationTest(AbstractSeq2SeqIntegrationTest):
 
     @unittest.skip("This test is broken, still generates english")
     def test_cc25_generate(self):
-        inputs = self.tokenizer.prepare_seq2seq_batch([self.src_text[0]]).to(torch_device)
+        inputs = self.tokenizer.prepare_seq2seq_batch([self.src_text[0]], return_tensors="pt").to(torch_device)
         translated_tokens = self.model.generate(
             input_ids=inputs["input_ids"].to(torch_device),
             decoder_start_token_id=self.tokenizer.lang_code_to_id["ro_RO"],
@@ -192,7 +165,9 @@ class MBartCC25IntegrationTest(AbstractSeq2SeqIntegrationTest):
 
     @slow
     def test_fill_mask(self):
-        inputs = self.tokenizer.prepare_seq2seq_batch(["One of the best <mask> I ever read!"]).to(torch_device)
+        inputs = self.tokenizer.prepare_seq2seq_batch(["One of the best <mask> I ever read!"], return_tensors="pt").to(
+            torch_device
+        )
         outputs = self.model.generate(
             inputs["input_ids"], decoder_start_token_id=self.tokenizer.lang_code_to_id["en_XX"], num_beams=1
         )

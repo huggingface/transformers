@@ -18,14 +18,15 @@ import os
 import pickle
 import unittest
 
-from transformers.testing_utils import custom_tokenizers
-from transformers.tokenization_bert_japanese import (
+from transformers import AutoTokenizer
+from transformers.models.bert_japanese.tokenization_bert_japanese import (
     VOCAB_FILES_NAMES,
     BertJapaneseTokenizer,
     CharacterTokenizer,
     MecabTokenizer,
     WordpieceTokenizer,
 )
+from transformers.testing_utils import custom_tokenizers
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -267,3 +268,11 @@ class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestC
         # 2 is for "[CLS]", 3 is for "[SEP]"
         assert encoded_sentence == [2] + text + [3]
         assert encoded_pair == [2] + text + [3] + text_2 + [3]
+
+
+@custom_tokenizers
+class AutoTokenizerCustomTest(unittest.TestCase):
+    def test_tokenizer_bert_japanese(self):
+        EXAMPLE_BERT_JAPANESE_ID = "cl-tohoku/bert-base-japanese"
+        tokenizer = AutoTokenizer.from_pretrained(EXAMPLE_BERT_JAPANESE_ID)
+        self.assertIsInstance(tokenizer, BertJapaneseTokenizer)

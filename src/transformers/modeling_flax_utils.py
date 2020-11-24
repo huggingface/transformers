@@ -35,7 +35,8 @@ logger = logging.get_logger(__name__)
 
 @jax.jit
 def gelu(x):
-    r"""Gaussian error linear unit activation function.
+    r"""
+    Gaussian error linear unit activation function.
 
     Computes the element-wise function:
 
@@ -43,9 +44,8 @@ def gelu(x):
       \mathrm{gelu}(x) = \frac{x}{2} \left(1 + \mathrm{tanh} \left(
         \sqrt{\frac{2}{\pi}} \left(x + 0.044715 x^3 \right) \right) \right)
 
-    We explicitly use the approximation rather than the exact formulation for
-    speed. For more information, see `Gaussian Error Linear Units (GELUs)
-    <https://arxiv.org/abs/1606.08415>`_, section 2.
+    We explicitly use the approximation rather than the exact formulation for speed. For more information, see
+    `Gaussian Error Linear Units (GELUs) <https://arxiv.org/abs/1606.08415>`_, section 2.
     """
     return x * 0.5 * (1.0 + jax.lax.erf(x / jnp.sqrt(2.0)))
 
@@ -53,6 +53,7 @@ def gelu(x):
 ACT2FN = {
     "gelu": nn.gelu,
     "relu": nn.relu,
+    "silu": nn.swish,
     "swish": nn.swish,
     "gelu_new": gelu,
 }
@@ -106,7 +107,7 @@ class FlaxPreTrainedModel(ABC):
         proxies = kwargs.pop("proxies", None)
         # output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
-        use_cdn = kwargs.pop("use_cdn", True)
+        revision = kwargs.pop("revision", None)
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
@@ -120,6 +121,7 @@ class FlaxPreTrainedModel(ABC):
                 resume_download=resume_download,
                 proxies=proxies,
                 local_files_only=local_files_only,
+                revision=revision,
                 **kwargs,
             )
         else:
@@ -130,7 +132,7 @@ class FlaxPreTrainedModel(ABC):
             if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
             else:
-                archive_file = hf_bucket_url(pretrained_model_name_or_path, filename=WEIGHTS_NAME, use_cdn=use_cdn)
+                archive_file = hf_bucket_url(pretrained_model_name_or_path, filename=WEIGHTS_NAME, revision=revision)
 
             # redirect to the cache, if necessary
             try:
@@ -142,16 +144,13 @@ class FlaxPreTrainedModel(ABC):
                     resume_download=resume_download,
                     local_files_only=local_files_only,
                 )
-            except EnvironmentError:
-                if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
-                    msg = f"Couldn't reach server at '{archive_file}' to download pretrained weights."
-                else:
-                    msg = (
-                        f"Model name '{pretrained_model_name_or_path}' "
-                        f"was not found in model name list ({', '.join(cls.pretrained_model_archive_map.keys())}). "
-                        f"We assumed '{archive_file}' was a path or url to model weight files but "
-                        "couldn't find any such file at this path or url."
-                    )
+            except EnvironmentError as err:
+                logger.error(err)
+                msg = (
+                    f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
+                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named {WEIGHTS_NAME}.\n\n"
+                )
                 raise EnvironmentError(msg)
 
             if resolved_archive_file == archive_file:

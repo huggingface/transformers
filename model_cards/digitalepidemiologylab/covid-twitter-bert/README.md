@@ -4,7 +4,7 @@ thumbnail: "https://raw.githubusercontent.com/digitalepidemiologylab/covid-twitt
 tags:
 - Twitter
 - COVID-19
-license: "MIT"
+license: mit
 ---
 
 # COVID-Twitter-BERT (CT-BERT) v1

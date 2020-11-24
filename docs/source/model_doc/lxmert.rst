@@ -8,9 +8,8 @@ The LXMERT model was proposed in `LXMERT: Learning Cross-Modality Encoder Repres
 <https://arxiv.org/abs/1908.07490>`__ by Hao Tan & Mohit Bansal. It is a series of bidirectional transformer encoders
 (one for the vision modality, one for the language modality, and then one to fuse both modalities) pretrained using a
 combination of masked language modeling, visual-language text alignment, ROI-feature regression, masked
-visual-attribute modeling, masked visual-object modeling, and visual-question answering objectives.
-The pretraining consists of multiple multi-modal datasets: MSCOCO, Visual-Genome + Visual-Genome Question Answering,
-VQA 2.0, and GQA.
+visual-attribute modeling, masked visual-object modeling, and visual-question answering objectives. The pretraining
+consists of multiple multi-modal datasets: MSCOCO, Visual-Genome + Visual-Genome Question Answering, VQA 2.0, and GQA.
 
 The abstract from the paper is the following:
 
@@ -68,19 +67,19 @@ LxmertTokenizerFast
 Lxmert specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.modeling_lxmert.LxmertModelOutput
+.. autoclass:: transformers.models.lxmert.modeling_lxmert.LxmertModelOutput
     :members:
 
-.. autoclass:: transformers.modeling_lxmert.LxmertForPreTrainingOutput
+.. autoclass:: transformers.models.lxmert.modeling_lxmert.LxmertForPreTrainingOutput
     :members:
 
-.. autoclass:: transformers.modeling_lxmert.LxmertForQuestionAnsweringOutput
+.. autoclass:: transformers.models.lxmert.modeling_lxmert.LxmertForQuestionAnsweringOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_lxmert.TFLxmertModelOutput
+.. autoclass:: transformers.models.lxmert.modeling_tf_lxmert.TFLxmertModelOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_lxmert.TFLxmertForPreTrainingOutput
+.. autoclass:: transformers.models.lxmert.modeling_tf_lxmert.TFLxmertForPreTrainingOutput
     :members:
 
 

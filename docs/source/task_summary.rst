@@ -2,30 +2,30 @@ Summary of the tasks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 This page shows the most frequent use-cases when using the library. The models available allow for many different
-configurations and a great versatility in use-cases. The most simple ones are presented here, showcasing usage
-for tasks such as question answering, sequence classification, named entity recognition and others.
+configurations and a great versatility in use-cases. The most simple ones are presented here, showcasing usage for
+tasks such as question answering, sequence classification, named entity recognition and others.
 
 These examples leverage auto-models, which are classes that will instantiate a model according to a given checkpoint,
 automatically selecting the correct model architecture. Please check the :class:`~transformers.AutoModel` documentation
-for more information.
-Feel free to modify the code to be more specific and adapt it to your specific use-case.
+for more information. Feel free to modify the code to be more specific and adapt it to your specific use-case.
 
 In order for a model to perform well on a task, it must be loaded from a checkpoint corresponding to that task. These
 checkpoints are usually pre-trained on a large corpus of data and fine-tuned on a specific task. This means the
 following:
 
 - Not all models were fine-tuned on all tasks. If you want to fine-tune a model on a specific task, you can leverage
-  one of the `run_$TASK.py` scripts in the
-  `examples <https://github.com/huggingface/transformers/tree/master/examples>`__ directory.
-- Fine-tuned models were fine-tuned on a specific dataset. This dataset may or may not overlap with your use-case
-  and domain. As mentioned previously, you may leverage the
-  `examples <https://github.com/huggingface/transformers/tree/master/examples>`__ scripts to fine-tune your model, or you
-  may create your own training script.
+  one of the `run_$TASK.py` scripts in the `examples
+  <https://github.com/huggingface/transformers/tree/master/examples>`__ directory.
+- Fine-tuned models were fine-tuned on a specific dataset. This dataset may or may not overlap with your use-case and
+  domain. As mentioned previously, you may leverage the `examples
+  <https://github.com/huggingface/transformers/tree/master/examples>`__ scripts to fine-tune your model, or you may
+  create your own training script.
 
 In order to do an inference on a task, several mechanisms are made available by the library:
 
 - Pipelines: very easy-to-use abstractions, which require as little as two lines of code.
-- Direct model use: Less abstractions, but more flexibility and power via a direct access to a tokenizer (PyTorch/TensorFlow) and full inference capacity.
+- Direct model use: Less abstractions, but more flexibility and power via a direct access to a tokenizer
+  (PyTorch/TensorFlow) and full inference capacity.
 
 Both approaches are showcased here.
 
@@ -40,15 +40,17 @@ Both approaches are showcased here.
 Sequence Classification
 -----------------------------------------------------------------------------------------------------------------------
 
-Sequence classification is the task of classifying sequences according to a given number of classes. An example
-of sequence classification is the GLUE dataset, which is entirely based on that task. If you would like to fine-tune
-a model on a GLUE sequence classification task, you may leverage the
-`run_glue.py <https://github.com/huggingface/transformers/tree/master/examples/text-classification/run_glue.py>`__ and
-`run_pl_glue.py <https://github.com/huggingface/transformers/tree/master/examples/text-classification/run_pl_glue.py>`__ or
-`run_tf_glue.py <https://github.com/huggingface/transformers/tree/master/examples/text-classification/run_tf_glue.py>`__ scripts.
+Sequence classification is the task of classifying sequences according to a given number of classes. An example of
+sequence classification is the GLUE dataset, which is entirely based on that task. If you would like to fine-tune a
+model on a GLUE sequence classification task, you may leverage the `run_glue.py
+<https://github.com/huggingface/transformers/tree/master/examples/text-classification/run_glue.py>`__ and
+`run_pl_glue.py
+<https://github.com/huggingface/transformers/tree/master/examples/text-classification/run_pl_glue.py>`__ or
+`run_tf_glue.py
+<https://github.com/huggingface/transformers/tree/master/examples/text-classification/run_tf_glue.py>`__ scripts.
 
-Here is an example of using pipelines to do sentiment analysis: identifying if a sequence is positive or negative.
-It leverages a fine-tuned model on sst2, which is a GLUE task.
+Here is an example of using pipelines to do sentiment analysis: identifying if a sequence is positive or negative. It
+leverages a fine-tuned model on sst2, which is a GLUE task.
 
 This returns a label ("POSITIVE" or "NEGATIVE") alongside a score, as follows:
 
@@ -67,18 +69,16 @@ This returns a label ("POSITIVE" or "NEGATIVE") alongside a score, as follows:
     label: POSITIVE, with score: 0.9999
 
 
-Here is an example of doing a sequence classification using a model to determine if two sequences are paraphrases
-of each other. The process is the following:
+Here is an example of doing a sequence classification using a model to determine if two sequences are paraphrases of
+each other. The process is the following:
 
-1. Instantiate a tokenizer and a model from the checkpoint name. The model is
-   identified as a BERT model and loads it with the weights stored in the
-   checkpoint.
-2. Build a sequence from the two sentences, with the correct model-specific
-   separators token type ids and attention masks
-   (:func:`~transformers.PreTrainedTokenizer.encode` and
-   :func:`~transformers.PreTrainedTokenizer.__call__` take care of this).
-3. Pass this sequence through the model so that it is classified in one of the
-   two available classes: 0 (not a paraphrase) and 1 (is a paraphrase).
+1. Instantiate a tokenizer and a model from the checkpoint name. The model is identified as a BERT model and loads it
+   with the weights stored in the checkpoint.
+2. Build a sequence from the two sentences, with the correct model-specific separators token type ids and attention
+   masks (:func:`~transformers.PreTrainedTokenizer.encode` and :func:`~transformers.PreTrainedTokenizer.__call__` take
+   care of this).
+3. Pass this sequence through the model so that it is classified in one of the two available classes: 0 (not a
+   paraphrase) and 1 (is a paraphrase).
 4. Compute the softmax of the result to get probabilities over the classes.
 5. Print the results.
 
@@ -89,7 +89,7 @@ of each other. The process is the following:
     >>> import torch
 
     >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased-finetuned-mrpc")
-    >>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased-finetuned-mrpc", return_dict=True)
+    >>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased-finetuned-mrpc")
 
     >>> classes = ["not paraphrase", "is paraphrase"]
 
@@ -122,7 +122,7 @@ of each other. The process is the following:
     >>> import tensorflow as tf
 
     >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased-finetuned-mrpc")
-    >>> model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased-finetuned-mrpc", return_dict=True)
+    >>> model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased-finetuned-mrpc")
 
     >>> classes = ["not paraphrase", "is paraphrase"]
 
@@ -155,14 +155,15 @@ Extractive Question Answering
 -----------------------------------------------------------------------------------------------------------------------
 
 Extractive Question Answering is the task of extracting an answer from a text given a question. An example of a
-question answering dataset is the SQuAD dataset, which is entirely based on that task. If you would like to fine-tune
-a model on a SQuAD task, you may leverage the
-`run_squad.py <https://github.com/huggingface/transformers/tree/master/examples/question-answering/run_squad.py>`__ and
-`run_tf_squad.py <https://github.com/huggingface/transformers/tree/master/examples/question-answering/run_tf_squad.py>`__ scripts.
+question answering dataset is the SQuAD dataset, which is entirely based on that task. If you would like to fine-tune a
+model on a SQuAD task, you may leverage the `run_squad.py
+<https://github.com/huggingface/transformers/tree/master/examples/question-answering/run_squad.py>`__ and
+`run_tf_squad.py
+<https://github.com/huggingface/transformers/tree/master/examples/question-answering/run_tf_squad.py>`__ scripts.
 
 
-Here is an example of using pipelines to do question answering: extracting an answer from a text given a question.
-It leverages a fine-tuned model on SQuAD.
+Here is an example of using pipelines to do question answering: extracting an answer from a text given a question. It
+leverages a fine-tuned model on SQuAD.
 
 .. code-block::
 
@@ -176,8 +177,8 @@ It leverages a fine-tuned model on SQuAD.
     ... a model on a SQuAD task, you may leverage the examples/question-answering/run_squad.py script.
     ... """
 
-This returns an answer extracted from the text, a confidence score, alongside "start" and "end" values, which
-are the positions of the extracted answer in the text.
+This returns an answer extracted from the text, a confidence score, alongside "start" and "end" values, which are the
+positions of the extracted answer in the text.
 
 .. code-block::
 
@@ -192,16 +193,13 @@ are the positions of the extracted answer in the text.
 
 Here is an example of question answering using a model and a tokenizer. The process is the following:
 
-1. Instantiate a tokenizer and a model from the checkpoint name. The model is
-   identified as a BERT model and loads it with the weights stored in the
-   checkpoint.
+1. Instantiate a tokenizer and a model from the checkpoint name. The model is identified as a BERT model and loads it
+   with the weights stored in the checkpoint.
 2. Define a text and a few questions.
-3. Iterate over the questions and build a sequence from the text and the current
-   question, with the correct model-specific separators token type ids and
-   attention masks.
-4. Pass this sequence through the model. This outputs a range of scores across
-   the entire sequence tokens (question and text), for both the start and end
-   positions.
+3. Iterate over the questions and build a sequence from the text and the current question, with the correct
+   model-specific separators token type ids and attention masks.
+4. Pass this sequence through the model. This outputs a range of scores across the entire sequence tokens (question and
+   text), for both the start and end positions.
 5. Compute the softmax of the result to get probabilities over the tokens.
 6. Fetch the tokens from the identified start and stop values, convert those tokens to a string.
 7. Print the results.
@@ -213,7 +211,7 @@ Here is an example of question answering using a model and a tokenizer. The proc
     >>> import torch
 
     >>> tokenizer = AutoTokenizer.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad")
-    >>> model = AutoModelForQuestionAnswering.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad", return_dict=True)
+    >>> model = AutoModelForQuestionAnswering.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad")
 
     >>> text = r"""
     ... 🤗 Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides general-purpose
@@ -233,7 +231,9 @@ Here is an example of question answering using a model and a tokenizer. The proc
     ...     input_ids = inputs["input_ids"].tolist()[0]
     ...
     ...     text_tokens = tokenizer.convert_ids_to_tokens(input_ids)
-    ...     answer_start_scores, answer_end_scores = model(**inputs)
+    ...     outputs = model(**inputs)
+    ...     answer_start_scores = outputs.start_logits
+    ...     answer_end_scores = outputs.end_logits
     ...
     ...     answer_start = torch.argmax(
     ...         answer_start_scores
@@ -255,7 +255,7 @@ Here is an example of question answering using a model and a tokenizer. The proc
     >>> import tensorflow as tf
 
     >>> tokenizer = AutoTokenizer.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad")
-    >>> model = TFAutoModelForQuestionAnswering.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad", return_dict=True)
+    >>> model = TFAutoModelForQuestionAnswering.from_pretrained("bert-large-uncased-whole-word-masking-finetuned-squad")
 
     >>> text = r"""
     ... 🤗 Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides general-purpose
@@ -275,7 +275,9 @@ Here is an example of question answering using a model and a tokenizer. The proc
     ...     input_ids = inputs["input_ids"].numpy()[0]
     ...
     ...     text_tokens = tokenizer.convert_ids_to_tokens(input_ids)
-    ...     answer_start_scores, answer_end_scores = model(inputs)
+    ...     outputs = model(inputs)
+    ...     answer_start_scores = outputs.start_logits
+    ...     answer_end_scores = outputs.end_logits
     ...
     ...     answer_start = tf.argmax(
     ...         answer_start_scores, axis=1
@@ -299,22 +301,22 @@ Here is an example of question answering using a model and a tokenizer. The proc
 Language Modeling
 -----------------------------------------------------------------------------------------------------------------------
 
-Language modeling is the task of fitting a model to a corpus, which can be domain specific. All popular transformer-based
-models are trained using a variant of language modeling, e.g. BERT with masked language modeling, GPT-2 with
-causal language modeling.
+Language modeling is the task of fitting a model to a corpus, which can be domain specific. All popular
+transformer-based models are trained using a variant of language modeling, e.g. BERT with masked language modeling,
+GPT-2 with causal language modeling.
 
 Language modeling can be useful outside of pre-training as well, for example to shift the model distribution to be
-domain-specific: using a language model trained over a very large corpus, and then fine-tuning it to a news dataset
-or on scientific papers e.g. `LysandreJik/arxiv-nlp <https://huggingface.co/lysandre/arxiv-nlp>`__.
+domain-specific: using a language model trained over a very large corpus, and then fine-tuning it to a news dataset or
+on scientific papers e.g. `LysandreJik/arxiv-nlp <https://huggingface.co/lysandre/arxiv-nlp>`__.
 
 Masked Language Modeling
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Masked language modeling is the task of masking tokens in a sequence with a masking token, and prompting the model to
 fill that mask with an appropriate token. This allows the model to attend to both the right context (tokens on the
-right of the mask) and the left context (tokens on the left of the mask). Such a training creates a strong basis
-for downstream tasks, requiring bi-directional context such as SQuAD (question answering,
-see `Lewis, Lui, Goyal et al. <https://arxiv.org/abs/1910.13461>`__, part 4.2).
+right of the mask) and the left context (tokens on the left of the mask). Such a training creates a strong basis for
+downstream tasks, requiring bi-directional context such as SQuAD (question answering, see `Lewis, Lui, Goyal et al.
+<https://arxiv.org/abs/1910.13461>`__, part 4.2).
 
 Here is an example of using pipelines to replace a mask from a sequence:
 
@@ -324,8 +326,7 @@ Here is an example of using pipelines to replace a mask from a sequence:
 
     >>> nlp = pipeline("fill-mask")
 
-This outputs the sequences with the mask filled, the confidence score, and the token id in the tokenizer
-vocabulary:
+This outputs the sequences with the mask filled, the confidence score, and the token id in the tokenizer vocabulary:
 
 .. code-block::
 
@@ -359,14 +360,12 @@ vocabulary:
 
 Here is an example of doing masked language modeling using a model and a tokenizer. The process is the following:
 
-1. Instantiate a tokenizer and a model from the checkpoint name. The model is
-   identified as a DistilBERT model and loads it with the weights stored in the
-   checkpoint.
+1. Instantiate a tokenizer and a model from the checkpoint name. The model is identified as a DistilBERT model and
+   loads it with the weights stored in the checkpoint.
 2. Define a sequence with a masked token, placing the :obj:`tokenizer.mask_token` instead of a word.
 3. Encode that sequence into a list of IDs and find the position of the masked token in that list.
-4. Retrieve the predictions at the index of the mask token: this tensor has the
-   same size as the vocabulary, and the values are the scores attributed to each
-   token. The model gives higher score to tokens it deems probable in that
+4. Retrieve the predictions at the index of the mask token: this tensor has the same size as the vocabulary, and the
+   values are the scores attributed to each token. The model gives higher score to tokens it deems probable in that
    context.
 5. Retrieve the top 5 tokens using the PyTorch :obj:`topk` or TensorFlow :obj:`top_k` methods.
 6. Replace the mask token by the tokens and print the results
@@ -378,7 +377,7 @@ Here is an example of doing masked language modeling using a model and a tokeniz
     >>> import torch
 
     >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-cased")
-    >>> model = AutoModelWithLMHead.from_pretrained("distilbert-base-cased", return_dict=True)
+    >>> model = AutoModelWithLMHead.from_pretrained("distilbert-base-cased")
 
     >>> sequence = f"Distilled models are smaller than the models they mimic. Using them instead of the large versions would help {tokenizer.mask_token} our carbon footprint."
 
@@ -394,7 +393,7 @@ Here is an example of doing masked language modeling using a model and a tokeniz
     >>> import tensorflow as tf
 
     >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-cased")
-    >>> model = TFAutoModelWithLMHead.from_pretrained("distilbert-base-cased", return_dict=True)
+    >>> model = TFAutoModelWithLMHead.from_pretrained("distilbert-base-cased")
 
     >>> sequence = f"Distilled models are smaller than the models they mimic. Using them instead of the large versions would help {tokenizer.mask_token} our carbon footprint."
 
@@ -427,9 +426,12 @@ Causal language modeling is the task of predicting the token following a sequenc
 model only attends to the left context (tokens on the left of the mask). Such a training is particularly interesting
 for generation tasks.
 
-Usually, the next token is predicted by sampling from the logits of the last hidden state the model produces from the input sequence.
+Usually, the next token is predicted by sampling from the logits of the last hidden state the model produces from the
+input sequence.
 
-Here is an example of using the tokenizer and model and leveraging the :func:`~transformers.PreTrainedModel.top_k_top_p_filtering` method to sample the next token following an input sequence of tokens.
+Here is an example of using the tokenizer and model and leveraging the
+:func:`~transformers.PreTrainedModel.top_k_top_p_filtering` method to sample the next token following an input sequence
+of tokens.
 
 .. code-block::
 
@@ -439,7 +441,7 @@ Here is an example of using the tokenizer and model and leveraging the :func:`~t
     >>> from torch.nn import functional as F
 
     >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-    >>> model = AutoModelWithLMHead.from_pretrained("gpt2", return_dict=True)
+    >>> model = AutoModelWithLMHead.from_pretrained("gpt2")
 
     >>> sequence = f"Hugging Face is based in DUMBO, New York City, and "
 
@@ -463,7 +465,7 @@ Here is an example of using the tokenizer and model and leveraging the :func:`~t
     >>> import tensorflow as tf
 
     >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
-    >>> model = TFAutoModelWithLMHead.from_pretrained("gpt2", return_dict=True)
+    >>> model = TFAutoModelWithLMHead.from_pretrained("gpt2")
 
     >>> sequence = f"Hugging Face is based in DUMBO, New York City, and "
 
@@ -490,12 +492,16 @@ This outputs a (hopefully) coherent next token following the original sequence, 
     >>> print(resulting_string)
     Hugging Face is based in DUMBO, New York City, and has
 
-In the next section, we show how this functionality is leveraged in :func:`~transformers.PreTrainedModel.generate` to generate multiple tokens up to a user-defined length.
+In the next section, we show how this functionality is leveraged in :func:`~transformers.PreTrainedModel.generate` to
+generate multiple tokens up to a user-defined length.
 
 Text Generation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-In text generation (*a.k.a* *open-ended text generation*) the goal is to create a coherent portion of text that is a continuation from the given context. The following example shows how *GPT-2* can be used in pipelines to generate text. As a default all models apply *Top-K* sampling when used in pipelines, as configured in their respective configurations (see `gpt-2 config <https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json>`__ for example).
+In text generation (*a.k.a* *open-ended text generation*) the goal is to create a coherent portion of text that is a
+continuation from the given context. The following example shows how *GPT-2* can be used in pipelines to generate text.
+As a default all models apply *Top-K* sampling when used in pipelines, as configured in their respective configurations
+(see `gpt-2 config <https://s3.amazonaws.com/models.huggingface.co/bert/gpt2-config.json>`__ for example).
 
 .. code-block::
 
@@ -507,17 +513,18 @@ In text generation (*a.k.a* *open-ended text generation*) the goal is to create 
 
 
 
-Here, the model generates a random text with a total maximal length of *50* tokens from context *"As far as I am concerned, I will"*.
-The default arguments of ``PreTrainedModel.generate()`` can be directly overriden in the pipeline, as is shown above for the argument ``max_length``.
+Here, the model generates a random text with a total maximal length of *50* tokens from context *"As far as I am
+concerned, I will"*. The default arguments of ``PreTrainedModel.generate()`` can be directly overridden in the
+pipeline, as is shown above for the argument ``max_length``.
 
-Here is an example of text generation using ``XLNet`` and its tokenzier.
+Here is an example of text generation using ``XLNet`` and its tokenizer.
 
 .. code-block::
 
     >>> ## PYTORCH CODE
     >>> from transformers import AutoModelWithLMHead, AutoTokenizer
 
-    >>> model = AutoModelWithLMHead.from_pretrained("xlnet-base-cased", return_dict=True)
+    >>> model = AutoModelWithLMHead.from_pretrained("xlnet-base-cased")
     >>> tokenizer = AutoTokenizer.from_pretrained("xlnet-base-cased")
 
     >>> # Padding text helps XLNet with short prompts - proposed by Aman Rusia in https://github.com/rusiaaman/XLNet-gen#methodology
@@ -542,7 +549,7 @@ Here is an example of text generation using ``XLNet`` and its tokenzier.
     >>> ## TENSORFLOW CODE
     >>> from transformers import TFAutoModelWithLMHead, AutoTokenizer
 
-    >>> model = TFAutoModelWithLMHead.from_pretrained("xlnet-base-cased", return_dict=True)
+    >>> model = TFAutoModelWithLMHead.from_pretrained("xlnet-base-cased")
     >>> tokenizer = AutoTokenizer.from_pretrained("xlnet-base-cased")
 
     >>> # Padding text helps XLNet with short prompts - proposed by Aman Rusia in https://github.com/rusiaaman/XLNet-gen#methodology
@@ -569,25 +576,30 @@ Here is an example of text generation using ``XLNet`` and its tokenzier.
     >>> print(generated)
     Today the weather is really nice and I am planning on anning on taking a nice...... of a great time!<eop>...............
 
-Text generation is currently possible with *GPT-2*, *OpenAi-GPT*, *CTRL*, *XLNet*, *Transfo-XL* and *Reformer* in PyTorch and for most models in Tensorflow as well. As can be seen in the example above *XLNet* and *Transfo-XL* often need to be padded to work well.
-GPT-2 is usually a good choice for *open-ended text generation* because it was trained on millions of webpages with a causal language modeling objective.
+Text generation is currently possible with *GPT-2*, *OpenAi-GPT*, *CTRL*, *XLNet*, *Transfo-XL* and *Reformer* in
+PyTorch and for most models in Tensorflow as well. As can be seen in the example above *XLNet* and *Transfo-XL* often
+need to be padded to work well. GPT-2 is usually a good choice for *open-ended text generation* because it was trained
+on millions of webpages with a causal language modeling objective.
 
-For more information on how to apply different decoding strategies for text generation, please also refer to our text generation blog post `here <https://huggingface.co/blog/how-to-generate>`__.
+For more information on how to apply different decoding strategies for text generation, please also refer to our text
+generation blog post `here <https://huggingface.co/blog/how-to-generate>`__.
 
 
 Named Entity Recognition
 -----------------------------------------------------------------------------------------------------------------------
 
-Named Entity Recognition (NER) is the task of classifying tokens according to a class, for example, identifying a
-token as a person, an organisation or a location.
-An example of a named entity recognition dataset is the CoNLL-2003 dataset, which is entirely based on that task.
-If you would like to fine-tune a model on an NER task, you may leverage the
-`run_ner.py <https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_ner.py>`__ (PyTorch),
-`run_pl_ner.py <https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_pl_ner.py>`__ (leveraging pytorch-lightning) or the
-`run_tf_ner.py <https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_tf_ner.py>`__ (TensorFlow) scripts.
+Named Entity Recognition (NER) is the task of classifying tokens according to a class, for example, identifying a token
+as a person, an organisation or a location. An example of a named entity recognition dataset is the CoNLL-2003 dataset,
+which is entirely based on that task. If you would like to fine-tune a model on an NER task, you may leverage the
+`run_ner.py <https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_ner.py>`__
+(PyTorch), `run_pl_ner.py
+<https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_pl_ner.py>`__ (leveraging
+pytorch-lightning) or the `run_tf_ner.py
+<https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_tf_ner.py>`__ (TensorFlow)
+scripts.
 
-Here is an example of using pipelines to do named entity recognition, specifically, trying to identify tokens as belonging to one
-of 9 classes:
+Here is an example of using pipelines to do named entity recognition, specifically, trying to identify tokens as
+belonging to one of 9 classes:
 
 - O, Outside of a named entity
 - B-MIS, Beginning of a miscellaneous entity right after another miscellaneous entity
@@ -599,8 +611,8 @@ of 9 classes:
 - B-LOC, Beginning of a location right after another location
 - I-LOC, Location
 
-It leverages a fine-tuned model on CoNLL-2003, fine-tuned by `@stefan-it <https://github.com/stefan-it>`__ from
-`dbmdz <https://github.com/dbmdz>`__.
+It leverages a fine-tuned model on CoNLL-2003, fine-tuned by `@stefan-it <https://github.com/stefan-it>`__ from `dbmdz
+<https://github.com/dbmdz>`__.
 
 .. code-block::
 
@@ -612,8 +624,8 @@ It leverages a fine-tuned model on CoNLL-2003, fine-tuned by `@stefan-it <https:
     ...            "close to the Manhattan Bridge which is visible from the window."
 
 
-This outputs a list of all words that have been identified as one of the entities from the 9 classes defined above. Here are the
-expected results:
+This outputs a list of all words that have been identified as one of the entities from the 9 classes defined above.
+Here are the expected results:
 
 .. code-block::
 
@@ -633,24 +645,21 @@ expected results:
         {'word': 'Bridge', 'score': 0.990249514579773, 'entity': 'I-LOC'}
     ]
 
-Note, how the tokens of the sequence "Hugging Face" have been identified as an organisation, and "New York City", "DUMBO" and
-"Manhattan Bridge" have been identified as locations.
+Note, how the tokens of the sequence "Hugging Face" have been identified as an organisation, and "New York City",
+"DUMBO" and "Manhattan Bridge" have been identified as locations.
 
 Here is an example of doing named entity recognition, using a model and a tokenizer. The process is the following:
 
-1. Instantiate a tokenizer and a model from the checkpoint name. The model is
-   identified as a BERT model and loads it with the weights stored in the
-   checkpoint.
+1. Instantiate a tokenizer and a model from the checkpoint name. The model is identified as a BERT model and loads it
+   with the weights stored in the checkpoint.
 2. Define the label list with which the model was trained on.
 3. Define a sequence with known entities, such as "Hugging Face" as an organisation and "New York City" as a location.
-4. Split words into tokens so that they can be mapped to predictions. We use a
-   small hack by, first, completely encoding and decoding the sequence, so that
-   we're left with a string that contains the special tokens.
+4. Split words into tokens so that they can be mapped to predictions. We use a small hack by, first, completely
+   encoding and decoding the sequence, so that we're left with a string that contains the special tokens.
 5. Encode that sequence into IDs (special tokens are added automatically).
-6. Retrieve the predictions by passing the input to the model and getting the
-   first output. This results in a distribution over the 9 possible classes for
-   each token. We take the argmax to retrieve the most likely class for each
-   token.
+6. Retrieve the predictions by passing the input to the model and getting the first output. This results in a
+   distribution over the 9 possible classes for each token. We take the argmax to retrieve the most likely class for
+   each token.
 7. Zip together each token with its prediction and print it.
 
 .. code-block::
@@ -659,7 +668,7 @@ Here is an example of doing named entity recognition, using a model and a tokeni
     >>> from transformers import AutoModelForTokenClassification, AutoTokenizer
     >>> import torch
 
-    >>> model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english", return_dict=True)
+    >>> model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
     >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
 
     >>> label_list = [
@@ -687,7 +696,7 @@ Here is an example of doing named entity recognition, using a model and a tokeni
     >>> from transformers import TFAutoModelForTokenClassification, AutoTokenizer
     >>> import tensorflow as tf
 
-    >>> model = TFAutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english", return_dict=True)
+    >>> model = TFAutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
     >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
 
     >>> label_list = [
@@ -713,9 +722,9 @@ Here is an example of doing named entity recognition, using a model and a tokeni
     >>> predictions = tf.argmax(outputs, axis=2)
 
 
-This outputs a list of each token mapped to its corresponding prediction. Differently from the pipeline, here every token has
-a prediction as we didn't remove the "0"th class, which means that no particular entity was found on that token. The
-following array should be the output:
+This outputs a list of each token mapped to its corresponding prediction. Differently from the pipeline, here every
+token has a prediction as we didn't remove the "0"th class, which means that no particular entity was found on that
+token. The following array should be the output:
 
 .. code-block::
 
@@ -727,11 +736,13 @@ Summarization
 
 Summarization is the task of summarizing a document or an article into a shorter text.
 
-An example of a summarization dataset is the CNN / Daily Mail dataset, which consists of long news articles and was created for the task of summarization.
-If you would like to fine-tune a model on a summarization task, various approaches are described in this
-`document <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`__.
+An example of a summarization dataset is the CNN / Daily Mail dataset, which consists of long news articles and was
+created for the task of summarization. If you would like to fine-tune a model on a summarization task, various
+approaches are described in this `document
+<https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`__.
 
-Here is an example of using the pipelines to do summarization. It leverages a Bart model that was fine-tuned on the CNN / Daily Mail data set.
+Here is an example of using the pipelines to do summarization. It leverages a Bart model that was fine-tuned on the CNN
+/ Daily Mail data set.
 
 .. code-block::
 
@@ -758,9 +769,9 @@ Here is an example of using the pipelines to do summarization. It leverages a Ba
     ... If convicted, Barrientos faces up to four years in prison.  Her next court appearance is scheduled for May 18.
     ... """
 
-Because the summarization pipeline depends on the ``PreTrainedModel.generate()`` method, we can override the default arguments
-of ``PreTrainedModel.generate()`` directly in the pipeline for ``max_length`` and ``min_length`` as shown below.
-This outputs the following summary:
+Because the summarization pipeline depends on the ``PreTrainedModel.generate()`` method, we can override the default
+arguments of ``PreTrainedModel.generate()`` directly in the pipeline for ``max_length`` and ``min_length`` as shown
+below. This outputs the following summary:
 
 .. code-block::
 
@@ -769,19 +780,21 @@ This outputs the following summary:
 
 Here is an example of doing summarization using a model and a tokenizer. The process is the following:
 
-1. Instantiate a tokenizer and a model from the checkpoint name. Summarization is usually done using an encoder-decoder model, such as ``Bart`` or ``T5``.
+1. Instantiate a tokenizer and a model from the checkpoint name. Summarization is usually done using an encoder-decoder
+   model, such as ``Bart`` or ``T5``.
 2. Define the article that should be summarized.
 3. Add the T5 specific prefix "summarize: ".
 4. Use the ``PreTrainedModel.generate()`` method to generate the summary.
 
-In this example we use Google`s T5 model. Even though it was pre-trained only on a multi-task mixed dataset (including CNN / Daily Mail), it yields very good results.
+In this example we use Google`s T5 model. Even though it was pre-trained only on a multi-task mixed dataset (including
+CNN / Daily Mail), it yields very good results.
 
 .. code-block::
 
     >>> ## PYTORCH CODE
     >>> from transformers import AutoModelWithLMHead, AutoTokenizer
 
-    >>> model = AutoModelWithLMHead.from_pretrained("t5-base", return_dict=True)
+    >>> model = AutoModelWithLMHead.from_pretrained("t5-base")
     >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
     >>> # T5 uses a max_length of 512 so we cut the article to 512 tokens.
@@ -790,7 +803,7 @@ In this example we use Google`s T5 model. Even though it was pre-trained only on
     >>> ## TENSORFLOW CODE
     >>> from transformers import TFAutoModelWithLMHead, AutoTokenizer
 
-    >>> model = TFAutoModelWithLMHead.from_pretrained("t5-base", return_dict=True)
+    >>> model = TFAutoModelWithLMHead.from_pretrained("t5-base")
     >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
     >>> # T5 uses a max_length of 512 so we cut the article to 512 tokens.
@@ -802,14 +815,13 @@ Translation
 
 Translation is the task of translating a text from one language to another.
 
-An example of a translation dataset is the WMT English to German dataset, which has sentences in English as the input data
-and the corresponding sentences in German as the target data.
-If you would like to fine-tune a model on a translation task, various approaches are described in this
-`document <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`__.
+An example of a translation dataset is the WMT English to German dataset, which has sentences in English as the input
+data and the corresponding sentences in German as the target data. If you would like to fine-tune a model on a
+translation task, various approaches are described in this `document
+<https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`__.
 
-Here is an example of using the pipelines to do translation.
-It leverages a T5 model that was only pre-trained on a multi-task mixture dataset (including WMT), yet, yielding impressive
-translation results.
+Here is an example of using the pipelines to do translation. It leverages a T5 model that was only pre-trained on a
+multi-task mixture dataset (including WMT), yet, yielding impressive translation results.
 
 .. code-block::
 
@@ -819,13 +831,14 @@ translation results.
     >>> print(translator("Hugging Face is a technology company based in New York and Paris", max_length=40))
     [{'translation_text': 'Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.'}]
 
-Because the translation pipeline depends on the ``PreTrainedModel.generate()`` method, we can override the default arguments
-of ``PreTrainedModel.generate()`` directly in the pipeline as is shown for ``max_length`` above.
+Because the translation pipeline depends on the ``PreTrainedModel.generate()`` method, we can override the default
+arguments of ``PreTrainedModel.generate()`` directly in the pipeline as is shown for ``max_length`` above.
 
 Here is an example of doing translation using a model and a tokenizer. The process is the following:
 
-1. Instantiate a tokenizer and a model from the checkpoint name. Summarization is usually done using an encoder-decoder model, such as ``Bart`` or ``T5``.
-2. Define the article that should be summarizaed.
+1. Instantiate a tokenizer and a model from the checkpoint name. Summarization is usually done using an encoder-decoder
+   model, such as ``Bart`` or ``T5``.
+2. Define the article that should be summarized.
 3. Add the T5 specific prefix "translate English to German: "
 4. Use the ``PreTrainedModel.generate()`` method to perform the translation.
 
@@ -834,7 +847,7 @@ Here is an example of doing translation using a model and a tokenizer. The proce
     >>> ## PYTORCH CODE
     >>> from transformers import AutoModelWithLMHead, AutoTokenizer
 
-    >>> model = AutoModelWithLMHead.from_pretrained("t5-base", return_dict=True)
+    >>> model = AutoModelWithLMHead.from_pretrained("t5-base")
     >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
     >>> inputs = tokenizer.encode("translate English to German: Hugging Face is a technology company based in New York and Paris", return_tensors="pt")
@@ -842,7 +855,7 @@ Here is an example of doing translation using a model and a tokenizer. The proce
     >>> ## TENSORFLOW CODE
     >>> from transformers import TFAutoModelWithLMHead, AutoTokenizer
 
-    >>> model = TFAutoModelWithLMHead.from_pretrained("t5-base", return_dict=True)
+    >>> model = TFAutoModelWithLMHead.from_pretrained("t5-base")
     >>> tokenizer = AutoTokenizer.from_pretrained("t5-base")
 
     >>> inputs = tokenizer.encode("translate English to German: Hugging Face is a technology company based in New York and Paris", return_tensors="tf")

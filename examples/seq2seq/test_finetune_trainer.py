@@ -1,24 +1,17 @@
 import os
 import sys
-from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
-from transformers import BertTokenizer, EncoderDecoderModel, is_torch_available
+from transformers import BertTokenizer, EncoderDecoderModel
 from transformers.file_utils import is_datasets_available
-from transformers.testing_utils import TestCasePlus, slow
+from transformers.testing_utils import TestCasePlus, execute_subprocess_async, get_gpu_count, slow
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import set_seed
 
 from .finetune_trainer import Seq2SeqTrainingArguments, main
 from .seq2seq_trainer import Seq2SeqTrainer
 from .test_seq2seq_examples import MBART_TINY
-from .utils import execute_async_std
 
-
-if is_torch_available():
-    import torch
 
 set_seed(42)
 MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
@@ -63,7 +56,9 @@ class TestFinetuneTrainer(TestCasePlus):
         tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
         bert2bert.config.vocab_size = bert2bert.config.encoder.vocab_size
+        bert2bert.config.eos_token_id = tokenizer.sep_token_id
         bert2bert.config.decoder_start_token_id = tokenizer.cls_token_id
+        bert2bert.config.max_length = 128
 
         train_dataset = datasets.load_dataset("cnn_dailymail", "3.0.0", split="train[:1%]")
         val_dataset = datasets.load_dataset("cnn_dailymail", "3.0.0", split="validation[:1%]")
@@ -143,7 +138,7 @@ class TestFinetuneTrainer(TestCasePlus):
             per_device_train_batch_size=batch_size,
             per_device_eval_batch_size=batch_size,
             predict_with_generate=True,
-            evaluate_during_training=True,
+            evaluation_strategy="steps",
             do_train=True,
             do_eval=True,
             warmup_steps=0,
@@ -164,11 +159,9 @@ class TestFinetuneTrainer(TestCasePlus):
         trainer.train()
 
     def run_trainer(self, eval_steps: int, max_len: str, model_name: str, num_train_epochs: int):
-
-        # XXX: remove hardcoded path
-        data_dir = "examples/seq2seq/test_data/wmt_en_ro"
+        data_dir = self.examples_dir / "seq2seq/test_data/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()
-        argv = f"""
+        args = f"""
             --model_name_or_path {model_name}
             --data_dir {data_dir}
             --output_dir {output_dir}
@@ -184,9 +177,9 @@ class TestFinetuneTrainer(TestCasePlus):
             --num_train_epochs {str(num_train_epochs)}
             --per_device_train_batch_size 4
             --per_device_eval_batch_size 4
-            --learning_rate 3e-4
+            --learning_rate 3e-3
             --warmup_steps 8
-            --evaluate_during_training
+            --evaluation_strategy steps
             --predict_with_generate
             --logging_steps 0
             --save_steps {str(eval_steps)}
@@ -200,33 +193,18 @@ class TestFinetuneTrainer(TestCasePlus):
         """.split()
         # --eval_beams  2
 
-        n_gpu = torch.cuda.device_count()
+        n_gpu = get_gpu_count()
         if n_gpu > 1:
-
-            path = Path(__file__).resolve()
-            cur_path = path.parents[0]
-
-            path = Path(__file__).resolve()
-            examples_path = path.parents[1]
-            src_path = f"{path.parents[2]}/src"
-            env = os.environ.copy()
-            env["PYTHONPATH"] = f"{examples_path}:{src_path}:{env.get('PYTHONPATH', '')}"
-
-            distributed_args = (
-                f"-m torch.distributed.launch --nproc_per_node={n_gpu} {cur_path}/finetune_trainer.py".split()
-            )
-            cmd = [sys.executable] + distributed_args + argv
-
-            print("\nRunning: ", " ".join(cmd))
-
-            result = execute_async_std(cmd, env=env, stdin=None, timeout=180, quiet=False, echo=False)
-
-            assert result.stdout, "produced no output"
-            if result.returncode > 0:
-                pytest.fail(f"failed with returncode {result.returncode}")
+            distributed_args = f"""
+                -m torch.distributed.launch
+                --nproc_per_node={n_gpu}
+                {self.test_file_dir}/finetune_trainer.py
+            """.split()
+            cmd = [sys.executable] + distributed_args + args
+            execute_subprocess_async(cmd, env=self.get_env())
         else:
             # 0 or 1 gpu
-            testargs = ["finetune_trainer.py"] + argv
+            testargs = ["finetune_trainer.py"] + args
             with patch.object(sys, "argv", testargs):
                 main()
 

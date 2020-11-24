@@ -4,7 +4,7 @@ Trainer
 The :class:`~transformers.Trainer` and :class:`~transformers.TFTrainer` classes provide an API for feature-complete
 training in most standard use cases. It's used in most of the :doc:`example scripts <../examples>`.
 
-Before instantiating your :class:`~transformers.Trainer`/:class:`~transformers.TFTrainer`, create a 
+Before instantiating your :class:`~transformers.Trainer`/:class:`~transformers.TFTrainer`, create a
 :class:`~transformers.TrainingArguments`/:class:`~transformers.TFTrainingArguments` to access all the points of
 customization during training.
 
@@ -35,7 +35,7 @@ Here is an example of how to customize :class:`~transformers.Trainer` using a cu
     class MyTrainer(Trainer):
         def compute_loss(self, model, inputs):
             labels = inputs.pop("labels")
-            outputs = models(**inputs)
+            outputs = model(**inputs)
             logits = outputs[0]
             return my_custom_loss(logits, labels)
 

@@ -4,7 +4,7 @@ tags:
 ---
 
 ## CS224n SQuAD2.0 Project Dataset
-The goal of this model is to save CS224n students GPU time when establising
+The goal of this model is to save CS224n students GPU time when establishing
 baselines to beat for the [Default Final Project](http://web.stanford.edu/class/cs224n/project/default-final-project-handout.pdf).
 The training set used to fine-tune this model is the same as
 the [official one](https://rajpurkar.github.io/SQuAD-explorer/); however,
@@ -17,7 +17,7 @@ set, students must make sure not to use the official SQuAD2.0 dev set in any way
 used the official SQuAD2.0 dev set for model selection.
 
 <a href="https://huggingface.co/exbert/?model=elgeish/cs224n-squad2.0-albert-base-v2">
-	<img width="300px" src="https://hf-dinosaur.huggingface.co/exbert/button.png">
+	<img width="300px" src="https://cdn-media.huggingface.co/exbert/button.png">
 </a>
 
 ## Results

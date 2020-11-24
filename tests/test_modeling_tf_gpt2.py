@@ -26,7 +26,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.modeling_tf_gpt2 import (
+    from transformers.models.gpt2.modeling_tf_gpt2 import (
         TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFGPT2DoubleHeadsModel,
         TFGPT2LMHeadModel,
@@ -104,7 +104,6 @@ class TFGPT2ModelTester:
             # initializer_range=self.initializer_range
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
-            return_dict=True,
         )
 
         head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)

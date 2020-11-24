@@ -5,6 +5,12 @@ datasets:
 
 # roberta-base for QA 
 
+NOTE: This is version 2 of the model. See [this github issue](https://github.com/deepset-ai/FARM/issues/552) from the FARM repository for an explanation of why we updated. If you'd like to use version 1, specify `revision="v1.0"` when loading the model in Transformers 3.5. For exmaple:
+```
+model_name = "deepset/roberta-base-squad2"
+pipeline(model=model_name, tokenizer=model_name, revision="v1.0", task="question-answering")
+```
+
 ## Overview
 **Language model:** roberta-base  
 **Language:** English  
@@ -17,10 +23,10 @@ datasets:
 ## Hyperparameters
 
 ```
-batch_size = 50
-n_epochs = 3
+batch_size = 96
+n_epochs = 2
 base_LM_model = "roberta-base"
-max_seq_len = 384
+max_seq_len = 386
 learning_rate = 3e-5
 lr_schedule = LinearWarmup
 warmup_proportion = 0.2
@@ -30,18 +36,25 @@ max_query_length=64
 
 ## Performance
 Evaluated on the SQuAD 2.0 dev set with the [official eval script](https://worksheets.codalab.org/rest/bundles/0x6b567e1cf2e041ec80d7098f031c5c9e/contents/blob/).
+
 ```
-"exact": 78.49743114629833,
-"f1": 81.73092721240889
+"exact": 79.97136359807968
+"f1": 83.00449234495325
+
+"total": 11873
+"HasAns_exact": 78.03643724696356
+"HasAns_f1": 84.11139298441825
+"HasAns_total": 5928
+"NoAns_exact": 81.90075693860386
+"NoAns_f1": 81.90075693860386
+"NoAns_total": 5945
 ```
 
 ## Usage
 
 ### In Transformers
 ```python
-from transformers.pipelines import pipeline
-from transformers.modeling_auto import AutoModelForQuestionAnswering
-from transformers.tokenization_auto import AutoTokenizer
+from transformers import AutoModelForQuestionAnswering, AutoTokenizer, pipeline
 
 model_name = "deepset/roberta-base-squad2"
 
@@ -83,7 +96,7 @@ For doing QA at scale (i.e. many docs instead of single paragraph), you can load
 ```python
 reader = FARMReader(model_name_or_path="deepset/roberta-base-squad2")
 # or 
-reader = TransformersReader(model="deepset/roberta-base-squad2",tokenizer="deepset/roberta-base-squad2")
+reader = TransformersReader(model_name_or_path="deepset/roberta-base-squad2",tokenizer="deepset/roberta-base-squad2")
 ```
 
 
@@ -106,4 +119,3 @@ Some of our work:
 
 Get in touch:
 [Twitter](https://twitter.com/deepset_ai) | [LinkedIn](https://www.linkedin.com/company/deepset-ai/) | [Website](https://deepset.ai)
-

@@ -24,6 +24,7 @@ from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
+from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
@@ -31,7 +32,7 @@ if is_torch_available():
     import torch
 
     from transformers import FSMTConfig, FSMTForConditionalGeneration, FSMTModel, FSMTTokenizer
-    from transformers.modeling_fsmt import (
+    from transformers.models.fsmt.modeling_fsmt import (
         SinusoidalPositionalEmbedding,
         _prepare_fsmt_decoder_inputs,
         invert_mask,
@@ -120,7 +121,7 @@ def prepare_fsmt_inputs_dict(
 
 
 @require_torch
-class FSMTModelTest(ModelTesterMixin, unittest.TestCase):
+class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (FSMTModel, FSMTForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (FSMTForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
@@ -258,7 +259,6 @@ class FSMTHeadTests(unittest.TestCase):
             eos_token_id=2,
             pad_token_id=1,
             bos_token_id=0,
-            return_dict=True,
         )
 
     def _get_config_and_data(self):

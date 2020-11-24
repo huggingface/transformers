@@ -19,6 +19,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
+from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
@@ -93,7 +94,6 @@ class CTRLModelTester:
             n_ctx=self.max_position_embeddings,
             # type_vocab_size=self.type_vocab_size,
             # initializer_range=self.initializer_range,
-            return_dict=True,
         )
 
         head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
@@ -151,7 +151,7 @@ class CTRLModelTester:
 
 
 @require_torch
-class CTRLModelTest(ModelTesterMixin, unittest.TestCase):
+class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (CTRLModel, CTRLLMHeadModel) if is_torch_available() else ()
     all_generative_model_classes = (CTRLLMHeadModel,) if is_torch_available() else ()

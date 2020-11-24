@@ -39,9 +39,8 @@ This model is the model obtained from the **third** fold of the cross-validation
 
 ### In Transformers
 ```python
-from transformers.pipelines import pipeline
-from transformers.modeling_auto import AutoModelForQuestionAnswering
-from transformers.tokenization_auto import AutoTokenizer
+from transformers import AutoModelForQuestionAnswering, AutoTokenizer, pipeline
+
 
 model_name = "deepset/roberta-base-squad2-covid"
 

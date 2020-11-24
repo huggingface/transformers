@@ -26,7 +26,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.modeling_tf_mobilebert import (
+    from transformers import (
         TFMobileBertForMaskedLM,
         TFMobileBertForMultipleChoice,
         TFMobileBertForNextSentencePrediction,
@@ -139,7 +139,6 @@ class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
                 type_vocab_size=self.type_vocab_size,
                 initializer_range=self.initializer_range,
                 embedding_size=self.embedding_size,
-                return_dict=True,
             )
 
             return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -287,6 +286,6 @@ class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         # for model_name in TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-        for model_name in ["mobilebert-uncased"]:
+        for model_name in ["google/mobilebert-uncased"]:
             model = TFMobileBertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)

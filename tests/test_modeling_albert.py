@@ -24,7 +24,10 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 
 
 if is_torch_available():
+    import torch
+
     from transformers import (
+        MODEL_FOR_PRETRAINING_MAPPING,
         AlbertConfig,
         AlbertForMaskedLM,
         AlbertForMultipleChoice,
@@ -34,7 +37,7 @@ if is_torch_available():
         AlbertForTokenClassification,
         AlbertModel,
     )
-    from transformers.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.albert.modeling_albert import ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class AlbertModelTester:
@@ -99,12 +102,11 @@ class AlbertModelTester:
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
             num_hidden_groups=self.num_hidden_groups,
-            return_dict=True,
         )
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
-    def create_and_check_albert_model(
+    def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = AlbertModel(config=config)
@@ -116,7 +118,7 @@ class AlbertModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
-    def create_and_check_albert_for_pretraining(
+    def create_and_check_for_pretraining(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = AlbertForPreTraining(config=config)
@@ -132,7 +134,7 @@ class AlbertModelTester:
         self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertEqual(result.sop_logits.shape, (self.batch_size, config.num_labels))
 
-    def create_and_check_albert_for_masked_lm(
+    def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = AlbertForMaskedLM(config=config)
@@ -141,7 +143,7 @@ class AlbertModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_albert_for_question_answering(
+    def create_and_check_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = AlbertForQuestionAnswering(config=config)
@@ -157,7 +159,7 @@ class AlbertModelTester:
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
-    def create_and_check_albert_for_sequence_classification(
+    def create_and_check_for_sequence_classification(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
@@ -167,7 +169,7 @@ class AlbertModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
-    def create_and_check_albert_for_token_classification(
+    def create_and_check_for_token_classification(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
@@ -177,7 +179,7 @@ class AlbertModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
-    def create_and_check_albert_for_multiple_choice(
+    def create_and_check_for_multiple_choice(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_choices = self.num_choices
@@ -227,6 +229,20 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
 
+    # special case for ForPreTraining model
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class in MODEL_FOR_PRETRAINING_MAPPING.values():
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+                inputs_dict["sentence_order_label"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+        return inputs_dict
+
     def setUp(self):
         self.model_tester = AlbertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AlbertConfig, hidden_size=37)
@@ -234,29 +250,35 @@ class AlbertModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_albert_model(self):
+    def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_albert_model(*config_and_inputs)
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_pretraining(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_albert_for_pretraining(*config_and_inputs)
+        self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_albert_for_masked_lm(*config_and_inputs)
+        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_albert_for_multiple_choice(*config_and_inputs)
+        self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
 
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_albert_for_question_answering(*config_and_inputs)
+        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_albert_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+
+    def test_model_various_embeddings(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        for type in ["absolute", "relative_key", "relative_key_query"]:
+            config_and_inputs[0].position_embedding_type = type
+            self.model_tester.create_and_check_model(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

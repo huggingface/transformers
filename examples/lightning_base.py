@@ -4,9 +4,11 @@ import os
 from pathlib import Path
 from typing import Any, Dict
 
+import packaging
 import pytorch_lightning as pl
 from pytorch_lightning.utilities import rank_zero_info
 
+import pkg_resources
 from transformers import (
     AdamW,
     AutoConfig,
@@ -32,6 +34,17 @@ from transformers.optimization import (
 
 logger = logging.getLogger(__name__)
 
+
+def require_min_ver(pkg, min_ver):
+    got_ver = pkg_resources.get_distribution(pkg).version
+    if packaging.version.parse(got_ver) < packaging.version.parse(min_ver):
+        logger.warning(
+            f"{pkg}>={min_ver} is required for a normal functioning of this module, but found {pkg}=={got_ver}. "
+            "Try: pip install -r examples/requirements.txt"
+        )
+
+
+require_min_ver("pytorch_lightning", "1.0.4")
 
 MODEL_MODES = {
     "base": AutoModel,
@@ -223,7 +236,7 @@ class BaseTransformer(pl.LightningModule):
             "--cache_dir",
             default="",
             type=str,
-            help="Where do you want to store the pre-trained models downloaded from s3",
+            help="Where do you want to store the pre-trained models downloaded from huggingface.co",
         )
         parser.add_argument(
             "--encoder_layerdrop",
@@ -337,7 +350,7 @@ def add_generic_args(parser, root_dir) -> None:
 def generic_train(
     model: BaseTransformer,
     args: argparse.Namespace,
-    early_stopping_callback=False,
+    early_stopping_callback=None,
     logger=True,  # can pass WandbLogger() here
     extra_callbacks=[],
     checkpoint_callback=None,
@@ -355,6 +368,8 @@ def generic_train(
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
             filepath=args.output_dir, prefix="checkpoint", monitor="val_loss", mode="min", save_top_k=1
         )
+    if early_stopping_callback:
+        extra_callbacks.append(early_stopping_callback)
     if logging_callback is None:
         logging_callback = LoggingCallback()
 
@@ -369,6 +384,8 @@ def generic_train(
         train_params["distributed_backend"] = "ddp"
 
     train_params["accumulate_grad_batches"] = args.accumulate_grad_batches
+    train_params["accelerator"] = extra_train_kwargs.get("accelerator", None)
+    train_params["profiler"] = extra_train_kwargs.get("profiler", None)
 
     trainer = pl.Trainer.from_argparse_args(
         args,
@@ -376,7 +393,6 @@ def generic_train(
         callbacks=[logging_callback] + extra_callbacks,
         logger=logger,
         checkpoint_callback=checkpoint_callback,
-        early_stop_callback=early_stopping_callback,
         **train_params,
     )
 

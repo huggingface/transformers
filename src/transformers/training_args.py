@@ -1,7 +1,6 @@
 import dataclasses
 import json
 import os
-import warnings
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
@@ -35,11 +34,14 @@ def default_logdir() -> str:
 @dataclass
 class TrainingArguments:
     """
-    TrainingArguments is the subset of the arguments we use in our example scripts
-    **which relate to the training loop itself**.
+    TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop
+    itself**.
 
-    Using :class:`~transformers.HfArgumentParser` we can turn this class
-    into argparse arguments to be able to specify them on the command line.
+    Using :class:`~transformers.HfArgumentParser` we can turn this class into argparse arguments to be able to specify
+    them on the command line.
+
+
+
 
     Parameters:
         output_dir (:obj:`str`):
@@ -48,12 +50,19 @@ class TrainingArguments:
             If :obj:`True`, overwrite the content of the output directory. Use this to continue training if
             :obj:`output_dir` points to a checkpoint directory.
         do_train (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to run training or not.
+            Whether to run training or not. This argument is not directly used by :class:`~transformers.Trainer`, it's
+            intended to be used by your training/evaluation scripts instead. See the `example scripts
+            <https://github.com/huggingface/transformers/tree/master/examples>`__ for more details.
         do_eval (:obj:`bool`, `optional`):
-            Whether to run evaluation on the dev set or not. Will default to :obj:`evaluation_strategy` different from
-            :obj:`"no"`.
+            Whether to run evaluation on the dev set or not. Will be set to :obj:`True` if :obj:`evaluation_strategy`
+            is different from :obj:`"no"`. This argument is not directly used by :class:`~transformers.Trainer`, it's
+            intended to be used by your training/evaluation scripts instead. See the `example scripts
+            <https://github.com/huggingface/transformers/tree/master/examples>`__ for more details.
         do_predict (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to run predictions on the test set or not.
+            Whether to run predictions on the test set or not. This argument is not directly used by
+            :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
+            the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
+            details.
         evaluation_strategy (:obj:`str` or :class:`~transformers.trainer_utils.EvaluationStrategy`, `optional`, defaults to :obj:`"no"`):
             The evaluation strategy to adopt during training. Possible values are:
 
@@ -83,6 +92,10 @@ class TrainingArguments:
             The initial learning rate for Adam.
         weight_decay (:obj:`float`, `optional`, defaults to 0):
             The weight decay to apply (if not zero).
+        adam_beta1 (:obj:`float`, `optional`, defaults to 0.9):
+            The beta1 for the Adam optimizer.
+        adam_beta2 (:obj:`float`, `optional`, defaults to 0.999):
+            The beta2 for the Adam optimizer.
         adam_epsilon (:obj:`float`, `optional`, defaults to 1e-8):
             Epsilon for the Adam optimizer.
         max_grad_norm (:obj:`float`, `optional`, defaults to 1.0):
@@ -128,7 +141,8 @@ class TrainingArguments:
             Number of update steps between two evaluations if :obj:`evaluation_strategy="steps"`. Will default to the
             same value as :obj:`logging_steps` if not set.
         dataloader_num_workers (:obj:`int`, `optional`, defaults to 0):
-            Number of subprocesses to use for data loading (PyTorch only). 0 means that the data will be loaded in the main process.
+            Number of subprocesses to use for data loading (PyTorch only). 0 means that the data will be loaded in the
+            main process.
         past_index (:obj:`int`, `optional`, defaults to -1):
             Some models like :doc:`TransformerXL <../model_doc/transformerxl>` or :doc`XLNet <../model_doc/xlnet>` can
             make use of the past hidden states for their predictions. If this argument is set to a positive int, the
@@ -143,13 +157,13 @@ class TrainingArguments:
             If using `nlp.Dataset` datasets, whether or not to automatically remove the columns unused by the model
             forward method.
 
-            (Note: this behavior is not implemented for :class:`~transformers.TFTrainer` yet.)
+            (Note that this behavior is not implemented for :class:`~transformers.TFTrainer` yet.)
         label_names (:obj:`List[str]`, `optional`):
             The list of keys in your dictionary of inputs that correspond to the labels.
 
             Will eventually default to :obj:`["labels"]` except if the model used is one of the
-            :obj:`XxxForQuestionAnswering` in which case it will default to
-            :obj:`["start_positions", "end_positions"]`.
+            :obj:`XxxForQuestionAnswering` in which case it will default to :obj:`["start_positions",
+            "end_positions"]`.
         load_best_model_at_end (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to load the best model found during training at the end of training.
 
@@ -157,7 +171,7 @@ class TrainingArguments:
 
                 When set to :obj:`True`, the parameters :obj:`save_steps` will be ignored and the model will be saved
                 after each evaluation.
-        metric_for_best_model (:obj:`str`, `optional`)
+        metric_for_best_model (:obj:`str`, `optional`):
             Use in conjunction with :obj:`load_best_model_at_end` to specify the metric to use to compare two different
             models. Must be the name of a metric returned by the evaluation with or without the prefix :obj:`"eval_"`.
             Will default to :obj:`"loss"` if unspecified and :obj:`load_best_model_at_end=True` (to use the evaluation
@@ -165,13 +179,16 @@ class TrainingArguments:
 
             If you set this value, :obj:`greater_is_better` will default to :obj:`True`. Don't forget to set it to
             :obj:`False` if your metric is better when lower.
-        greater_is_better (:obj:`bool`, `optional`)
+        greater_is_better (:obj:`bool`, `optional`):
             Use in conjunction with :obj:`load_best_model_at_end` and :obj:`metric_for_best_model` to specify if better
             models should have a greater metric or not. Will default to:
 
             - :obj:`True` if :obj:`metric_for_best_model` is set to a value that isn't :obj:`"loss"` or
               :obj:`"eval_loss"`.
             - :obj:`False` if :obj:`metric_for_best_model` is not set, or set to :obj:`"loss"` or :obj:`"eval_loss"`.
+        model_parallel (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If there are more than one devices, whether to use model parallelism to distribute the model's modules
+            across devices or not.
     """
 
     output_dir: str = field(
@@ -190,9 +207,14 @@ class TrainingArguments:
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
     do_eval: bool = field(default=None, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
-    evaluate_during_training: bool = field(
+    model_parallel: bool = field(
         default=False,
-        metadata={"help": "Run evaluation during training at each logging step."},
+        metadata={
+            "help": (
+                "If there are more than one devices, whether to use model parallelism to distribute the "
+                "model's modules across devices."
+            )
+        },
     )
     evaluation_strategy: EvaluationStrategy = field(
         default="no",
@@ -249,7 +271,7 @@ class TrainingArguments:
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
     logging_dir: Optional[str] = field(default_factory=default_logdir, metadata={"help": "Tensorboard log dir."})
-    logging_first_step: bool = field(default=False, metadata={"help": "Log and eval the first global_step"})
+    logging_first_step: bool = field(default=False, metadata={"help": "Log the first global_step"})
     logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
     save_steps: int = field(default=500, metadata={"help": "Save checkpoint every X updates steps."})
     save_total_limit: Optional[int] = field(
@@ -332,12 +354,6 @@ class TrainingArguments:
     def __post_init__(self):
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
-        if self.evaluate_during_training is True:
-            self.evaluation_strategy = EvaluationStrategy.STEPS
-            warnings.warn(
-                "The `evaluate_during_training` argument is deprecated in favor of `evaluation_strategy` (which has more options)",
-                FutureWarning,
-            )
         self.evaluation_strategy = EvaluationStrategy(self.evaluation_strategy)
         if self.do_eval is False and self.evaluation_strategy != EvaluationStrategy.NO:
             self.do_eval = True
@@ -351,7 +367,7 @@ class TrainingArguments:
         if self.run_name is None:
             self.run_name = self.output_dir
 
-        if self.device.type != "cuda" and self.fp16:
+        if is_torch_available() and self.device.type != "cuda" and self.fp16:
             raise ValueError("AMP (`--fp16`) can only be used on CUDA devices.")
 
     @property
@@ -365,7 +381,11 @@ class TrainingArguments:
                 "version. Using `--per_device_train_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_train_batch_size or self.per_device_train_batch_size
-        return per_device_batch_size * max(1, self.n_gpu)
+        if not self.model_parallel:
+            train_batch_size = per_device_batch_size * max(1, self.n_gpu)
+        else:
+            train_batch_size = per_device_batch_size
+        return train_batch_size
 
     @property
     def eval_batch_size(self) -> int:
@@ -378,7 +398,11 @@ class TrainingArguments:
                 "version. Using `--per_device_eval_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_eval_batch_size or self.per_device_eval_batch_size
-        return per_device_batch_size * max(1, self.n_gpu)
+        if not self.model_parallel:
+            eval_batch_size = per_device_batch_size * max(1, self.n_gpu)
+        else:
+            eval_batch_size = per_device_batch_size
+        return eval_batch_size
 
     @cached_property
     @torch_required
@@ -401,7 +425,7 @@ class TrainingArguments:
             n_gpu = torch.cuda.device_count()
         else:
             # Here, we'll use torch.distributed.
-            # Initializes the distributed backend which will take care of sychronizing nodes/GPUs
+            # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
             torch.distributed.init_process_group(backend="nccl")
             device = torch.device("cuda", self.local_rank)
             n_gpu = 1

@@ -26,11 +26,6 @@ class DataCollatorForLanguageModeling:
         requires_pytorch(self)
 
 
-class DataCollatorForNextSentencePrediction:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
 class DataCollatorForPermutationLanguageModeling:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -42,6 +37,15 @@ class DataCollatorForPermutationLanguageModeling:
 
 class DataCollatorForSOP:
     def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DataCollatorForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
         requires_pytorch(self)
 
 
@@ -104,8 +108,90 @@ class TextDatasetForNextSentencePrediction:
         requires_pytorch(self)
 
 
+class BeamScorer:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BeamSearchScorer:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class LogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class LogitsProcessorList:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class LogitsWarper:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MinLengthLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class NoBadWordsLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class NoRepeatNGramLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class RepetitionPenaltyLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class TemperatureLogitsWarper:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class TopKLogitsWarper:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class TopPLogitsWarper:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 def top_k_top_p_filtering(*args, **kwargs):
     requires_pytorch(top_k_top_p_filtering)
+
+
+class Conv1D:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class PreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+def apply_chunking_to_forward(*args, **kwargs):
+    requires_pytorch(apply_chunking_to_forward)
+
+
+def prune_layer(*args, **kwargs):
+    requires_pytorch(prune_layer)
 
 
 ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -192,6 +278,9 @@ MODEL_FOR_MASKED_LM_MAPPING = None
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = None
 
 
+MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = None
+
+
 MODEL_FOR_PRETRAINING_MAPPING = None
 
 
@@ -241,6 +330,15 @@ class AutoModelForMaskedLM:
 
 
 class AutoModelForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class AutoModelForNextSentencePrediction:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
@@ -657,6 +755,15 @@ class DistilBertPreTrainedModel:
     @classmethod
     def from_pretrained(self, *args, **kwargs):
         requires_pytorch(self)
+
+
+DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class DPRContextEncoder:
@@ -1254,6 +1361,24 @@ def load_tf_weights_in_mobilebert(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_mobilebert)
 
 
+class MT5ForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MT5Model:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -1662,28 +1787,6 @@ class TransfoXLPreTrainedModel:
 
 def load_tf_weights_in_transfo_xl(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_transfo_xl)
-
-
-class Conv1D:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
-class PreTrainedModel:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
-def apply_chunking_to_forward(*args, **kwargs):
-    requires_pytorch(apply_chunking_to_forward)
-
-
-def prune_layer(*args, **kwargs):
-    requires_pytorch(prune_layer)
 
 
 XLM_PRETRAINED_MODEL_ARCHIVE_LIST = None

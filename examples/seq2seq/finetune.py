@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader
 
 from callbacks import Seq2SeqLoggingCallback, get_checkpoint_callback, get_early_stopping_callback
 from transformers import MBartTokenizer, T5ForConditionalGeneration
-from transformers.modeling_bart import shift_tokens_right
+from transformers.models.bart.modeling_bart import shift_tokens_right
 from utils import (
     ROUGE_KEYS,
     LegacySeq2SeqDataset,
@@ -148,7 +148,7 @@ class SummarizationModule(BaseTransformer):
             self.save_readable_batch(batch)
 
         outputs = self(src_ids, attention_mask=src_mask, decoder_input_ids=decoder_input_ids, use_cache=False)
-        lm_logits = outputs[0]
+        lm_logits = outputs["logits"]
         if self.hparams.label_smoothing == 0:
             # Same behavior as modeling_bart.py, besides ignoring pad_token_id
             ce_loss_fct = torch.nn.CrossEntropyLoss(ignore_index=pad_token_id)
@@ -182,7 +182,6 @@ class SummarizationModule(BaseTransformer):
         return self._generative_step(batch)
 
     def validation_epoch_end(self, outputs, prefix="val") -> Dict:
-
         self.step_count += 1
         losses = {k: torch.stack([x[k] for x in outputs]).mean() for k in self.loss_names}
         loss = losses["loss"]
@@ -252,7 +251,7 @@ class SummarizationModule(BaseTransformer):
     def get_dataloader(self, type_path: str, batch_size: int, shuffle: bool = False) -> DataLoader:
         dataset = self.get_dataset(type_path)
 
-        if self.hparams.sortish_sampler and type_path != "test":
+        if self.hparams.sortish_sampler and type_path != "test" and type_path != "val":
             sampler = dataset.make_sortish_sampler(batch_size, distributed=self.hparams.gpus > 1)
             return DataLoader(
                 dataset,
@@ -263,7 +262,7 @@ class SummarizationModule(BaseTransformer):
                 sampler=sampler,
             )
 
-        elif self.hparams.max_tokens_per_batch is not None and type_path != "test":
+        elif self.hparams.max_tokens_per_batch is not None and type_path != "test" and type_path != "val":
             batch_sampler = dataset.make_dynamic_sampler(
                 self.hparams.max_tokens_per_batch, distributed=self.hparams.gpus > 1
             )

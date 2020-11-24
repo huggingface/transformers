@@ -24,7 +24,10 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 
 
 if is_torch_available():
+    import torch
+
     from transformers import (
+        MODEL_FOR_PRETRAINING_MAPPING,
         ElectraConfig,
         ElectraForMaskedLM,
         ElectraForMultipleChoice,
@@ -34,7 +37,7 @@ if is_torch_available():
         ElectraForTokenClassification,
         ElectraModel,
     )
-    from transformers.modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.electra.modeling_electra import ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class ElectraModelTester:
@@ -98,7 +101,6 @@ class ElectraModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            return_dict=True,
         )
 
         return (
@@ -285,6 +287,17 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
 
+    # special case for ForPreTraining model
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class in MODEL_FOR_PRETRAINING_MAPPING.values():
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+        return inputs_dict
+
     def setUp(self):
         self.model_tester = ElectraModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ElectraConfig, hidden_size=37)
@@ -295,6 +308,12 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
     def test_electra_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_electra_model(*config_and_inputs)
+
+    def test_electra_model_various_embeddings(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        for type in ["absolute", "relative_key", "relative_key_query"]:
+            config_and_inputs[0].position_embedding_type = type
+            self.model_tester.create_and_check_electra_model(*config_and_inputs)
 
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

@@ -37,7 +37,7 @@ EXPECTED_FILL_MASK_TARGET_RESULT = [
 
 class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
     pipeline_task = "fill-mask"
-    pipeline_loading_kwargs = {"topk": 2}
+    pipeline_loading_kwargs = {"top_k": 2}
     small_models = ["sshleifer/tiny-distilroberta-base"]  # Models tested without the @slow decorator
     large_models = ["distilroberta-base"]  # Models tested with the @slow decorator
     mandatory_keys = {"sequence", "score", "token"}
@@ -50,6 +50,21 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
         "This is"  # No mask_token is not supported
     ]
     expected_check_keys = ["sequence"]
+
+    @require_torch
+    def test_torch_fill_mask(self):
+        valid_inputs = "My name is <mask>"
+        nlp = pipeline(task="fill-mask", model=self.small_models[0])
+        outputs = nlp(valid_inputs)
+        self.assertIsInstance(outputs, list)
+
+        # This passes
+        outputs = nlp(valid_inputs, targets=[" Patrick", " Clara"])
+        self.assertIsInstance(outputs, list)
+
+        # This used to fail with `cannot mix args and kwargs`
+        outputs = nlp(valid_inputs, something=False)
+        self.assertIsInstance(outputs, list)
 
     @require_torch
     def test_torch_fill_mask_with_targets(self):
@@ -94,23 +109,55 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
                 model=model_name,
                 tokenizer=model_name,
                 framework="pt",
-                topk=2,
+                top_k=2,
             )
-            self._test_mono_column_pipeline(
-                nlp,
-                valid_inputs,
-                mandatory_keys,
-                expected_multi_result=EXPECTED_FILL_MASK_RESULT,
-                expected_check_keys=["sequence"],
-            )
-            self._test_mono_column_pipeline(
-                nlp,
-                valid_inputs[:1],
-                mandatory_keys,
-                expected_multi_result=EXPECTED_FILL_MASK_TARGET_RESULT,
-                expected_check_keys=["sequence"],
-                targets=valid_targets,
-            )
+
+            mono_result = nlp(valid_inputs[0], targets=valid_targets)
+            self.assertIsInstance(mono_result, list)
+            self.assertIsInstance(mono_result[0], dict)
+
+            for mandatory_key in mandatory_keys:
+                self.assertIn(mandatory_key, mono_result[0])
+
+            multi_result = [nlp(valid_input) for valid_input in valid_inputs]
+            self.assertIsInstance(multi_result, list)
+            self.assertIsInstance(multi_result[0], (dict, list))
+
+            for result, expected in zip(multi_result, EXPECTED_FILL_MASK_RESULT):
+                self.assertEqual(set([o["sequence"] for o in result]), set([o["sequence"] for o in result]))
+
+            if isinstance(multi_result[0], list):
+                multi_result = multi_result[0]
+
+            for result in multi_result:
+                for key in mandatory_keys:
+                    self.assertIn(key, result)
+
+            self.assertRaises(Exception, nlp, [None])
+
+            valid_inputs = valid_inputs[:1]
+            mono_result = nlp(valid_inputs[0], targets=valid_targets)
+            self.assertIsInstance(mono_result, list)
+            self.assertIsInstance(mono_result[0], dict)
+
+            for mandatory_key in mandatory_keys:
+                self.assertIn(mandatory_key, mono_result[0])
+
+            multi_result = [nlp(valid_input) for valid_input in valid_inputs]
+            self.assertIsInstance(multi_result, list)
+            self.assertIsInstance(multi_result[0], (dict, list))
+
+            for result, expected in zip(multi_result, EXPECTED_FILL_MASK_TARGET_RESULT):
+                self.assertEqual(set([o["sequence"] for o in result]), set([o["sequence"] for o in result]))
+
+            if isinstance(multi_result[0], list):
+                multi_result = multi_result[0]
+
+            for result in multi_result:
+                for key in mandatory_keys:
+                    self.assertIn(key, result)
+
+            self.assertRaises(Exception, nlp, [None])
 
     @require_tf
     @slow
@@ -123,18 +170,50 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
         valid_targets = [" Patrick", " Clara"]
         for model_name in self.large_models:
             nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf", topk=2)
-            self._test_mono_column_pipeline(
-                nlp,
-                valid_inputs,
-                mandatory_keys,
-                expected_multi_result=EXPECTED_FILL_MASK_RESULT,
-                expected_check_keys=["sequence"],
-            )
-            self._test_mono_column_pipeline(
-                nlp,
-                valid_inputs[:1],
-                mandatory_keys,
-                expected_multi_result=EXPECTED_FILL_MASK_TARGET_RESULT,
-                expected_check_keys=["sequence"],
-                targets=valid_targets,
-            )
+
+            mono_result = nlp(valid_inputs[0], targets=valid_targets)
+            self.assertIsInstance(mono_result, list)
+            self.assertIsInstance(mono_result[0], dict)
+
+            for mandatory_key in mandatory_keys:
+                self.assertIn(mandatory_key, mono_result[0])
+
+            multi_result = [nlp(valid_input) for valid_input in valid_inputs]
+            self.assertIsInstance(multi_result, list)
+            self.assertIsInstance(multi_result[0], (dict, list))
+
+            for result, expected in zip(multi_result, EXPECTED_FILL_MASK_RESULT):
+                self.assertEqual(set([o["sequence"] for o in result]), set([o["sequence"] for o in result]))
+
+            if isinstance(multi_result[0], list):
+                multi_result = multi_result[0]
+
+            for result in multi_result:
+                for key in mandatory_keys:
+                    self.assertIn(key, result)
+
+            self.assertRaises(Exception, nlp, [None])
+
+            valid_inputs = valid_inputs[:1]
+            mono_result = nlp(valid_inputs[0], targets=valid_targets)
+            self.assertIsInstance(mono_result, list)
+            self.assertIsInstance(mono_result[0], dict)
+
+            for mandatory_key in mandatory_keys:
+                self.assertIn(mandatory_key, mono_result[0])
+
+            multi_result = [nlp(valid_input) for valid_input in valid_inputs]
+            self.assertIsInstance(multi_result, list)
+            self.assertIsInstance(multi_result[0], (dict, list))
+
+            for result, expected in zip(multi_result, EXPECTED_FILL_MASK_TARGET_RESULT):
+                self.assertEqual(set([o["sequence"] for o in result]), set([o["sequence"] for o in result]))
+
+            if isinstance(multi_result[0], list):
+                multi_result = multi_result[0]
+
+            for result in multi_result:
+                for key in mandatory_keys:
+                    self.assertIn(key, result)
+
+            self.assertRaises(Exception, nlp, [None])

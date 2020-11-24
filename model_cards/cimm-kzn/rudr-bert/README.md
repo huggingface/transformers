@@ -8,7 +8,7 @@ RuDR-BERT - Multilingual, Cased, which pretrained on the raw part of the RuDReC 
 
 If you find this repository helpful, feel free to cite our publication:
 
-[1] Tutubalina E, Alimova I, Miftahutdinov Z, et al. The Russian Drug Reaction Corpus and Neural Models for Drug Reactions and Effectiveness Detection in User Reviews. 
+[1] Tutubalina E, Alimova I, Miftahutdinov Z, et al. The Russian Drug Reaction Corpus and Neural Models for Drug Reactions and Effectiveness Detection in User Reviews.//Bioinformatics. - 2020. 
    
    preprint: https://arxiv.org/abs/2004.03659
 ```
@@ -25,7 +25,7 @@ If you find this repository helpful, feel free to cite our publication:
     eprint = {https://academic.oup.com/bioinformatics/advance-article-pdf/doi/10.1093/bioinformatics/btaa675/33539752/btaa675.pdf},
 } 
 ```
-[2] Tutubalina, EV and Miftahutdinov, Z Sh and Nugmanov, RI and Madzhidov, TI and Nikolenko, SI and Alimova, IS and Tropsha, AE Using semantic analysis of texts for the identification of drugs with similar therapeutic effects.
+[2] Tutubalina, EV and Miftahutdinov, Z Sh and Nugmanov, RI and Madzhidov, TI and Nikolenko, SI and Alimova, IS and Tropsha, AE Using semantic analysis of texts for the identification of drugs with similar therapeutic effects.//Russian Chemical Bulletin. – 2017. – Т. 66. – №. 11. – С. 2180-2189.
    [link to paper](https://www.researchgate.net/profile/Elena_Tutubalina/publication/323751823_Using_semantic_analysis_of_texts_for_the_identification_of_drugs_with_similar_therapeutic_effects/links/5bf7cfc3299bf1a0202cbc1f/Using-semantic-analysis-of-texts-for-the-identification-of-drugs-with-similar-therapeutic-effects.pdf)
 ```
 @article{tutubalina2017using,
