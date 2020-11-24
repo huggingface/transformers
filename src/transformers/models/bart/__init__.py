@@ -4,11 +4,11 @@
 
 from ...file_utils import is_tf_available, is_tokenizers_available, is_torch_available
 from .configuration_bart import BartConfig
-from .tokenization_bart import BartTokenizer
+from .tokenization_bart import BartTokenizer, BART_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 
 if is_tokenizers_available():
-    from .tokenization_bart_fast import BartTokenizerFast
+    from .tokenization_bart_fast import BartTokenizerFast, BART_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 if is_torch_available():
     from .modeling_bart import (

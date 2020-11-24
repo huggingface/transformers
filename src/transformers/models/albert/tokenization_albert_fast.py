@@ -93,7 +93,6 @@ class AlbertTokenizerFast(PreTrainedTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     max_model_input_sizes = 512
     slow_tokenizer_class = AlbertTokenizer
-    tokenizer_class_name = "AlbertTokenizerFast"
 
     def __init__(
         self,

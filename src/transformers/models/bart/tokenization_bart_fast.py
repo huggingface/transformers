@@ -26,29 +26,26 @@ from .tokenization_bart import BartTokenizer
 logger = logging.get_logger(__name__)
 
 
-# vocab and merges same as roberta
-vocab_url = "https://huggingface.co/roberta-large/resolve/main/vocab.json"
-merges_url = "https://huggingface.co/roberta-large/resolve/main/merges.txt"
-tokenizer_url = "https://huggingface.co/roberta-large/resolve/main/tokenizer.json"
-_all_bart_models = [
+VOCAB_FILES_NAMES = {
+    "vocab_file": "vocab.json",
+    "merges_file": "merges.txt",
+    "tokenizer_file": "tokenizer.json"
+}
+
+BART_PRETRAINED_TOKENIZER_ARCHIVE_LIST = [
     "facebook/bart-base",
     "facebook/bart-large",
     "facebook/bart-large-mnli",
     "facebook/bart-large-cnn",
     "facebook/bart-large-xsum",
     "yjernite/bart_eli5",
-    # This is not exhaustive: see https://huggingface.co/models?filter=bart
+    # See all BART models at https://huggingface.co/models?filter=bart
 ]
 
 
 class BartTokenizerFast(RobertaTokenizerFast):
-    # merges and vocab same as Roberta
-    max_model_input_sizes = {m: 1024 for m in _all_bart_models}
-    pretrained_vocab_files_map = {
-        "vocab_file": {m: vocab_url for m in _all_bart_models},
-        "merges_file": {m: merges_url for m in _all_bart_models},
-        "tokenizer_file": {m: tokenizer_url for m in _all_bart_models},
-    }
+    vocab_files_names = VOCAB_FILES_NAMES
+    max_model_input_sizes = 1024
     slow_tokenizer_class = BartTokenizer
 
     @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)

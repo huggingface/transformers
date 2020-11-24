@@ -1518,14 +1518,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     max_model_input_sizes: Optional[int] = None
     model_input_names: List[str] = ["token_type_ids", "attention_mask"]
     padding_side: str = "right"
-    tokenizer_class_name = None
     slow_tokenizer_class = None
 
     def __init__(self, **kwargs):
         # inputs and kwargs for saving and re-loading (see ``from_pretrained`` and ``save_pretrained``)
         self.init_inputs = ()
         self.init_kwargs = copy.deepcopy(kwargs)
-        self.init_kwargs["tokenizer_class_name"] = self.tokenizer_class_name  # Used by AutoTokenizer
+        self.init_kwargs["tokenizer_class_name"] = self.__class__.__name__  # Used by AutoTokenizer to rebuild the tokenizer
 
         self.name_or_path = kwargs.pop("name_or_path", "")
 

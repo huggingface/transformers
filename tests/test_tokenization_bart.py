@@ -2,7 +2,7 @@ import json
 import os
 import unittest
 
-from transformers import BartTokenizer, BartTokenizerFast, BatchEncoding
+from transformers import BartTokenizer, BartTokenizerFast, BatchEncoding, BART_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from transformers.file_utils import cached_property
 from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers, require_torch
@@ -12,6 +12,7 @@ from .test_tokenization_common import TokenizerTesterMixin, filter_roberta_detec
 
 @require_tokenizers
 class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
+    pretrained_vocab_checkpoints = BART_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = BartTokenizer
     rust_tokenizer_class = BartTokenizerFast
     test_rust_tokenizer = True

@@ -102,7 +102,7 @@ from .models.auto import (
     AutoConfig,
     AutoTokenizer,
 )
-from .models.bart import BartConfig, BartTokenizer
+from .models.bart import BartConfig, BartTokenizer, BART_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from .models.bert import (
     BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     BasicTokenizer,
