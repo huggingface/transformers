@@ -5,6 +5,7 @@ Utilities for working with package versions
 import operator
 import re
 import sys
+from typing import Optional
 
 from packaging import version
 
@@ -21,15 +22,15 @@ ops = {
 }
 
 
-def require_version(requirement, hint=None):
+def require_version(requirement: str, hint: Optional[str] = None) -> None:
     """
     Perform a runtime check of the dependency versions, using the exact same syntax used by pip.
 
     The installed module version comes from the `site-packages` dir via `pkg_resources`.
 
     Args:
-    - requirement: pip style definition, e.g.,  "tokenizers==0.9.4", "tqdm>=4.27", "numpy"
-    - hint: what suggestion to print in case of requirements not being met
+        requirement (:obj:`str`): pip style definition, e.g.,  "tokenizers==0.9.4", "tqdm>=4.27", "numpy"
+        hint (:obj:`str`, `optional`): what suggestion to print in case of requirements not being met
     """
 
     # note: while pkg_resources.require_version(requirement) is a much simpler way to do it, it
