@@ -105,6 +105,7 @@ from .models.auto import (
 from .models.bart import BartConfig, BartTokenizer, BART_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from .models.bert import (
     BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    BERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST,
     BasicTokenizer,
     BertConfig,
     BertTokenizer,

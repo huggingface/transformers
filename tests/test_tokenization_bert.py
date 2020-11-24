@@ -17,7 +17,7 @@
 import os
 import unittest
 
-from transformers import BertTokenizerFast
+from transformers import BertTokenizerFast, BERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from transformers.models.bert.tokenization_bert import (
     VOCAB_FILES_NAMES,
     BasicTokenizer,
@@ -35,6 +35,7 @@ from .test_tokenization_common import TokenizerTesterMixin, filter_non_english
 @require_tokenizers
 class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
+    pretrained_vocab_checkpoints = BERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = BertTokenizer
     rust_tokenizer_class = BertTokenizerFast
     test_rust_tokenizer = True

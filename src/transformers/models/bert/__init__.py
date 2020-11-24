@@ -4,11 +4,11 @@
 
 from ...file_utils import is_flax_available, is_tf_available, is_tokenizers_available, is_torch_available
 from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
-from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer
+from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer, BERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 
 if is_tokenizers_available():
-    from .tokenization_bert_fast import BertTokenizerFast
+    from .tokenization_bert_fast import BertTokenizerFast, BERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 if is_torch_available():
     from .modeling_bert import (
