@@ -121,6 +121,8 @@ class TFElectraSelfAttention(tf.keras.layers.Layer):
         context_layer = tf.reshape(
             context_layer, (batch_size, -1, self.all_head_size)
         )  # (batch_size, seq_len_q, all_head_size)
+        print(context_layer.shape)
+        print(attention_probs.shape)
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs

@@ -78,7 +78,7 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
 
         assert config.hidden_size % self.num_attention_heads == 0
 
-        self.attention_head_size = int(config.hidden_size / self.num_attention_heads)
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.query = tf.keras.layers.Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
@@ -120,16 +120,15 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         x = tf.reshape(x, (batch_size, -1, self.num_attention_heads, self.attention_head_size))
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
-    def reshape_for_conv(self, x, batch_size):
-        x = tf.reshape(x, [batch_size, -1, self.all_head_size])
-        return x
-
     def call(self, hidden_states, attention_mask, head_mask, output_attentions, training=False):
         batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(hidden_states)
         mixed_key_layer = self.key(hidden_states)
         mixed_value_layer = self.value(hidden_states)
+
         mixed_key_conv_attn_layer = self.key_conv_attn_layer(hidden_states)
+        print(mixed_key_conv_attn_layer.shape)
+        print("***", self.num_attention_heads, self.attention_head_size, self.conv_kernel_size)
 
         query_layer = self.transpose_for_scores(mixed_query_layer, batch_size)
         key_layer = self.transpose_for_scores(mixed_key_layer, batch_size)
@@ -138,12 +137,18 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         # value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
 
         width = mixed_key_conv_attn_layer.shape[-1]
+        print(width)
         mixed_key_conv_attn_layer = tf.reshape(mixed_key_conv_attn_layer, [-1, width])
+        print(mixed_key_conv_attn_layer.shape)
         conv_attn_layer = tf.multiply(mixed_key_conv_attn_layer, mixed_query_layer)
+        print(conv_attn_layer.shape)
 
         conv_kernel_layer = self.conv_kernel_layer(conv_attn_layer)
+        print(conv_kernel_layer.shape)
         conv_kernel_layer = tf.reshape(conv_kernel_layer, [-1, self.conv_kernel_size, 1])
+        print(conv_kernel_layer.shape)
         conv_kernel_layer = tf.nn.softmax(conv_kernel_layer, axis=1)
+        print(conv_kernel_layer.shape)
 
         paddings = tf.constant(
             [
@@ -157,8 +162,11 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         )
 
         conv_out_layer = self.conv_out_layer(hidden_states)
+        print(conv_out_layer.shape)
         conv_out_layer = tf.reshape(conv_out_layer, [batch_size, -1, self.all_head_size])
+        print(conv_out_layer.shape)
         conv_out_layer = tf.pad(conv_out_layer, paddings, "CONSTANT")
+        print(conv_out_layer.shape)
 
         slices = [
             tf.slice(conv_out_layer, [0, i, 0], [batch_size, mixed_query_layer.shape[1], self.all_head_size])
@@ -166,10 +174,14 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         ]
 
         unfold_conv_out_layer = tf.stack(slices, axis=-1)
+        print(unfold_conv_out_layer.shape)
         conv_out_layer = tf.reshape(unfold_conv_out_layer, [-1, self.attention_head_size, self.conv_kernel_size])
+        print(conv_out_layer.shape)
 
         conv_out_layer = tf.matmul(conv_out_layer, conv_kernel_layer)
+        print(conv_out_layer.shape)
         conv_out_layer = tf.reshape(conv_out_layer, [-1, self.all_head_size])
+        print(conv_out_layer.shape)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = tf.matmul(
@@ -197,16 +209,23 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
             mixed_value_layer, [batch_size, -1, self.num_attention_heads, self.attention_head_size]
         )
         value_layer = tf.transpose(value_layer, [0, 2, 1, 3])
+        print("vvvv")
+        print(value_layer.shape)
 
         context_layer = tf.matmul(attention_probs, value_layer)
         context_layer = tf.transpose(context_layer, perm=[0, 2, 1, 3])
 
         conv_out = tf.reshape(conv_out_layer, [batch_size, -1, self.num_attention_heads, self.attention_head_size])
-
+        print("/////////")
+        print(conv_out.shape)
         context_layer = tf.concat([context_layer, conv_out], 2)
         context_layer = tf.reshape(
             context_layer, (batch_size, -1, self.head_ratio * self.all_head_size)
         )  # (batch_size, seq_len_q, all_head_size)
+        print(context_layer.shape)
+        print("@@@@@")
+        print(context_layer.shape)
+        print(attention_probs.shape)
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
