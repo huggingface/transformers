@@ -52,8 +52,8 @@ class DependencyVersionCheckTest(TestCasePlus):
             try:
                 require_version_core(req)
             except pkg_resources.DistributionNotFound as e:
-                self.assertIn(f"{req} is required", str(e))
-                self.assertIn("but it is not installed", str(e))
+                self.assertIn(f"The '{req}' distribution was not found and is required by this application", str(e))
+                self.assertIn("Try: pip install transformers -U", str(e))
 
         # bogus requirements formats:
         # 1. whole thing

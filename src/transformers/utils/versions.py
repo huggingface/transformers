@@ -37,6 +37,8 @@ def require_version(requirement, hint=None):
     # bad, hence the more complicated check - which also should be faster, since it doesn't check
     # dependencies of dependencies.
 
+    hint = f"\n{hint}" if hint is not None else ""
+
     # non-versioned check
     if re.match(r"^[\w_\-\d]+$", requirement):
         pkg, op, want_ver = requirement, None, None
@@ -63,20 +65,12 @@ def require_version(requirement, hint=None):
     try:
         got_ver = pkg_resources.get_distribution(pkg).version
     except pkg_resources.DistributionNotFound:
-        raise pkg_resources.DistributionNotFound(
-            f"{requirement} is required for a normal functioning of this module, but it is not installed. "
-            + ("\n" + hint if hint is not None else ""),
-            requirement,
-        )
+        raise pkg_resources.DistributionNotFound(requirement, ["this application", hint])
 
     # check that the right version is installed if version number was provided
     if want_ver is not None and not ops[op](version.parse(got_ver), version.parse(want_ver)):
         raise pkg_resources.VersionConflict(
-            f"{requirement} is required for a normal functioning of this module, but found {pkg}=={got_ver}. "
-            + "\n"
-            + hint
-            if hint is not None
-            else ""
+            f"{requirement} is required for a normal functioning of this module, but found {pkg}=={got_ver}.{hint}"
         )
 
 
