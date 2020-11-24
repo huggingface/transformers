@@ -161,6 +161,7 @@ from .modeling_mpnet import (
     MPNetForMultipleChoice,
     MPNetForQuestionAnswering,
     MPNetForSequenceClassification,
+    MPNetForTokenClassification,
     MPNetModel,
 )
 from .modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
