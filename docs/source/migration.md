@@ -22,13 +22,13 @@ In version `v3.x`:
 ```py
 from transformers import AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("xxx")
+tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
 ```
 to obtain the same in version `v4.x`:
 ```py
 from transformers import AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("xxx", use_fast=False)
+tokenizer = AutoTokenizer.from_pretrained("bert-base-cased", use_fast=False)
 ```
 
 #### 2. SentencePiece is removed from the required dependencies
@@ -92,16 +92,78 @@ In order to obtain the same behavior as version `v3.x`, you should specify the `
 
 In version `v3.x`:
 ```bash
+model = BertModel.from_pretrained("bert-base-cased")
 outputs = model(**inputs)
 ```
 to obtain the same in version `v4.x`:
 ```bash
+model = BertModel.from_pretrained("bert-base-cased")
 outputs = model(**inputs, return_dict=False)
+```
+or
+```bash
+model = BertModel.from_pretrained("bert-base-cased", return_dict=False)
+outputs = model(**inputs)
 ```
 
 #### 5. Removed some deprecated attributes
 
-Attributes that were deprecated have been removed if they had been deprecated for at least a month. The full list of deprecated attributes can be found in https://github.com/huggingface/transformers/pull/8604.
+Attributes that were deprecated have been removed if they had been deprecated for at least a month. The full list of deprecated attributes can be found in [#8604](https://github.com/huggingface/transformers/pull/8604).
+
+Here is a list of these attributes and what their replacements should be:
+
+In several models, the labels become consistent with the other models:
+- `masked_lm_labels` becomes `labels` in `AlbertForMaskedLM` and `AlbertForPreTraining`.
+- `masked_lm_labels` becomes `labels` in `BertForMaskedLM` and `BertForPreTraining`.
+- `masked_lm_labels` becomes `labels` in `DistilBertForMaskedLM`.
+- `masked_lm_labels` becomes `labels` in `ElectraForMaskedLM`.
+- `masked_lm_labels` becomes `labels` in `LongformerForMaskedLM`.
+- `masked_lm_labels` becomes `labels` in `MobileBertForMaskedLM`.
+- `masked_lm_labels` becomes `labels` in `RobertaForMaskedLM`.
+- `lm_labels` becomes `labels` in `BartForConditionalGeneration`.
+- `lm_labels` becomes `labels` in `GPT2DoubleHeadsModel`.
+- `lm_labels` becomes `labels` in `OpenAIGPTDoubleHeadsModel`.
+- `lm_labels` becomes `labels` in `T5ForConditionalGeneration`.
+
+In several models, the caching mechanism becomes consistent with the other models:
+- `decoder_cached_states` becomes `past_key_values` in all BART-like, FSMT and T5 models.
+- `decoder_past_key_values` becomes `past_key_values` in all BART-like, FSMT and T5 models.
+- `past` becomes `past_key_values` in all CTRL models.
+- `past` becomes `past_key_values` in all GPT-2 models.
+
+Regarding the tokenizer classes:
+- The tokenizer attribute `max_len` becomes `model_max_length`.
+- The tokenizer attribute `return_lengths` becomes `return_length`.
+- The tokenizer encoding argument `is_pretokenized` becomes `is_split_into_words`.
+
+Regarding the `Trainer` class:
+- The `Trainer` argument `tb_writer` is removed in favor of the callback `TensorBoardCallback(tb_writer=...)`.
+- The `Trainer` argument `prediction_loss_only` is removed in favor of the class argument `args.prediction_loss_only`.
+- The `Trainer` attribute `data_collator` should be a callable.
+- The `Trainer` method `_log` is deprecated in favor of `log`.
+- The `Trainer` method `_training_step` is deprecated in favor of `training_step`.
+- The `Trainer` method `_prediction_loop` is deprecated in favor of `prediction_loop`.
+- The `Trainer` method `is_local_master` is deprecated in favor of `is_local_process_zero`.
+- The `Trainer` method `is_world_master` is deprecated in favor of `is_world_process_zero`.
+
+Regarding the `TFTrainer` class:
+- The `TFTrainer` argument `prediction_loss_only` is removed in favor of the class argument `args.prediction_loss_only`.
+- The `Trainer` method `_log` is deprecated in favor of `log`.
+- The `TFTrainer` method `_prediction_loop` is deprecated in favor of `prediction_loop`.
+- The `TFTrainer` method `_setup_wandb` is deprecated in favor of `setup_wandb`.
+- The `TFTrainer` method `_run_model` is deprecated in favor of `run_model`.
+
+Regarding the `TrainerArgument` class:
+- The `TrainerArgyment` argument `evaluate_during_training` is deprecated in favor of `evaluation_strategy`.
+
+Regarding the Transfo-XL model:
+- The Transfo-XL configuration attribute `tie_weight` becomes `tie_words_embeddings`.
+- The Transfo-XL modeling method `reset_length` becomes `reset_memory_length`.
+
+Regarding pipelines:
+- The `FillMaskPipeline` argument `topk` becomes `top_k`.
+
+
 
 ## Migrating from pytorch-transformers to 🤗 Transformers
 
