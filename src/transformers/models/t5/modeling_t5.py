@@ -1338,8 +1338,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 class T5ModelEncoder(T5PreTrainedModel):
     authorized_missing_keys = [
         r"encoder\.embed_tokens\.weight",
-        r"decoder\.embed_tokens\.weight",
-        r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
+        r"decoder\.(.*?)"
     ]
 
     def __init__(self, config: T5Config):
