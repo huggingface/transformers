@@ -1640,6 +1640,9 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
         for i, item in enumerate(inputs):
             inputs[i] = self.normalize(item)
 
+        if isinstance(inputs, list) and isinstance(inputs[0], list):
+            inputs = inputs[0]
+
         return inputs
 
 

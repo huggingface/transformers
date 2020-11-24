@@ -23,6 +23,17 @@ class QAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
             "question": "In what field is HuggingFace working ?",
             "context": "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
         },
+        {
+            "question": ["In what field is HuggingFace working ?", "In what field is HuggingFace working ?"],
+            "context": "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
+        },
+        {
+            "question": ["In what field is HuggingFace working ?", "In what field is HuggingFace working ?"],
+            "context": [
+                "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
+                "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
+            ],
+        },
     ]
 
     def _test_pipeline(self, nlp: Pipeline):
