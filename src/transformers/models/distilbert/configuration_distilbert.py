@@ -132,11 +132,14 @@ class DistilBertConfig(PretrainedConfig):
         self.dropout = dropout
         self.attention_type = attention_type
         self.attention_dropout = attention_dropout
-        self.performer_attention_config = performer_attention_config
         self.activation = activation
         self.initializer_range = initializer_range
+        self.performer_attention_config = performer_attention_config
         self.qa_dropout = qa_dropout
         self.seq_classif_dropout = seq_classif_dropout
+        
+        if isinstance(self.performer_attention_config, dict):
+            self.performer_attention_config = PerformerAttentionConfig(**self.performer_attention_config)
 
     @property
     def hidden_size(self):

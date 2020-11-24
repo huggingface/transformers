@@ -242,8 +242,8 @@ class TransformerBlock(nn.Module):
         elif att_type == 'performer':
             performer_config = config.performer_attention_config or PerformerAttentionConfig()
             performer_config.attention_dropout = config.attention_dropout
-            performer_config.dim = config.dim
-            performer_config.n_neads = config.n_heads
+            performer_config.d_model = config.dim
+            performer_config.num_heads = config.n_heads
             
             self.attention = PerformerAttention(performer_config)
         else:

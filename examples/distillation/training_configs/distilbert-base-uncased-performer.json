@@ -9,6 +9,9 @@
 	"max_position_embeddings": 512,
 	"n_heads": 12,
 	"n_layers": 6,
+    	"performer_attention_config": {
+		"redraw_stochastically": true
+    	},
 	"sinusoidal_pos_embds": true,
 	"tie_weights_": true,
 	"vocab_size": 30522

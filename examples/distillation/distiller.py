@@ -381,21 +381,25 @@ class Distiller:
         lm_labels: `torch.tensor(bs, seq_length)` - The language modeling labels (mlm labels for MLM and clm labels for CLM).
         """
         if self.mlm:
-            s_logits, s_hidden_states = self.student(
+            s_output = self.student(
+                input_ids=input_ids, attention_mask=None
+            )  # (bs, seq_length, voc_size)
+            s_logits, s_hidden_states = s_output if isinstance(s_output, tuple) else s_output.to_tuple()
+            
+            with torch.no_grad():
+                t_output = self.teacher(
+                    input_ids=input_ids, attention_mask=None
+                )  # (bs, seq_length, voc_size)
+                t_logits, t_hidden_states = t_output if isinstance(t_output, tuple) else t_output.to_tuple()
+        else:
+            s_logits, _, s_hidden_states = self.student(
                 input_ids=input_ids, attention_mask=attention_mask
             )  # (bs, seq_length, voc_size)
             with torch.no_grad():
-                t_logits, t_hidden_states = self.teacher(
+                t_logits, _, t_hidden_states = self.teacher(
                     input_ids=input_ids, attention_mask=attention_mask
                 )  # (bs, seq_length, voc_size)
-        else:
-            s_logits, _, s_hidden_states = self.student(
-                input_ids=input_ids, attention_mask=None
-            )  # (bs, seq_length, voc_size)
-            with torch.no_grad():
-                t_logits, _, t_hidden_states = self.teacher(
-                    input_ids=input_ids, attention_mask=None
-                )  # (bs, seq_length, voc_size)
+        
         assert s_logits.size() == t_logits.size()
 
         # https://github.com/peterliht/knowledge-distillation-pytorch/blob/master/model/net.py#L100
