@@ -110,7 +110,7 @@ outputs = model(**inputs)
 
 Attributes that were deprecated have been removed if they had been deprecated for at least a month. The full list of deprecated attributes can be found in [#8604](https://github.com/huggingface/transformers/pull/8604).
 
-Here is a list of these attributes and what their replacements should be:
+Here is a list of these attributes/methods/arguments and what their replacements should be:
 
 In several models, the labels become consistent with the other models:
 - `masked_lm_labels` becomes `labels` in `AlbertForMaskedLM` and `AlbertForPreTraining`.
@@ -154,7 +154,7 @@ Regarding the `TFTrainer` class:
 - The `TFTrainer` method `_run_model` is deprecated in favor of `run_model`.
 
 Regarding the `TrainerArgument` class:
-- The `TrainerArgyment` argument `evaluate_during_training` is deprecated in favor of `evaluation_strategy`.
+- The `TrainerArgument` argument `evaluate_during_training` is deprecated in favor of `evaluation_strategy`.
 
 Regarding the Transfo-XL model:
 - The Transfo-XL configuration attribute `tie_weight` becomes `tie_words_embeddings`.
