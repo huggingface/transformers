@@ -133,7 +133,8 @@ def deps_list(*pkgs):
     return [deps[pkg] for pkg in pkgs]
 
 class DepsTableUpdateCommand(Command):
-    """A custom distutils command that updates the dependency table.
+    """
+    A custom distutils command that updates the dependency table.
     usage: python setup.py deps_table_update
     """
     
