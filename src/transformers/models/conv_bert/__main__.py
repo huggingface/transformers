@@ -14,8 +14,9 @@ if __name__ == "__main__":
     tokenizer = ConvBertTokenizer.from_pretrained("/home/abhishek/huggingface/models/convbert/")
     model = TFConvBertModel(conf)
 
-    inputs = tokenizer("Hello, my dog is a very cute dog", return_tensors="tf")
+    inputs = tokenizer("Hello, my dog is a very cute dog to be honest", return_tensors="tf")
     print(inputs)
     outputs = model(inputs)
 
     last_hidden_states = outputs.last_hidden_state
+    print(last_hidden_states)
