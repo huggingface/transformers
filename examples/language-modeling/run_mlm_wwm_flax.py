@@ -30,7 +30,6 @@ import os
 import sys
 from dataclasses import dataclass, field
 
-from flax import linen as nn
 from flax.optim import Adam
 from rich.logging import RichHandler
 from rich.progress import track
