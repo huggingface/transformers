@@ -446,7 +446,6 @@ class LongformerEmbeddings(nn.Module):
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.__init__
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
@@ -461,7 +460,6 @@ class LongformerEmbeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
-        # End copy
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
@@ -475,7 +473,6 @@ class LongformerEmbeddings(nn.Module):
             else:
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
-        # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.forward
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
