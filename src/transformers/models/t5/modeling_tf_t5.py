@@ -34,7 +34,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_tf_outputs import TFSeq2SeqLMOutput, TFSeq2SeqModelOutput
+from ...modeling_tf_outputs import TFSeq2SeqLMOutput, TFSeq2SeqModelOutput, TFBaseModelOutput
 from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
