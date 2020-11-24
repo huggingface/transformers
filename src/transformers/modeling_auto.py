@@ -449,7 +449,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForTokenClassification),
         (FlaubertConfig, FlaubertForTokenClassification),
         (FunnelConfig, FunnelForTokenClassification),
-        (MPNetConfig, MPNetForSequenceClassification)
+        (MPNetConfig, MPNetForTokenClassification),
     ]
 )
 

@@ -1,7 +1,6 @@
 import logging
 
 from .configuration_utils import PretrainedConfig
-from .configuration_bert import BertConfig
 
 
 logger = logging.getLogger(__name__)
@@ -14,8 +13,14 @@ MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class MPNetConfig(PretrainedConfig):
     r"""
-        :class:`~transformers.MPNetConfig` is the configuration class to store the configuration of a
-        `MPNetModel`.
+        This is the configuration class to store the configuration of a :class:`~transformers.MPNetModel` or a
+        :class:`~transformers.TFMPNetModel`. It is used to instantiate a MPNet model according to the specified
+        arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
+        configuration to that of the MPNet `mpnet-base <https://huggingface.co/mpnet-base>`__ architecture.
+        
+        Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
+        to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
+        for more information.
 
         Arguments:
             vocab_size: Vocabulary size of `inputs_ids` in `MPNetModel`.
