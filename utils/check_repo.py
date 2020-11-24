@@ -46,8 +46,10 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "test_modeling_flax_bert.py",
     "test_modeling_flax_roberta.py",
     "test_modeling_mbart.py",
+    "test_modeling_mt5.py",
     "test_modeling_pegasus.py",
     "test_modeling_tf_camembert.py",
+    "test_modeling_tf_mt5.py",
     "test_modeling_tf_xlm_roberta.py",
     "test_modeling_xlm_prophetnet.py",
     "test_modeling_xlm_roberta.py",
@@ -61,7 +63,6 @@ IGNORE_NON_DOCUMENTED = [
     "T5Stack",  # Building part of bigger (tested) model.
     "TFDPREncoder",  # Building part of bigger (documented) model.
     "TFDPRSpanPredictor",  # Building part of bigger (documented) model.
-    "TFElectraMainLayer",  # Building part of bigger (documented) model (should it be a TFPreTrainedModel ?)
 ]
 
 # Update this dict with any special correspondance model name (used in modeling_xxx.py) to doc file.
@@ -134,11 +135,15 @@ def get_model_modules():
         "modeling_tf_transfo_xl_utilities",
     ]
     modules = []
-    for attr_name in dir(transformers):
-        if attr_name.startswith("modeling") and attr_name not in _ignore_modules:
-            module = getattr(transformers, attr_name)
-            if inspect.ismodule(module):
-                modules.append(module)
+    for model in dir(transformers.models):
+        # There are some magic dunder attributes in the dir, we ignore them
+        if not model.startswith("__"):
+            model_module = getattr(transformers.models, model)
+            for submodule in dir(model_module):
+                if submodule.startswith("modeling") and submodule not in _ignore_modules:
+                    modeling_module = getattr(model_module, submodule)
+                    if inspect.ismodule(modeling_module):
+                        modules.append(modeling_module)
     return modules
 
 
@@ -197,7 +202,7 @@ def get_model_doc_files():
 def find_tested_models(test_file):
     """ Parse the content of test_file to detect what's in all_model_classes"""
     # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the class
-    with open(os.path.join(PATH_TO_TESTS, test_file), "r", encoding="utf-8") as f:
+    with open(os.path.join(PATH_TO_TESTS, test_file), "r", encoding="utf-8", newline="\n") as f:
         content = f.read()
     all_models = re.findall(r"all_model_classes\s+=\s+\(\s*\(([^\)]*)\)", content)
     # Check with one less parenthesis
@@ -243,7 +248,7 @@ def check_all_models_are_tested():
     test_files = get_model_test_files()
     failures = []
     for module in modules:
-        test_file = f"test_{module.__name__.split('.')[1]}.py"
+        test_file = f"test_{module.__name__.split('.')[-1]}.py"
         if test_file not in test_files:
             failures.append(f"{module.__name__} does not have its corresponding test file {test_file}.")
         new_failures = check_models_are_tested(module, test_file)
@@ -255,7 +260,7 @@ def check_all_models_are_tested():
 
 def find_documented_classes(doc_file):
     """ Parse the content of doc_file to detect which classes it documents"""
-    with open(os.path.join(PATH_TO_DOC, doc_file), "r", encoding="utf-8") as f:
+    with open(os.path.join(PATH_TO_DOC, doc_file), "r", encoding="utf-8", newline="\n") as f:
         content = f.read()
     return re.findall(r"autoclass:: transformers.(\S+)\s+", content)
 
@@ -278,21 +283,10 @@ def check_models_are_documented(module, doc_file):
 
 def _get_model_name(module):
     """ Get the model name for the module defining it."""
-    splits = module.__name__.split("_")
-
-    # Secial case for transfo_xl
-    if splits[-1] == "xl":
-        return "_".join(splits[-2:])
-    # Special case for xlm_prophetnet
-    if splits[-1] == "prophetnet" and splits[-2] == "xlm":
-        return "_".join(splits[-2:])
-    # Secial case for xlm_roberta
-    if splits[-1] == "roberta" and splits[-2] == "xlm":
-        return "_".join(splits[-2:])
-    # Special case for bert_generation
-    if splits[-1] == "generation" and splits[-2] == "bert":
-        return "_".join(splits[-2:])
-    return splits[-1]
+    module_name = module.__name__.split(".")[-1]
+    splits = module_name.split("_")
+    splits = splits[(2 if splits[1] in ["flax", "tf"] else 1) :]
+    return "_".join(splits)
 
 
 def check_all_models_are_documented():
@@ -319,12 +313,12 @@ def check_all_models_are_documented():
 def get_all_auto_configured_models():
     """ Return the list of all models in at least one auto class."""
     result = set()  # To avoid duplicates we concatenate all model classes in a set.
-    for attr_name in dir(transformers.modeling_auto):
+    for attr_name in dir(transformers.models.auto.modeling_auto):
         if attr_name.startswith("MODEL_") and attr_name.endswith("MAPPING"):
-            result = result | set(getattr(transformers.modeling_auto, attr_name).values())
-    for attr_name in dir(transformers.modeling_tf_auto):
+            result = result | set(getattr(transformers.models.auto.modeling_auto, attr_name).values())
+    for attr_name in dir(transformers.models.auto.modeling_tf_auto):
         if attr_name.startswith("TF_MODEL_") and attr_name.endswith("MAPPING"):
-            result = result | set(getattr(transformers.modeling_tf_auto, attr_name).values())
+            result = result | set(getattr(transformers.models.auto.modeling_tf_auto, attr_name).values())
     return [cls.__name__ for cls in result]
 
 
@@ -360,7 +354,7 @@ _re_decorator = re.compile(r"^\s*@(\S+)\s+$")
 
 def check_decorator_order(filename):
     """ Check that in the test file `filename` the slow decorator is always last."""
-    with open(filename, "r", encoding="utf-8") as f:
+    with open(filename, "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
     decorator_before = None
     errors = []

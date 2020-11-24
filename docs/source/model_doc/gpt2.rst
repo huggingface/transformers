@@ -60,10 +60,10 @@ GPT2TokenizerFast
 GPT2 specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.modeling_gpt2.GPT2DoubleHeadsModelOutput
+.. autoclass:: transformers.models.gpt2.modeling_gpt2.GPT2DoubleHeadsModelOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_gpt2.TFGPT2DoubleHeadsModelOutput
+.. autoclass:: transformers.models.gpt2.modeling_tf_gpt2.TFGPT2DoubleHeadsModelOutput
     :members:
 
 
@@ -71,14 +71,14 @@ GPT2Model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.GPT2Model
-    :members: forward
+    :members: forward, parallelize, deparallelize
 
 
 GPT2LMHeadModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.GPT2LMHeadModel
-    :members: forward
+    :members: forward, parallelize, deparallelize
 
 
 GPT2DoubleHeadsModel

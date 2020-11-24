@@ -38,7 +38,7 @@ if is_torch_available():
         XLNetLMHeadModel,
         XLNetModel,
     )
-    from transformers.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.xlnet.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class XLNetModelTester:
@@ -148,7 +148,6 @@ class XLNetModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             eos_token_id=self.eos_token_id,
-            return_dict=True,
         )
 
         return (

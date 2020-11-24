@@ -186,6 +186,15 @@ except ImportError:
 
 
 try:
+    import google.protobuf  # noqa: F401
+
+    _protobuf_available = True
+
+except ImportError:
+    _protobuf_available = False
+
+
+try:
     import tokenizers  # noqa: F401
 
     _tokenizers_available = True
@@ -194,8 +203,28 @@ except ImportError:
     _tokenizers_available = False
 
 
-default_cache_path = os.path.join(torch_cache_home, "transformers")
+old_default_cache_path = os.path.join(torch_cache_home, "transformers")
+# New default cache, shared with the Datasets library
+hf_cache_home = os.path.expanduser(
+    os.getenv("HF_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "huggingface"))
+)
+default_cache_path = os.path.join(hf_cache_home, "transformers")
 
+# Onetime move from the old location to the new one if no ENV variable has been set.
+if (
+    os.path.isdir(old_default_cache_path)
+    and "PYTORCH_PRETRAINED_BERT_CACHE" not in os.environ
+    and "PYTORCH_TRANSFORMERS_CACHE" not in os.environ
+    and "TRANSFORMERS_CACHE" not in os.environ
+):
+    logger.warn(
+        "In Transformers v4.0.0, the default path to cache downloaded models changed from "
+        "'~/.cache/torch/transformers' to '~/.cache/huggingface/transformers'. Since you don't seem to have overridden "
+        "and '~/.cache/torch/transformers' is a directory that exists, we're moving it to "
+        "'~/.cache/huggingface/transformers' to avoid redownloading models you have already in the cache. You should "
+        "only see this message once."
+    )
+    shutil.move(old_default_cache_path, default_cache_path)
 
 PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
 PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
@@ -270,6 +299,10 @@ def is_sentencepiece_available():
     return _sentencepiece_available
 
 
+def is_protobuf_available():
+    return _protobuf_available
+
+
 def is_tokenizers_available():
     return _tokenizers_available
 
@@ -326,6 +359,14 @@ In a notebook or a colab, you can install it by executing a cell with
 SENTENCEPIECE_IMPORT_ERROR = """
 {0} requires the SentencePiece library but it was not found in your environment. Checkout the instructions on the
 installation page of its repo: https://github.com/google/sentencepiece#installation and follow the ones
+that match your environment.
+"""
+
+
+# docstyle-ignore
+PROTOBUF_IMPORT_ERROR = """
+{0} requires the protobuf library but it was not found in your environment. Checkout the instructions on the
+installation page of its repo: https://github.com/protocolbuffers/protobuf/tree/master/python#installation and follow the ones
 that match your environment.
 """
 
@@ -418,6 +459,12 @@ def requires_sentencepiece(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_sentencepiece_available():
         raise ImportError(SENTENCEPIECE_IMPORT_ERROR.format(name))
+
+
+def requires_protobuf(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_protobuf_available():
+        raise ImportError(PROTOBUF_IMPORT_ERROR.format(name))
 
 
 def add_start_docstrings(*docstr):
@@ -532,7 +579,7 @@ PT_TOKEN_CLASSIFICATION_SAMPLE = r"""
         >>> import torch
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> labels = torch.tensor([1] * inputs["input_ids"].size(1)).unsqueeze(0)  # Batch size 1
@@ -549,7 +596,7 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
         >>> import torch
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
         >>> inputs = tokenizer(question, text, return_tensors='pt')
@@ -569,7 +616,7 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
         >>> import torch
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
@@ -585,7 +632,7 @@ PT_MASKED_LM_SAMPLE = r"""
         >>> import torch
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="pt")
         >>> labels = tokenizer("The capital of France is Paris.", return_tensors="pt")["input_ids"]
@@ -602,7 +649,7 @@ PT_BASE_MODEL_SAMPLE = r"""
         >>> import torch
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -617,7 +664,7 @@ PT_MULTIPLE_CHOICE_SAMPLE = r"""
         >>> import torch
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> choice0 = "It is eaten with a fork and a knife."
@@ -639,7 +686,7 @@ PT_CAUSAL_LM_SAMPLE = r"""
         >>> from transformers import {tokenizer_class}, {model_class}
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
+        >>> model = {model_class}.from_pretrained('{checkpoint})
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs, labels=inputs["input_ids"])
@@ -654,7 +701,7 @@ TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
         >>> input_ids = inputs["input_ids"]
@@ -672,7 +719,7 @@ TF_QUESTION_ANSWERING_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> question, text = "Who was Jim Henson?", "Jim Henson was a nice puppet"
         >>> input_dict = tokenizer(question, text, return_tensors='tf')
@@ -691,7 +738,7 @@ TF_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
         >>> inputs["labels"] = tf.reshape(tf.constant(1), (-1, 1)) # Batch size 1
@@ -708,7 +755,7 @@ TF_MASKED_LM_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("The capital of France is {mask}.", return_tensors="tf")
         >>> inputs["labels"] = tokenizer("The capital of France is Paris.", return_tensors="tf")["input_ids"]
@@ -725,7 +772,7 @@ TF_BASE_MODEL_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
         >>> outputs = model(inputs)
@@ -740,7 +787,7 @@ TF_MULTIPLE_CHOICE_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> choice0 = "It is eaten with a fork and a knife."
@@ -761,7 +808,7 @@ TF_CAUSAL_LM_SAMPLE = r"""
         >>> import tensorflow as tf
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint}', return_dict=True)
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
         >>> outputs = model(inputs)
@@ -828,7 +875,9 @@ def is_remote_url(url_or_filename):
     return parsed.scheme in ("http", "https")
 
 
-def hf_bucket_url(model_id: str, filename: str, revision: Optional[str] = None, mirror=None) -> str:
+def hf_bucket_url(
+    model_id: str, filename: str, subfolder: Optional[str] = None, revision: Optional[str] = None, mirror=None
+) -> str:
     """
     Resolve a model identifier, a file name, and an optional revision id, to a huggingface.co-hosted url, redirecting
     to Cloudfront (a Content Delivery Network, or CDN) for large files.
@@ -845,6 +894,9 @@ def hf_bucket_url(model_id: str, filename: str, revision: Optional[str] = None, 
     its sha1 if stored in git, or its sha256 if stored in git-lfs. Files cached locally from transformers before v3.5.0
     are not shared with those new files, because the cached file's name contains a hash of the url (which changed).
     """
+    if subfolder is not None:
+        filename = f"{subfolder}/{filename}"
+
     if mirror:
         endpoint = PRESET_MIRROR_DICT.get(mirror, mirror)
         legacy_format = "/" not in model_id

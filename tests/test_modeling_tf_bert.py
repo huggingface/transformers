@@ -26,7 +26,8 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.modeling_tf_bert import (
+    from transformers import TF_MODEL_FOR_PRETRAINING_MAPPING
+    from transformers.models.bert.modeling_tf_bert import (
         TFBertForMaskedLM,
         TFBertForMultipleChoice,
         TFBertForNextSentencePrediction,
@@ -119,7 +120,6 @@ class TFBertModelTester:
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
-            return_dict=True,
         )
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -274,6 +274,16 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
         else ()
     )
 
+    # special case for ForPreTraining model
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class in TF_MODEL_FOR_PRETRAINING_MAPPING.values():
+                inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
+
+        return inputs_dict
+
     def setUp(self):
         self.model_tester = TFBertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BertConfig, hidden_size=37)
@@ -330,6 +340,7 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertTrue(layer.split("_")[0] in ["dropout", "classifier"])
 
 
+@require_tf
 class TFBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
@@ -337,7 +348,7 @@ class TFBertModelIntegrationTest(unittest.TestCase):
         input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
-        expected_shape = [1, 6, 10]
+        expected_shape = [1, 6, 32000]
         self.assertEqual(output.shape, expected_shape)
 
         print(output[:, :3, :3])
@@ -345,9 +356,9 @@ class TFBertModelIntegrationTest(unittest.TestCase):
         expected_slice = tf.constant(
             [
                 [
-                    [0.03706957, 0.10124919, 0.03616843],
-                    [-0.06099961, 0.02266058, 0.00601412],
-                    [-0.06066202, 0.05684517, 0.02038802],
+                    [-0.05243197, -0.04498899, 0.05512108],
+                    [-0.07444685, -0.01064632, 0.04352357],
+                    [-0.05020351, 0.05530146, 0.00700043],
                 ]
             ]
         )

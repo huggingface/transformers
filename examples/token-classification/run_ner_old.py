@@ -25,6 +25,7 @@ import numpy as np
 from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_score
 from torch import nn
 
+import transformers
 from transformers import (
     AutoConfig,
     AutoModelForTokenClassification,
@@ -35,6 +36,7 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
+from transformers.trainer_utils import is_main_process
 from utils_ner import Split, TokenClassificationDataset, TokenClassificationTask
 
 
@@ -63,7 +65,8 @@ class ModelArguments:
     # If you want to tweak more attributes on your tokenizer, you should do it in a distinct script,
     # or just modify its tokenizer_config.json.
     cache_dir: Optional[str] = field(
-        default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
+        default=None,
+        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
     )
 
 
@@ -139,6 +142,11 @@ def main():
         bool(training_args.local_rank != -1),
         training_args.fp16,
     )
+    # Set the verbosity to info of the Transformers logger (on main process only):
+    if is_main_process(training_args.local_rank):
+        transformers.utils.logging.set_verbosity_info()
+        transformers.utils.logging.enable_default_handler()
+        transformers.utils.logging.enable_explicit_format()
     logger.info("Training/evaluation parameters %s", training_args)
 
     # Set seed
@@ -246,7 +254,7 @@ def main():
         trainer.save_model()
         # For convenience, we also re-save the tokenizer to the same directory,
         # so that you can share your model easily on huggingface.co/models =)
-        if trainer.is_world_master():
+        if trainer.is_world_process_zero():
             tokenizer.save_pretrained(training_args.output_dir)
 
     # Evaluation
@@ -257,7 +265,7 @@ def main():
         result = trainer.evaluate()
 
         output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
-        if trainer.is_world_master():
+        if trainer.is_world_process_zero():
             with open(output_eval_file, "w") as writer:
                 logger.info("***** Eval results *****")
                 for key, value in result.items():

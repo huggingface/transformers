@@ -37,10 +37,11 @@ REFERENCE_CODE = """    def __init__(self, config):
 class CopyCheckTester(unittest.TestCase):
     def setUp(self):
         self.transformer_dir = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.transformer_dir, "models/bert/"))
         check_copies.TRANSFORMER_PATH = self.transformer_dir
         shutil.copy(
-            os.path.join(git_repo_path, "src/transformers/modeling_bert.py"),
-            os.path.join(self.transformer_dir, "modeling_bert.py"),
+            os.path.join(git_repo_path, "src/transformers/models/bert/modeling_bert.py"),
+            os.path.join(self.transformer_dir, "models/bert/modeling_bert.py"),
         )
 
     def tearDown(self):
@@ -62,27 +63,27 @@ class CopyCheckTester(unittest.TestCase):
                 self.assertTrue(f.read(), expected)
 
     def test_find_code_in_transformers(self):
-        code = check_copies.find_code_in_transformers("modeling_bert.BertLMPredictionHead")
+        code = check_copies.find_code_in_transformers("models.bert.modeling_bert.BertLMPredictionHead")
         self.assertEqual(code, REFERENCE_CODE)
 
     def test_is_copy_consistent(self):
         # Base copy consistency
         self.check_copy_consistency(
-            "# Copied from transformers.modeling_bert.BertLMPredictionHead",
+            "# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead",
             "BertLMPredictionHead",
             REFERENCE_CODE + "\n",
         )
 
         # With no empty line at the end
         self.check_copy_consistency(
-            "# Copied from transformers.modeling_bert.BertLMPredictionHead",
+            "# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead",
             "BertLMPredictionHead",
             REFERENCE_CODE,
         )
 
         # Copy consistency with rename
         self.check_copy_consistency(
-            "# Copied from transformers.modeling_bert.BertLMPredictionHead with Bert->TestModel",
+            "# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->TestModel",
             "TestModelLMPredictionHead",
             re.sub("Bert", "TestModel", REFERENCE_CODE),
         )
@@ -90,14 +91,14 @@ class CopyCheckTester(unittest.TestCase):
         # Copy consistency with a really long name
         long_class_name = "TestModelWithAReallyLongNameBecauseSomePeopleLikeThatForSomeReasonIReallyDontUnderstand"
         self.check_copy_consistency(
-            f"# Copied from transformers.modeling_bert.BertLMPredictionHead with Bert->{long_class_name}",
+            f"# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->{long_class_name}",
             f"{long_class_name}LMPredictionHead",
             re.sub("Bert", long_class_name, REFERENCE_CODE),
         )
 
         # Copy consistency with overwrite
         self.check_copy_consistency(
-            "# Copied from transformers.modeling_bert.BertLMPredictionHead with Bert->TestModel",
+            "# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->TestModel",
             "TestModelLMPredictionHead",
             REFERENCE_CODE,
             overwrite_result=re.sub("Bert", "TestModel", REFERENCE_CODE),

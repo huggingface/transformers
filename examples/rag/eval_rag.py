@@ -95,7 +95,7 @@ def evaluate_batch_retrieval(args, rag_model, questions):
         truncation=True,
     )["input_ids"].to(args.device)
 
-    question_enc_outputs = rag_model.rag.question_encoder(retriever_input_ids, return_dict=True)
+    question_enc_outputs = rag_model.rag.question_encoder(retriever_input_ids)
     question_enc_pool_output = question_enc_outputs.pooler_output
 
     result = rag_model.retriever(
@@ -153,7 +153,7 @@ def get_args():
     parser.add_argument(
         "--index_name",
         default=None,
-        choices=["hf", "legacy"],
+        choices=["exact", "compressed", "legacy"],
         type=str,
         help="RAG model retriever type",
     )

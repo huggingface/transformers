@@ -36,7 +36,7 @@ if is_torch_available():
         FlaubertModel,
         FlaubertWithLMHeadModel,
     )
-    from transformers.modeling_flaubert import FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.flaubert.modeling_flaubert import FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class FlaubertModelTester(object):
@@ -113,7 +113,6 @@ class FlaubertModelTester(object):
             initializer_range=self.initializer_range,
             summary_type=self.summary_type,
             use_proj=self.use_proj,
-            return_dict=True,
         )
 
         return (

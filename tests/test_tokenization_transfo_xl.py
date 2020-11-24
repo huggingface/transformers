@@ -17,7 +17,7 @@
 import os
 import unittest
 
-from transformers.tokenization_transfo_xl import VOCAB_FILES_NAMES, TransfoXLTokenizer
+from transformers.models.transfo_xl.tokenization_transfo_xl import VOCAB_FILES_NAMES, TransfoXLTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
 

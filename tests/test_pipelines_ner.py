@@ -146,10 +146,10 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
     @require_torch
     def test_pt_ignore_subwords_slow_tokenizer_raises(self):
         for model_name in self.small_models:
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
 
             with self.assertRaises(ValueError):
-                pipeline(task="ner", model=model_name, tokenizer=tokenizer, ignore_subwords=True)
+                pipeline(task="ner", model=model_name, tokenizer=tokenizer, ignore_subwords=True, use_fast=False)
 
     @require_torch
     def test_pt_defaults_slow_tokenizer(self):
