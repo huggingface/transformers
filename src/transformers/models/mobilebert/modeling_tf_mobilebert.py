@@ -1103,7 +1103,7 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
 @add_start_docstrings("""MobileBert Model with a `language modeling` head on top. """, MOBILEBERT_START_DOCSTRING)
 class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [r"pooler", r"seq_relationship___cls", r"predictions___cls", r"cls.seq_relationship"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"seq_relationship___cls", r"predictions___cls", r"cls.seq_relationship"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1203,7 +1203,7 @@ class TFMobileBertOnlyNSPHead(tf.keras.layers.Layer):
 )
 class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextSentencePredictionLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [r"predictions___cls", r"cls.predictions"]
+    _keys_to_ignore_on_load_unexpected = [r"predictions___cls", r"cls.predictions"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1303,13 +1303,13 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
 )
 class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSequenceClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [
+    _keys_to_ignore_on_load_unexpected = [
         r"predictions___cls",
         r"seq_relationship___cls",
         r"cls.predictions",
         r"cls.seq_relationship",
     ]
-    authorized_missing_keys = [r"dropout"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1405,7 +1405,7 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
 )
 class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAnsweringLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [
+    _keys_to_ignore_on_load_unexpected = [
         r"pooler",
         r"predictions___cls",
         r"seq_relationship___cls",
@@ -1519,13 +1519,13 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
 )
 class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoiceLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [
+    _keys_to_ignore_on_load_unexpected = [
         r"predictions___cls",
         r"seq_relationship___cls",
         r"cls.predictions",
         r"cls.seq_relationship",
     ]
-    authorized_missing_keys = [r"dropout"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1655,14 +1655,14 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
 )
 class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [
+    _keys_to_ignore_on_load_unexpected = [
         r"pooler",
         r"predictions___cls",
         r"seq_relationship___cls",
         r"cls.predictions",
         r"cls.seq_relationship",
     ]
-    authorized_missing_keys = [r"dropout"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)

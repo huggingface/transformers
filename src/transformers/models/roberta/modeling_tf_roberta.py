@@ -799,7 +799,7 @@ class TFRobertaLMHead(tf.keras.layers.Layer):
 @add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """, ROBERTA_START_DOCSTRING)
 class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [r"pooler", r"lm_head.decoder.weight"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head.decoder.weight"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -918,7 +918,7 @@ class TFRobertaClassificationHead(tf.keras.layers.Layer):
 )
 class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [r"pooler", r"lm_head"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1009,8 +1009,8 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
 )
 class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [r"lm_head"]
-    authorized_missing_keys = [r"dropout"]
+    _keys_to_ignore_on_load_unexpected = [r"lm_head"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1133,8 +1133,8 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
 )
 class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [r"pooler", r"lm_head"]
-    authorized_missing_keys = [r"dropout"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1229,7 +1229,7 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
 )
 class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnsweringLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [r"pooler", r"lm_head"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)

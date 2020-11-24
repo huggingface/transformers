@@ -812,7 +812,7 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
 )
 class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [r"predictions.decoder.weight"]
+    _keys_to_ignore_on_load_unexpected = [r"predictions.decoder.weight"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -922,7 +922,7 @@ class TFAlbertSOPHead(tf.keras.layers.Layer):
 @add_start_docstrings("""Albert Model with a `language modeling` head on top. """, ALBERT_START_DOCSTRING)
 class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [r"pooler", r"predictions.decoder.weight"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"predictions.decoder.weight"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1015,8 +1015,8 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
 )
 class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [r"predictions"]
-    authorized_missing_keys = [r"dropout"]
+    _keys_to_ignore_on_load_unexpected = [r"predictions"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1111,8 +1111,8 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
 )
 class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [r"pooler", r"predictions"]
-    authorized_missing_keys = [r"dropout"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"predictions"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1206,7 +1206,7 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
 )
 class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [r"pooler", r"predictions"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"predictions"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1314,8 +1314,8 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
 )
 class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [r"pooler", r"predictions"]
-    authorized_missing_keys = [r"dropout"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"predictions"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)

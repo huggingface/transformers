@@ -1998,7 +1998,7 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
 )
 class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [r"pooler"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -2092,7 +2092,7 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
 )
 class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAnsweringLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [r"pooler"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -2249,7 +2249,7 @@ class TFLongformerClassificationHead(tf.keras.layers.Layer):
 )
 class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSequenceClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [r"pooler"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -2347,7 +2347,7 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
 )
 class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoiceLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_missing_keys = [r"dropout"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -2482,8 +2482,8 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
 )
 class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenClassificationLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    authorized_unexpected_keys = [r"pooler"]
-    authorized_missing_keys = [r"dropout"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
