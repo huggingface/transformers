@@ -17,15 +17,7 @@ else:
     absl.logging.set_stderrthreshold("info")
     absl.logging._warn_preinit_stderr = False
 
-# Integrations: this needs to come before other ml imports
-# in order to allow any 3rd-party code to initialize properly
-from .integrations import (  # isort:skip
-    is_comet_available,
-    is_optuna_available,
-    is_ray_available,
-    is_tensorboard_available,
-    is_wandb_available,
-)
+from . import dependency_versions_check
 
 # Configuration
 from .configuration_utils import PretrainedConfig
@@ -200,6 +192,17 @@ from .tokenization_utils_base import (
     SpecialTokensMixin,
     TensorType,
     TokenSpan,
+)
+
+
+# Integrations: this needs to come before other ml imports
+# in order to allow any 3rd-party code to initialize properly
+from .integrations import (  # isort:skip
+    is_comet_available,
+    is_optuna_available,
+    is_ray_available,
+    is_tensorboard_available,
+    is_wandb_available,
 )
 
 
