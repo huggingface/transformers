@@ -1103,7 +1103,12 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
 @add_start_docstrings("""MobileBert Model with a `language modeling` head on top. """, MOBILEBERT_START_DOCSTRING)
 class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    _keys_to_ignore_on_load_unexpected = [r"pooler", r"seq_relationship___cls", r"predictions___cls", r"cls.seq_relationship"]
+    _keys_to_ignore_on_load_unexpected = [
+        r"pooler",
+        r"seq_relationship___cls",
+        r"predictions___cls",
+        r"cls.seq_relationship",
+    ]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
