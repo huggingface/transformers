@@ -30,16 +30,13 @@ from .file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_callable,
-<<<<<<< HEAD
     replace_return_docstrings,
-=======
 )
 from .modeling_utils import (
     PreTrainedModel,
     apply_chunking_to_forward,
     prune_linear_layer,
     find_pruneable_heads_and_indices,
->>>>>>> ab3c94071c4dc62c34d741c2c3268fc0fdedef1f
 )
 from .modeling_outputs import (
     BaseModelOutput,
