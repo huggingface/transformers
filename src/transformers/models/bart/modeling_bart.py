@@ -730,6 +730,8 @@ class Attention(nn.Module):
             attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
+        attn_weights = F.softmax(attn_weights, dim=-1)
+
         if output_attentions:
             # make sure that attn_weights are included in graph
             attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
@@ -737,7 +739,6 @@ class Attention(nn.Module):
         else:
             attn_weights_reshaped = None
 
-        attn_weights = F.softmax(attn_weights, dim=-1)
         attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
 
         assert v is not None
