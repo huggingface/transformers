@@ -1515,9 +1515,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     """
 
     vocab_files_names: Dict[str, str] = {}
-    pretrained_vocab_files_map: Dict[str, Dict[str, str]] = {}
-    pretrained_init_configuration: Dict[str, Dict[str, Any]] = {}
-    max_model_input_sizes: Dict[str, Optional[int]] = {}
+    max_model_input_sizes: Optional[int] = None
     model_input_names: List[str] = ["token_type_ids", "attention_mask"]
     padding_side: str = "right"
     tokenizer_class_name = None
@@ -1527,7 +1525,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         # inputs and kwargs for saving and re-loading (see ``from_pretrained`` and ``save_pretrained``)
         self.init_inputs = ()
         self.init_kwargs = copy.deepcopy(kwargs)
-        self.init_kwargs["tokenizer_class"] = self.tokenizer_class_name  # Used by AutoTokenizer
+        self.init_kwargs["tokenizer_class_name"] = self.tokenizer_class_name  # Used by AutoTokenizer
 
         self.name_or_path = kwargs.pop("name_or_path", "")
 
@@ -1685,68 +1683,48 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", None)
 
-        s3_models = list(cls.max_model_input_sizes.keys())
         vocab_files = {}
         init_configuration = {}
-        if pretrained_model_name_or_path in s3_models:
-            # Get the vocabulary from AWS S3 bucket
-            for file_id, map_list in cls.pretrained_vocab_files_map.items():
-                vocab_files[file_id] = map_list[pretrained_model_name_or_path]
-            if (
-                cls.pretrained_init_configuration
-                and pretrained_model_name_or_path in cls.pretrained_init_configuration
-            ):
-                init_configuration = cls.pretrained_init_configuration[pretrained_model_name_or_path].copy()
-        else:
-            # Get the vocabulary from local files
-            logger.info(
-                "Model name '{}' not found in model shortcut name list ({}). "
-                "Assuming '{}' is a path, a model identifier, or url to a directory containing tokenizer files.".format(
-                    pretrained_model_name_or_path, ", ".join(s3_models), pretrained_model_name_or_path
+        if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
+            if len(cls.vocab_files_names) > 1:
+                raise ValueError(
+                    "Calling {}.from_pretrained() with the path to a single file or url is not supported."
+                    "Use a model identifier or the path to a directory instead.".format(cls.__name__)
+                )
+            logger.warning(
+                "Calling {}.from_pretrained() with the path to a single file or url is deprecated".format(
+                    cls.__name__
                 )
             )
-
-            if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
-                if len(cls.vocab_files_names) > 1:
-                    raise ValueError(
-                        "Calling {}.from_pretrained() with the path to a single file or url is not supported."
-                        "Use a model identifier or the path to a directory instead.".format(cls.__name__)
-                    )
-                logger.warning(
-                    "Calling {}.from_pretrained() with the path to a single file or url is deprecated".format(
-                        cls.__name__
-                    )
-                )
-                file_id = list(cls.vocab_files_names.keys())[0]
-                vocab_files[file_id] = pretrained_model_name_or_path
-            else:
-                # At this point pretrained_model_name_or_path is either a directory or a model identifier name
-                additional_files_names = {
-                    "added_tokens_file": ADDED_TOKENS_FILE,
-                    "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
-                    "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
-                    "tokenizer_file": FULL_TOKENIZER_FILE,
-                }
-                # Look for the tokenizer files
-                for file_id, file_name in {**cls.vocab_files_names, **additional_files_names}.items():
-                    if os.path.isdir(pretrained_model_name_or_path):
-                        if subfolder is not None:
-                            full_file_name = os.path.join(pretrained_model_name_or_path, subfolder, file_name)
-                        else:
-                            full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
-                        if not os.path.exists(full_file_name):
-                            logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
-                            full_file_name = None
+            file_id = list(cls.vocab_files_names.keys())[0]
+            vocab_files[file_id] = pretrained_model_name_or_path
+        else:
+            additional_files_names = {
+                "added_tokens_file": ADDED_TOKENS_FILE,
+                "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
+                "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
+                "tokenizer_file": FULL_TOKENIZER_FILE,
+            }
+            # Look for the tokenizer files
+            for file_id, file_name in {**cls.vocab_files_names, **additional_files_names}.items():
+                if os.path.isdir(pretrained_model_name_or_path):
+                    if subfolder is not None:
+                        full_file_name = os.path.join(pretrained_model_name_or_path, subfolder, file_name)
                     else:
-                        full_file_name = hf_bucket_url(
-                            pretrained_model_name_or_path,
-                            filename=file_name,
-                            subfolder=subfolder,
-                            revision=revision,
-                            mirror=None,
-                        )
+                        full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
+                    if not os.path.exists(full_file_name):
+                        logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
+                        full_file_name = None
+                else:
+                    full_file_name = hf_bucket_url(
+                        pretrained_model_name_or_path,
+                        filename=file_name,
+                        subfolder=subfolder,
+                        revision=revision,
+                        mirror=None,
+                    )
 
-                    vocab_files[file_id] = full_file_name
+                vocab_files[file_id] = full_file_name
 
         # Get files from url, cache, or disk depending on the case
         resolved_vocab_files = {}
@@ -1836,13 +1814,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         init_kwargs = convert_added_tokens(init_kwargs)
 
-        # Set max length if needed
-        if pretrained_model_name_or_path in cls.max_model_input_sizes:
-            # if we're using a pretrained model, ensure the tokenizer
-            # wont index sequences longer than the number of positional embeddings
-            model_max_length = cls.max_model_input_sizes[pretrained_model_name_or_path]
-            if model_max_length is not None and isinstance(model_max_length, (int, float)):
-                init_kwargs["model_max_length"] = min(init_kwargs.get("model_max_length", int(1e30)), model_max_length)
+        # if we're using a pretrained model, ensure the tokenizer
+        # wont index sequences longer than the number of positional embeddings
+        # We use the model_max_length secified in the config if possible
+        # If not we default to the class default length
+        model_max_length = init_kwargs.get("model_max_length", None)
+        if not isinstance(model_max_length, (int, float)):
+            model_max_length = cls.max_model_input_sizes
+        init_kwargs["model_max_length"] = model_max_length
 
         # Merge resolved_vocab_files arguments in init_kwargs.
         added_tokens_file = resolved_vocab_files.pop("added_tokens_file", None)

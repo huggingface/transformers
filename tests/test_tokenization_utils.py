@@ -19,24 +19,11 @@ from typing import Callable, Optional
 import numpy as np
 
 from transformers import BatchEncoding, BertTokenizer, BertTokenizerFast, PreTrainedTokenizer, TensorType, TokenSpan
-from transformers.models.gpt2.tokenization_gpt2 import GPT2Tokenizer
+from transformers.models.albert.tokenization_albert import AlbertTokenizer, ALBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from transformers.testing_utils import CaptureStderr, require_flax, require_tf, require_tokenizers, require_torch, slow
 
 
 class TokenizerUtilsTest(unittest.TestCase):
-    def check_tokenizer_from_pretrained(self, tokenizer_class):
-        s3_models = list(tokenizer_class.max_model_input_sizes.keys())
-        for model_name in s3_models[:1]:
-            tokenizer = tokenizer_class.from_pretrained(model_name)
-            self.assertIsNotNone(tokenizer)
-            self.assertIsInstance(tokenizer, tokenizer_class)
-            self.assertIsInstance(tokenizer, PreTrainedTokenizer)
-
-            for special_tok in tokenizer.all_special_tokens:
-                self.assertIsInstance(special_tok, str)
-                special_tok_id = tokenizer.convert_tokens_to_ids(special_tok)
-                self.assertIsInstance(special_tok_id, int)
-
     def assert_dump_and_restore(self, be_original: BatchEncoding, equal_op: Optional[Callable] = None):
         batch_encoding_str = pickle.dumps(be_original)
         self.assertIsNotNone(batch_encoding_str)
@@ -61,7 +48,16 @@ class TokenizerUtilsTest(unittest.TestCase):
 
     @slow
     def test_pretrained_tokenizers(self):
-        self.check_tokenizer_from_pretrained(GPT2Tokenizer)
+        for model_name in ALBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST[:1]:
+            tokenizer = AlbertTokenizer.from_pretrained(model_name)
+            self.assertIsNotNone(tokenizer)
+            self.assertIsInstance(tokenizer, AlbertTokenizer)
+            self.assertIsInstance(tokenizer, PreTrainedTokenizer)
+
+            for special_tok in tokenizer.all_special_tokens:
+                self.assertIsInstance(special_tok, str)
+                special_tok_id = tokenizer.convert_tokens_to_ids(special_tok)
+                self.assertIsInstance(special_tok_id, int)
 
     def test_tensor_type_from_str(self):
         self.assertEqual(TensorType("tf"), TensorType.TENSORFLOW)

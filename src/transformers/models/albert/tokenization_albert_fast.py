@@ -32,7 +32,7 @@ else:
 logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
-ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+ALBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST = [
     "albert-base-v1",
     "albert-large-v1",
     "albert-xlarge-v1",

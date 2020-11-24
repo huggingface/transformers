@@ -7,10 +7,10 @@ from .configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertCo
 
 
 if is_sentencepiece_available():
-    from .tokenization_albert import AlbertTokenizer
+    from .tokenization_albert import AlbertTokenizer, ALBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 if is_tokenizers_available():
-    from .tokenization_albert_fast import AlbertTokenizerFast
+    from .tokenization_albert_fast import AlbertTokenizerFast, ALBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 if is_torch_available():
     from .modeling_albert import (

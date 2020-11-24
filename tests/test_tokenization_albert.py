@@ -17,7 +17,7 @@
 import os
 import unittest
 
-from transformers import AlbertTokenizer, AlbertTokenizerFast
+from transformers import AlbertTokenizer, AlbertTokenizerFast, ALBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -30,6 +30,7 @@ SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixture
 @require_tokenizers
 class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
+    pretrained_vocab_checkpoints = ALBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = AlbertTokenizer
     rust_tokenizer_class = AlbertTokenizerFast
     test_rust_tokenizer = True

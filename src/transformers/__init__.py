@@ -204,7 +204,7 @@ from .tokenization_utils_base import (
 
 
 if is_sentencepiece_available():
-    from .models.albert import AlbertTokenizer
+    from .models.albert import AlbertTokenizer, ALBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.bert_generation import BertGenerationTokenizer
     from .models.camembert import CamembertTokenizer
     from .models.marian import MarianTokenizer
@@ -219,7 +219,7 @@ else:
     from .utils.dummy_sentencepiece_objects import *
 
 if is_tokenizers_available():
-    from .models.albert import AlbertTokenizerFast
+    from .models.albert import AlbertTokenizerFast, ALBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.bart import BartTokenizerFast
     from .models.bert import BertTokenizerFast
     from .models.camembert import CamembertTokenizerFast
