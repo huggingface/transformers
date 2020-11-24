@@ -721,7 +721,7 @@ class TFDPRReader(TFDPRPretrainedReader):
             inputs["attention_mask"] = tf.ones(input_shape, dtype=tf.dtypes.int32)
 
         if inputs["token_type_ids"] is None:
-            token_type_ids = tf.zeros(input_shape, dtype=tf.dtypes.int32)
+            inputs["token_type_ids"] = tf.zeros(input_shape, dtype=tf.dtypes.int32)
 
         return self.span_predictor(
             input_ids=inputs["input_ids"],
