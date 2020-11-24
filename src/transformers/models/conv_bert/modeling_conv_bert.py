@@ -66,88 +66,6 @@ CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def load_tf_weights_in_conv_bert(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch model."""
-    try:
-        import re
-
-        import numpy as np
-        import tensorflow as tf
-    except ImportError:
-        logger.error(
-            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions."
-        )
-        raise
-    tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
-
-    names = []
-    arrays = []
-
-    for name, shape in init_vars:
-        logger.info("Loading TF weight {} with shape {}".format(name, shape))
-        array = tf.train.load_variable(tf_path, name)
-        names.append(name)
-        arrays.append(array)
-
-    for name, array in zip(names, arrays):
-        original_name: str = name
-
-        try:
-            if isinstance(model, ConvBertModel):
-                name = name.replace("conv_bert/embeddings/", "generator/embeddings/")
-
-            name = name.replace("dense_1", "dense_prediction")
-            name = name.replace("generator_predictions/output_bias", "generator_lm_head/bias")
-
-            name = name.split("/")
-            # print(original_name, name)
-            # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-            # which are not required for using pretrained model
-            if any(n in ["global_step", "temperature"] for n in name):
-                logger.info("Skipping {}".format(original_name))
-                continue
-            pointer = model
-            for m_name in name:
-                if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
-                    scope_names = re.split(r"_(\d+)", m_name)
-                else:
-                    scope_names = [m_name]
-                if scope_names[0] == "kernel" or scope_names[0] == "gamma":
-                    pointer = getattr(pointer, "weight")
-                elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
-                    pointer = getattr(pointer, "bias")
-                elif scope_names[0] == "output_weights":
-                    pointer = getattr(pointer, "weight")
-                elif scope_names[0] == "squad":
-                    pointer = getattr(pointer, "classifier")
-                else:
-                    pointer = getattr(pointer, scope_names[0])
-                if len(scope_names) >= 2:
-                    num = int(scope_names[1])
-                    pointer = pointer[num]
-            if m_name.endswith("_embeddings"):
-                pointer = getattr(pointer, "weight")
-            elif m_name == "kernel":
-                array = np.transpose(array)
-            try:
-                assert (
-                    pointer.shape == array.shape
-                ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
-            except AssertionError as e:
-                e.args += (pointer.shape, array.shape)
-                raise
-            print("Initialize PyTorch weight {}".format(name), original_name)
-            pointer.data = torch.from_numpy(array)
-        except AttributeError as e:
-            print("Skipping {}".format(original_name), name, e)
-            continue
-    return model
-
-
 class ConvBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -275,31 +193,21 @@ class ConvBertSelfAttention(nn.Module):
 
         mixed_key_conv_attn_layer = self.key_conv_attn_layer(hidden_states.transpose(1, 2))
         mixed_key_conv_attn_layer = mixed_key_conv_attn_layer.transpose(1, 2)
-        print(mixed_key_conv_attn_layer.shape)
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
         key_layer = self.transpose_for_scores(mixed_key_layer)
 
         width = mixed_key_conv_attn_layer.size(-1)
-        print(width)
         mixed_key_conv_attn_layer = torch.reshape(mixed_key_conv_attn_layer, [-1, width])
-        print(mixed_key_conv_attn_layer.shape, mixed_query_layer.shape)
         conv_attn_layer = torch.multiply(mixed_key_conv_attn_layer, mixed_query_layer)
-        print(conv_attn_layer.shape)
 
         conv_kernel_layer = self.conv_kernel_layer(conv_attn_layer)
-        print(conv_kernel_layer.shape)
         conv_kernel_layer = torch.reshape(conv_kernel_layer, [-1, self.conv_kernel_size, 1])
-        print(conv_kernel_layer.shape)
         conv_kernel_layer = torch.softmax(conv_kernel_layer, dim=1)
-        print(conv_kernel_layer.shape)
 
         conv_out_layer = self.conv_out_layer(hidden_states)
-        print(conv_out_layer.shape)
         conv_out_layer = torch.reshape(conv_out_layer, [batch_size, -1, self.all_head_size])
-        print(conv_out_layer.shape)
         conv_out_layer = conv_out_layer.transpose(1, 2).contiguous().unsqueeze(-1)
-        print(conv_out_layer.shape)
         conv_out_layer = nn.functional.unfold(
             conv_out_layer,
             kernel_size=[self.conv_kernel_size, 1],
@@ -307,15 +215,12 @@ class ConvBertSelfAttention(nn.Module):
             padding=[(self.conv_kernel_size - 1) // 2, 0],
             stride=1,
         )
-        print(conv_out_layer.shape)
         conv_out_layer = conv_out_layer.transpose(1, 2).reshape(
             batch_size, -1, self.all_head_size, self.conv_kernel_size
         )
-        print(conv_out_layer.shape)
         conv_out_layer = torch.reshape(conv_out_layer, [-1, self.attention_head_size, self.conv_kernel_size])
         conv_out_layer = torch.matmul(conv_out_layer, conv_kernel_layer)
         conv_out_layer = torch.reshape(conv_out_layer, [-1, self.all_head_size])
-        print(conv_out_layer.shape)
         # conv_out_layer = tf.pad(conv_out_layer, paddings, "CONSTANT")
         # print(conv_out_layer.shape)
 
@@ -341,27 +246,15 @@ class ConvBertSelfAttention(nn.Module):
             mixed_value_layer, [batch_size, -1, self.num_attention_heads, self.attention_head_size]
         )
         value_layer = value_layer.transpose(2, 1)
-        print("vvvv")
-        print(value_layer.shape)
 
         context_layer = torch.matmul(attention_probs, value_layer)
-        print(context_layer.shape)
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        print(context_layer.shape)
 
         conv_out = torch.reshape(conv_out_layer, [batch_size, -1, self.num_attention_heads, self.attention_head_size])
-        print("/////////")
-        print(conv_out.shape)
-        print(context_layer.shape)
         context_layer = torch.cat([context_layer, conv_out], 2)
-        print(context_layer.shape)
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.head_ratio * self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
-        print(context_layer.shape)
-        print("@@@@@")
-        print(context_layer.shape)
-        print(attention_probs.shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         return outputs
