@@ -1035,10 +1035,11 @@ class TFBartModel(TFPretrainedBartModel):
     BART_START_DOCSTRING,
 )
 class TFBartForConditionalGeneration(TFPretrainedBartModel):
-    authorized_missing_keys = [
+    base_model_prefix = "model"
+    _keys_to_ignore_on_load_missing = [
         r"final_logits_bias",
     ]
-    authorized_unexpected_keys = [
+    _keys_to_ignore_on_load_unexpected = [
         r"model.encoder.embed_tokens.weight",
         r"model.decoder.embed_tokens.weight",
     ]

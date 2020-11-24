@@ -459,7 +459,7 @@ class AlbertPreTrainedModel(PreTrainedModel):
 
     config_class = AlbertConfig
     base_model_prefix = "albert"
-    authorized_missing_keys = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -851,7 +851,7 @@ class AlbertSOPHead(nn.Module):
 )
 class AlbertForMaskedLM(AlbertPreTrainedModel):
 
-    authorized_unexpected_keys = [r"pooler"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1021,7 +1021,7 @@ class AlbertForSequenceClassification(AlbertPreTrainedModel):
 )
 class AlbertForTokenClassification(AlbertPreTrainedModel):
 
-    authorized_unexpected_keys = [r"pooler"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1110,7 +1110,7 @@ class AlbertForTokenClassification(AlbertPreTrainedModel):
 )
 class AlbertForQuestionAnswering(AlbertPreTrainedModel):
 
-    authorized_unexpected_keys = [r"pooler"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
         super().__init__(config)

@@ -189,7 +189,7 @@ class Seq2SeqTrainer(Trainer):
         }
 
         if self.args.predict_with_generate and not self.args.prediction_loss_only:
-            generated_tokens = model.generate(
+            generated_tokens = self.model.generate(
                 inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
                 **gen_kwargs,

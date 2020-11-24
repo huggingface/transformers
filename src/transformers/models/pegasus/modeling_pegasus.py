@@ -46,14 +46,14 @@ class PegasusForConditionalGeneration(BartForConditionalGeneration):
     """
     # All the code is in src/transformers/models/bart/modeling_bart.py
     config_class = PegasusConfig
-    authorized_missing_keys = [
+    _keys_to_ignore_on_load_missing = [
         r"final_logits_bias",
         r"encoder\.version",
         r"decoder\.version",
         "model.encoder.embed_positions",
         "model.decoder.embed_positions",
     ]
-    keys_to_never_save = [
+    _keys_to_ignore_on_save = [
         "model.encoder.embed_positions.weight",
         "model.decoder.embed_positions.weight",
     ]
