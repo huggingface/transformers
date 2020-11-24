@@ -492,7 +492,9 @@ class BartModelIntegrationTests(unittest.TestCase):
         inputs_dict = prepare_bart_inputs_dict(model.config, input_ids)
         # Test that model hasn't changed
         with torch.no_grad():
-            batched_logits, features = model(**inputs_dict)
+            outputs = model(**inputs_dict)
+
+        batched_logits = outputs[0]
         expected_shape = torch.Size((2, 3))
         self.assertEqual(batched_logits.shape, expected_shape)
         expected_slice = torch.Tensor([[0.1907, 1.4342, -1.0289]]).to(torch_device)
