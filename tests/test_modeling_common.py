@@ -716,12 +716,16 @@ class ModelTesterMixin:
             decoder_hidden_states.retain_grad()
             decoder_attentions.retain_grad()
 
+            cross_attentions = outputs.cross_attentions[0]
+            cross_attentions.retain_grad()
+
             output.flatten()[0].backward(retain_graph=True)
 
             self.assertIsNotNone(encoder_hidden_states.grad)
             self.assertIsNotNone(encoder_attentions.grad)
             self.assertIsNotNone(decoder_hidden_states.grad)
             self.assertIsNotNone(decoder_attentions.grad)
+            self.assertIsNotNone(cross_attentions.grad)
         else:
             # Encoder-/Decoder-only models
             hidden_states = outputs.hidden_states[0]

@@ -556,6 +556,10 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlnet_qa(*config_and_inputs)
 
+    def test_retain_grad_hidden_states_attentions(self):
+        # xlnet cannot keep gradients in attentions or hidden states
+        return
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in XLNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
