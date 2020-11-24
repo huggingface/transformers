@@ -1,5 +1,107 @@
 # Migrating from previous packages
 
+## Migrating from transformers `v3.x` to `v4.x`
+
+A couple of changes were introduced when the switch from version 3 to version 4 was done. Below is a summary of the
+expected changes:
+
+#### 1. AutoTokenizers and pipelines now use fast (rust) tokenizers by default.
+
+The python and rust tokenizers have roughly the same API, but the rust tokenizers have a more complete feature set. 
+The main breaking change is twofold:
+- The handling of overflowing tokens between the python and rust tokenizers is different.
+- The rust tokenizers do not accept integers in the encoding methods.
+
+##### How to obtain the same behavior as v3.x in v4.x
+
+- The pipelines now contain additional features out of the box. See the [token-classification pipeline with the `grouped_entities` flag](https://huggingface.co/transformers/main_classes/pipelines.html?highlight=textclassification#tokenclassificationpipeline).
+- The auto-tokenizers now return rust tokenizers. In order to obtain the python tokenizers instead, the user may use the `use_fast` flag by setting it to `False`:
+
+In version `v3.x`:
+```py
+from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("xxx")
+```
+to obtain the same in version `v4.x`:
+```py
+from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("xxx", use_fast=False)
+```
+
+#### 2. SentencePiece is removed from the required dependencies
+
+The requirement on the SentencePiece dependency has been lifted from the `setup.py`. This is done so that we may have a channel on anaconda cloud without relying on `conda-forge`. This means that the tokenizers that depend on the SentencePiece library will not be available with a standard `transformers` installation.
+
+This includes the **slow** versions of:
+- `XLNetTokenizer`
+- `AlbertTokenizer`
+- `CamembertTokenizer`
+- `MBartTokenizer`
+- `PegasusTokenizer`
+- `T5Tokenizer`
+- `ReformerTokenizer`
+- `XLMRobertaTokenizer`
+
+##### How to obtain the same behavior as v3.x in v4.x
+
+In order to obtain the same behavior as version `v3.x`, you should install `sentencepiece` additionally:
+
+In version `v3.x`:
+```bash
+pip install transformers
+```
+to obtain the same in version `v4.x`:
+```bash
+pip install transformers[sentencepiece]
+```
+or
+```bash
+pip install transformers sentencepiece
+```
+#### 3. The architecture of the repo has been updated so that each model resides in its folder
+
+The past and foreseeable addition of new models means that the number of files in the directory `src/transformers` keeps growing and becomes harder to navigate and understand. We made the choice to put each model and the files accompanying it in their own sub-directories.
+
+This is a breaking change as importing intermediary layers using a model's module directly needs to be done via a different path.
+
+##### How to obtain the same behavior as v3.x in v4.x
+
+In order to obtain the same behavior as version `v3.x`, you should update the path used to access the layers. 
+
+In version `v3.x`:
+```bash
+from transformers.modeling_bert import BertLayer
+```
+to obtain the same in version `v4.x`:
+```bash
+from transformers.models.bert.modeling_bert import BertLayer
+```
+
+#### 4. Switching the `return_dict` argument to `True` by default
+
+The [`return_dict` argument](https://huggingface.co/transformers/main_classes/output.html) enables the return of named-tuples-like python objects containing the model outputs, instead of the standard tuples. This object is self-documented as keys can be used to retrieve values, while also behaving as a tuple as users may retrieve objects by index or by slice.
+
+This is a breaking change as the limitation of that tuple is that it cannot be unpacked: `value0, value1 = outputs` will not work.
+
+##### How to obtain the same behavior as v3.x in v4.x
+
+In order to obtain the same behavior as version `v3.x`, you should specify the `return_dict` argument to `False`, either in the model configuration or during the forward pass.
+
+In version `v3.x`:
+```bash
+outputs = model(**inputs)
+```
+to obtain the same in version `v4.x`:
+```bash
+outputs = model(**inputs, return_dict=False)
+```
+
+#### 5. Removed some deprecated attributes
+
+Attributes that were deprecated have been removed if they had been deprecated for at least a month. The full list of deprecated attributes can be found in https://github.com/huggingface/transformers/pull/8604.
+
 ## Migrating from pytorch-transformers to 🤗 Transformers
 
 Here is a quick summary of what you should take care of when migrating from `pytorch-transformers` to 🤗 Transformers.
