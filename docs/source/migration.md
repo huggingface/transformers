@@ -8,7 +8,8 @@ expected changes:
 #### 1. AutoTokenizers and pipelines now use fast (rust) tokenizers by default.
 
 The python and rust tokenizers have roughly the same API, but the rust tokenizers have a more complete feature set. 
-The main breaking change is twofold:
+
+This introduces two breaking changes:
 - The handling of overflowing tokens between the python and rust tokenizers is different.
 - The rust tokenizers do not accept integers in the encoding methods.
 
