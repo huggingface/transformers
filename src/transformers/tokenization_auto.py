@@ -211,7 +211,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (RagConfig, (RagTokenizer, None)),
         (XLMProphetNetConfig, (XLMProphetNetTokenizer, None)),
         (ProphetNetConfig, (ProphetNetTokenizer, None)),
-        (MPNetConfig, (MPNetTokenizer, None))
+        (MPNetConfig, (MPNetTokenizer, None)),
     ]
 )
 

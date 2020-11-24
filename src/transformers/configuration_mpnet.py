@@ -13,36 +13,36 @@ MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class MPNetConfig(PretrainedConfig):
     r"""
-        This is the configuration class to store the configuration of a :class:`~transformers.MPNetModel` or a
-        :class:`~transformers.TFMPNetModel`. It is used to instantiate a MPNet model according to the specified
-        arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
-        configuration to that of the MPNet `mpnet-base <https://huggingface.co/mpnet-base>`__ architecture.
-        
-        Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-        to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-        for more information.
+    This is the configuration class to store the configuration of a :class:`~transformers.MPNetModel` or a
+    :class:`~transformers.TFMPNetModel`. It is used to instantiate a MPNet model according to the specified
+    arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
+    configuration to that of the MPNet `mpnet-base <https://huggingface.co/mpnet-base>`__ architecture.
 
-        Arguments:
-            vocab_size: Vocabulary size of `inputs_ids` in `MPNetModel`.
-            hidden_size: Size of the encoder layers and the pooler layer.
-            num_hidden_layers: Number of hidden layers in the Transformer encoder.
-            num_attention_heads: Number of attention heads for each attention layer in
-                the Transformer encoder.
-            intermediate_size: The size of the "intermediate" (i.e., feed-forward)
-                layer in the Transformer encoder.
-            hidden_act: The non-linear activation function (function or string) in the
-                encoder and pooler. If string, "gelu", "relu", "swish" and "gelu_new" are supported.
-            hidden_dropout_prob: The dropout probabilitiy for all fully connected
-                layers in the embeddings, encoder, and pooler.
-            attention_probs_dropout_prob: The dropout ratio for the attention
-                probabilities.
-            max_position_embeddings: The maximum sequence length that this model might
-                ever be used with. Typically set this to something large just in case
-                (e.g., 512 or 1024 or 2048).
-            initializer_range: The sttdev of the truncated_normal_initializer for
-                initializing all weight matrices.
-            layer_norm_eps: The epsilon used by LayerNorm.
-            relative_attention_num_buckets: The buckets for relative positional embedding.
+    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
+    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
+    for more information.
+
+    Args:
+        vocab_size: Vocabulary size of `inputs_ids` in `MPNetModel`.
+        hidden_size: Size of the encoder layers and the pooler layer.
+        num_hidden_layers: Number of hidden layers in the Transformer encoder.
+        num_attention_heads: Number of attention heads for each attention layer in
+            the Transformer encoder.
+        intermediate_size: The size of the "intermediate" (i.e., feed-forward)
+            layer in the Transformer encoder.
+        hidden_act: The non-linear activation function (function or string) in the
+            encoder and pooler. If string, "gelu", "relu", "swish" and "gelu_new" are supported.
+        hidden_dropout_prob: The dropout probabilitiy for all fully connected
+            layers in the embeddings, encoder, and pooler.
+        attention_probs_dropout_prob: The dropout ratio for the attention
+            probabilities.
+        max_position_embeddings: The maximum sequence length that this model might
+            ever be used with. Typically set this to something large just in case
+            (e.g., 512 or 1024 or 2048).
+        initializer_range: The sttdev of the truncated_normal_initializer for
+            initializing all weight matrices.
+        layer_norm_eps: The epsilon used by LayerNorm.
+        relative_attention_num_buckets: The buckets for relative positional embedding.
     """
     pretrained_config_archive_map = MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP
     model_type = "mpnet"

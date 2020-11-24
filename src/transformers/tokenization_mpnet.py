@@ -32,7 +32,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "mpnet-base": "",
-    }        
+    }
 }
 
 
@@ -48,7 +48,7 @@ PRETRAINED_INIT_CONFIGURATION = {
 class MPNetTokenizer(BertTokenizer):
     """
     Constructs a MPNet BPE tokenizer, derived from the Bert tokenizer. Peculiarities:
-    
+
     :This tokenizer inherits from :class:`~transformers.BertTokenizer` which contains most of the methods. Users
     should refer to the superclass for more information regarding methods.
 
@@ -108,7 +108,7 @@ class MPNetTokenizer(BertTokenizer):
         cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
-        
+
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
         super().__init__(
@@ -202,7 +202,6 @@ class MPNetTokenizerFast(BertTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-
     def __init__(
         self,
         vocab_file,
@@ -231,5 +230,5 @@ class MPNetTokenizerFast(BertTokenizerFast):
         output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
         if token_ids_1 is None:
             return output
-        
+
         return output + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]

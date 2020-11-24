@@ -294,7 +294,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (CTRLConfig, CTRLLMHeadModel),
         (ElectraConfig, ElectraForPreTraining),
         (LxmertConfig, LxmertForPreTraining),
-        (MPNetConfig, MPNetForMaskedLM)
+        (MPNetConfig, MPNetForMaskedLM),
     ]
 )
 
