@@ -1521,11 +1521,8 @@ class TFT5ModelEncoder(TFT5PreTrainedModel):
         if isinstance(inputs, (tuple, list)):
             input_ids = inputs[0]
             attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            encoder_outputs = inputs[4] if len(inputs) > 4 else encoder_outputs
-            past_key_values = inputs[5] if len(inputs) > 5 else head_mask
             head_mask = inputs[6] if len(inputs) > 6 else head_mask
             inputs_embeds = inputs[7] if len(inputs) > 7 else inputs_embeds
-            use_cache = inputs[9] if len(inputs) > 9 else use_cache
             output_attentions = inputs[10] if len(inputs) > 10 else output_attentions
             output_hidden_states = inputs[11] if len(inputs) > 11 else output_hidden_states
             return_dict = inputs[12] if len(inputs) > 12 else return_dict
@@ -1536,37 +1533,32 @@ class TFT5ModelEncoder(TFT5PreTrainedModel):
                 input_ids = inputs.get("inputs")
             input_ids = inputs.get("input_ids")
             attention_mask = inputs.get("attention_mask", attention_mask)
-            encoder_outputs = inputs.get("encoder_outputs", encoder_outputs)
-            past_key_values = inputs.get("past_key_values", past_key_values)
             head_mask = inputs.get("head_mask", head_mask)
             inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            use_cache = inputs.get("use_cache", use_cache)
             output_attentions = inputs.get("output_attentions", output_attentions)
             output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
             assert len(inputs) <= 13, "Too many inputs."
         else:
             input_ids = inputs
 
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions else self.config.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states else self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        # Encode if needed (training, first prediction pass)
-        if encoder_outputs is None:
-            encoder_outputs = self.encoder(
-                input_ids,
-                attention_mask=attention_mask,
-                encoder_hidden_states=None,
-                encoder_attention_mask=None,
-                inputs_embeds=inputs_embeds,
-                head_mask=head_mask,
-                past_key_values=None,
-                use_cache=False,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                training=training,
-            )
+
+        encoder_outputs = self.encoder(
+            input_ids,
+            attention_mask=attention_mask,
+            encoder_hidden_states=None,
+            encoder_attention_mask=None,
+            inputs_embeds=inputs_embeds,
+            head_mask=head_mask,
+            past_key_values=None,
+            use_cache=False,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            training=training,
+        )
 
         return encoder_outputs
   
