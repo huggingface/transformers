@@ -72,18 +72,58 @@ if stale_egg_info.exists():
 
 
 # IMPORTANT:
-# 1. all version requirements should be in this table
+# 1. all dependencies should be listed here with their version requirements if any
 # 2. once modified, run: `make deps_table_update` to update src/transformers/dependency_versions_table.py
 _deps = [
+    "black>=20.8b1",
+    "cookiecutter==1.7.2",
+    "dataclasses",
+    "datasets",
+    "faiss-cpu",
+    "fastapi",
+    "filelock",
+    "flake8>=3.8.3",
     "flax==0.2.2",
+    "fugashi>=1.0",
+    "ipadic>=1.0.0,<2.0",
+    "isort>=5.5.4",
     "jax>=0.2.0",
     "jaxlib==0.1.55",
+    "keras2onnx",
     "numpy",
+    "onnxconverter-common",
+    "onnxruntime-tools>=1.4.2",
+    "onnxruntime>=1.4.0",
+    "packaging",
+    "parameterized",
+    "protobuf",
+    "psutil",
+    "pydantic",
+    "pytest",
+    "pytest-xdist",
     "python>=3.6.0",
+    "recommonmark",
     "regex!=2019.12.17",
+    "requests",
+    "sacremoses",
+    "scikit-learn",
+    "sentencepiece==0.1.91",
+    "sphinx-copybutton",
+    "sphinx-markdown-tables",
+    "sphinx-rtd-theme==0.4.3", # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
+    "sphinx==3.2.1",
+    "starlette",
+    "tensorflow-cpu>=2.0",
+    "tensorflow>=2.0",
+    "timeout-decorator",
     "tokenizers==0.9.4",
+    "torch>=1.0",
     "tqdm>=4.27",
+    "unidic>=1.0.2",
+    "unidic_lite>=1.0.7",
+    "uvicorn",
 ]
+
 
 # tokenizers: "tokenizers==0.9.4" lookup table
 # support non-versions file too so that they can be checked at run time
@@ -118,45 +158,32 @@ deps = {
 
 extras = {}
 
-extras["ja"] = ["fugashi>=1.0", "ipadic>=1.0.0,<2.0", "unidic_lite>=1.0.7", "unidic>=1.0.2"]
-extras["sklearn"] = ["scikit-learn"]
+extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic")
+extras["sklearn"] = deps_list("scikit-learn")
 
-# keras2onnx and onnxconverter-common version is specific through a commit until 1.7.0 lands on pypi
-extras["tf"] = [
-    "tensorflow>=2.0",
-    "onnxconverter-common",
-    "keras2onnx"
-    # "onnxconverter-common @ git+git://github.com/microsoft/onnxconverter-common.git@f64ca15989b6dc95a1f3507ff6e4c395ba12dff5#egg=onnxconverter-common",
-    # "keras2onnx @ git+git://github.com/onnx/keras-onnx.git@cbdc75cb950b16db7f0a67be96a278f8d2953b48#egg=keras2onnx",
-]
-extras["tf-cpu"] = [
-    "tensorflow-cpu>=2.0",
-    "onnxconverter-common",
-    "keras2onnx"
-    # "onnxconverter-common @ git+git://github.com/microsoft/onnxconverter-common.git@f64ca15989b6dc95a1f3507ff6e4c395ba12dff5#egg=onnxconverter-common",
-    # "keras2onnx @ git+git://github.com/onnx/keras-onnx.git@cbdc75cb950b16db7f0a67be96a278f8d2953b48#egg=keras2onnx",
-]
-extras["torch"] = ["torch>=1.0"]
+extras["tf"] = deps_list( "tensorflow", "onnxconverter-common", "keras2onnx")
+extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "keras2onnx")
+
+extras["torch"] = deps_list("torch")
 
 if os.name == "nt":  # windows
-    extras["retrieval"] = ["datasets"] # faiss is not supported on windows
+    extras["retrieval"] = deps_list("datasets") # faiss is not supported on windows
     extras["flax"] = [] # jax is not supported on windows
 else:
-    extras["retrieval"] = ["faiss-cpu", "datasets"]
+    extras["retrieval"] = deps_list("faiss-cpu", "datasets")
     extras["flax"] = deps_list("jax", "jaxlib", "flax")
 
 extras["tokenizers"] = deps_list("tokenizers")
-extras["onnxruntime"] = ["onnxruntime>=1.4.0", "onnxruntime-tools>=1.4.2"]
-extras["modelcreation"] = ["cookiecutter==1.7.2"]
+extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
+extras["modelcreation"] = deps_list("cookiecutter")
 
-extras["serving"] = ["pydantic", "uvicorn", "fastapi", "starlette"]
+extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 
-extras["sentencepiece"] = ["sentencepiece==0.1.91", "protobuf"]
-extras["retrieval"] = ["faiss-cpu", "datasets"]
-extras["testing"] = ["pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil"] + extras["retrieval"] + extras["modelcreation"]
-# sphinx-rtd-theme==0.5.0 introduced big changes in the style.
-extras["docs"] = ["recommonmark", "sphinx==3.2.1", "sphinx-markdown-tables", "sphinx-rtd-theme==0.4.3", "sphinx-copybutton"]
-extras["quality"] = ["black >= 20.8b1", "isort >= 5.5.4", "flake8 >= 3.8.3"]
+extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
+extras["retrieval"] = deps_list("faiss-cpu", "datasets")
+extras["testing"] = deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil") + extras["retrieval"] + extras["modelcreation"]
+extras["docs"] = deps_list("recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme", "sphinx-copybutton")
+extras["quality"] = deps_list("black", "isort", "flake8")
 
 
 extras["all"] = extras["tf"] + extras["torch"] + extras["flax"] + extras["sentencepiece"] + extras["tokenizers"]
@@ -177,22 +204,22 @@ setup(
     package_dir={"": "src"},
     packages=find_packages("src"),
     install_requires=[
-        "numpy",
+        deps["numpy"],
         deps["tokenizers"],
         # dataclasses for Python versions that don't have it
-        "dataclasses;python_version<'3.7'",
+        deps["dataclasses"] + ";python_version<'3.7'",
         # utilities from PyPA to e.g., compare versions
-        "packaging",
+        deps["packaging"],
         # filesystem locks, e.g., to prevent parallel downloads
-        "filelock",
+        deps["filelock"],
         # for downloading models over HTTPS
-        "requests",
+        deps["requests"],
         # progress bars in model download and training scripts
         deps["tqdm"],
         # for OpenAI GPT
         deps["regex"],
         # for XLM
-        "sacremoses",
+        deps["sacremoses"],
     ],
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
