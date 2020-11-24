@@ -729,6 +729,14 @@ class Attention(nn.Module):
             reshaped = key_padding_mask.unsqueeze(1).unsqueeze(2)
             attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+
+        if output_attentions:
+            # make sure that attn_weights are included in graph
+            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+        else:
+            attn_weights_reshaped = None
+
         attn_weights = F.softmax(attn_weights, dim=-1)
         attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
 
@@ -737,11 +745,8 @@ class Attention(nn.Module):
         assert attn_output.size() == (bsz * self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
         attn_output = self.out_proj(attn_output)
-        if output_attentions:
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights = None
-        return attn_output, attn_weights
+
+        return attn_output, attn_weights_reshaped
 
     def _concat_saved_state(self, k, v, saved_state, static_kv, bsz) -> Tuple[Tensor]:
         # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
