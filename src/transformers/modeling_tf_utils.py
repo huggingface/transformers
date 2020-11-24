@@ -612,15 +612,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         else:
             raise NotImplementedError
 
-    def get_output_embeddings(self) -> tf.keras.layers.Layer:
-        """
-        Returns the model's output embeddings.
-
-        Returns:
-            :obj:`tf.keras.layers.Layer`: A torch module mapping hidden states to vocabulary.
-        """
-        return None  # Overwrite for models with output embeddings
-
     def resize_token_embeddings(self, new_num_tokens=None) -> tf.Variable:
         """
         Resizes input token embeddings matrix of the model if :obj:`new_num_tokens != config.vocab_size`.
