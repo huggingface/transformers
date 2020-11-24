@@ -494,7 +494,7 @@ class BartModelIntegrationTests(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs_dict)
 
-        batched_logits, features = outputs[0], outputs[1]
+        batched_logits = outputs[0]
         expected_shape = torch.Size((2, 3))
         self.assertEqual(batched_logits.shape, expected_shape)
         expected_slice = torch.Tensor([[0.1907, 1.4342, -1.0289]]).to(torch_device)
