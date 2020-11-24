@@ -196,7 +196,8 @@ PARALLELIZE_DOCSTRING = r"""
                 - t5-11b: 24
 
     Example::
-        Here is an example of a device map on a machine with 4 GPUs using t5-3b, which has a total of 24 attention modules:
+
+            # Here is an example of a device map on a machine with 4 GPUs using t5-3b, which has a total of 24 attention modules:
             model = T5ForConditionalGeneration.from_pretrained('t5-3b')
             device_map = {0: [0, 1, 2],
 
@@ -209,7 +210,8 @@ DEPARALLELIZE_DOCSTRING = r"""
     Moves the model to cpu from a model parallel state.
 
     Example::
-        On a 4 GPU machine with t5-3b:
+
+        # On a 4 GPU machine with t5-3b:
         model = T5ForConditionalGeneration.from_pretrained('t5-3b')
         device_map = {0: [0, 1, 2],
 
