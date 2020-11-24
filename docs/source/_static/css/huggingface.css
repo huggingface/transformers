@@ -2,6 +2,15 @@
 
 /* Colab dropdown */
 
+table.center-aligned-table td {
+    text-align: center;
+}
+
+table.center-aligned-table th {
+    text-align: center;
+    vertical-align: middle;
+}
+
 .colab-dropdown {
     position: relative;
     display: inline-block;
