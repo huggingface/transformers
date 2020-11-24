@@ -1585,7 +1585,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
 class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     authorized_unexpected_keys = [r"pooler", r"mlm___cls", r"nsp___cls", r"cls.predictions", r"cls.seq_relationship"]
-    
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 

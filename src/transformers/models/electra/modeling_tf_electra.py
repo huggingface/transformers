@@ -471,7 +471,6 @@ class TFElectraPreTrainedModel(TFPreTrainedModel):
     # When the model is loaded from a PT model
     authorized_unexpected_keys = [r"generator_lm_head.weight"]
     authorized_missing_keys = [r"dropout"]
-    
 
 
 @keras_serializable
