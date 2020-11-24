@@ -70,7 +70,7 @@ class DependencyVersionCheckTest(TestCasePlus):
                 self.assertIn("need one of ", str(e))
 
     def test_examples(self):
-        # the main functionality is tests in `test_core`, this is just the hint check
+        # the main functionality is tested in `test_core`, this is just the hint check
         try:
             require_version_examples("numpy>1000.4.5")
         except pkg_resources.VersionConflict as e:
