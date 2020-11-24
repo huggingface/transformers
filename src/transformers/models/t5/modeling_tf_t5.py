@@ -1490,7 +1490,7 @@ class TFT5ModelEncoder(TFT5PreTrainedModel):
         return self.encoder
 
     @add_start_docstrings_to_model_forward(T5_ENCODER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=TFBaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         inputs,
