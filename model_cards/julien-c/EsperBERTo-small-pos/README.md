@@ -1,6 +1,6 @@
 ---
 language: eo
-thumbnail: https://huggingface.co/blog/assets/EsperBERTo-thumbnail-v2.png
+thumbnail: https://huggingface.co/blog/assets/01_how-to-train/EsperBERTo-thumbnail-v2.png
 widget:
 - text: "Mi estas viro kej estas tago varma."
 ---
@@ -15,7 +15,7 @@ widget:
 - machine name: `galinette`
 
 
-![](https://huggingface.co/blog/assets/EsperBERTo-thumbnail-v2.png)
+![](https://huggingface.co/blog/assets/01_how-to-train/EsperBERTo-thumbnail-v2.png)
 
 ## Example pipeline
 
