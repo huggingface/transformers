@@ -44,12 +44,12 @@ class TFGenerationMixin:
         if hasattr(self.config, "mem_len") and self.config.mem_len == 0:
             return False
         return True
-    
+
     def is_lm_model(self):
         from .models.auto import (
-            TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_MASKED_LM_MAPPING,
+            TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         )
 
         list_models = list(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.values())
