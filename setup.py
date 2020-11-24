@@ -190,6 +190,20 @@ extras["all"] = extras["tf"] + extras["torch"] + extras["flax"] + extras["senten
 
 extras["dev"] = extras["all"] + extras["testing"] + extras["quality"] + extras["ja"] + extras["docs"] + extras["sklearn"] + extras["modelcreation"]
 
+
+# when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
+install_requires = [
+    deps["dataclasses"] + ";python_version<'3.7'",  # dataclasses for Python versions that don't have it
+    deps["filelock"],    # filesystem locks, e.g., to prevent parallel downloads
+    deps["numpy"],
+    deps["packaging"],   # utilities from PyPA to e.g., compare versions
+    deps["regex"],       # for OpenAI GPT
+    deps["requests"],    # for downloading models over HTTPS
+    deps["sacremoses"],  # for XLM
+    deps["tokenizers"],
+    deps["tqdm"],        # progress bars in model download and training scripts
+]
+
 setup(
     name="transformers",
     version="4.0.0-dev",
@@ -203,27 +217,10 @@ setup(
     url="https://github.com/huggingface/transformers",
     package_dir={"": "src"},
     packages=find_packages("src"),
-    install_requires=[
-        deps["numpy"],
-        deps["tokenizers"],
-        # dataclasses for Python versions that don't have it
-        deps["dataclasses"] + ";python_version<'3.7'",
-        # utilities from PyPA to e.g., compare versions
-        deps["packaging"],
-        # filesystem locks, e.g., to prevent parallel downloads
-        deps["filelock"],
-        # for downloading models over HTTPS
-        deps["requests"],
-        # progress bars in model download and training scripts
-        deps["tqdm"],
-        # for OpenAI GPT
-        deps["regex"],
-        # for XLM
-        deps["sacremoses"],
-    ],
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},
     python_requires=">=3.6.0",
+    install_requires=install_requires,
     classifiers=[
         "Development Status :: 5 - Production/Stable",
         "Intended Audience :: Developers",
