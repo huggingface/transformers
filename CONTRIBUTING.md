@@ -317,3 +317,16 @@ One way one can run the make command on Window is to pass by MSYS2:
 1. [Download MSYS2](https://www.msys2.org/), we assume to have it installed in C:\msys64
 2. Open the command line C:\msys64\msys2.exe (it should be available from the start menu)
 3. Run in the shell: `pacman -Syu` and install make with `pacman -S make`
+
+### Syncing forked master with upstream (HuggingFace) master
+
+To avoid pinging the upstream repository which adds reference notes to each upstream PR and sends unnessary notifications to the developers involved in these PRs, 
+when syncing the master branch of a forked repository, please, follow these steps:
+1. When possible, avoid syncing with the upstream using a branch and PR on the forked repository. Instead merge directly into the forked master.
+2. If a PR is absolutely necessary, use the following steps after checking out your branch:
+```
+$ git checkout -b your-branch-for-syncing
+$ git pull --squash --no-commit upstream master
+$ git commit -m '<your message without GitHub references>'
+$ git push --set-upstream origin your-branch-for-syncing
+```
