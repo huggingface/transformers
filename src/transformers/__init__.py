@@ -51,8 +51,8 @@ from .configuration_lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertCo
 from .configuration_marian import MarianConfig
 from .configuration_mbart import MBartConfig
 from .configuration_mmbt import MMBTConfig
-from .configuration_mpnet import MPNetConfig
 from .configuration_mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig
+from .configuration_mpnet import MPNetConfig
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from .configuration_pegasus import PegasusConfig
 from .configuration_prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig
@@ -88,7 +88,6 @@ from .data import (
     xnli_processors,
     xnli_tasks_num_labels,
 )
-
 # Files and general utilities
 from .file_utils import (
     CONFIG_NAME,
@@ -117,10 +116,8 @@ from .file_utils import (
     is_torch_tpu_available,
 )
 from .hf_argparser import HfArgumentParser
-
 # Model Cards
 from .modelcard import ModelCard
-
 # TF 2.0 <=> PyTorch conversion utilities
 from .modeling_tf_pytorch_utils import (
     convert_tf_weight_name_to_pt_weight_name,
@@ -131,7 +128,6 @@ from .modeling_tf_pytorch_utils import (
     load_tf2_model_in_pytorch_model,
     load_tf2_weights_in_pytorch_model,
 )
-
 # Pipelines
 from .pipelines import (
     Conversation,
@@ -154,10 +150,8 @@ from .pipelines import (
     ZeroShotClassificationPipeline,
     pipeline,
 )
-
 # Retriever
 from .retrieval_rag import RagRetriever
-
 # Tokenizers
 from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from .tokenization_bart import BartTokenizer
@@ -204,6 +198,19 @@ from .tokenization_utils_base import (
     TokenSpan,
 )
 from .tokenization_xlm import XLMTokenizer
+# Trainer
+from .trainer_callback import (
+    DefaultFlowCallback,
+    PrinterCallback,
+    ProgressCallback,
+    TrainerCallback,
+    TrainerControl,
+    TrainerState,
+)
+from .trainer_utils import EvalPrediction, EvaluationStrategy, set_seed
+from .training_args import TrainingArguments
+from .training_args_tf import TFTrainingArguments
+from .utils import logging
 
 
 if is_sentencepiece_available():
@@ -257,19 +264,6 @@ if is_tokenizers_available():
 else:
     from .utils.dummy_tokenizers_objects import *
 
-# Trainer
-from .trainer_callback import (
-    DefaultFlowCallback,
-    PrinterCallback,
-    ProgressCallback,
-    TrainerCallback,
-    TrainerControl,
-    TrainerState,
-)
-from .trainer_utils import EvalPrediction, EvaluationStrategy, set_seed
-from .training_args import TrainingArguments
-from .training_args_tf import TFTrainingArguments
-from .utils import logging
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name

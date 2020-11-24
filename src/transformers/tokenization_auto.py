@@ -40,8 +40,8 @@ from .configuration_auto import (
     LxmertConfig,
     MarianConfig,
     MBartConfig,
-    MPNetConfig,
     MobileBertConfig,
+    MPNetConfig,
     OpenAIGPTConfig,
     PegasusConfig,
     ProphetNetConfig,
@@ -211,7 +211,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (RagConfig, (RagTokenizer, None)),
         (XLMProphetNetConfig, (XLMProphetNetTokenizer, None)),
         (ProphetNetConfig, (ProphetNetTokenizer, None)),
-        (MPNetConfig, (MPNetTokenizer, None))
+        (MPNetConfig, (MPNetTokenizer, None)),
     ]
 )
 

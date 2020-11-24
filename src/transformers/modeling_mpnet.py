@@ -30,12 +30,7 @@ from .file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_callable,
-)
-from .modeling_utils import (
-    PreTrainedModel, 
-    apply_chunking_to_forward,
-    prune_linear_layer,
-    find_pruneable_heads_and_indices,
+    replace_return_docstrings,
 )
 from .modeling_outputs import (
     BaseModelOutput,
@@ -45,6 +40,12 @@ from .modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
+from .modeling_utils import (
+    PreTrainedModel,
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    prune_linear_layer,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -53,16 +54,14 @@ _CONFIG_FOR_DOC = "MPNetConfig"
 _TOKENIZER_FOR_DOC = "MPNetTokenizer"
 
 
-MPNET_PRETRAINED_MODEL_ARCHIVE_MAP = {
-    "mpnet-base": ""        
-}
+MPNET_PRETRAINED_MODEL_ARCHIVE_MAP = {"mpnet-base": ""}
 
 
 def mish(x):
     return x * torch.tanh(nn.functional.softplus(x))
 
-ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
 
+ACT2FN = {"gelu": gelu, "relu": torch.nn.functional.relu, "swish": swish, "gelu_new": gelu_new, "mish": mish}
 
 
 class MPNetPreTrainedModel(PreTrainedModel):
@@ -84,16 +83,14 @@ class MPNetPreTrainedModel(PreTrainedModel):
 
 
 class MPNetEmbeddings(nn.Module):
-    def __init__(self, config): 
+    def __init__(self, config):
         super().__init__()
         self.padding_idx = 1
-        self.word_embeddings = nn.Embedding(
-            config.vocab_size, config.hidden_size, padding_idx=self.padding_idx
-        )
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=self.padding_idx)
         self.position_embeddings = nn.Embedding(
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
         )
-        
+
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
@@ -165,7 +162,7 @@ class MPNetSelfAttention(nn.Module):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
-    
+
     def forward(
         self,
         hidden_states,
@@ -187,14 +184,14 @@ class MPNetSelfAttention(nn.Module):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(q, k.transpose(-1, -2))
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        
+
         # Apply relative position embedding (precomputed in MPNetEncoder) if provided.
         if position_bias is not None:
             attention_scores += position_bias
-        
+
         if attention_mask is not None:
             attention_scores = attention_scores + attention_mask
-        
+
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
 
@@ -226,7 +223,7 @@ class MPNetAttention(nn.Module):
 
     def prune_heads(self, heads):
         if len(heads) == 0:
-            return 
+            return
 
         heads, index = find_pruneable_heads_and_indices(
             heads, self.attn.num_attention_heads, self.attn.attention_head_size, self.prune_heads
@@ -251,11 +248,15 @@ class MPNetAttention(nn.Module):
         **kwargs,
     ):
         self_outputs = self.attn(
-            hidden_states, attention_mask, head_mask, position_bias,
+            hidden_states,
+            attention_mask,
+            head_mask,
+            position_bias,
         )
         attention_output = self.LayerNorm(self.dropout(self_outputs[0]) + hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
+
 
 # Copied from transformers.modeling_bert.BertIntermediate
 class MPNetIntermediate(nn.Module):
@@ -303,9 +304,7 @@ class MPNetLayer(nn.Module):
         position_bias=None,
         **kwargs,
     ):
-        self_attention_outputs = self.attention(
-            hidden_states, attention_mask, head_mask, position_bias=position_bias
-        )
+        self_attention_outputs = self.attention(hidden_states, attention_mask, head_mask, position_bias=position_bias)
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
@@ -343,7 +342,11 @@ class MPNetEncoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
-                hidden_states, attention_mask, head_mask[i], position_bias, **kwargs,
+                hidden_states,
+                attention_mask,
+                head_mask[i],
+                position_bias,
+                **kwargs,
             )
             hidden_states = layer_outputs[0]
 
@@ -357,7 +360,7 @@ class MPNetEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states, 
+            last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
             attentions=all_attentions,
         )
@@ -370,13 +373,10 @@ class MPNetEncoder(nn.Module):
         else:
             context_position = torch.arange(qlen, dtype=torch.long)[:, None]
             memory_position = torch.arange(klen, dtype=torch.long)[None, :]
-        
+
         relative_position = memory_position - context_position
-    
-        rp_bucket = self.relative_position_bucket(
-            relative_position,
-            num_buckets=num_buckets
-        )
+
+        rp_bucket = self.relative_position_bucket(relative_position, num_buckets=num_buckets)
         rp_bucket = rp_bucket.to(x.device)
         values = self.relative_attention_bias(rp_bucket)
         values = values.permute([2, 0, 1]).unsqueeze(0)
@@ -385,23 +385,23 @@ class MPNetEncoder(nn.Module):
 
     @staticmethod
     def relative_position_bucket(relative_position, num_buckets=32, max_distance=128):
-        ret = 0 
+        ret = 0
         n = -relative_position
-    
+
         num_buckets //= 2
         ret += (n < 0).to(torch.long) * num_buckets
         n = torch.abs(n)
-    
+
         max_exact = num_buckets // 2
         is_small = n < max_exact
-    
+
         val_if_large = max_exact + (
             torch.log(n.float() / max_exact) / math.log(max_distance / max_exact) * (num_buckets - max_exact)
         ).to(torch.long)
-    
+
         val_if_large = torch.min(val_if_large, torch.full_like(val_if_large, num_buckets - 1))
         ret += torch.where(is_small, n, val_if_large)
-        return ret    
+        return ret
 
 
 MPNET_START_DOCSTRING = r"""
@@ -449,9 +449,10 @@ MPNET_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
+
 @add_start_docstrings(
     "The bare MPNet Model transformer outputting raw hidden-states without any specific head on top.",
-    MPNET_START_DOCSTRING
+    MPNET_START_DOCSTRING,
 )
 class MPNetModel(MPNetPreTrainedModel):
 
@@ -475,7 +476,7 @@ class MPNetModel(MPNetPreTrainedModel):
     def _prune_heads(self, heads_to_prune):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
-    
+
     @add_start_docstrings_to_callable(MPNET_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -505,12 +506,12 @@ class MPNetModel(MPNetPreTrainedModel):
 
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=input_ids.device)
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, input_ids.device)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
+            attention_mask, input_shape, input_ids.device
+        )
 
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-        embedding_output = self.embeddings(
-            input_ids=input_ids, position_ids=position_ids, inputs_embeds=inputs_embeds
-        )
+        embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids, inputs_embeds=inputs_embeds)
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
@@ -535,7 +536,7 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
 
         self.mpnet = MPNetModel(config)
         self.lm_head = MPNetLMHead(config)
-        
+
         self.init_weights()
 
     def get_output_embeddings(self):
@@ -604,7 +605,7 @@ class MPNetLMHead(nn.Module):
     MPNET_START_DOCSTRING,
 )
 class MPNetForSequenceClassification(MPNetPreTrainedModel):
-    
+
     base_model_prefix = "mpnet"
 
     def __init__(self, config):
@@ -615,7 +616,7 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
         self.classifier = MPNetClassificationHead(config)
 
         self.init_weights()
-    
+
     @add_start_docstrings_to_callable(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -698,7 +699,7 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         self.init_weights()
-    
+
     @add_start_docstrings_to_callable(MPNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -772,7 +773,7 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
     MPNET_START_DOCSTRING,
 )
 class MPNetForTokenClassification(MPNetPreTrainedModel):
-    
+
     base_model_prefix = "mpnet"
 
     def __init__(self, config):
@@ -813,7 +814,7 @@ class MPNetForTokenClassification(MPNetPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.mpnet(
-			input_ids,
+            input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -822,7 +823,7 @@ class MPNetForTokenClassification(MPNetPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-		)
+        )
 
         sequence_output = outputs[0]
 
@@ -976,7 +977,7 @@ class MPNetForQuestionAnswering(MPNetPreTrainedModel):
 
 
 def create_position_ids_from_input_ids(input_ids, padding_idx):
-    """ Replace non-padding symbols with their position numbers. Position numbers begin at
+    """Replace non-padding symbols with their position numbers. Position numbers begin at
     padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
     `utils.make_positions`.
     :param torch.Tensor x:

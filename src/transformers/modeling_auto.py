@@ -158,10 +158,10 @@ from .modeling_mobilebert import (
 )
 from .modeling_mpnet import (
     MPNetForMaskedLM,
-    MPNetModel,
+    MPNetForMultipleChoice,
     MPNetForQuestionAnswering,
     MPNetForSequenceClassification,
-    MPNetForMultipleChoice,
+    MPNetModel,
 )
 from .modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
 from .modeling_pegasus import PegasusForConditionalGeneration
@@ -294,7 +294,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (CTRLConfig, CTRLLMHeadModel),
         (ElectraConfig, ElectraForPreTraining),
         (LxmertConfig, LxmertForPreTraining),
-        (MPNetConfig, MPNetForMaskedLM)
+        (MPNetConfig, MPNetForMaskedLM),
     ]
 )
 

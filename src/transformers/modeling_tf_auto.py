@@ -121,8 +121,8 @@ from .modeling_tf_mobilebert import (
 from .modeling_tf_mpnet import (
     TFMPNetForMultipleChoice,
     TFMPNetForQuestionAnswering,
-    TFMPNetForTokenClassification,
     TFMPNetForSequenceClassification,
+    TFMPNetForTokenClassification,
     TFMPNetModel,
 )
 from .modeling_tf_openai import TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
