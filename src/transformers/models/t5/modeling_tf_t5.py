@@ -266,7 +266,10 @@ class TFT5Attention(tf.keras.layers.Layer):
             )
             real_seq_length += past_key_value[0].shape[2] if query_length is None else query_length
 
-        key_length = real_seq_length if key_value_states is None or key_value_states.shape[1] is None else key_value_states.shape[1]
+        if key_value_states is None or key_value_states.shape[1] is None:
+            key_length = real_seq_length
+        else:
+            key_length = key_value_states.shape[1]
 
         def shape(hidden_states):
             """  projection """
