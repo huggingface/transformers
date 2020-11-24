@@ -972,7 +972,7 @@ class TFBartModel(TFPretrainedBartModel):
             )
         else:
             decoder_padding_mask, causal_mask = None, None
-        
+
         if inputs["encoder_outputs"] is None:
             inputs["encoder_outputs"] = self.encoder(
                 input_ids=inputs["input_ids"],
