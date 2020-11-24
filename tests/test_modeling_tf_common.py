@@ -152,7 +152,7 @@ class TFModelTesterMixin:
 
             if model.config.is_encoder_decoder:
                 expected_arg_names = [
-                    "inputs",
+                    "input_ids",
                     "attention_mask",
                     "decoder_input_ids",
                     "decoder_attention_mask",
@@ -161,7 +161,7 @@ class TFModelTesterMixin:
                 self.assertListEqual(arg_names[:5], expected_arg_names)
 
             else:
-                expected_arg_names = ["inputs"]
+                expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
     @slow
@@ -753,7 +753,7 @@ class TFModelTesterMixin:
 
     def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]
+        input_ids = inputs_dict["input_ids"]
 
         # iterate over all generative models
         for model_class in self.all_generative_model_classes:

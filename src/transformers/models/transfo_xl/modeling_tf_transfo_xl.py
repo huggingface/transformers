@@ -16,6 +16,7 @@
 """
  TF 2.0 Transformer XL model.
 """
+
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -27,8 +28,7 @@ from ...file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
 )
-from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
-from ...tokenization_utils import BatchEncoding
+from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, input_processing, keras_serializable, shape_list
 from ...utils import logging
 from .configuration_transfo_xl import TransfoXLConfig
 from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
@@ -504,7 +504,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
 
     def call(
         self,
-        inputs,
+        input_ids=None,
         mems=None,
         head_mask=None,
         inputs_embeds=None,
@@ -512,64 +512,60 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
+        **kwargs,
     ):
-        if isinstance(inputs, (tuple, list)):
-            input_ids = inputs[0]
-            mems = inputs[1] if len(inputs) > 1 else mems
-            head_mask = inputs[2] if len(inputs) > 2 else head_mask
-            inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
-            output_attentions = inputs[4] if len(inputs) > 4 else output_attentions
-            output_hidden_states = inputs[5] if len(inputs) > 5 else output_hidden_states
-            return_dict = inputs[6] if len(inputs) > 6 else return_dict
-            assert len(inputs) <= 7, "Too many inputs."
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            input_ids = inputs.get("input_ids")
-            mems = inputs.get("mems", mems)
-            head_mask = inputs.get("head_mask", head_mask)
-            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            output_attentions = inputs.get("output_attentions", output_attentions)
-            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            return_dict = inputs.get("return_dict", return_dict)
-            assert len(inputs) <= 7, "Too many inputs."
-        else:
-            input_ids = inputs
-
-        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
-        return_dict = return_dict if return_dict is not None else self.return_dict
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
+            mems=mems,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
         # the original code for Transformer-XL used shapes [len, bsz] but we want a unified interface in the library
         # so we transpose here from shape [bsz, len] to shape [len, bsz]
-        if input_ids is not None and inputs_embeds is not None:
+        if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_ids = tf.transpose(input_ids, perm=(1, 0))
-            qlen, bsz = shape_list(input_ids)
-        elif inputs_embeds is not None:
-            inputs_embeds = tf.transpose(inputs_embeds, perm=(1, 0, 2))
-            qlen, bsz = shape_list(inputs_embeds)[:2]
+        elif inputs["input_ids"] is not None:
+            inputs["input_ids"] = tf.transpose(inputs["input_ids"], perm=(1, 0))
+            qlen, bsz = shape_list(inputs["input_ids"])
+        elif inputs["inputs_embeds"] is not None:
+            inputs["inputs_embeds"] = tf.transpose(inputs["inputs_embeds"], perm=(1, 0, 2))
+            qlen, bsz = shape_list(inputs["inputs_embeds"])[:2]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        if mems is None:
-            mems = self.init_mems(bsz)
+        if inputs["mems"] is None:
+            inputs["mems"] = self.init_mems(bsz)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads] (a head_mask for each layer)
         # and head_mask is converted to shape [num_hidden_layers x qlen x klen x bsz x n_head]
-        if head_mask is not None:
+        if inputs["head_mask"] is not None:
             raise NotImplementedError
         else:
-            head_mask = [None] * self.n_layer
+            inputs["head_mask"] = [None] * self.n_layer
 
-        if inputs_embeds is not None:
-            word_emb = inputs_embeds
+        if inputs["inputs_embeds"] is not None:
+            word_emb = inputs["inputs_embeds"]
         else:
-            word_emb = self.word_emb(input_ids)
+            word_emb = self.word_emb(inputs["input_ids"])
 
-        mlen = shape_list(mems[0])[0] if mems is not None else 0
+        mlen = shape_list(inputs["mems"][0])[0] if inputs["mems"] is not None else 0
         klen = mlen + qlen
 
         attn_mask = tf.ones([qlen, qlen])
@@ -602,20 +598,20 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
                 pos_seq = tf.minimum(pos_seq, self.clamp_len)
             pos_emb = self.pos_emb(pos_seq)
 
-            core_out = self.drop(word_emb, training=training)
-            pos_emb = self.drop(pos_emb, training=training)
+            core_out = self.drop(word_emb, training=inputs["training"])
+            pos_emb = self.drop(pos_emb, training=inputs["training"])
 
             for i, layer in enumerate(self.layers):
                 hids.append(core_out)
-                mems_i = None if mems is None else mems[i]
+                mems_i = None if inputs["mems"] is None else inputs["mems"][i]
                 layer_outputs = layer(
                     core_out,
                     pos_emb,
                     dec_attn_mask,
                     mems_i,
-                    head_mask[i],
+                    inputs["head_mask"][i],
                     output_attentions,
-                    training=training,
+                    training=inputs["training"],
                 )
                 core_out = layer_outputs[0]
                 if output_attentions:
@@ -623,9 +619,9 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         else:  # learnable embeddings and absolute embeddings
             raise NotImplementedError  # Removed these to avoid maintaining dead code - They are not used in our pretrained checkpoint
 
-        core_out = self.drop(core_out, training=training)
+        core_out = self.drop(core_out, training=inputs["training"])
 
-        new_mems = self._update_mems(hids, mems, mlen, qlen)
+        new_mems = self._update_mems(hids, inputs["mems"], mlen, qlen)
 
         # We transpose back here to shape [bsz, len, hidden_dim]
         core_out = tf.transpose(core_out, perm=(1, 0, 2))
@@ -814,8 +810,41 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
         output_type=TFTransfoXLModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    def call(self, inputs, **kwargs):
-        outputs = self.transformer(inputs, **kwargs)
+    def call(
+        self,
+        input_ids=None,
+        mems=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False,
+        **kwargs,
+    ):
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
+            mems=mems,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        outputs = self.transformer(
+            input_ids=inputs["input_ids"],
+            mems=inputs["mems"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
+
         return outputs
 
 
@@ -879,7 +908,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
     )
     def call(
         self,
-        inputs,
+        input_ids=None,
         mems=None,
         head_mask=None,
         inputs_embeds=None,
@@ -888,51 +917,42 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         return_dict=None,
         labels=None,
         training=False,
+        **kwargs,
     ):
-        if isinstance(inputs, (tuple, list)):
-            input_ids = inputs[0]
-            mems = inputs[1] if len(inputs) > 1 else mems
-            head_mask = inputs[2] if len(inputs) > 2 else head_mask
-            inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
-            output_attentions = inputs[4] if len(inputs) > 4 else output_attentions
-            output_hidden_states = inputs[5] if len(inputs) > 5 else output_hidden_states
-            return_dict = inputs[6] if len(inputs) > 6 else return_dict
-            labels = inputs[7] if len(inputs) > 7 else labels
-            assert len(inputs) <= 8, "Too many inputs."
-        elif isinstance(inputs, (BatchEncoding, dict)):
-            input_ids = inputs.get("input_ids")
-            mems = inputs.get("mems", mems)
-            head_mask = inputs.get("head_mask", head_mask)
-            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            output_attentions = inputs.get("output_attentions", output_attentions)
-            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            return_dict = inputs.get("return_dict", return_dict)
-            labels = inputs.get("labels", labels)
-            assert len(inputs) <= 8, "Too many inputs."
-        else:
-            input_ids = inputs
-        return_dict = return_dict if return_dict is not None else self.transformer.return_dict
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
+            mems=mems,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
 
-        if input_ids is not None:
-            bsz, tgt_len = shape_list(input_ids)[:2]
+        if inputs["input_ids"] is not None:
+            bsz, tgt_len = shape_list(inputs["input_ids"])[:2]
         else:
-            bsz, tgt_len = shape_list(inputs_embeds)[:2]
+            bsz, tgt_len = shape_list(inputs["inputs_embeds"])[:2]
 
         transformer_outputs = self.transformer(
-            input_ids,
-            mems,
-            head_mask,
-            inputs_embeds,
-            output_attentions,
-            output_hidden_states,
+            inputs["input_ids"],
+            inputs["mems"],
+            inputs["head_mask"],
+            inputs["inputs_embeds"],
+            inputs["output_attentions"],
+            inputs["output_hidden_states"],
             return_dict,
-            training=training,
+            training=inputs["training"],
         )
 
         last_hidden = transformer_outputs[0]
         pred_hid = last_hidden[:, -tgt_len:]
 
-        softmax_output = self.crit(pred_hid, labels, training=training)
+        softmax_output = self.crit(pred_hid, labels, training=inputs["training"])
 
         if not return_dict:
             return (softmax_output,) + transformer_outputs[1:]
@@ -945,7 +965,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(self, inputs, past, **model_kwargs):
-        inputs = {"inputs": inputs}
+        inputs = {"input_ids": inputs}
 
         # if past is defined in model kwargs then use it for faster decoding
         if past:
