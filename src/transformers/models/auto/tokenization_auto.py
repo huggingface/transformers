@@ -72,6 +72,7 @@ from .configuration_auto import (
     MarianConfig,
     MBartConfig,
     MobileBertConfig,
+    MT5Config,
     OpenAIGPTConfig,
     PegasusConfig,
     ProphetNetConfig,
@@ -173,6 +174,7 @@ TOKENIZER_MAPPING = OrderedDict(
     [
         (RetriBertConfig, (RetriBertTokenizer, RetriBertTokenizerFast)),
         (T5Config, (T5Tokenizer, T5TokenizerFast)),
+        (MT5Config, (T5Tokenizer, T5TokenizerFast)),
         (MobileBertConfig, (MobileBertTokenizer, MobileBertTokenizerFast)),
         (DistilBertConfig, (DistilBertTokenizer, DistilBertTokenizerFast)),
         (AlbertConfig, (AlbertTokenizer, AlbertTokenizerFast)),
