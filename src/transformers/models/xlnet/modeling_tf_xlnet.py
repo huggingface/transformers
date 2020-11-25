@@ -1164,7 +1164,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
         input_mask=None,
         head_mask=None,
         inputs_embeds=None,
-        use_mems=True,
+        use_mems=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1255,7 +1255,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
             "input_ids": inputs,
             "perm_mask": perm_mask,
             "target_mapping": target_mapping,
-            "use_mems": kwargs["use_mems"],
+            "use_mems": kwargs.get("use_mems"),
         }
 
         # if past is defined in model kwargs then use it for faster decoding
