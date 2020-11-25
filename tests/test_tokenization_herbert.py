@@ -18,7 +18,7 @@ import json
 import os
 import unittest
 
-from transformers import HerbertTokenizer, HerbertTokenizerFast
+from transformers import HerbertTokenizer, HerbertTokenizerFast, HERBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from transformers.models.herbert.tokenization_herbert import VOCAB_FILES_NAMES
 from transformers.testing_utils import get_tests_dir, require_tokenizers, slow
 
@@ -28,6 +28,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 @require_tokenizers
 class HerbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
+    pretrained_vocab_checkpoints = HERBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = HerbertTokenizer
     rust_tokenizer_class = HerbertTokenizerFast
     test_rust_tokenizer = True
@@ -113,6 +114,9 @@ class HerbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ids = tokenizer.encode(sequence)
         rust_ids = rust_tokenizer.encode(sequence)
         self.assertListEqual(ids, rust_ids)
+
+    def test_padding_to_multiple_of(self):
+        pass  # Because HerBert has a max length of 514 which is not a multiple of 8
 
     @slow
     def test_sequence_builders(self):

@@ -4,11 +4,11 @@
 
 from ...file_utils import is_tokenizers_available, is_torch_available
 from .configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
-from .tokenization_layoutlm import LayoutLMTokenizer
+from .tokenization_layoutlm import LayoutLMTokenizer, LAYOUTLM_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 
 if is_tokenizers_available():
-    from .tokenization_layoutlm_fast import LayoutLMTokenizerFast
+    from .tokenization_layoutlm_fast import LayoutLMTokenizerFast, LAYOUTLM_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 if is_torch_available():
     from .modeling_layoutlm import (

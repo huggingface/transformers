@@ -17,7 +17,7 @@
 import os
 import unittest
 
-from transformers import LayoutLMTokenizer, LayoutLMTokenizerFast
+from transformers import LayoutLMTokenizer, LayoutLMTokenizerFast, LAYOUTLM_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from transformers.models.layoutlm.tokenization_layoutlm import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
 
@@ -27,6 +27,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 @require_tokenizers
 class LayoutLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
+    pretrained_vocab_checkpoints = LAYOUTLM_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = LayoutLMTokenizer
     rust_tokenizer_class = LayoutLMTokenizerFast
     test_rust_tokenizer = True
