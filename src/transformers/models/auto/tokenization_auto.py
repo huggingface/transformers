@@ -39,6 +39,7 @@ from ..layoutlm.tokenization_layoutlm import LayoutLMTokenizer
 from ..longformer.tokenization_longformer import LongformerTokenizer
 from ..lxmert.tokenization_lxmert import LxmertTokenizer
 from ..mobilebert.tokenization_mobilebert import MobileBertTokenizer
+from ..mpnet.tokenization_mpnet import MPNetTokenizer
 from ..openai.tokenization_openai import OpenAIGPTTokenizer
 from ..phobert.tokenization_phobert import PhobertTokenizer
 from ..prophetnet.tokenization_prophetnet import ProphetNetTokenizer
@@ -72,6 +73,7 @@ from .configuration_auto import (
     MarianConfig,
     MBartConfig,
     MobileBertConfig,
+    MPNetConfig,
     MT5Config,
     OpenAIGPTConfig,
     PegasusConfig,
@@ -132,6 +134,7 @@ if is_tokenizers_available():
     from ..lxmert.tokenization_lxmert_fast import LxmertTokenizerFast
     from ..mbart.tokenization_mbart_fast import MBartTokenizerFast
     from ..mobilebert.tokenization_mobilebert_fast import MobileBertTokenizerFast
+    from ..mpnet.tokenization_mpnet_fast import MPNetTokenizerFast
     from ..openai.tokenization_openai_fast import OpenAIGPTTokenizerFast
     from ..pegasus.tokenization_pegasus_fast import PegasusTokenizerFast
     from ..reformer.tokenization_reformer_fast import ReformerTokenizerFast
@@ -157,6 +160,7 @@ else:
     LxmertTokenizerFast = None
     MBartTokenizerFast = None
     MobileBertTokenizerFast = None
+    MPNetTokenizerFast = None
     OpenAIGPTTokenizerFast = None
     PegasusTokenizerFast = None
     ReformerTokenizerFast = None
@@ -209,6 +213,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (RagConfig, (RagTokenizer, None)),
         (XLMProphetNetConfig, (XLMProphetNetTokenizer, None)),
         (ProphetNetConfig, (ProphetNetTokenizer, None)),
+        (MPNetConfig, (MPNetTokenizer, MPNetTokenizerFast)),
     ]
 )
 

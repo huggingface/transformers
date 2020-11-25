@@ -16,29 +16,23 @@
 """PyTorch MPNet model. """
 
 
-import logging
 import math
 import os
+import warnings
+import logging
 
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .activations import ACT2FN
-from .configuration_mpnet import MPNetConfig
-from .file_utils import (
+from ...activations import ACT2FN
+from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
-    add_start_docstrings_to_callable,
+    add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from .modeling_utils import (
-    PreTrainedModel,
-    apply_chunking_to_forward,
-    prune_linear_layer,
-    find_pruneable_heads_and_indices,
-)
-from .modeling_outputs import (
+from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
@@ -46,26 +40,30 @@ from .modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from .modeling_utils import (
+from ...modeling_utils import (
     PreTrainedModel,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
+from ...utils import logging
+from .configuration_mpnet import MPNetConfig
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MPNetConfig"
 _TOKENIZER_FOR_DOC = "MPNetTokenizer"
 
 
-MPNET_PRETRAINED_MODEL_ARCHIVE_MAP = {"mpnet-base": ""}
+MPNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "mpnet-base",
+]
 
 
 class MPNetPreTrainedModel(PreTrainedModel):
     config_class = MPNetConfig
-    pretrained_model_archive_map = MPNET_PRETRAINED_MODEL_ARCHIVE_MAP
+    pretrained_model_archive_map = MPNET_PRETRAINED_MODEL_ARCHIVE_LIST
     base_model_prefix = "mpnet"
 
     def _init_weights(self, module):
@@ -476,7 +474,7 @@ class MPNetModel(MPNetPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_callable(MPNET_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="mpnet-base",
@@ -616,7 +614,7 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="mpnet-base",
@@ -699,7 +697,7 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MPNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="mpnet-base",
@@ -785,7 +783,7 @@ class MPNetForTokenClassification(MPNetPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MPNET_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="mpnet-base",
@@ -893,7 +891,7 @@ class MPNetForQuestionAnswering(MPNetPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_callable(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="mpnet-base",
