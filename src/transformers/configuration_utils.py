@@ -55,8 +55,6 @@ class PretrainedConfig(object):
             Whether or not the model should return all hidden-states.
         output_attentions (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not the model should returns all attentions.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
         return_dict (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return a :class:`~transformers.file_utils.ModelOutput` instead of a plain
             tuple.
@@ -168,7 +166,6 @@ class PretrainedConfig(object):
         self.return_dict = kwargs.pop("return_dict", True)
         self.output_hidden_states = kwargs.pop("output_hidden_states", False)
         self.output_attentions = kwargs.pop("output_attentions", False)
-        self.use_cache = kwargs.pop("use_cache", True)  # Not used by all models
         self.torchscript = kwargs.pop("torchscript", False)  # Only used by PyTorch models
         self.use_bfloat16 = kwargs.pop("use_bfloat16", False)
         self.pruned_heads = kwargs.pop("pruned_heads", {})

@@ -19,7 +19,7 @@ representations (Dai and Le, 2015; Peters et al., 2018; Howard and Ruder, 2018; 
 heterogeneous French corpus. Models of different sizes are trained using the new CNRS (French National Centre for
 Scientific Research) Jean Zay supercomputer. We apply our French language models to diverse NLP tasks (text
 classification, paraphrasing, natural language inference, parsing, word sense disambiguation) and show that most of the
-time they outperform other pre-training approaches. Different versions of FlauBERT as well as a unified evaluation
+time they outperform other pretraining approaches. Different versions of FlauBERT as well as a unified evaluation
 protocol for the downstream tasks, called FLUE (French Language Understanding Evaluation), are shared to the research
 community for further reproducible experiments in French NLP.*
 

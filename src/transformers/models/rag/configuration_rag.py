@@ -72,6 +72,8 @@ RAG_CONFIG_DOC = r"""
         output_retrieved(:obj:`bool`, `optional`, defaults to :obj:`False`):
             If set to ``True``, :obj:`retrieved_doc_embeds`, :obj:`retrieved_doc_ids`, :obj:`context_input_ids` and
             :obj:`context_attention_mask` are returned. See returned tensors for more detail.
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not the model should return the last key/values attentions (not used by all models).
 """
 
 
@@ -107,6 +109,7 @@ class RagConfig(PretrainedConfig):
         exclude_bos_score=False,
         do_marginalize=False,
         output_retrieved=False,
+        use_cache=True,
         **kwargs
     ):
         super().__init__(
@@ -155,6 +158,8 @@ class RagConfig(PretrainedConfig):
         self.output_retrieved = output_retrieved
 
         self.do_deduplication = do_deduplication
+
+        self.use_cache = use_cache
 
     @classmethod
     def from_question_encoder_generator_configs(

@@ -1013,7 +1013,7 @@ class LxmertModel(LxmertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Lxmert Model with a specified pre-training head on top. """,
+    """Lxmert Model with a specified pretraining head on top. """,
     LXMERT_START_DOCSTRING,
 )
 class LxmertForPreTraining(LxmertPreTrainedModel):
@@ -1024,7 +1024,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         self.num_qa_labels = config.num_qa_labels
         self.visual_loss_normalizer = config.visual_loss_normalizer
 
-        # Use of pre-training tasks
+        # Use of pretraining tasks
         self.task_mask_lm = config.task_mask_lm
         self.task_obj_predict = config.task_obj_predict
         self.task_matched = config.task_matched

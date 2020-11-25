@@ -440,6 +440,9 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         self.layer = [TFXLNetLayer(config, name="layer_._{}".format(i)) for i in range(config.n_layer)]
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
+        self.use_mems_eval = config.use_mems_eval
+        self.use_mems_train = config.use_mems_train
+
     def get_input_embeddings(self):
         return self.word_embedding
 
@@ -489,14 +492,23 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         return ret
 
     def cache_mem(self, curr_out, prev_mem):
-        """cache hidden states into memory."""
+        # cache hidden states into memory.
         if self.reuse_len is not None and self.reuse_len > 0:
             curr_out = curr_out[: self.reuse_len]
 
-        if prev_mem is None:
-            new_mem = curr_out[-self.mem_len :]
+        if self.mem_len is None or self.mem_len == 0:
+            # If :obj:`use_mems` is active but no `mem_len` is defined, the model behaves like GPT-2 at inference time
+            # and returns all of the past and current hidden states.
+            cutoff = 0
         else:
-            new_mem = tf.concat([prev_mem, curr_out], 0)[-self.mem_len :]
+            # If :obj:`use_mems` is active and `mem_len` is defined, the model returns the last `mem_len` hidden
+            # states. This is the preferred setting for training and long-form generation.
+            cutoff = -self.mem_len
+        if prev_mem is None:
+            # if :obj:`use_mems` is active and `mem_len` is defined, the model
+            new_mem = curr_out[cutoff:]
+        else:
+            new_mem = tf.concat([prev_mem, curr_out], 0)[cutoff:]
 
         return tf.stop_gradient(new_mem)
 
@@ -569,7 +581,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         input_mask=None,
         head_mask=None,
         inputs_embeds=None,
-        use_cache=True,
+        use_mems=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -587,7 +599,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             input_mask=input_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
+            use_mems=use_mems,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -601,6 +613,11 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
+
+        if training:
+            use_mems = use_mems if use_mems is not None else self.use_mems_train
+        else:
+            use_mems = use_mems if use_mems is not None else self.use_mems_eval
 
         # the original code for XLNet uses shapes [len, bsz] with the batch dimension at the end
         # but we want a unified interface in the library with the batch size on the first dimension
@@ -737,7 +754,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         hidden_states = [] if output_hidden_states else None
         for i, layer_module in enumerate(self.layer):
             # cache new mems
-            if self.mem_len is not None and self.mem_len > 0 and use_cache:
+            if use_mems:
                 new_mems = new_mems + (self.cache_mem(output_h, inputs["mems"][i]),)
             if output_hidden_states:
                 hidden_states.append((output_h, output_g) if output_g is not None else output_h)
@@ -768,7 +785,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         # Prepare outputs, we transpose back here to shape [bsz, len, hidden_dim] (cf. beginning of forward() method)
         output = tf.transpose(output, perm=(1, 0, 2))
 
-        if not (self.mem_len is not None and self.mem_len > 0 and use_cache):
+        if not use_mems:
             new_mems = None
         if output_hidden_states:
             if output_g is not None:
@@ -1066,7 +1083,7 @@ XLNET_INPUTS_DOCSTRING = r"""
             decoding. The token ids which have their past given to this model should not be passed as :obj:`input_ids`
             as they have already been computed.
 
-            :obj::obj:`use_cache` has to be set to :obj:`True` to make use of :obj:`mems`.
+            :obj::obj:`use_mems` has to be set to :obj:`True` to make use of :obj:`mems`.
         perm_mask (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, sequence_length, sequence_length)`, `optional`):
             Mask to indicate the attention pattern for each input token with values selected in ``[0, 1]``:
 
@@ -1147,7 +1164,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
         input_mask=None,
         head_mask=None,
         inputs_embeds=None,
-        use_cache=True,
+        use_mems=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1165,7 +1182,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
             input_mask=input_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
+            use_mems=use_mems,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1182,7 +1199,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
             input_mask=inputs["input_mask"],
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
-            use_cache=inputs["use_cache"],
+            use_mems=inputs["use_mems"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
@@ -1207,7 +1224,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
     def get_output_embeddings(self):
         return self.lm_loss.input_embeddings
 
-    def prepare_inputs_for_generation(self, inputs, past, **kwargs):
+    def prepare_inputs_for_generation(self, inputs, past, use_mems=None, **kwargs):
         # Add dummy token at the end (no attention on this one)
 
         # At every pass, the attention values for the new token and the two last generated tokens
@@ -1238,7 +1255,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
             "input_ids": inputs,
             "perm_mask": perm_mask,
             "target_mapping": target_mapping,
-            "use_cache": kwargs["use_cache"],
+            "use_mems": kwargs.get("use_mems"),
         }
 
         # if past is defined in model kwargs then use it for faster decoding
@@ -1260,7 +1277,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         input_mask=None,
         head_mask=None,
         inputs_embeds=None,
-        use_cache=True,
+        use_mems=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1309,7 +1326,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
             input_mask=input_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
+            use_mems=use_mems,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1328,7 +1345,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
             input_mask=inputs["input_mask"],
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
-            use_cache=inputs["use_cache"],
+            use_mems=inputs["use_mems"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=return_dict,
@@ -1395,7 +1412,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
         input_mask=None,
         head_mask=None,
         inputs_embeds=None,
-        use_cache=True,
+        use_mems=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1420,7 +1437,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
             input_mask=input_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
+            use_mems=use_mems,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1439,7 +1456,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
             input_mask=inputs["input_mask"],
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
-            use_cache=inputs["use_cache"],
+            use_mems=inputs["use_mems"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=return_dict,
@@ -1512,7 +1529,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
         target_mapping=None,
         head_mask=None,
         inputs_embeds=None,
-        use_cache=True,
+        use_mems=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1526,6 +1543,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
             num_choices]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
             :obj:`input_ids` above)
         """
+
         inputs = input_processing(
             func=self.call,
             input_ids=input_ids,
@@ -1537,7 +1555,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
             input_mask=input_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
+            use_mems=use_mems,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1579,7 +1597,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
             flat_input_mask,
             inputs["head_mask"],
             flat_inputs_embeds,
-            inputs["use_cache"],
+            inputs["use_mems"],
             inputs["output_attentions"],
             inputs["output_hidden_states"],
             return_dict=return_dict,
@@ -1639,7 +1657,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
         input_mask=None,
         head_mask=None,
         inputs_embeds=None,
-        use_cache=True,
+        use_mems=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1663,7 +1681,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
             input_mask=input_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
+            use_mems=use_mems,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1682,7 +1700,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
             input_mask=inputs["input_mask"],
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
-            use_cache=inputs["use_cache"],
+            use_mems=inputs["use_mems"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=return_dict,
@@ -1739,7 +1757,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
         input_mask=None,
         head_mask=None,
         inputs_embeds=None,
-        use_cache=True,
+        use_mems=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1769,7 +1787,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
             input_mask=input_mask,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
+            use_mems=use_mems,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1789,7 +1807,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
             input_mask=inputs["input_mask"],
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
-            use_cache=inputs["use_cache"],
+            use_mems=inputs["use_mems"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=return_dict,

@@ -1176,7 +1176,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
         self.num_qa_labels = config.num_qa_labels
         self.visual_loss_normalizer = config.visual_loss_normalizer
 
-        # Use of pre-training tasks
+        # Use of pretraining tasks
         self.task_mask_lm = config.task_mask_lm
         self.task_obj_predict = config.task_obj_predict
         self.task_matched = config.task_matched

@@ -153,7 +153,7 @@ class TFXLNetModelTester:
         inputs = [input_ids_1, input_mask]
         result = model(inputs)
 
-        config.mem_len = 0
+        config.use_mems_eval = False
         model = TFXLNetModel(config)
         no_mems_outputs = model(inputs)
         self.parent.assertEqual(len(no_mems_outputs), 1)

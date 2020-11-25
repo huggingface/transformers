@@ -10,7 +10,7 @@ Tasks <https://arxiv.org/abs/1907.12461>`__ by Sascha Rothe, Shashi Narayan, Ali
 
 The abstract from the paper is the following:
 
-*Unsupervised pre-training of large neural models has recently revolutionized Natural Language Processing. By
+*Unsupervised pretraining of large neural models has recently revolutionized Natural Language Processing. By
 warm-starting from the publicly released checkpoints, NLP practitioners have pushed the state-of-the-art on multiple
 benchmarks while saving significant amounts of compute time. So far the focus has been mainly on the Natural Language
 Understanding tasks. In this paper, we demonstrate the efficacy of pre-trained checkpoints for Sequence Generation. We

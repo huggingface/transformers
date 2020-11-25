@@ -888,7 +888,7 @@ class BertModel(BertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Bert Model with two heads on top as done during the pre-training: a `masked language modeling` head and a `next
+    Bert Model with two heads on top as done during the pretraining: a `masked language modeling` head and a `next
     sentence prediction (classification)` head.
     """,
     BERT_START_DOCSTRING,

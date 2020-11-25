@@ -730,7 +730,7 @@ class AlbertModel(AlbertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Albert Model with two heads on top as done during the pre-training: a `masked language modeling` head and a
+    Albert Model with two heads on top as done during the pretraining: a `masked language modeling` head and a
     `sentence order prediction (classification)` head.
     """,
     ALBERT_START_DOCSTRING,

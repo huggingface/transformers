@@ -13,7 +13,7 @@ The MBart model was presented in `Multilingual Denoising Pre-training for Neural
 Ghazvininejad, Mike Lewis, Luke Zettlemoyer.
 
 According to the abstract, MBART is a sequence-to-sequence denoising auto-encoder pretrained on large-scale monolingual
-corpora in many languages using the BART objective. mBART is one of the first methods for pre-training a complete
+corpora in many languages using the BART objective. mBART is one of the first methods for pretraining a complete
 sequence-to-sequence model by denoising full texts in multiple languages, while previous approaches have focused only
 on the encoder, decoder, or reconstructing parts of the text.
 

@@ -97,6 +97,6 @@ You should check out our [swift-coreml-transformers](https://github.com/huggingf
 It contains a set of tools to convert PyTorch or TensorFlow 2.0 trained Transformer models (currently contains `GPT-2`, 
 `DistilGPT-2`, `BERT`, and `DistilBERT`) to CoreML models that run on iOS devices.
 
-At some point in the future, you'll be able to seamlessly move from pre-training or fine-tuning models in PyTorch or
+At some point in the future, you'll be able to seamlessly move from pretraining or fine-tuning models in PyTorch or
 TensorFlow 2.0 to productizing them in CoreML, or prototype a model or an app in CoreML then research its
 hyperparameters or architecture from PyTorch or TensorFlow 2.0. Super exciting!
