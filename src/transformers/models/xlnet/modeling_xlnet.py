@@ -16,6 +16,7 @@
 """
  PyTorch XLNet model.
 """
+import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -1084,6 +1085,7 @@ class XLNetModel(XLNetPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,  # delete after depreciation warning is removed
     ):
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1091,6 +1093,13 @@ class XLNetModel(XLNetPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if "use_cache" in kwargs:
+            warnings.warn(
+                "The `use_cache` argument is deprecated and will be removed in a future version, use `use_mems` instead.",
+                FutureWarning,
+            )
+            use_mems = kwargs["use_cache"]
 
         if self.training:
             use_mems = use_mems if use_mems is not None else self.config.use_mems_train
@@ -1363,6 +1372,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,  # delete when `use_cache` is removed in XLNetModel
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_predict)`, `optional`):
@@ -1426,6 +1436,7 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         logits = self.lm_loss(transformer_outputs[0])
@@ -1490,6 +1501,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,  # delete when `use_cache` is removed in XLNetModel
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1513,6 +1525,7 @@ class XLNetForSequenceClassification(XLNetPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
         output = transformer_outputs[0]
 
@@ -1582,6 +1595,7 @@ class XLNetForTokenClassification(XLNetPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,  # delete when `use_cache` is removed in XLNetModel
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1678,6 +1692,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,  # delete when `use_cache` is removed in XLNetModel
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1713,6 +1728,7 @@ class XLNetForMultipleChoice(XLNetPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         output = transformer_outputs[0]
@@ -1780,6 +1796,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,  # delete when `use_cache` is removed in XLNetModel
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1807,6 +1824,7 @@ class XLNetForQuestionAnsweringSimple(XLNetPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -1889,6 +1907,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,  # delete when `use_cache` is removed in XLNetModel
     ):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1941,6 +1960,7 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
         hidden_states = transformer_outputs[0]
         start_logits = self.start_logits(hidden_states, p_mask=p_mask)
