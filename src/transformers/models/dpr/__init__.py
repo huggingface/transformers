@@ -9,14 +9,19 @@ from .tokenization_dpr import (
     DPRQuestionEncoderTokenizer,
     DPRReaderOutput,
     DPRReaderTokenizer,
+    DPR_CONTEXT_ENCODER_PRETRAINED_TOKENIZER_ARCHIVE_LIST,
+    DPR_QUESTION_ENCODER_PRETRAINED_TOKENIZER_ARCHIVE_LIST,
+    DPR_READER_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 )
-
 
 if is_tokenizers_available():
     from .tokenization_dpr_fast import (
         DPRContextEncoderTokenizerFast,
         DPRQuestionEncoderTokenizerFast,
         DPRReaderTokenizerFast,
+        DPR_CONTEXT_ENCODER_PRETRAINED_TOKENIZER_ARCHIVE_LIST,
+        DPR_QUESTION_ENCODER_PRETRAINED_TOKENIZER_ARCHIVE_LIST,
+        DPR_READER_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     )
 
 if is_torch_available():

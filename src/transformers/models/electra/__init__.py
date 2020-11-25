@@ -4,11 +4,11 @@
 
 from ...file_utils import is_tf_available, is_tokenizers_available, is_torch_available
 from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
-from .tokenization_electra import ElectraTokenizer
+from .tokenization_electra import ElectraTokenizer, ELECTRA_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 
 if is_tokenizers_available():
-    from .tokenization_electra_fast import ElectraTokenizerFast
+    from .tokenization_electra_fast import ElectraTokenizerFast, ELECTRA_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 if is_torch_available():
     from .modeling_electra import (

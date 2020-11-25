@@ -133,8 +133,11 @@ from .models.dpr import (
     DPRQuestionEncoderTokenizer,
     DPRReaderOutput,
     DPRReaderTokenizer,
+        DPR_CONTEXT_ENCODER_PRETRAINED_TOKENIZER_ARCHIVE_LIST,
+        DPR_QUESTION_ENCODER_PRETRAINED_TOKENIZER_ARCHIVE_LIST,
+        DPR_READER_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 )
-from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
+from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer, ELECTRA_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from .models.encoder_decoder import EncoderDecoderConfig
 from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
 from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
@@ -227,8 +230,11 @@ if is_tokenizers_available():
     from .models.bert import BertTokenizerFast, BERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.camembert import CamembertTokenizerFast, CAMEMBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.distilbert import DistilBertTokenizerFast, DISTILBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
-    from .models.dpr import DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast
-    from .models.electra import ElectraTokenizerFast
+    from .models.dpr import (DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast,        DPR_CONTEXT_ENCODER_PRETRAINED_TOKENIZER_ARCHIVE_LIST,
+        DPR_QUESTION_ENCODER_PRETRAINED_TOKENIZER_ARCHIVE_LIST,
+        DPR_READER_PRETRAINED_TOKENIZER_ARCHIVE_LIST)
+
+    from .models.electra import ElectraTokenizerFast, ELECTRA_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.funnel import FunnelTokenizerFast
     from .models.gpt2 import GPT2TokenizerFast
     from .models.herbert import HerbertTokenizerFast

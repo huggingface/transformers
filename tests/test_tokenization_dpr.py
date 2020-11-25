@@ -22,6 +22,9 @@ from transformers import (
     DPRReaderOutput,
     DPRReaderTokenizer,
     DPRReaderTokenizerFast,
+        DPR_CONTEXT_ENCODER_PRETRAINED_TOKENIZER_ARCHIVE_LIST,
+        DPR_QUESTION_ENCODER_PRETRAINED_TOKENIZER_ARCHIVE_LIST,
+        DPR_READER_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 )
 from transformers.testing_utils import require_tokenizers, slow
 from transformers.tokenization_utils_base import BatchEncoding
@@ -32,6 +35,7 @@ from .test_tokenization_bert import BertTokenizationTest
 @require_tokenizers
 class DPRContextEncoderTokenizationTest(BertTokenizationTest):
 
+    pretrained_vocab_checkpoints = DPR_CONTEXT_ENCODER_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = DPRContextEncoderTokenizer
     rust_tokenizer_class = DPRContextEncoderTokenizerFast
     test_rust_tokenizer = True
@@ -40,6 +44,7 @@ class DPRContextEncoderTokenizationTest(BertTokenizationTest):
 @require_tokenizers
 class DPRQuestionEncoderTokenizationTest(BertTokenizationTest):
 
+    pretrained_vocab_checkpoints = DPR_QUESTION_ENCODER_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = DPRQuestionEncoderTokenizer
     rust_tokenizer_class = DPRQuestionEncoderTokenizerFast
     test_rust_tokenizer = True
@@ -48,6 +53,7 @@ class DPRQuestionEncoderTokenizationTest(BertTokenizationTest):
 @require_tokenizers
 class DPRReaderTokenizationTest(BertTokenizationTest):
 
+    pretrained_vocab_checkpoints = DPR_READER_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = DPRReaderTokenizer
     rust_tokenizer_class = DPRReaderTokenizerFast
     test_rust_tokenizer = True

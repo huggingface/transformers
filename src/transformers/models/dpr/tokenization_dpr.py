@@ -28,63 +28,23 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
-CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/dpr-ctx_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
-        "facebook/dpr-ctx_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
-    },
-    "tokenizer_file": {
-        "facebook/dpr-ctx_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
-        "facebook/dpr-ctx_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
-    },
-}
-QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/dpr-question_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
-        "facebook/dpr-question_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
-    },
-    "tokenizer_file": {
-        "facebook/dpr-question_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
-        "facebook/dpr-question_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
-    },
-}
-READER_PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "facebook/dpr-reader-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
-        "facebook/dpr-reader-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
-    },
-    "tokenizer_file": {
-        "facebook/dpr-reader-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
-        "facebook/dpr-reader-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
-    },
-}
+DPR_CONTEXT_ENCODER_PRETRAINED_TOKENIZER_ARCHIVE_LIST = [
+    "facebook/dpr-ctx_encoder-single-nq-base",
+    "facebook/dpr-ctx_encoder-multiset-base",
+    # See all DPR models at https://huggingface.co/models?filter=dpr
+]
 
-CONTEXT_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/dpr-ctx_encoder-single-nq-base": 512,
-    "facebook/dpr-ctx_encoder-multiset-base": 512,
-}
-QUESTION_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/dpr-question_encoder-single-nq-base": 512,
-    "facebook/dpr-question_encoder-multiset-base": 512,
-}
-READER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/dpr-reader-single-nq-base": 512,
-    "facebook/dpr-reader-multiset-base": 512,
-}
+DPR_QUESTION_ENCODER_PRETRAINED_TOKENIZER_ARCHIVE_LIST = [
+    "facebook/dpr-question_encoder-single-nq-base",
+    "facebook/dpr-question_encoder-multiset-base",
+    # See all DPR models at https://huggingface.co/models?filter=dpr
+]
 
-
-CONTEXT_ENCODER_PRETRAINED_INIT_CONFIGURATION = {
-    "facebook/dpr-ctx_encoder-single-nq-base": {"do_lower_case": True},
-    "facebook/dpr-ctx_encoder-multiset-base": {"do_lower_case": True},
-}
-QUESTION_ENCODER_PRETRAINED_INIT_CONFIGURATION = {
-    "facebook/dpr-question_encoder-single-nq-base": {"do_lower_case": True},
-    "facebook/dpr-question_encoder-multiset-base": {"do_lower_case": True},
-}
-READER_PRETRAINED_INIT_CONFIGURATION = {
-    "facebook/dpr-reader-single-nq-base": {"do_lower_case": True},
-    "facebook/dpr-reader-multiset-base": {"do_lower_case": True},
-}
+DPR_READER_PRETRAINED_TOKENIZER_ARCHIVE_LIST = [
+    "facebook/dpr-reader-single-nq-base",
+    "facebook/dpr-reader-multiset-base",
+    # See all DPR models at https://huggingface.co/models?filter=dpr
+]
 
 
 class DPRContextEncoderTokenizer(BertTokenizer):
@@ -99,9 +59,7 @@ class DPRContextEncoderTokenizer(BertTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = CONTEXT_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = CONTEXT_ENCODER_PRETRAINED_INIT_CONFIGURATION
+    max_model_input_sizes = 512
 
 
 class DPRQuestionEncoderTokenizer(BertTokenizer):
@@ -116,9 +74,7 @@ class DPRQuestionEncoderTokenizer(BertTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = QUESTION_ENCODER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = QUESTION_ENCODER_PRETRAINED_INIT_CONFIGURATION
+    max_model_input_sizes = 512
 
 
 DPRSpanPrediction = collections.namedtuple(
@@ -380,7 +336,5 @@ class DPRReaderTokenizer(CustomDPRReaderTokenizerMixin, BertTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = READER_PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = READER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = READER_PRETRAINED_INIT_CONFIGURATION
+    max_model_input_sizes = 512
     model_input_names = ["attention_mask"]
