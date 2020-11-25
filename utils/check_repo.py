@@ -126,6 +126,7 @@ def get_model_modules():
         "modeling_outputs",
         "modeling_retribert",
         "modeling_utils",
+        "modeling_flax_auto",
         "modeling_flax_utils",
         "modeling_transfo_xl_utilities",
         "modeling_tf_auto",
