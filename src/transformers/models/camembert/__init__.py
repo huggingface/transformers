@@ -7,10 +7,10 @@ from .configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, Ca
 
 
 if is_sentencepiece_available():
-    from .tokenization_camembert import CamembertTokenizer
+    from .tokenization_camembert import CamembertTokenizer, CAMEMBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 if is_tokenizers_available():
-    from .tokenization_camembert_fast import CamembertTokenizerFast
+    from .tokenization_camembert_fast import CamembertTokenizerFast, CAMEMBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 if is_torch_available():
     from .modeling_camembert import (

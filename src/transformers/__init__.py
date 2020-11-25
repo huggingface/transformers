@@ -209,7 +209,7 @@ from .tokenization_utils_base import (
 if is_sentencepiece_available():
     from .models.albert import AlbertTokenizer, ALBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.bert_generation import BertGenerationTokenizer, BERT_GENERATION_PRETRAINED_TOKENIZER_ARCHIVE_LIST
-    from .models.camembert import CamembertTokenizer
+    from .models.camembert import CamembertTokenizer, CAMEMBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.marian import MarianTokenizer
     from .models.mbart import MBartTokenizer
     from .models.pegasus import PegasusTokenizer
@@ -225,7 +225,7 @@ if is_tokenizers_available():
     from .models.albert import AlbertTokenizerFast, ALBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.bart import BartTokenizerFast
     from .models.bert import BertTokenizerFast
-    from .models.camembert import CamembertTokenizerFast
+    from .models.camembert import CamembertTokenizerFast, CAMEMBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.distilbert import DistilBertTokenizerFast
     from .models.dpr import DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast
     from .models.electra import ElectraTokenizerFast

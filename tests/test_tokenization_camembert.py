@@ -17,7 +17,7 @@
 import os
 import unittest
 
-from transformers import CamembertTokenizer, CamembertTokenizerFast
+from transformers import CamembertTokenizer, CamembertTokenizerFast, CAMEMBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from transformers.testing_utils import _torch_available, require_sentencepiece, require_tokenizers
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -32,6 +32,7 @@ FRAMEWORK = "pt" if _torch_available else "tf"
 @require_tokenizers
 class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
+    pretrained_vocab_checkpoints = CAMEMBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = CamembertTokenizer
     rust_tokenizer_class = CamembertTokenizerFast
     test_rust_tokenizer = True

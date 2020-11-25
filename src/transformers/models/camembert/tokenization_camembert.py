@@ -29,21 +29,9 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "camembert-base": "https://huggingface.co/camembert-base/resolve/main/sentencepiece.bpe.model",
-    }
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "camembert-base": 512,
-}
-
-SHARED_MODEL_IDENTIFIERS = [
-    # Load with
-    # `tokenizer = AutoTokenizer.from_pretrained("username/pretrained_model")`
-    "Musixmatch/umberto-commoncrawl-cased-v1",
-    "Musixmatch/umberto-wikipedia-uncased-v1",
+CAMEMBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST = [
+    "camembert-base",
+    # See all CAMEMBERT models at https://huggingface.co/models?filter=camembert
 ]
 
 SPIECE_UNDERLINE = "▁"
@@ -98,8 +86,7 @@ class CamembertTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    max_model_input_sizes = 512
     model_input_names = ["attention_mask"]
 
     def __init__(
