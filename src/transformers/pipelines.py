@@ -1486,11 +1486,16 @@ class TokenClassificationPipeline(Pipeline):
                 else:
                     word = self.tokenizer.convert_ids_to_tokens(int(input_ids[idx]))
 
+                    start_ind = None
+                    end_ind = None
+
                 entity = {
                     "word": word,
                     "score": score[idx][label_idx].item(),
                     "entity": self.model.config.id2label[label_idx],
                     "index": idx,
+                    "start": start_ind,
+                    "end": end_ind,
                 }
 
                 if self.grouped_entities and self.ignore_subwords:
@@ -1524,6 +1529,8 @@ class TokenClassificationPipeline(Pipeline):
             "entity_group": entity,
             "score": np.mean(scores),
             "word": self.tokenizer.convert_tokens_to_string(tokens),
+            "start": entities[0]["start"],
+            "end": entities[-1]["end"],
         }
         return entity_group
 
