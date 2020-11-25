@@ -72,7 +72,7 @@ We used a Google Cloud Storage bucket, for persistent storage of training data a
 
 ## Eval results
 
-We evaluate QARiB models on five NLP downstream task:
+We evaluated QARiB models on five NLP downstream task:
 - Sentiment Analysis
 - Emotion Detection
 - Named-Entity Recognition (NER)
@@ -83,7 +83,7 @@ The results obtained from QARiB models outperforms multilingual BERT/AraBERT/Ara
 
 
 ## Model Weights and Vocab Download
-
+TBD
 
 ## Contacts
 
