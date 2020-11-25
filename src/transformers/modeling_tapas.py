@@ -565,7 +565,7 @@ class TapasEncoder(nn.Module):
         encoder_attention_mask=None,
         output_attentions=False,
         output_hidden_states=False,
-        return_dict=False,
+        return_dict=True,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -780,7 +780,7 @@ class TapasModel(TapasPreTrainedModel):
             >>> import pandas as pd
 
             >>> tokenizer = TapasTokenizer.from_pretrained('tapas-base-finetuned-wtq')
-            >>> model = TapasModel.from_pretrained('tapas-base-finetuned-wtq', return_dict=True)
+            >>> model = TapasModel.from_pretrained('tapas-base-finetuned-wtq')
 
             >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Age': ["56", "45", "59"], 'Number of movies': ["87", "53", "69"]}
             >>> table = pd.DataFrame.from_dict(data)
@@ -912,7 +912,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
             >>> import pandas as pd
 
             >>> tokenizer = TapasTokenizer.from_pretrained('tapas-base')
-            >>> model = TapasForMaskedLM.from_pretrained('tapas-base', return_dict=True)
+            >>> model = TapasForMaskedLM.from_pretrained('tapas-base')
 
             >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Age': ["56", "45", "59"], 'Number of movies': ["87", "53", "69"]}
             >>> table = pd.DataFrame.from_dict(data)
@@ -1059,8 +1059,8 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             should be in :obj:`[0, ..., config.num_aggregation_labels - 1]`. Only required in case of strong
             supervision for aggregation (WikiSQL-SUPERVISED).
         float_answer (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, )`, `optional`):
-            Float answer for every example in the batch (NaN if there is no scalar answer). Only required in case of weak
-            supervision (WTQ, WikiSQL) to calculate the aggregate mask and regression loss.
+            Float answer for every example in the batch. Set to `float('nan')` for cell selection questions.  
+            Only required in case of weak supervision (WTQ, WikiSQL) to calculate the aggregate mask and regression loss.
         numeric_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
             Numeric values of every token, NaN for tokens which are not numeric values. Can be obtained using
             :class:`~transformers.TapasTokenizer`. Only required in case of weak supervision for aggregation (WTQ,
@@ -1077,7 +1077,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             >>> import pandas as pd
 
             >>> tokenizer = TapasTokenizer.from_pretrained('tapas-base-finetuned-wtq')
-            >>> model = TapasForQuestionAnswering.from_pretrained('tapas-base-finetuned-wtq', return_dict=True)
+            >>> model = TapasForQuestionAnswering.from_pretrained('tapas-base-finetuned-wtq')
 
             >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Age': ["56", "45", "59"], 'Number of movies': ["87", "53", "69"]}
             >>> table = pd.DataFrame.from_dict(data)
@@ -1363,7 +1363,7 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
             >>> import pandas as pd
 
             >>> tokenizer = TapasTokenizer.from_pretrained('tapas-base-finetuned-tabfact')
-            >>> model = TapasForSequenceClassification.from_pretrained('tapas-base-finetuned-tabfact', return_dict=True)
+            >>> model = TapasForSequenceClassification.from_pretrained('tapas-base-finetuned-tabfact')
 
             >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Age': ["56", "45", "59"], 'Number of movies': ["87", "53", "69"]}
             >>> table = pd.DataFrame.from_dict(data)

@@ -32,20 +32,55 @@ logging.set_verbosity_info()
 
 
 def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, tapas_config_file, pytorch_dump_path):
-    # Initialise PyTorch model
+    # Initialise PyTorch model. Defaults to TapasForQuestionAnswering with default SQA config.
+    # Uncomment another config and/or model to change this. If you want to convert a checkpoint
+    # that has absolute position embeddings, make sure to set reset_position_index_per_cell of
+    # TapasConfig to False.
 
     # WTQ config
-    # config = TapasConfig(# run_task_main.py hparams
+    # config = TapasConfig(
+    #         # run_task_main.py hparams
     #         num_aggregation_labels = 4,
     #         use_answer_as_supervision = True,
     #         # hparam_utils.py hparams
     #         answer_loss_cutoff = 0.664694,
-    #         cell_select_pref = 0.207951,
+    #         cell_selection_preference = 0.207951,
     #         huber_loss_delta = 0.121194,
     #         init_cell_selection_weights_to_zero = True,
     #         select_one_column = True,
     #         allow_empty_column_selection = False,
-    #         temperature = 0.0352513)
+    #         temperature = 0.0352513,
+    # )
+
+    # WikiSQL config
+    # config = TapasConfig(
+    #         # run_task_main.py hparams
+    #         num_aggregation_labels = 4,
+    #         use_answer_as_supervision = True,
+    #         # hparam_utils.py hparams
+    #         answer_loss_cutoff = 0.185567,
+    #         cell_selection_preference = 0.611754,
+    #         huber_loss_delta = 1265.74,
+    #         init_cell_selection_weights_to_zero = False,
+    #         select_one_column = False,
+    #         allow_empty_column_selection = False,
+    #         temperature = 0.107515,
+    # )
+
+    # WikiSQL-supervised config
+    # config = TapasConfig(
+    #         # run_task_main.py hparams
+    #         num_aggregation_labels = 4,
+    #         use_answer_as_supervision = False,
+    #         # hparam_utils.py hparams
+    #         answer_loss_cutoff = 36.4519,
+    #         cell_selection_preference = 0.903421,
+    #         huber_loss_delta = 222.088,
+    #         init_cell_selection_weights_to_zero = True,
+    #         select_one_column = True,
+    #         allow_empty_column_selection = True,
+    #         temperature = 0.763141,
+    # )
 
     # SQA config
     config = TapasConfig()
