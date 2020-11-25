@@ -23,7 +23,6 @@ https://huggingface.co/models?filter=masked-lm
 
 import jax
 import jax.numpy as jnp
-import json
 import logging
 import numpy as np
 import os
@@ -35,7 +34,7 @@ from rich.logging import RichHandler
 from rich.progress import track
 from typing import Optional
 
-from datasets import Dataset, load_dataset
+from datasets import load_dataset
 
 from transformers import (
     CONFIG_MAPPING,
@@ -43,7 +42,7 @@ from transformers import (
     AutoConfig,
     FlaxBertForMaskedLM,
     AutoTokenizer,
-    DataCollatorForWholeWordMask,
+    DataCollatorForLanguageModeling,
     HfArgumentParser,
     TrainingArguments,
     set_seed,
@@ -146,7 +145,7 @@ class DataTrainingArguments:
                 assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
 
 
-@jax.jit
+# @jax.jit
 def training_step(optimizer, batch):
     def one_hot(labels, num_classes):
         x = labels[..., None] == jnp.arange(num_classes)[None]
@@ -276,7 +275,7 @@ if __name__ == "__main__":
     def tokenize_function(examples):
         # Remove empty lines
         examples["text"] = [line for line in examples["text"] if len(line) > 0 and not line.isspace()]
-        return tokenizer(examples["text"], padding=padding, truncation=True, pad_to_multiple_of=8, max_length=data_args.max_seq_length)
+        return tokenizer(examples["text"], padding=padding, truncation=True, pad_to_multiple_of=32, max_length=data_args.max_seq_length)
 
     tokenized_datasets = datasets.map(
         tokenize_function,
@@ -288,7 +287,7 @@ if __name__ == "__main__":
 
     # Data collator
     # This one will take care of randomly masking the tokens.
-    data_collator = DataCollatorForWholeWordMask(tokenizer=tokenizer, mlm_probability=data_args.mlm_probability)
+    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=data_args.mlm_probability)
 
     # Initialize our training
     rng = jax.random.PRNGKey(training_args.seed)
