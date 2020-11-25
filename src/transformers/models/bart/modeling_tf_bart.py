@@ -953,6 +953,9 @@ class TFBartModel(TFPretrainedBartModel):
             kwargs_call=kwargs,
         )
 
+        if inputs["decoder_input_ids"] is None:
+            inputs["use_cache"] = False
+
         if not inputs["use_cache"]:
             inputs["decoder_input_ids"], decoder_padding_mask, causal_mask = self._prepare_bart_decoder_inputs(
                 inputs["input_ids"],
