@@ -204,6 +204,10 @@ class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         output_result = self.model_tester.create_transfo_xl_lm_head(*config_and_inputs)
         self.model_tester.check_transfo_xl_lm_head_output(output_result)
 
+    def test_retain_grad_hidden_states_attentions(self):
+        # xlnet cannot keep gradients in attentions or hidden states
+        return
+
     @require_torch_multi_gpu
     def test_multi_gpu_data_parallel_forward(self):
         # Opt-out of this test.

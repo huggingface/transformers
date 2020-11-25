@@ -697,3 +697,36 @@ class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_retain_grad_hidden_states_attentions(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+
+        hidden_states_lang = outputs.language_hidden_states[0]
+        attentions_lang = outputs.language_attentions[0]
+
+        hidden_states_vision = outputs.vision_hidden_states[0]
+        attentions_vision = outputs.vision_attentions[0]
+
+        hidden_states_lang.retain_grad()
+        attentions_lang.retain_grad()
+        hidden_states_vision.retain_grad()
+        attentions_vision.retain_grad()
+
+        outputs.language_output.flatten()[0].backward(retain_graph=True)
+        outputs.vision_output.flatten()[0].backward(retain_graph=True)
+
+        self.assertIsNotNone(hidden_states_lang.grad)
+        self.assertIsNotNone(attentions_vision.grad)
+        self.assertIsNotNone(hidden_states_vision.grad)
+        self.assertIsNotNone(attentions_vision.grad)

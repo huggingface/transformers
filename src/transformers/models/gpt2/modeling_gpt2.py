@@ -708,7 +708,7 @@ class GPT2Model(GPT2PreTrainedModel):
                 if isinstance(head_mask, torch.Tensor):
                     head_mask = head_mask.to(hidden_states.device)
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
             if getattr(self.config, "gradient_checkpointing", False):
 
