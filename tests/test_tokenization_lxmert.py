@@ -17,7 +17,7 @@
 import os
 import unittest
 
-from transformers import LxmertTokenizer, LxmertTokenizerFast
+from transformers import LxmertTokenizer, LxmertTokenizerFast, LXMERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
 
@@ -27,6 +27,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 @require_tokenizers
 class LxmertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
+    pretrained_vocab_checkpoints = LXMERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = LxmertTokenizer
     rust_tokenizer_class = LxmertTokenizerFast
     test_rust_tokenizer = True

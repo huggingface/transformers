@@ -4,11 +4,11 @@
 
 from ...file_utils import is_tf_available, is_tokenizers_available, is_torch_available
 from .configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
-from .tokenization_longformer import LongformerTokenizer
+from .tokenization_longformer import LongformerTokenizer, LONGFORMER_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 
 if is_tokenizers_available():
-    from .tokenization_longformer_fast import LongformerTokenizerFast
+    from .tokenization_longformer_fast import LongformerTokenizerFast, LONGFORMER_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 if is_torch_available():
     from .modeling_longformer import (

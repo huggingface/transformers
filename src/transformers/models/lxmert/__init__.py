@@ -4,11 +4,11 @@
 
 from ...file_utils import is_tf_available, is_tokenizers_available, is_torch_available
 from .configuration_lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig
-from .tokenization_lxmert import LxmertTokenizer
+from .tokenization_lxmert import LxmertTokenizer, LXMERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 
 if is_tokenizers_available():
-    from .tokenization_lxmert_fast import LxmertTokenizerFast
+    from .tokenization_lxmert_fast import LxmertTokenizerFast, LXMERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 if is_torch_available():
     from .modeling_lxmert import (

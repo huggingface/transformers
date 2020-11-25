@@ -145,8 +145,8 @@ from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, F
 from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer, GPT2_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from .models.herbert import HerbertTokenizer, HERBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer, LAYOUTLM_PRETRAINED_TOKENIZER_ARCHIVE_LIST
-from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
-from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
+from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer, LONGFORMER_PRETRAINED_TOKENIZER_ARCHIVE_LIST
+from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer, LXMERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from .models.marian import MarianConfig
 from .models.mbart import MBartConfig
 from .models.mmbt import MMBTConfig
@@ -239,8 +239,8 @@ if is_tokenizers_available():
     from .models.gpt2 import GPT2TokenizerFast, GPT2_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.herbert import HerbertTokenizerFast, HERBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.layoutlm import LayoutLMTokenizerFast, LAYOUTLM_PRETRAINED_TOKENIZER_ARCHIVE_LIST
-    from .models.longformer import LongformerTokenizerFast
-    from .models.lxmert import LxmertTokenizerFast
+    from .models.longformer import LongformerTokenizerFast, LONGFORMER_PRETRAINED_TOKENIZER_ARCHIVE_LIST
+    from .models.lxmert import LxmertTokenizerFast, LXMERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.mbart import MBartTokenizerFast
     from .models.mobilebert import MobileBertTokenizerFast
     from .models.openai import OpenAIGPTTokenizerFast
