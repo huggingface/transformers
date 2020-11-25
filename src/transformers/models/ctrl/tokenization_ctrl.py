@@ -28,18 +28,14 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {
-    "vocab_file": "vocab.json",
-    "merges_file": "merges.txt",
+    "vocab_file": "ctrl-vocab.json",
+    "merges_file": "ctrl-merges.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"ctrl": "https://raw.githubusercontent.com/salesforce/ctrl/master/ctrl-vocab.json"},
-    "merges_file": {"ctrl": "https://raw.githubusercontent.com/salesforce/ctrl/master/ctrl-merges.txt"},
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "ctrl": 256,
-}
+CTRL_PRETRAINED_TOKENIZER_ARCHIVE_LIST = [
+    "salesforce/ctrl",
+    # See all CTRL models at https://huggingface.co/models?filter=ctrl
+]
 
 CONTROL_CODES = {
     "Pregnancy": 168629,
@@ -134,8 +130,7 @@ class CTRLTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    max_model_input_sizes = 256
     control_codes = CONTROL_CODES
 
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):

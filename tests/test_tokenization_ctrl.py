@@ -17,13 +17,14 @@ import json
 import os
 import unittest
 
-from transformers.models.ctrl.tokenization_ctrl import VOCAB_FILES_NAMES, CTRLTokenizer
+from transformers.models.ctrl.tokenization_ctrl import VOCAB_FILES_NAMES, CTRLTokenizer, CTRL_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
 class CTRLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
+    pretrained_vocab_checkpoints = CTRL_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = CTRLTokenizer
     test_rust_tokenizer = False
 

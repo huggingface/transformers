@@ -123,9 +123,9 @@ from .models.blenderbot import (
     BlenderbotTokenizer,
 )
 from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
-from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
-from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
-from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
+from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer, CTRL_PRETRAINED_TOKENIZER_ARCHIVE_LIST
+from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer, DEBERTA_PRETRAINED_TOKENIZER_ARCHIVE_LIST
+from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer, DISTILBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from .models.dpr import (
     DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
     DPRConfig,
@@ -223,10 +223,10 @@ else:
 
 if is_tokenizers_available():
     from .models.albert import AlbertTokenizerFast, ALBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
-    from .models.bart import BartTokenizerFast
-    from .models.bert import BertTokenizerFast
+    from .models.bart import BartTokenizerFast, BART_PRETRAINED_TOKENIZER_ARCHIVE_LIST
+    from .models.bert import BertTokenizerFast, BERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.camembert import CamembertTokenizerFast, CAMEMBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
-    from .models.distilbert import DistilBertTokenizerFast
+    from .models.distilbert import DistilBertTokenizerFast, DISTILBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.dpr import DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast
     from .models.electra import ElectraTokenizerFast
     from .models.funnel import FunnelTokenizerFast

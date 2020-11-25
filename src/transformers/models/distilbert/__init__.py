@@ -4,11 +4,11 @@
 
 from ...file_utils import is_tf_available, is_tokenizers_available, is_torch_available
 from .configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
-from .tokenization_distilbert import DistilBertTokenizer
+from .tokenization_distilbert import DistilBertTokenizer, DISTILBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 
 if is_tokenizers_available():
-    from .tokenization_distilbert_fast import DistilBertTokenizerFast
+    from .tokenization_distilbert_fast import DistilBertTokenizerFast, DISTILBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 if is_torch_available():
     from .modeling_distilbert import (

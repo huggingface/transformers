@@ -4,7 +4,7 @@
 
 from ...file_utils import is_torch_available
 from .configuration_deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig
-from .tokenization_deberta import DebertaTokenizer
+from .tokenization_deberta import DebertaTokenizer, DEBERTA_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 
 if is_torch_available():

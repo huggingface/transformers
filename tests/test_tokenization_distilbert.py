@@ -14,7 +14,7 @@
 # limitations under the License.
 
 
-from transformers import DistilBertTokenizer, DistilBertTokenizerFast
+from transformers import DistilBertTokenizer, DistilBertTokenizerFast, DISTILBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from transformers.testing_utils import require_tokenizers, slow
 
 from .test_tokenization_bert import BertTokenizationTest
@@ -23,6 +23,7 @@ from .test_tokenization_bert import BertTokenizationTest
 @require_tokenizers
 class DistilBertTokenizationTest(BertTokenizationTest):
 
+    pretrained_vocab_checkpoints = DISTILBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = DistilBertTokenizer
     rust_tokenizer_class = DistilBertTokenizerFast
     test_rust_tokenizer = True

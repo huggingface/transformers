@@ -18,7 +18,7 @@ import re
 import unittest
 from typing import Tuple
 
-from transformers.models.deberta.tokenization_deberta import DebertaTokenizer
+from transformers.models.deberta.tokenization_deberta import DebertaTokenizer, DEBERTA_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from transformers.testing_utils import require_torch
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -27,6 +27,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 @require_torch
 class DebertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
+    pretrained_vocab_checkpoints = DEBERTA_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = DebertaTokenizer
 
     def setUp(self):
