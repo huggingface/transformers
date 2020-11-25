@@ -4,11 +4,11 @@
 
 from ...file_utils import is_tf_available, is_tokenizers_available, is_torch_available
 from .configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
-from .tokenization_gpt2 import GPT2Tokenizer
+from .tokenization_gpt2 import GPT2Tokenizer, GPT2_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 
 if is_tokenizers_available():
-    from .tokenization_gpt2_fast import GPT2TokenizerFast
+    from .tokenization_gpt2_fast import GPT2TokenizerFast, GPT2_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 if is_torch_available():
     from .modeling_gpt2 import (

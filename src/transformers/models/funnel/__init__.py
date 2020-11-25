@@ -4,11 +4,11 @@
 
 from ...file_utils import is_tf_available, is_tokenizers_available, is_torch_available
 from .configuration_funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig
-from .tokenization_funnel import FunnelTokenizer
+from .tokenization_funnel import FunnelTokenizer, FUNNEL_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 
 if is_tokenizers_available():
-    from .tokenization_funnel_fast import FunnelTokenizerFast
+    from .tokenization_funnel_fast import FunnelTokenizerFast, FUNNEL_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 if is_torch_available():
     from .modeling_funnel import (

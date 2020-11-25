@@ -33,30 +33,14 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "gpt2": "https://huggingface.co/gpt2/resolve/main/vocab.json",
-        "gpt2-medium": "https://huggingface.co/gpt2-medium/resolve/main/vocab.json",
-        "gpt2-large": "https://huggingface.co/gpt2-large/resolve/main/vocab.json",
-        "gpt2-xl": "https://huggingface.co/gpt2-xl/resolve/main/vocab.json",
-        "distilgpt2": "https://huggingface.co/distilgpt2/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "gpt2": "https://huggingface.co/gpt2/resolve/main/merges.txt",
-        "gpt2-medium": "https://huggingface.co/gpt2-medium/resolve/main/merges.txt",
-        "gpt2-large": "https://huggingface.co/gpt2-large/resolve/main/merges.txt",
-        "gpt2-xl": "https://huggingface.co/gpt2-xl/resolve/main/merges.txt",
-        "distilgpt2": "https://huggingface.co/distilgpt2/resolve/main/merges.txt",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "gpt2": 1024,
-    "gpt2-medium": 1024,
-    "gpt2-large": 1024,
-    "gpt2-xl": 1024,
-    "distilgpt2": 1024,
-}
+GPT2_PRETRAINED_TOKENIZER_ARCHIVE_LIST = [
+    "gpt2",
+    "gpt2-medium",
+    "gpt2-large",
+    "gpt2-xl",
+    "distilgpt2",
+    # See all GPT2 models at https://huggingface.co/models?filter=gpt2
+]
 
 
 @lru_cache()
@@ -146,8 +130,7 @@ class GPT2Tokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    max_model_input_sizes = 1024
     model_input_names = ["attention_mask"]
 
     def __init__(

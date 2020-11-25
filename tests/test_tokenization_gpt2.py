@@ -18,7 +18,7 @@ import json
 import os
 import unittest
 
-from transformers import GPT2Tokenizer, GPT2TokenizerFast
+from transformers import GPT2Tokenizer, GPT2TokenizerFast, GPT2_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from transformers.models.gpt2.tokenization_gpt2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
 
@@ -28,6 +28,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 @require_tokenizers
 class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
+    pretrained_vocab_checkpoints = GPT2_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = GPT2Tokenizer
     rust_tokenizer_class = GPT2TokenizerFast
     test_rust_tokenizer = True

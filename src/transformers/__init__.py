@@ -141,8 +141,8 @@ from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
 from .models.encoder_decoder import EncoderDecoderConfig
 from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer, FLAUBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer, FSMT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
-from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
-from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
+from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer, FUNNEL_PRETRAINED_TOKENIZER_ARCHIVE_LIST
+from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer, GPT2_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from .models.herbert import HerbertTokenizer
 from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
 from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
@@ -235,8 +235,8 @@ if is_tokenizers_available():
         DPR_READER_PRETRAINED_TOKENIZER_ARCHIVE_LIST)
 
     from .models.electra import ElectraTokenizerFast, ELECTRA_PRETRAINED_TOKENIZER_ARCHIVE_LIST
-    from .models.funnel import FunnelTokenizerFast
-    from .models.gpt2 import GPT2TokenizerFast
+    from .models.funnel import FunnelTokenizerFast, FUNNEL_PRETRAINED_TOKENIZER_ARCHIVE_LIST
+    from .models.gpt2 import GPT2TokenizerFast, GPT2_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.herbert import HerbertTokenizerFast
     from .models.layoutlm import LayoutLMTokenizerFast
     from .models.longformer import LongformerTokenizerFast

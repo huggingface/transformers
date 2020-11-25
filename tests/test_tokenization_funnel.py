@@ -17,7 +17,7 @@
 import os
 import unittest
 
-from transformers import FunnelTokenizer, FunnelTokenizerFast
+from transformers import FunnelTokenizer, FunnelTokenizerFast, FUNNEL_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from transformers.models.funnel.tokenization_funnel import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
 
@@ -27,6 +27,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 @require_tokenizers
 class FunnelTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
+    pretrained_vocab_checkpoints = FUNNEL_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = FunnelTokenizer
     rust_tokenizer_class = FunnelTokenizerFast
     test_rust_tokenizer = True
