@@ -302,7 +302,7 @@ def convert_pt_checkpoint_to_tf(
         pytorch_checkpoint_url = hf_bucket_url(pytorch_checkpoint_path, filename=WEIGHTS_NAME)
         pytorch_checkpoint_path = cached_path(pytorch_checkpoint_url, force_download=not use_cached_models)
     # Load PyTorch checkpoint in tf2 model:
-    tf_model = load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path)
+    tf_model = load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, config)
 
     if compare_with_pt_model:
         tfo = tf_model(tf_model.dummy_inputs, training=False)  # build the network

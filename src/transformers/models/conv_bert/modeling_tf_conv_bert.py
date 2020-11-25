@@ -97,20 +97,20 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
             activation=None,
             depthwise_initializer=get_initializer(1 / self.conv_kernel_size),
             pointwise_initializer=get_initializer(config.initializer_range),
-            name="conv_attn_key",
+            name="key_conv_attn_layer",
         )
 
         self.conv_kernel_layer = tf.keras.layers.Dense(
             self.num_attention_heads * self.conv_kernel_size,
             activation=None,
-            name="conv_attn_kernel",
+            name="conv_kernel_layer",
             kernel_initializer=get_initializer(config.initializer_range),
         )
 
         self.conv_out_layer = tf.keras.layers.Dense(
             self.all_head_size,
             activation=None,
-            name="conv_attn_point",
+            name="conv_out_layer",
             kernel_initializer=get_initializer(config.initializer_range),
         )
 
@@ -127,8 +127,6 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         mixed_value_layer = self.value(hidden_states)
 
         mixed_key_conv_attn_layer = self.key_conv_attn_layer(hidden_states)
-        print(mixed_key_conv_attn_layer.shape)
-        print("***", self.num_attention_heads, self.attention_head_size, self.conv_kernel_size)
 
         query_layer = self.transpose_for_scores(mixed_query_layer, batch_size)
         key_layer = self.transpose_for_scores(mixed_key_layer, batch_size)
@@ -136,19 +134,13 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         # TODO: remove after testing
         # value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
 
-        width = mixed_key_conv_attn_layer.shape[-1]
-        print(width)
-        mixed_key_conv_attn_layer = tf.reshape(mixed_key_conv_attn_layer, [-1, width])
-        print(mixed_key_conv_attn_layer.shape)
+        # width = mixed_key_conv_attn_layer.shape[-1]
+        # mixed_key_conv_attn_layer = tf.reshape(mixed_key_conv_attn_layer, [-1, width])
         conv_attn_layer = tf.multiply(mixed_key_conv_attn_layer, mixed_query_layer)
-        print(conv_attn_layer.shape)
 
         conv_kernel_layer = self.conv_kernel_layer(conv_attn_layer)
-        print(conv_kernel_layer.shape)
         conv_kernel_layer = tf.reshape(conv_kernel_layer, [-1, self.conv_kernel_size, 1])
-        print(conv_kernel_layer.shape)
         conv_kernel_layer = tf.nn.softmax(conv_kernel_layer, axis=1)
-        print(conv_kernel_layer.shape)
 
         paddings = tf.constant(
             [
@@ -162,11 +154,8 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         )
 
         conv_out_layer = self.conv_out_layer(hidden_states)
-        print(conv_out_layer.shape)
         conv_out_layer = tf.reshape(conv_out_layer, [batch_size, -1, self.all_head_size])
-        print(conv_out_layer.shape)
         conv_out_layer = tf.pad(conv_out_layer, paddings, "CONSTANT")
-        print(conv_out_layer.shape)
 
         slices = [
             tf.slice(conv_out_layer, [0, i, 0], [batch_size, mixed_query_layer.shape[1], self.all_head_size])
@@ -174,14 +163,10 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         ]
 
         unfold_conv_out_layer = tf.stack(slices, axis=-1)
-        print(unfold_conv_out_layer.shape)
         conv_out_layer = tf.reshape(unfold_conv_out_layer, [-1, self.attention_head_size, self.conv_kernel_size])
-        print(conv_out_layer.shape)
 
         conv_out_layer = tf.matmul(conv_out_layer, conv_kernel_layer)
-        print(conv_out_layer.shape)
         conv_out_layer = tf.reshape(conv_out_layer, [-1, self.all_head_size])
-        print(conv_out_layer.shape)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = tf.matmul(
@@ -209,23 +194,15 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
             mixed_value_layer, [batch_size, -1, self.num_attention_heads, self.attention_head_size]
         )
         value_layer = tf.transpose(value_layer, [0, 2, 1, 3])
-        print("vvvv")
-        print(value_layer.shape)
 
         context_layer = tf.matmul(attention_probs, value_layer)
         context_layer = tf.transpose(context_layer, perm=[0, 2, 1, 3])
 
         conv_out = tf.reshape(conv_out_layer, [batch_size, -1, self.num_attention_heads, self.attention_head_size])
-        print("/////////")
-        print(conv_out.shape)
         context_layer = tf.concat([context_layer, conv_out], 2)
         context_layer = tf.reshape(
             context_layer, (batch_size, -1, self.head_ratio * self.all_head_size)
         )  # (batch_size, seq_len_q, all_head_size)
-        print(context_layer.shape)
-        print("@@@@@")
-        print(context_layer.shape)
-        print(attention_probs.shape)
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         return outputs
@@ -272,21 +249,32 @@ class TFConvBertAttention(tf.keras.layers.Layer):
 
 
 class GroupedLinearLayer(tf.keras.layers.Layer):
-    def __init__(self, hidden_size, num_groups, kernel_initializer, **kwargs):
+    def __init__(self, input_size, output_size, num_groups, kernel_initializer, **kwargs):
         super().__init__(**kwargs)
-        self.hidden_size = hidden_size
+        self.input_size = input_size
+        self.output_size = output_size
         self.num_groups = num_groups
-        self.group_out_dim = self.hidden_size // self.num_groups
-        self.group_output = tf.keras.layers.Dense(self.group_out_dim, kernel_initializer=kernel_initializer)
+        self.kernel_initializer = kernel_initializer
+        self.group_in_dim = self.input_size // self.num_groups
+        self.group_out_dim = self.output_size // self.num_groups
+        self.kernel = self.add_weight(
+            "kernel",
+            shape=[self.num_groups, self.group_in_dim, self.group_out_dim],
+            initializer=self.kernel_initializer,
+            trainable=True,
+        )
+
+        self.bias = self.add_weight(
+            "bias", shape=[self.output_size], initializer=self.kernel_initializer, dtype=self.dtype, trainable=True
+        )
 
     def call(self, inputs):
-        shape = inputs.shape.as_list()
-        grouped_input_shape = shape[:-1] + [self.num_groups, -1]
-        inputs = tf.transpose(tf.reshape(inputs, grouped_input_shape), [1, 0, 2, 3])
-        group_out = self.group_output(inputs)
-        outputs = tf.transpose(group_out, [1, 0, 2, 3])
-        output_shape = shape[:-1] + [-1]
-        outputs = tf.reshape(outputs, output_shape)
+        batch_size = shape_list(inputs)[0]
+        inputs = tf.transpose(tf.reshape(inputs, [-1, self.num_groups, self.group_in_dim]), [1, 0, 2])
+        group_out = tf.matmul(inputs, self.kernel)
+        outputs = tf.transpose(group_out, [1, 0, 2])
+        outputs = tf.reshape(outputs, [batch_size, -1, self.output_size])
+        outputs = outputs + self.bias
         return outputs
 
 
@@ -300,6 +288,7 @@ class TFConvBertIntermediate(tf.keras.layers.Layer):
             )
         else:
             self.dense = GroupedLinearLayer(
+                config.hidden_size,
                 config.intermediate_size,
                 num_groups=config.num_groups,
                 kernel_initializer=get_initializer(config.initializer_range),
@@ -329,6 +318,7 @@ class TFConvBertOutput(tf.keras.layers.Layer):
             )
         else:
             self.dense = GroupedLinearLayer(
+                config.intermediate_size,
                 config.hidden_size,
                 num_groups=config.num_groups,
                 kernel_initializer=get_initializer(config.initializer_range),

@@ -725,7 +725,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
             # Load from a PyTorch checkpoint
-            return load_pytorch_checkpoint_in_tf2_model(model, resolved_archive_file, allow_missing_keys=True)
+            return load_pytorch_checkpoint_in_tf2_model(model, resolved_archive_file, config, allow_missing_keys=True)
 
         model(model.dummy_inputs, training=False)  # build the network with dummy inputs
 

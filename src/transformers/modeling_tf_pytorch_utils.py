@@ -43,6 +43,13 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
           other
     """
     tf_name = tf_name.replace(":0", "")  # device ids
+
+    # support for ConvBERT model
+    tf_name_split = tf_name.split("/")
+    if tf_name_split[-1] == "depthwise_kernel":
+        tf_name = "/".join(tf_name_split[:-1]) + "/depthwise/weight"
+    if tf_name_split[-1] == "pointwise_kernel":
+        tf_name = "/".join(tf_name_split[:-1]) + "/pointwise/weight"
     tf_name = re.sub(
         r"/[^/]*___([^/]*)/", r"/\1/", tf_name
     )  # '$1___$2' is replaced by $2 (can be used to duplicate or remove layers in TF2.0 vs PyTorch)
@@ -66,7 +73,6 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
     tf_name = ".".join(tf_name)
     if start_prefix_to_remove:
         tf_name = tf_name.replace(start_prefix_to_remove, "", 1)
-
     return tf_name, transpose
 
 
@@ -75,7 +81,9 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
 #####################
 
 
-def load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=None, allow_missing_keys=False):
+def load_pytorch_checkpoint_in_tf2_model(
+    tf_model, pytorch_checkpoint_path, config, tf_inputs=None, allow_missing_keys=False
+):
     """Load pytorch checkpoints in a TF 2.0 model"""
     try:
         import tensorflow as tf  # noqa: F401
@@ -94,7 +102,7 @@ def load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_i
     logger.info("PyTorch checkpoint contains {:,} parameters".format(sum(t.numel() for t in pt_state_dict.values())))
 
     return load_pytorch_weights_in_tf2_model(
-        tf_model, pt_state_dict, tf_inputs=tf_inputs, allow_missing_keys=allow_missing_keys
+        tf_model, pt_state_dict, config=config, tf_inputs=tf_inputs, allow_missing_keys=allow_missing_keys
     )
 
 
@@ -107,7 +115,7 @@ def load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=None, allow_mi
     )
 
 
-def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, allow_missing_keys=False):
+def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, config=None, tf_inputs=None, allow_missing_keys=False):
     """Load pytorch state_dict in a TF 2.0 model."""
     try:
         import tensorflow as tf  # noqa: F401
@@ -173,8 +181,26 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
         array = pt_state_dict[name].numpy()
 
+        if config.model_type == "convbert":
+            if name.endswith("depthwise.weight"):
+                array = numpy.transpose(array, axes=(2, 0, 1))
+                transpose = False
+
+            if name.endswith("pointwise.weight"):
+                array = numpy.transpose(array, axes=(2, 1, 0))
+                transpose = False
+
+            if name.endswith("conv_attn_key.bias"):
+                array = numpy.squeeze(array, -1)
+                transpose = False
+
+            if config.num_groups > 1:
+                transpose = False
+
         if transpose:
             array = numpy.transpose(array)
+
+        # if symbolic_weight.shape != array.shape:
 
         if len(symbolic_weight.shape) < len(array.shape):
             array = numpy.squeeze(array)

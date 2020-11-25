@@ -12,10 +12,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch CONV_BERT model. """
+"""PyTorch ConvBERT model. """
 
+import re
 import math
 import os
+from operator import attrgetter
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -48,6 +50,7 @@ from ...modeling_utils import (
 )
 from ...utils import logging
 from .configuration_conv_bert import ConvBertConfig
+from .param_mapping import fetch_mapping
 
 
 logger = logging.get_logger(__name__)
@@ -55,15 +58,55 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ConvBertConfig"
 _TOKENIZER_FOR_DOC = "ConvBertTokenizer"
 
-CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/conv-bert-small-generator",
-    "google/conv-bert-base-generator",
-    "google/conv-bert-large-generator",
-    "google/conv-bert-small-discriminator",
-    "google/conv-bert-base-discriminator",
-    "google/conv-bert-large-discriminator",
-    # See all CONV_BERT models at https://huggingface.co/models?filter=conv_bert
-]
+CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = ["convbert-base", "convbert-small", "convbert-medium-small"]
+
+
+def load_tf_weights_in_conv_bert(model, config, tf_checkpoint_path):
+    """Load tf checkpoints in a pytorch model."""
+    try:
+        import re
+
+        import numpy as np
+        import tensorflow as tf
+    except ImportError:
+        logger.error(
+            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
+            "https://www.tensorflow.org/install/ for installation instructions."
+        )
+        raise
+    tf_path = os.path.abspath(tf_checkpoint_path)
+    logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
+    # Load weights from TF model
+    init_vars = tf.train.list_variables(tf_path)
+    tf_data = {}
+    for name, shape in init_vars:
+        logger.info("Loading TF weight {} with shape {}".format(name, shape))
+        array = tf.train.load_variable(tf_path, name)
+        tf_data[name] = array
+
+    param_mapping = fetch_mapping(config)
+
+    for p in model.named_parameters():
+        param_name = p[0]
+        retriever = attrgetter(param_name)
+        result = retriever(model)
+        tf_name = param_mapping[param_name]
+        value = torch.from_numpy(tf_data[tf_name])
+        if tf_name.endswith("/kernel"):
+            if tf_name.endswith("/intermediate/g_dense/kernel") or tf_name.endswith("/output/g_dense/kernel"):
+                value = value
+            else:
+                value = value.T
+        if tf_name.endswith("/depthwise_kernel"):
+            value = value.permute(1, 2, 0)  # 2, 0, 1
+        if tf_name.endswith("/pointwise_kernel"):
+            value = value.permute(2, 1, 0)  # 2, 1, 0
+        if tf_name.endswith("/conv_attn_key/bias"):
+            value = value.unsqueeze(-1)
+        if value.shape != result.data.shape:
+            print(param_name, tf_name, result.data.shape, value.shape)
+        result.data = value
+    return model
 
 
 class ConvBertEmbeddings(nn.Module):
@@ -112,15 +155,22 @@ class ConvBertEmbeddings(nn.Module):
 class SeparableConv1D(nn.Module):
     def __init__(self, input_filters, output_filters, kernel_size, **kwargs):
         super().__init__(**kwargs)
-        self.depth = nn.Conv1d(
-            input_filters, input_filters, kernel_size=kernel_size, groups=input_filters, padding=kernel_size // 2
+        self.depthwise = nn.Conv1d(
+            input_filters,
+            input_filters,
+            kernel_size=kernel_size,
+            groups=input_filters,
+            padding=kernel_size // 2,
+            bias=False,
         )
-        self.point = nn.Conv1d(input_filters, output_filters, kernel_size=1)
+        self.pointwise = nn.Conv1d(input_filters, output_filters, kernel_size=1, bias=False)
+        self.bias = nn.Parameter(torch.zeros(output_filters, 1))
 
-    def forward(self, inputs):
-        inputs = self.depth(inputs)
-        inputs = self.point(inputs)
-        return inputs
+    def forward(self, x):
+        x = self.depthwise(x)
+        x = self.pointwise(x)
+        x += self.bias
+        return x
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->ConvBert
@@ -196,9 +246,11 @@ class ConvBertSelfAttention(nn.Module):
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
         key_layer = self.transpose_for_scores(mixed_key_layer)
+        value_layer = self.transpose_for_scores(mixed_value_layer)
 
-        width = mixed_key_conv_attn_layer.size(-1)
-        mixed_key_conv_attn_layer = torch.reshape(mixed_key_conv_attn_layer, [-1, width])
+        # width = mixed_key_conv_attn_layer.size(-1)
+        # mixed_key_conv_attn_layer = torch.reshape(mixed_key_conv_attn_layer, [-1, width])
+        # print(mixed_key_conv_attn_layer.shape, mixed_query_layer.shape)
         conv_attn_layer = torch.multiply(mixed_key_conv_attn_layer, mixed_query_layer)
 
         conv_kernel_layer = self.conv_kernel_layer(conv_attn_layer)
@@ -222,7 +274,6 @@ class ConvBertSelfAttention(nn.Module):
         conv_out_layer = torch.matmul(conv_out_layer, conv_kernel_layer)
         conv_out_layer = torch.reshape(conv_out_layer, [-1, self.all_head_size])
         # conv_out_layer = tf.pad(conv_out_layer, paddings, "CONSTANT")
-        # print(conv_out_layer.shape)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -241,11 +292,6 @@ class ConvBertSelfAttention(nn.Module):
         # Mask heads if we want to
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
-
-        value_layer = torch.reshape(
-            mixed_value_layer, [batch_size, -1, self.num_attention_heads, self.attention_head_size]
-        )
-        value_layer = value_layer.transpose(2, 1)
 
         context_layer = torch.matmul(attention_probs, value_layer)
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
@@ -331,17 +377,16 @@ class GroupedLinearLayer(nn.Module):
         self.num_groups = num_groups
         self.group_in_dim = self.input_size // self.num_groups
         self.group_out_dim = self.output_size // self.num_groups
-        self.out = nn.Linear(self.group_in_dim, self.group_out_dim)
+        self.weight = nn.Parameter(torch.Tensor(self.num_groups, self.group_in_dim, self.group_out_dim))
+        self.bias = nn.Parameter(torch.Tensor(output_size))
 
     def forward(self, x):
-        shape = list(x.size())
-        grouped_input_shape = shape[:-1] + [self.num_groups, -1]
-        x = torch.reshape(x, grouped_input_shape)
-        x = x.transpose(1, 0)
-        x = self.out(x)
-        x = x.transpose(1, 0)
-        output_shape = shape[:-1] + [-1]
-        outputs = torch.reshape(x, output_shape)
+        bs = list(x.size())[0]
+        x = torch.reshape(x, [-1, self.num_groups, self.group_in_dim])
+        x = x.transpose(0, 1)
+        x = torch.matmul(x, self.weight)
+        x = x.transpose(0, 1)
+        outputs = torch.reshape(x, [bs, -1, self.output_size])
         return outputs
 
 

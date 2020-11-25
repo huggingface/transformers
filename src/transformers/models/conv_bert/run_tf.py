@@ -7,9 +7,13 @@ import tensorflow as tf
 
 
 if __name__ == "__main__":
-    conf = ConvBertConfig.from_json_file("/home/abhishek/huggingface/models/convbert/config.json")
+    conf = ConvBertConfig.from_json_file(
+        "/home/abhishek/huggingface/models/convbert_models/convbert_medium_small/config.json"
+    )
     print(conf)
-    tokenizer = ConvBertTokenizer.from_pretrained("/home/abhishek/huggingface/models/convbert/")
+    tokenizer = ConvBertTokenizer.from_pretrained(
+        "/home/abhishek/huggingface/models/convbert_models/convbert_medium_small"
+    )
     model = TFConvBertModel(conf)
 
     inputs = tokenizer("Hello, my dog is a very cute dog to be honest", return_tensors="tf")
