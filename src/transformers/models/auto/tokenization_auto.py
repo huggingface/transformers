@@ -96,6 +96,7 @@ from .configuration_auto import (
 if is_sentencepiece_available():
     from ..albert.tokenization_albert import AlbertTokenizer
     from ..bert_generation.tokenization_bert_generation import BertGenerationTokenizer
+    from ..blenderbot.tokenization_blenderbot import BlenderbotTokenizer
     from ..camembert.tokenization_camembert import CamembertTokenizer
     from ..marian.tokenization_marian import MarianTokenizer
     from ..mbart.tokenization_mbart import MBartTokenizer
@@ -108,6 +109,7 @@ if is_sentencepiece_available():
 else:
     AlbertTokenizer = None
     BertGenerationTokenizer = None
+    BlenderbotTokenizer = None
     CamembertTokenizer = None
     MarianTokenizer = None
     MBartTokenizer = None
@@ -220,6 +222,7 @@ NO_CONFIG_TOKENIZER = [
     HerbertTokenizer,
     HerbertTokenizerFast,
     PhobertTokenizer,
+    BlenderbotTokenizer,
 ]
 
 class NoTokenizerClassAttribute(Exception):
@@ -398,6 +401,9 @@ class AutoTokenizer:
                     "Tokenizer class {} does not exist or is not currently imported.".format(tokenizer_class_candidate)
                 )
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+        # Could find a tokenizer_class in the tokenizer or model config.
+        # Let's try other (backward compatible) options
 
         # if model is an encoder decoder, the encoder tokenizer class is used by default
         if isinstance(config, EncoderDecoderConfig):

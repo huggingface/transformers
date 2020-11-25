@@ -21,6 +21,8 @@ import unittest
 
 from transformers.file_utils import cached_property
 from transformers.models.blenderbot.tokenization_blenderbot import (
+    BLENDERBOT_LARGE_PRETRAINED_TOKENIZER_ARCHIVE_LIST,
+    BLENDERBOT_SMALL_PRETRAINED_TOKENIZER_ARCHIVE_LIST,
     VOCAB_FILES_NAMES,
     BlenderbotSmallTokenizer,
     BlenderbotTokenizer,
@@ -31,6 +33,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 
 class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
+    pretrained_vocab_checkpoints = BLENDERBOT_SMALL_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = BlenderbotSmallTokenizer
 
     def setUp(self):
@@ -92,7 +95,7 @@ class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 class Blenderbot3BTokenizerTests(unittest.TestCase):
     @cached_property
     def tokenizer_3b(self):
-        return BlenderbotTokenizer.from_pretrained("facebook/blenderbot-3B")
+        return BlenderbotTokenizer.from_pretrained(BLENDERBOT_LARGE_PRETRAINED_TOKENIZER_ARCHIVE_LIST[0])
 
     def test_encode_decode_cycle(self):
         tok = self.tokenizer_3b

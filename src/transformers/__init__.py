@@ -116,6 +116,8 @@ from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, Mec
 from .models.bertweet import BertweetTokenizer, BERT_TWEET_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from .models.blenderbot import (
     BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    BLENDERBOT_LARGE_PRETRAINED_TOKENIZER_ARCHIVE_LIST,
+    BLENDERBOT_SMALL_PRETRAINED_TOKENIZER_ARCHIVE_LIST,
     BlenderbotConfig,
     BlenderbotSmallTokenizer,
     BlenderbotTokenizer,

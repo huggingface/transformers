@@ -32,9 +32,17 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
     "merges_file": "merges.txt",
-    # "tokenizer_config_file": "tokenizer_config.json",
 }
-CKPT_3B = "facebook/blenderbot-3B"
+
+BLENDERBOT_LARGE_PRETRAINED_TOKENIZER_ARCHIVE_LIST = [
+    "facebook/blenderbot-3B",
+    # See all BLENDERBOT models at https://huggingface.co/models?filter=blenderbot
+]
+
+BLENDERBOT_SMALL_PRETRAINED_TOKENIZER_ARCHIVE_LIST = [
+    "facebook/blenderbot-90M",
+    # See all BLENDERBOT models at https://huggingface.co/models?filter=blenderbot
+]
 
 
 class BlenderbotTokenizer(RobertaTokenizer):
@@ -48,17 +56,8 @@ class BlenderbotTokenizer(RobertaTokenizer):
     Refer to superclass :class:`~transformers.RobertaTokenizer` for usage examples and documentation concerning
     parameters.
     """
-    vocab_files_names = {
-        "vocab_file": "vocab.json",
-        "merges_file": "merges.txt",
-        "tokenizer_config_file": "tokenizer_config.json",
-    }
-    pretrained_vocab_files_map = {
-        "vocab_file": {CKPT_3B: "https://cdn.huggingface.co/facebook/blenderbot-3B/vocab.json"},
-        "merges_file": {CKPT_3B: "https://cdn.huggingface.co/facebook/blenderbot-3B/merges.txt"},
-        "tokenizer_config_file": {CKPT_3B: "https://cdn.huggingface.co/facebook/blenderbot-3B/tokenizer_config.json"},
-    }
-    max_model_input_sizes = {"facebook/blenderbot-3B": 128}
+    vocab_files_names = VOCAB_FILES_NAMES
+    max_model_input_sizes = 128
 
     def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: List[int] = None):
         """
@@ -121,11 +120,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
-    pretrained_vocab_files_map = {
-        "vocab_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-90M/vocab.json"},
-        "merges_file": {"facebook/blenderbot-90M": "https://cdn.huggingface.co/facebook/blenderbot-90M/merges.txt"},
-    }
-    max_model_input_sizes = {"facebook/blenderbot-90M": 512}
+    max_model_input_sizes = 512
 
     def __init__(
         self,

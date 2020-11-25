@@ -4,7 +4,7 @@
 
 from ...file_utils import is_tf_available, is_torch_available
 from .configuration_blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig
-from .tokenization_blenderbot import BlenderbotSmallTokenizer, BlenderbotTokenizer
+from .tokenization_blenderbot import BlenderbotSmallTokenizer, BlenderbotTokenizer, BLENDERBOT_LARGE_PRETRAINED_TOKENIZER_ARCHIVE_LIST, BLENDERBOT_SMALL_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 
 if is_torch_available():
