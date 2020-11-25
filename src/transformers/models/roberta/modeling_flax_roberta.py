@@ -397,7 +397,7 @@ class FlaxRobertaModel(FlaxPreTrainedModel):
         return jax_state
 
     def __init__(self, config: RobertaConfig, state: dict, seed: int = 0, **kwargs):
-        model = FlaxRobertaModule(
+        module = FlaxRobertaModule(
             vocab_size=config.vocab_size,
             hidden_size=config.hidden_size,
             type_vocab_size=config.type_vocab_size,
@@ -408,11 +408,7 @@ class FlaxRobertaModel(FlaxPreTrainedModel):
             intermediate_size=config.intermediate_size,
         )
 
-        super().__init__(config, model, state, seed)
-
-    @property
-    def module(self) -> nn.Module:
-        return self._module
+        super().__init__(config, module, state, seed)
 
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(self, input_ids, token_type_ids=None, attention_mask=None, position_ids=None):

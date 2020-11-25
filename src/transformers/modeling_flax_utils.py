@@ -65,7 +65,7 @@ class FlaxPreTrainedModel(ABC):
     base_model_prefix = ""
     model_class = None
 
-    def __init__(self, config: PretrainedConfig, params: Dict, seed: int = 0):
+    def __init__(self, config: PretrainedConfig, model: nn.Module, params: Dict, seed: int = 0):
         if config is None:
             raise ValueError("config cannot be None")
 
@@ -75,6 +75,8 @@ class FlaxPreTrainedModel(ABC):
         # Those are private to be exposed as typed property on derived classes.
         self._config = config
 
+        self._module = model
+
         # Those are public as their type is generic to every derived classes.
         self.key = PRNGKey(seed)
         self.params = params
@@ -82,6 +84,10 @@ class FlaxPreTrainedModel(ABC):
     @property
     def config(self) -> PretrainedConfig:
         return self._config
+
+    @property
+    def module(self) -> nn.Module:
+        return self._module
 
     @staticmethod
     @abstractmethod
