@@ -390,7 +390,7 @@ def input_processing(func, config, input_ids, **kwargs):
         for k, v in dict(input_ids).items():
             if not isinstance(v, allowed_types):
                 raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
-            elif k not in parameter_names:
+            elif k not in parameter_names and "args" not in parameter_names:
                 logger.warn(
                     f"The parameter {k} does not belongs to the parameter list {parameter_names} and will be ignored."
                 )

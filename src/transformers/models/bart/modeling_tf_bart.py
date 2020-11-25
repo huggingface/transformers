@@ -955,11 +955,11 @@ class TFBartModel(TFPretrainedBartModel):
 
         if inputs["decoder_input_ids"] is None:
             inputs["use_cache"] = False
-        
-        inputs["output_hidden_states"] = (	
-            inputs["output_hidden_states"]	
-            if inputs["output_hidden_states"] is not None	
-            else self.config.output_hidden_states	
+
+        inputs["output_hidden_states"] = (
+            inputs["output_hidden_states"]
+            if inputs["output_hidden_states"] is not None
+            else self.config.output_hidden_states
         )
 
         if not inputs["use_cache"]:

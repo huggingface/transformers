@@ -841,6 +841,7 @@ class TFBertModel(TFBertPreTrainedModel):
         training=False,
         **kwargs,
     ):
+        print(input_ids)
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -856,6 +857,7 @@ class TFBertModel(TFBertPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
+        print(inputs)
         outputs = self.bert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
