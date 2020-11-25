@@ -24,7 +24,6 @@ if __name__ == "__main__":
     print(model.dummy_inputs)
     print(model(**model.dummy_inputs))
 
-
     # tf_model = TFConvBertModel(conf)
 
     print(tf_model.dummy_inputs)

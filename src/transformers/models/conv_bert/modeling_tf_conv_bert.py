@@ -41,17 +41,9 @@ from .configuration_conv_bert import ConvBertConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ConvBertConfig"
-_TOKENIZER_FOR_DOC = "ElectraTokenizer"
+_TOKENIZER_FOR_DOC = "ConvBertTokenizer"
 
-TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/conv-bert-small-generator",
-    "google/conv-bert-base-generator",
-    "google/conv-bert-large-generator",
-    "google/conv-bert-small-discriminator",
-    "google/conv-bert-base-discriminator",
-    "google/conv-bert-large-discriminator",
-    # See all ELECTRA models at https://huggingface.co/models?filter=conv_bert
-]
+TF_CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = ["convbert-base", "convbert-small", "convbert-medium-small"]
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention
@@ -227,7 +219,7 @@ class TFConvBertSelfOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->Electra
+# Copied from from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->ConvBert
 class TFConvBertAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -257,6 +249,8 @@ class GroupedLinearLayer(tf.keras.layers.Layer):
         self.kernel_initializer = kernel_initializer
         self.group_in_dim = self.input_size // self.num_groups
         self.group_out_dim = self.output_size // self.num_groups
+
+    def build(self, input_shape):
         self.kernel = self.add_weight(
             "kernel",
             shape=[self.num_groups, self.group_in_dim, self.group_out_dim],
@@ -335,7 +329,7 @@ class TFConvBertOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with Bert->Electra
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with Bert->ConvBert
 class TFConvBertLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -356,7 +350,7 @@ class TFConvBertLayer(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertEncoder with Bert->Electra
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertEncoder with Bert->ConvBert
 class TFConvBertEncoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -731,7 +725,7 @@ class TFConvBertForPreTrainingOutput(ModelOutput):
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``tf.Tensor`` of shape :obj:`(1,)`):
-            Total loss of the ELECTRA objective.
+            Total loss of the CONV_BERT objective.
         logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
             Prediction scores of the head (scores for each token before SoftMax).
         hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
@@ -752,7 +746,7 @@ class TFConvBertForPreTrainingOutput(ModelOutput):
     attentions: Optional[Tuple[tf.Tensor]] = None
 
 
-ELECTRA_START_DOCSTRING = r"""
+CONV_BERT_START_DOCSTRING = r"""
 
     This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
@@ -788,12 +782,12 @@ ELECTRA_START_DOCSTRING = r"""
             weights.
 """
 
-ELECTRA_INPUTS_DOCSTRING = r"""
+CONV_BERT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.ElectraTokenizer`. See
+            Indices can be obtained using :class:`~transformers.ConvBertTokenizer`. See
             :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
             details.
 
@@ -835,12 +829,12 @@ ELECTRA_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Electra Model transformer outputting raw hidden-states without any specific head on top. Identical to "
+    "The bare ConvBert Model transformer outputting raw hidden-states without any specific head on top. Identical to "
     "the BERT model except that it uses an additional linear layer between the embedding layer and the encoder if the "
     "hidden size and embedding size are different."
     ""
     "Both the generator and discriminator checkpoints may be loaded into this model.",
-    ELECTRA_START_DOCSTRING,
+    CONV_BERT_START_DOCSTRING,
 )
 class TFConvBertModel(TFConvBertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
@@ -848,7 +842,7 @@ class TFConvBertModel(TFConvBertPreTrainedModel):
 
         self.conv_bert = TFConvBertMainLayer(config, name="conv_bert")
 
-    @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/conv-bert-small-discriminator",
@@ -863,13 +857,13 @@ class TFConvBertModel(TFConvBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Electra model with a binary classification head on top as used during pre-training for identifying generated
+    ConvBert model with a binary classification head on top as used during pre-training for identifying generated
     tokens.
 
     Even though both the discriminator and generator may be loaded into this model, the discriminator is the only model
     of the two to have the correct classification head to be used for this model.
     """,
-    ELECTRA_START_DOCSTRING,
+    CONV_BERT_START_DOCSTRING,
 )
 class TFConvBertForPreTraining(TFConvBertPreTrainedModel):
     def __init__(self, config, **kwargs):
@@ -878,7 +872,7 @@ class TFConvBertForPreTraining(TFConvBertPreTrainedModel):
         self.conv_bert = TFConvBertMainLayer(config, name="conv_bert")
         self.discriminator_predictions = TFConvBertDiscriminatorPredictions(config, name="discriminator_predictions")
 
-    @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFConvBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
@@ -900,9 +894,9 @@ class TFConvBertForPreTraining(TFConvBertPreTrainedModel):
         Examples::
 
             >>> import tensorflow as tf
-            >>> from transformers import ElectraTokenizer, TFConvBertForPreTraining
+            >>> from transformers import ConvBertTokenizer, TFConvBertForPreTraining
 
-            >>> tokenizer = ElectraTokenizer.from_pretrained('google/conv-bert-small-discriminator')
+            >>> tokenizer = ConvBertTokenizer.from_pretrained('google/conv-bert-small-discriminator')
             >>> model = TFConvBertForPreTraining.from_pretrained('google/conv-bert-small-discriminator')
             >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute"))[None, :]  # Batch size 1
             >>> outputs = model(input_ids)
@@ -962,12 +956,12 @@ class TFConvBertMaskedLMHead(tf.keras.layers.Layer):
 
 @add_start_docstrings(
     """
-    Electra model with a language modeling head on top.
+    ConvBert model with a language modeling head on top.
 
     Even though both the discriminator and generator may be loaded into this model, the generator is the only model of
     the two to have been trained for the masked language modeling task.
     """,
-    ELECTRA_START_DOCSTRING,
+    CONV_BERT_START_DOCSTRING,
 )
 class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config, **kwargs):
@@ -987,7 +981,7 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
     def get_output_embeddings(self):
         return self.generator_lm_head
 
-    @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/conv-bert-small-generator",
@@ -1079,7 +1073,7 @@ class TFConvBertClassificationHead(tf.keras.layers.Layer):
         x = inputs[:, 0, :]  # take <s> token (equiv. to [CLS])
         x = self.dropout(x)
         x = self.dense(x)
-        x = get_tf_activation("gelu")(x)  # although BERT uses tanh here, it seems Electra authors used gelu here
+        x = get_tf_activation("gelu")(x)  # although BERT uses tanh here, it seems ConvBert authors used gelu here
         x = self.dropout(x)
         x = self.out_proj(x)
 
@@ -1088,10 +1082,10 @@ class TFConvBertClassificationHead(tf.keras.layers.Layer):
 
 @add_start_docstrings(
     """
-    ELECTRA Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    CONV_BERT Model transformer with a sequence classification/regression head on top (a linear layer on top of the
     pooled output) e.g. for GLUE tasks.
     """,
-    ELECTRA_START_DOCSTRING,
+    CONV_BERT_START_DOCSTRING,
 )
 class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
@@ -1100,7 +1094,7 @@ class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceC
         self.conv_bert = TFConvBertMainLayer(config, name="conv_bert")
         self.classifier = TFConvBertClassificationHead(config, name="classifier")
 
-    @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/conv-bert-small-discriminator",
@@ -1174,10 +1168,10 @@ class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceC
 
 @add_start_docstrings(
     """
-    ELECTRA Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    CONV_BERT Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
     softmax) e.g. for RocStories/SWAG tasks.
     """,
-    ELECTRA_START_DOCSTRING,
+    CONV_BERT_START_DOCSTRING,
 )
 class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
@@ -1201,7 +1195,9 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
-    @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        CONV_BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/conv-bert-small-discriminator",
@@ -1305,11 +1301,11 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
 
 @add_start_docstrings(
     """
-    Electra model with a token classification head on top.
+    ConvBert model with a token classification head on top.
 
     Both the discriminator and generator may be loaded into this model.
     """,
-    ELECTRA_START_DOCSTRING,
+    CONV_BERT_START_DOCSTRING,
 )
 class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config, **kwargs):
@@ -1321,7 +1317,7 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/conv-bert-small-discriminator",
@@ -1389,10 +1385,10 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
 
 @add_start_docstrings(
     """
-    Electra Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    ConvBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
-    ELECTRA_START_DOCSTRING,
+    CONV_BERT_START_DOCSTRING,
 )
 class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
@@ -1404,7 +1400,7 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
-    @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/conv-bert-small-discriminator",
