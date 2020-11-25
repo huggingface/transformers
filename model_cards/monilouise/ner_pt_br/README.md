@@ -8,6 +8,7 @@ metrics:
 - accuracy
 - precision
 - recall
+inference: false
 ---
 
 # RiskData Brazilian Portuguese NER
@@ -21,6 +22,18 @@ For more details, please see, (https://github.com/SecexSaudeTCU/noticias_ner).
 ## Intended uses & limitations
 
 #### How to use
+
+```python
+from transformers import BertForTokenClassification, DistilBertTokenizerFast, pipeline
+
+model = BertForTokenClassification.from_pretrained('monilouise/ner_pt_br')
+tokenizer = DistilBertTokenizerFast.from_pretrained('neuralmind/bert-base-portuguese-cased'
+                                                    , model_max_length=512
+                                                    , do_lower_case=False
+                                                    )
+nlp = pipeline('ner', model=model, tokenizer=tokenizer)
+result = nlp("O Tribunal de Contas da União é localizado em Brasília e foi fundado por Rui Barbosa.")
+```
 
 #### Limitations and bias
 
