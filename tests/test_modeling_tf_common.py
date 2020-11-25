@@ -596,7 +596,7 @@ class TFModelTesterMixin:
         for model_class in self.all_model_classes:
             model = model_class(config)
             assert isinstance(model.get_input_embeddings(), (tf.keras.layers.Layer, TFAdaptiveEmbedding))
-            x = model.get_output_embeddings()
+            x = model.get_bias()
             assert x is None or isinstance(x, tf.keras.layers.Layer)
 
     def test_determinism(self):

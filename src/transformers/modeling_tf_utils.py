@@ -612,6 +612,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         else:
             raise NotImplementedError
 
+    def get_bias(self) -> Union[None, tf.keras.layers.Layer]:
+        """
+        Get the layer that handles a bias attribute in case the model has an LM head.
+
+        Return:
+            :obj:`tf.keras.layers.Layer`: The layer that handles the bias, None if not an LM model.
+        """
+        return None
+
     def resize_token_embeddings(self, new_num_tokens=None) -> tf.Variable:
         """
         Resizes input token embeddings matrix of the model if :obj:`new_num_tokens != config.vocab_size`.
@@ -675,9 +684,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             :obj:`new_num_tokens` is :obj:`None`
         """
         word_embeddings = self._get_word_embeddings(old_embeddings)
+        bias_layer = self.get_bias()
+
         if new_num_tokens is None:
             return word_embeddings
+
         old_num_tokens, old_embedding_dim = word_embeddings.shape
+
         if old_num_tokens == new_num_tokens:
             return word_embeddings
 
@@ -690,13 +703,23 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             initializer=get_initializer(init_range),
             dtype=tf.float32,
         )
-
         init_weights = tf.make_ndarray(tf.make_tensor_proto(new_embeddings.value()))
 
         # Copy token embeddings from the previous weights
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
         init_weights[:num_tokens_to_copy] = word_embeddings.value()[:num_tokens_to_copy, :]
         new_embeddings.assign(init_weights)
+
+        if bias_layer is not None and hasattr(bias_layer, "bias"):
+            # initialize bias
+            new_bias = self.add_weight(
+                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=bias_layer.bias.name.split(":")[0]
+            )
+            init_bias = tf.make_ndarray(tf.make_tensor_proto(new_bias.value()))
+
+            # Copy bias from the previous one
+            init_bias[:num_tokens_to_copy] = bias_layer.bias.value()[:num_tokens_to_copy, :]
+            new_bias.assign(init_bias)
 
         return new_embeddings
 
