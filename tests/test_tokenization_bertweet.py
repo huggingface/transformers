@@ -16,13 +16,14 @@
 import os
 import unittest
 
-from transformers.models.bertweet.tokenization_bertweet import VOCAB_FILES_NAMES, BertweetTokenizer
+from transformers.models.bertweet.tokenization_bertweet import VOCAB_FILES_NAMES, BertweetTokenizer, BERT_TWEET_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
 class BertweetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
+    pretrained_vocab_checkpoints = BERT_TWEET_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = BertweetTokenizer
 
     def setUp(self):

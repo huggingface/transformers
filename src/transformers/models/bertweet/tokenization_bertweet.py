@@ -35,18 +35,9 @@ VOCAB_FILES_NAMES = {
     "merges_file": "bpe.codes",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "vinai/bertweet-base": "https://huggingface.co/vinai/bertweet-base/resolve/main/vocab.txt",
-    },
-    "merges_file": {
-        "vinai/bertweet-base": "https://huggingface.co/vinai/bertweet-base/resolve/main/bpe.codes",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "vinai/bertweet-base": 128,
-}
+BERT_TWEET_PRETRAINED_TOKENIZER_ARCHIVE_LIST = [
+    "vinai/bertweet-base",
+]
 
 
 def get_pairs(word):
@@ -111,8 +102,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    max_model_input_sizes = 128
 
     def __init__(
         self,

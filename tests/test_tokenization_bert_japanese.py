@@ -20,6 +20,7 @@ import unittest
 
 from transformers import AutoTokenizer
 from transformers.models.bert_japanese.tokenization_bert_japanese import (
+    BERT_JAPANESE_PRETRAINED_TOKENIZER_ARCHIVE_LIST,
     VOCAB_FILES_NAMES,
     BertJapaneseTokenizer,
     CharacterTokenizer,
@@ -34,6 +35,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 @custom_tokenizers
 class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
+    pretrained_vocab_checkpoints = BERT_JAPANESE_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = BertJapaneseTokenizer
     space_between_special_tokens = True
 

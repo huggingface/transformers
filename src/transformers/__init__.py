@@ -112,8 +112,8 @@ from .models.bert import (
     WordpieceTokenizer,
 )
 from .models.bert_generation import BertGenerationConfig
-from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
-from .models.bertweet import BertweetTokenizer
+from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer, BERT_JAPANESE_PRETRAINED_TOKENIZER_ARCHIVE_LIST
+from .models.bertweet import BertweetTokenizer, BERT_TWEET_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from .models.blenderbot import (
     BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     BlenderbotConfig,
