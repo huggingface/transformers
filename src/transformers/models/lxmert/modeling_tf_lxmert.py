@@ -128,7 +128,7 @@ class TFLxmertForPreTrainingOutput(ModelOutput):
 
     """
 
-    loss: [tf.Tensor] = None
+    loss: Optional[tf.Tensor] = None
     prediction_logits: Optional[tf.Tensor] = None
     cross_relationship_score: Optional[tf.Tensor] = None
     question_answering_score: Optional[tf.Tensor] = None
