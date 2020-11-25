@@ -30,34 +30,13 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "flaubert/flaubert_small_cased": "https://huggingface.co/flaubert/flaubert_small_cased/resolve/main/vocab.json",
-        "flaubert/flaubert_base_uncased": "https://huggingface.co/flaubert/flaubert_base_uncased/resolve/main/vocab.json",
-        "flaubert/flaubert_base_cased": "https://huggingface.co/flaubert/flaubert_base_cased/resolve/main/vocab.json",
-        "flaubert/flaubert_large_cased": "https://huggingface.co/flaubert/flaubert_large_cased/resolve/main/vocab.json",
-    },
-    "merges_file": {
-        "flaubert/flaubert_small_cased": "https://huggingface.co/flaubert/flaubert_small_cased/resolve/main/merges.txt",
-        "flaubert/flaubert_base_uncased": "https://huggingface.co/flaubert/flaubert_base_uncased/resolve/main/merges.txt",
-        "flaubert/flaubert_base_cased": "https://huggingface.co/flaubert/flaubert_base_cased/resolve/main/merges.txt",
-        "flaubert/flaubert_large_cased": "https://huggingface.co/flaubert/flaubert_large_cased/resolve/main/merges.txt",
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "flaubert/flaubert_small_cased": 512,
-    "flaubert/flaubert_base_uncased": 512,
-    "flaubert/flaubert_base_cased": 512,
-    "flaubert/flaubert_large_cased": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "flaubert/flaubert_small_cased": {"do_lowercase": False},
-    "flaubert/flaubert_base_uncased": {"do_lowercase": True},
-    "flaubert/flaubert_base_cased": {"do_lowercase": False},
-    "flaubert/flaubert_large_cased": {"do_lowercase": False},
-}
+FLAUBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST = [
+    "flaubert/flaubert_small_cased",
+    "flaubert/flaubert_base_uncased",
+    "flaubert/flaubert_base_cased",
+    "flaubert/flaubert_large_cased",
+    # See all FLAUBERT models at https://huggingface.co/models?filter=flaubert
+]
 
 
 def convert_to_unicode(text):
@@ -91,9 +70,7 @@ class FlaubertTokenizer(XLMTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    max_model_input_sizes = 512
 
     def __init__(self, do_lowercase=False, **kwargs):
         super().__init__(**kwargs)

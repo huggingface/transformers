@@ -139,8 +139,8 @@ from .models.dpr import (
 )
 from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer, ELECTRA_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from .models.encoder_decoder import EncoderDecoderConfig
-from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
-from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
+from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer, FLAUBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
+from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer, FSMT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
 from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
 from .models.herbert import HerbertTokenizer

@@ -4,7 +4,7 @@
 
 from ...file_utils import is_tf_available, is_torch_available
 from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
-from .tokenization_flaubert import FlaubertTokenizer
+from .tokenization_flaubert import FlaubertTokenizer, FLAUBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 
 if is_torch_available():

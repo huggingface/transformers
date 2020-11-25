@@ -4,7 +4,7 @@
 
 from ...file_utils import is_torch_available
 from .configuration_fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig
-from .tokenization_fsmt import FSMTTokenizer
+from .tokenization_fsmt import FSMTTokenizer, FSMT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 
 if is_torch_available():

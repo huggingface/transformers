@@ -19,7 +19,7 @@ import os
 import unittest
 
 from transformers.file_utils import cached_property
-from transformers.models.fsmt.tokenization_fsmt import VOCAB_FILES_NAMES, FSMTTokenizer
+from transformers.models.fsmt.tokenization_fsmt import VOCAB_FILES_NAMES, FSMTTokenizer, FSMT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from transformers.testing_utils import slow
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -30,6 +30,8 @@ FSMT_TINY2 = "stas/tiny-wmt19-en-ru"
 
 
 class FSMTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+
+    pretrained_vocab_checkpoints = FSMT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = FSMTTokenizer
 
     def setUp(self):
