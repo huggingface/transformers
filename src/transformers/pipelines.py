@@ -1420,9 +1420,14 @@ class TokenClassificationPipeline(Pipeline):
 
             - **word** (:obj:`str`) -- The token/word classified.
             - **score** (:obj:`float`) -- The corresponding probability for :obj:`entity`.
-            - **entity** (:obj:`str`) -- The entity predicted for that token/word.
+            - **entity** (:obj:`str`) -- The entity predicted for that token/word (it is named `entity_group` when
+              `grouped_entities` is set to True.
             - **index** (:obj:`int`, only present when ``self.grouped_entities=False``) -- The index of the
               corresponding token in the sentence.
+            - **start** (:obj:`int`, `optional`) -- The index of the start of the corresponding entity in the sentence.
+              Only exists if the offsets are available within the tokenizer
+            - **end** (:obj:`int`, `optional`) -- The index of the end of the corresponding entity in the sentence.
+              Only exists if the offsets are available within the tokenizer
         """
 
         inputs, offset_mappings = self._args_parser(inputs, **kwargs)
