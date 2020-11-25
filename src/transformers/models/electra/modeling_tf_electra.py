@@ -789,8 +789,7 @@ class TFElectraModel(TFElectraPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Electra model with a binary classification head on top as used during pre-training for identifying generated
-    tokens.
+    Electra model with a binary classification head on top as used during pretraining for identifying generated tokens.
 
     Even though both the discriminator and generator may be loaded into this model, the discriminator is the only model
     of the two to have the correct classification head to be used for this model.

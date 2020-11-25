@@ -1241,7 +1241,7 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Funnel model with a binary classification head on top as used during pre-training for identifying generated tokens.
+    Funnel model with a binary classification head on top as used during pretraining for identifying generated tokens.
     """,
     FUNNEL_START_DOCSTRING,
 )

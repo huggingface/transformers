@@ -462,7 +462,6 @@ class GenerationMixin:
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if input_ids is None:
             # init `input_ids` with bos_token_id

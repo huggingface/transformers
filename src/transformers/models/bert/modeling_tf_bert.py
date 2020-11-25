@@ -90,7 +90,7 @@ TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 class TFBertPreTrainingLoss:
     """
-    Loss function suitable for BERT-like pre-training, that is, the task of pretraining a language model by combining
+    Loss function suitable for BERT-like pretraining, that is, the task of pretraining a language model by combining
     NSP + MLM. .. note:: Any label of -100 will be ignored (along with the corresponding logits) in the loss
     computation.
     """
@@ -878,7 +878,7 @@ class TFBertModel(TFBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-Bert Model with two heads on top as done during the pre-training:
+Bert Model with two heads on top as done during the pretraining:
     a `masked language modeling` head and a `next sentence prediction (classification)` head.
     """,
     BERT_START_DOCSTRING,
