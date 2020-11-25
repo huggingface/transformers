@@ -29,7 +29,10 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-tokenizer_url = "https://huggingface.co/google/bert_for_seq_generation_L-24_bbc_encoder/resolve/main/spiece.model"
+
+BERT_GENERATION_PRETRAINED_TOKENIZER_ARCHIVE_LIST = [
+    "google/bert_for_seq_generation_L-24_bbc_encoder",
+]
 
 
 class BertGenerationTokenizer(PreTrainedTokenizer):
@@ -55,8 +58,7 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = {"vocab_file": {"bert_for_seq_generation": tokenizer_url}}
-    max_model_input_sizes = {"bert_for_seq_generation": 512}
+    max_model_input_sizes = 512
     prefix_tokens: List[int] = []
 
     def __init__(

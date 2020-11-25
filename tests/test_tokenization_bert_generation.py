@@ -17,7 +17,7 @@
 import os
 import unittest
 
-from transformers import BertGenerationTokenizer
+from transformers import BertGenerationTokenizer, BERT_GENERATION_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_torch, slow
 
@@ -32,6 +32,7 @@ SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixture
 @require_sentencepiece
 class BertGenerationTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
+    pretrained_vocab_checkpoints = BERT_GENERATION_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = BertGenerationTokenizer
 
     def setUp(self):

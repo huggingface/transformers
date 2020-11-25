@@ -206,7 +206,7 @@ from .tokenization_utils_base import (
 
 if is_sentencepiece_available():
     from .models.albert import AlbertTokenizer, ALBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
-    from .models.bert_generation import BertGenerationTokenizer
+    from .models.bert_generation import BertGenerationTokenizer, BERT_GENERATION_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.camembert import CamembertTokenizer
     from .models.marian import MarianTokenizer
     from .models.mbart import MBartTokenizer

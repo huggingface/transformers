@@ -7,7 +7,7 @@ from .configuration_bert_generation import BertGenerationConfig
 
 
 if is_sentencepiece_available():
-    from .tokenization_bert_generation import BertGenerationTokenizer
+    from .tokenization_bert_generation import BertGenerationTokenizer, BERT_GENERATION_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 if is_torch_available():
     from .modeling_bert_generation import (
