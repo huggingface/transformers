@@ -25,6 +25,7 @@ from ...modeling_tf_outputs import (
     TFTokenClassifierOutput,
 )
 from ...modeling_tf_utils import (
+    TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
@@ -701,6 +702,10 @@ class TFMPNetLMHead(tf.keras.layers.Layer):
         x = self.decoder(x, mode="linear") + self.bias
 
         return x
+
+
+@add_start_docstrings("""MPNet Model with a `language modeling` head on top. """, MPNET_START_DOCSTRING)
+
 
 
 class TFMPNetClassificationHead(tf.keras.layers.Layer):
