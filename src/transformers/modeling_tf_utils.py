@@ -284,17 +284,22 @@ def booleans_processing(config, **kwargs):
         if (
             kwargs["output_attentions"] is not None
             or kwargs["output_hidden_states"] is not None
-            or ("use_cache" in kwargs and kwargs["output_hidden_states"] is not None)
-            or ("return_dict" in kwargs and kwargs["return_dict"] is not None)
+            or ("use_cache" in kwargs and kwargs["use_cache"] is not None)
+            # or ("return_dict" in kwargs and kwargs["return_dict"] is not None)
         ):
             logger.warn(
-                "Cannot update the boolean parameters behavior in graph mode and the return_dict parameter is always True in that mode."
+                "The parameters `output_attentions`, `output_hidden_states` and `use_cache` cannot be updated when calling a model."
+                "They have to be set to True/False in the config object (i.e.: `config=XConfig.from_pretrained('name', output_attentions=True)`)."
             )
 
         final_booleans["output_attentions"] = config.output_attentions
         final_booleans["output_hidden_states"] = config.output_hidden_states
 
         if "return_dict" in kwargs:
+            if kwargs["return_dict"] is not None:
+                logger.warn(
+                    "The parameter `return_dict` cannot be set in graph mode and will always be set to `True`."
+                )
             final_booleans["return_dict"] = True
 
         if "use_cache" in kwargs:
@@ -323,7 +328,6 @@ def input_processing(func, config, input_ids, **kwargs):
     parameter_names = list(signature.keys())
     output = {}
     allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict)
-    boolean_properties = ["return_dict", "output_attentions", "output_hidden_states", "use_cache"]
 
     if "inputs" in kwargs["kwargs_call"]:
         warnings.warn(
@@ -424,7 +428,11 @@ def input_processing(func, config, input_ids, **kwargs):
     if "kwargs" in output:
         del output["kwargs"]
 
-    boolean_dict = {k: v for k, v in output.items() if k in boolean_properties}
+    boolean_dict = {
+        k: v
+        for k, v in output.items()
+        if k in ["return_dict", "output_attentions", "output_hidden_states", "use_cache"]
+    }
 
     output.update(
         booleans_processing(
