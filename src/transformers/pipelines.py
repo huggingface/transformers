@@ -1624,7 +1624,17 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
         elif "data" in kwargs:
             inputs = kwargs["data"]
         elif "question" in kwargs and "context" in kwargs:
-            inputs = [{"question": kwargs["question"], "context": kwargs["context"]}]
+            if isinstance(kwargs["question"], list) and isinstance(kwargs["context"], str):
+                inputs = [{"question": Q, "context": kwargs["context"]} for Q in kwargs["question"]]
+            elif isinstance(kwargs["question"], list) and isinstance(kwargs["context"], list):
+                if len(kwargs["question"]) != len(kwargs["context"]):
+                    raise ValueError("Questions and contexts don't have the same lengths")
+
+                inputs = [{"question": Q, "context": C} for Q, C in zip(kwargs["question"], kwargs["context"])]
+            elif isinstance(kwargs["question"], str) and isinstance(kwargs["context"], str):
+                inputs = [{"question": kwargs["question"], "context": kwargs["context"]}]
+            else:
+                raise ValueError("Arguments can't be understood")
         else:
             raise ValueError("Unknown arguments {}".format(kwargs))
 

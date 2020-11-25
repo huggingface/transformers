@@ -23,6 +23,17 @@ class QAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
             "question": "In what field is HuggingFace working ?",
             "context": "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
         },
+        {
+            "question": ["In what field is HuggingFace working ?", "In what field is HuggingFace working ?"],
+            "context": "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
+        },
+        {
+            "question": ["In what field is HuggingFace working ?", "In what field is HuggingFace working ?"],
+            "context": [
+                "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
+                "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
+            ],
+        },
     ]
 
     def _test_pipeline(self, nlp: Pipeline):
@@ -78,6 +89,11 @@ class QAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
         normalized = qa(question=Q, context=C)
         self.assertEqual(type(normalized), list)
         self.assertEqual(len(normalized), 1)
+        self.assertEqual({type(el) for el in normalized}, {SquadExample})
+
+        normalized = qa(question=[Q, Q], context=C)
+        self.assertEqual(type(normalized), list)
+        self.assertEqual(len(normalized), 2)
         self.assertEqual({type(el) for el in normalized}, {SquadExample})
 
         normalized = qa({"question": Q, "context": C})
@@ -158,6 +174,26 @@ class QAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
             qa([{"question": Q, "context": C}, {"question": Q, "context": None}])
         with self.assertRaises(ValueError):
             qa([{"question": Q, "context": C}, {"question": Q, "context": ""}])
+
+        with self.assertRaises(ValueError):
+            qa(question={"This": "Is weird"}, context="This is a context")
+
+        with self.assertRaises(ValueError):
+            qa(question=[Q, Q], context=[C, C, C])
+
+        with self.assertRaises(ValueError):
+            qa(question=[Q, Q, Q], context=[C, C])
+
+    def test_argument_handler_old_format(self):
+        qa = QuestionAnsweringArgumentHandler()
+
+        Q = "Where was HuggingFace founded ?"
+        C = "HuggingFace was founded in Paris"
+        # Backward compatibility for this
+        normalized = qa(question=[Q, Q], context=[C, C])
+        self.assertEqual(type(normalized), list)
+        self.assertEqual(len(normalized), 2)
+        self.assertEqual({type(el) for el in normalized}, {SquadExample})
 
     def test_argument_handler_error_handling_odd(self):
         qa = QuestionAnsweringArgumentHandler()
