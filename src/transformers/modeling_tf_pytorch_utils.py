@@ -181,7 +181,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, config=None, tf_i
 
         array = pt_state_dict[name].numpy()
 
-        if config.model_type == "convbert":
+        if config.model_type == "conv_bert":
             if name.endswith("depthwise.weight"):
                 array = numpy.transpose(array, axes=(2, 0, 1))
                 transpose = False
@@ -191,16 +191,18 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, config=None, tf_i
                 transpose = False
 
             if name.endswith("conv_attn_key.bias"):
-                array = numpy.squeeze(array, -1)
+                array = numpy.squeeze(array)
                 transpose = False
 
             if config.num_groups > 1:
-                transpose = False
+                if name.endswith("intermediate.dense.weight") or name.endswith("output.dense.weight"):
+                    transpose = False
 
         if transpose:
             array = numpy.transpose(array)
 
-        # if symbolic_weight.shape != array.shape:
+        if symbolic_weight.shape != array.shape:
+            print(symbolic_weight.shape, array.shape)
 
         if len(symbolic_weight.shape) < len(array.shape):
             array = numpy.squeeze(array)

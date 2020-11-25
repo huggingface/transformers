@@ -7,7 +7,7 @@ from .tokenization_conv_bert import ConvBertTokenizer
 
 import tensorflow as tf
 
-model_path = "/home/abhishek/huggingface/models/convbert_models/convbert_medium_small"
+model_path = "/home/abhishek/huggingface/models/convbert_models/convbert_small"
 
 if __name__ == "__main__":
     conf = ConvBertConfig.from_json_file(os.path.join(model_path, "config.json"))
@@ -22,12 +22,12 @@ if __name__ == "__main__":
     tf_model.save_pretrained(model_path)
 
     print(model.dummy_inputs)
-    print(model(**model.dummy_inputs))
+    print(model(**model.dummy_inputs).last_hidden_state)
 
     # tf_model = TFConvBertModel(conf)
 
     print(tf_model.dummy_inputs)
-    print(tf_model(tf_model.dummy_inputs))
+    print(tf_model(tf_model.dummy_inputs).last_hidden_state)
 
     # last_hidden_states = outputs.last_hidden_state
     # print(last_hidden_states)
