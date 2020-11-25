@@ -32,14 +32,10 @@ VOCAB_FILES_NAMES = {
     "merges_file": "merges.txt",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"openai-gpt": "https://huggingface.co/openai-gpt/resolve/main/vocab.json"},
-    "merges_file": {"openai-gpt": "https://huggingface.co/openai-gpt/resolve/main/merges.txt"},
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "openai-gpt": 512,
-}
+OPENAIGPT_PRETRAINED_TOKENIZER_ARCHIVE_LIST = [
+    "openai-gpt",
+    # See all OPENAIGPT models at https://huggingface.co/models?filter=openai-gpt
+]
 
 
 def get_pairs(word):
@@ -92,8 +88,7 @@ class OpenAIGPTTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    max_model_input_sizes = 512
     model_input_names = ["attention_mask"]
 
     def __init__(self, vocab_file, merges_file, unk_token="<unk>", **kwargs):

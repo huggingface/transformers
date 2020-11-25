@@ -234,6 +234,7 @@ WEIGHTS_NAME = "pytorch_model.bin"
 TF2_WEIGHTS_NAME = "tf_model.h5"
 TF_WEIGHTS_NAME = "model.ckpt"
 CONFIG_NAME = "config.json"
+TOKENIZER_CONFIG_NAME = "tokenizer_config.json"
 MODEL_CARD_NAME = "modelcard.json"
 
 SENTENCEPIECE_UNDERLINE = "▁"

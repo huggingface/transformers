@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 
-from transformers import SPIECE_UNDERLINE, BatchEncoding, MBartTokenizer, MBartTokenizerFast, is_torch_available
+from transformers import SPIECE_UNDERLINE, BatchEncoding, MBartTokenizer, MBartTokenizerFast, is_torch_available, MBART_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from transformers.testing_utils import (
     _sentencepiece_available,
     require_sentencepiece,
@@ -26,6 +26,8 @@ RO_CODE = 250020
 @require_sentencepiece
 @require_tokenizers
 class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+
+    pretrained_vocab_checkpoints = MBART_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = MBartTokenizer
     rust_tokenizer_class = MBartTokenizerFast
     test_rust_tokenizer = True

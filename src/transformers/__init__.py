@@ -55,6 +55,7 @@ from .data import (
 # Files and general utilities
 from .file_utils import (
     CONFIG_NAME,
+    TOKENIZER_CONFIG_NAME,
     MODEL_CARD_NAME,
     PYTORCH_PRETRAINED_BERT_CACHE,
     PYTORCH_TRANSFORMERS_CACHE,
@@ -150,9 +151,9 @@ from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, L
 from .models.marian import MarianConfig
 from .models.mbart import MBartConfig
 from .models.mmbt import MMBTConfig
-from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
+from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer, MOBILEBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from .models.mt5 import MT5Config
-from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
+from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer, OPENAIGPT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from .models.pegasus import PegasusConfig
 from .models.phobert import PhobertTokenizer
 from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
@@ -213,8 +214,8 @@ if is_sentencepiece_available():
     from .models.albert import AlbertTokenizer, ALBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.bert_generation import BertGenerationTokenizer, BERT_GENERATION_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.camembert import CamembertTokenizer, CAMEMBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
-    from .models.marian import MarianTokenizer
-    from .models.mbart import MBartTokenizer
+    from .models.marian import MarianTokenizer, MARIAN_PRETRAINED_TOKENIZER_ARCHIVE_LIST
+    from .models.mbart import MBartTokenizer, MBART_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.pegasus import PegasusTokenizer
     from .models.reformer import ReformerTokenizer
     from .models.t5 import T5Tokenizer
@@ -241,9 +242,9 @@ if is_tokenizers_available():
     from .models.layoutlm import LayoutLMTokenizerFast, LAYOUTLM_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.longformer import LongformerTokenizerFast, LONGFORMER_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.lxmert import LxmertTokenizerFast, LXMERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
-    from .models.mbart import MBartTokenizerFast
-    from .models.mobilebert import MobileBertTokenizerFast
-    from .models.openai import OpenAIGPTTokenizerFast
+    from .models.mbart import MBartTokenizerFast, MBART_PRETRAINED_TOKENIZER_ARCHIVE_LIST
+    from .models.mobilebert import MobileBertTokenizerFast, MOBILEBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
+    from .models.openai import OpenAIGPTTokenizerFast, OPENAIGPT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     from .models.pegasus import PegasusTokenizerFast
     from .models.reformer import ReformerTokenizerFast
     from .models.retribert import RetriBertTokenizerFast

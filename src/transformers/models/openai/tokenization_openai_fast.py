@@ -26,15 +26,10 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"openai-gpt": "https://huggingface.co/openai-gpt/resolve/main/vocab.json"},
-    "merges_file": {"openai-gpt": "https://huggingface.co/openai-gpt/resolve/main/merges.txt"},
-    "tokenizer_file": {"openai-gpt": "https://huggingface.co/openai-gpt/resolve/main/tokenizer.json"},
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "openai-gpt": 512,
-}
+OPENAIGPT_PRETRAINED_TOKENIZER_ARCHIVE_LIST = [
+    "openai-gpt",
+    # See all OPENAIGPT models at https://huggingface.co/models?filter=openai-gpt
+]
 
 
 class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
@@ -59,8 +54,7 @@ class OpenAIGPTTokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    max_model_input_sizes = 512
     model_input_names = ["attention_mask"]
     slow_tokenizer_class = OpenAIGPTTokenizer
 

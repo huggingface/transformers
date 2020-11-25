@@ -21,15 +21,10 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"mobilebert-uncased": "https://huggingface.co/google/mobilebert-uncased/resolve/main/vocab.txt"}
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"mobilebert-uncased": 512}
-
-
-PRETRAINED_INIT_CONFIGURATION = {}
-
+MOBILEBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST = [
+    "google/mobilebert-uncased",
+    # See all MOBILEBERT models at https://huggingface.co/models?search=mobilebert
+]
 
 class MobileBertTokenizer(BertTokenizer):
     r"""
@@ -43,6 +38,4 @@ class MobileBertTokenizer(BertTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    max_model_input_sizes = 512

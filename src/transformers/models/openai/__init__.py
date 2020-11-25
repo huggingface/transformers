@@ -4,11 +4,11 @@
 
 from ...file_utils import is_tf_available, is_tokenizers_available, is_torch_available
 from .configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
-from .tokenization_openai import OpenAIGPTTokenizer
+from .tokenization_openai import OpenAIGPTTokenizer, OPENAIGPT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 
 if is_tokenizers_available():
-    from .tokenization_openai_fast import OpenAIGPTTokenizerFast
+    from .tokenization_openai_fast import OpenAIGPTTokenizerFast, OPENAIGPT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 if is_torch_available():
     from .modeling_openai import (

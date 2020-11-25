@@ -7,7 +7,7 @@ from .configuration_marian import MarianConfig
 
 
 if is_sentencepiece_available():
-    from .tokenization_marian import MarianTokenizer
+    from .tokenization_marian import MarianTokenizer, MARIAN_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 if is_torch_available():
     from .modeling_marian import MarianMTModel

@@ -18,7 +18,7 @@ import json
 import os
 import unittest
 
-from transformers import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast
+from transformers import OpenAIGPTTokenizer, OpenAIGPTTokenizerFast, OPENAIGPT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 from transformers.models.openai.tokenization_openai import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
 
@@ -28,6 +28,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 @require_tokenizers
 class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
+    pretrained_vocab_checkpoints = OPENAIGPT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = OpenAIGPTTokenizer
     rust_tokenizer_class = OpenAIGPTTokenizerFast
     test_rust_tokenizer = True

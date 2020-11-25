@@ -20,7 +20,7 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
-from transformers import BatchEncoding, MarianTokenizer
+from transformers import BatchEncoding, MarianTokenizer, MARIAN_PRETRAINED_TOKENIZER_ARCHIVE_LIST, TOKENIZER_CONFIG_NAME
 from transformers.testing_utils import _sentencepiece_available, _torch_available, require_sentencepiece
 
 
@@ -41,6 +41,7 @@ FRAMEWORK = "pt" if _torch_available else "tf"
 @require_sentencepiece
 class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
+    pretrained_vocab_checkpoints = MARIAN_PRETRAINED_TOKENIZER_ARCHIVE_LIST
     tokenizer_class = MarianTokenizer
     test_rust_tokenizer = False
 
@@ -50,7 +51,7 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         save_dir = Path(self.tmpdirname)
         save_json(vocab_tokens, save_dir / vocab_files_names["vocab"])
-        save_json(mock_tokenizer_config, save_dir / vocab_files_names["tokenizer_config_file"])
+        save_json(mock_tokenizer_config, save_dir / TOKENIZER_CONFIG_NAME)
         if not (save_dir / vocab_files_names["source_spm"]).exists():
             copyfile(SAMPLE_SP, save_dir / vocab_files_names["source_spm"])
             copyfile(SAMPLE_SP, save_dir / vocab_files_names["target_spm"])

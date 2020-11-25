@@ -7,10 +7,10 @@ from .configuration_mbart import MBartConfig
 
 
 if is_sentencepiece_available():
-    from .tokenization_mbart import MBartTokenizer
+    from .tokenization_mbart import MBartTokenizer, MBART_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 if is_tokenizers_available():
-    from .tokenization_mbart_fast import MBartTokenizerFast
+    from .tokenization_mbart_fast import MBartTokenizerFast, MBART_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 if is_torch_available():
     from .modeling_mbart import MBartForConditionalGeneration

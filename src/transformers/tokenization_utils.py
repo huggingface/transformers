@@ -21,7 +21,7 @@ import re
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple, Union, overload
 
-from .file_utils import add_end_docstrings
+from .file_utils import add_end_docstrings, TOKENIZER_CONFIG_NAME
 from .tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
@@ -33,7 +33,7 @@ from .tokenization_utils_base import (
     PaddingStrategy,
     PreTokenizedInput,
     PreTokenizedInputPair,
-    PreTrainedTokenizerBase,
+    PreTrainedTokenizerBase, TOKENIZER_CONFIG_FILE,
     TensorType,
     TextInput,
     TextInputPair,
@@ -47,8 +47,7 @@ logger = logging.get_logger(__name__)
 # Slow tokenizers are saved in a vocabulary plus three separated files
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 ADDED_TOKENS_FILE = "added_tokens.json"
-TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
-
+TOKENIZER_CONFIG_FILE = TOKENIZER_CONFIG_NAME  # Backward compatibility
 
 def _is_whitespace(char):
     """Checks whether `char` is a whitespace character."""

@@ -16,22 +16,12 @@ vocab_files_names = {
     "source_spm": "source.spm",
     "target_spm": "target.spm",
     "vocab": "vocab.json",
-    "tokenizer_config_file": "tokenizer_config.json",
 }
 
-PRETRAINED_VOCAB_FILES_MAP = {
-    "source_spm": {"Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/source.spm"},
-    "target_spm": {"Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/target.spm"},
-    "vocab": {"Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/vocab.json"},
-    "tokenizer_config_file": {
-        "Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/tokenizer_config.json"
-    },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"Helsinki-NLP/opus-mt-en-de": 512}
-PRETRAINED_INIT_CONFIGURATION = {}
-
-# Example URL https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/vocab.json
+MARIAN_PRETRAINED_TOKENIZER_ARCHIVE_LIST = [
+    "Helsinki-NLP/opus-mt-en-de",
+    # See all MARIAN models at https://huggingface.co/models?filter=marian
+]
 
 
 class MarianTokenizer(PreTrainedTokenizer):
@@ -76,9 +66,7 @@ class MarianTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = vocab_files_names
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    max_model_input_sizes = 512
     model_input_names = ["attention_mask"]
     language_code_re = re.compile(">>.+<<")  # type: re.Pattern
 

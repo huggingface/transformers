@@ -32,9 +32,11 @@ else:
 
 logger = logging.get_logger(__name__)
 
-_all_mbart_models = ["facebook/mbart-large-en-ro", "facebook/mbart-large-cc25"]
-SPM_URL = "https://huggingface.co/facebook/mbart-large-en-ro/resolve/main/sentence.bpe.model"
-tokenizer_URL = "https://huggingface.co/facebook/mbart-large-en-ro/resolve/main/tokenizer.json"
+MBART_PRETRAINED_TOKENIZER_ARCHIVE_LIST = [
+    "facebook/mbart-large-en-ro",
+    "facebook/mbart-large-cc25"
+    # See all MBART models at https://huggingface.co/models?filter=mbart
+]
 
 FAIRSEQ_LANGUAGE_CODES = [
     "ar_AR",
@@ -94,8 +96,7 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
     """
 
     vocab_files_names = {"vocab_file": "sentencepiece.bpe.model"}
-    max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
-    pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart_models}}
+    max_model_input_sizes = 1024
     slow_tokenizer_class = MBartTokenizer
 
     prefix_tokens: List[int] = []

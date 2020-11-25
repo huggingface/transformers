@@ -4,11 +4,11 @@
 
 from ...file_utils import is_tf_available, is_tokenizers_available, is_torch_available
 from .configuration_mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig
-from .tokenization_mobilebert import MobileBertTokenizer
+from .tokenization_mobilebert import MobileBertTokenizer, MOBILEBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 
 if is_tokenizers_available():
-    from .tokenization_mobilebert_fast import MobileBertTokenizerFast
+    from .tokenization_mobilebert_fast import MobileBertTokenizerFast, MOBILEBERT_PRETRAINED_TOKENIZER_ARCHIVE_LIST
 
 if is_torch_available():
     from .modeling_mobilebert import (
