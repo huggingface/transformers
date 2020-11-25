@@ -2065,21 +2065,8 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.longformer.return_dict
-        outputs = self.longformer(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            global_attention_mask=inputs["global_attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
-            training=inputs["training"],
-        )
         sequence_output = outputs[0]
-        prediction_scores = self.lm_head(sequence_output, training=training)
+        prediction_scores = self.lm_head(sequence_output, training=inputs["training"])
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], prediction_scores)
 
         if not inputs["return_dict"]:

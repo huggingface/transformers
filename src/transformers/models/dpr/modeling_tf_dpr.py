@@ -267,19 +267,6 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
         outputs = self.encoder(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
-            training=inputs["training"],
-        )
-        return_dict = (
-            inputs["return_dict"] if inputs["return_dict"] is not None else self.encoder.bert_model.return_dict
-        )
-        outputs = self.encoder(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],

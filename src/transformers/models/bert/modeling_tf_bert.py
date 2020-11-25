@@ -952,19 +952,6 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
-        outputs = self.bert(
-            inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
-            training=inputs["training"],
-        )
         sequence_output, pooled_output = outputs[:2]
         prediction_scores = self.mlm(sequence_output, training=inputs["training"])
         seq_relationship_score = self.nsp(pooled_output)
@@ -1235,7 +1222,6 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1246,19 +1232,6 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
-            training=inputs["training"],
-        )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
-        outputs = self.bert(
-            inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
             training=inputs["training"],
         )
         pooled_output = outputs[1]
@@ -1573,19 +1546,6 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
-        outputs = self.bert(
-            inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
-            training=inputs["training"],
-        )
         sequence_output = outputs[0]
         sequence_output = self.dropout(sequence_output, training=inputs["training"])
         logits = self.classifier(sequence_output)
@@ -1684,19 +1644,6 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
-            training=inputs["training"],
-        )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
-        outputs = self.bert(
-            inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
             training=inputs["training"],
         )
         sequence_output = outputs[0]

@@ -1170,19 +1170,6 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
-        outputs = self.mobilebert(
-            inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
-            training=inputs["training"],
-        )
 
         sequence_output = outputs[0]
         prediction_scores = self.mlm(sequence_output, training=inputs["training"])
@@ -1284,20 +1271,6 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
-        outputs = self.mobilebert(
-            inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
-            training=inputs["training"],
-        )
-
         pooled_output = outputs[1]
         seq_relationship_scores = self.cls(pooled_output)
 
@@ -1393,23 +1366,9 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
-        outputs = self.mobilebert(
-            inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
-            training=inputs["training"],
-        )
-
         pooled_output = outputs[1]
 
-        pooled_output = self.dropout(pooled_output, training=training)
+        pooled_output = self.dropout(pooled_output, training=inputs["training"])
         logits = self.classifier(pooled_output)
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
@@ -1508,20 +1467,6 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
-        outputs = self.mobilebert(
-            inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
-            training=inputs["training"],
-        )
-
         sequence_output = outputs[0]
 
         logits = self.qa_outputs(sequence_output)
@@ -1657,7 +1602,7 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
             training=inputs["training"],
         )
         pooled_output = outputs[1]
-        pooled_output = self.dropout(pooled_output, training=training)
+        pooled_output = self.dropout(pooled_output, training=inputs["training"])
         logits = self.classifier(pooled_output)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
 
@@ -1751,23 +1696,10 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
             return_dict=return_dict,
             training=inputs["training"],
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
-        outputs = self.mobilebert(
-            inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
-            training=inputs["training"],
-        )
 
         sequence_output = outputs[0]
 
-        sequence_output = self.dropout(sequence_output, training=training)
+        sequence_output = self.dropout(sequence_output, training=inputs["training"])
         logits = self.classifier(sequence_output)
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)

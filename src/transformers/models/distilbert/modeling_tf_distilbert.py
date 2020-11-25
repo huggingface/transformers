@@ -886,23 +886,9 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
-        outputs = self.distilbert(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
-            training=inputs["training"],
-        )
-
         sequence_output = outputs[0]
-
         sequence_output = self.dropout(sequence_output, training=inputs["training"])
         logits = self.classifier(sequence_output)
-
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
         if not inputs["return_dict"]:
@@ -1114,18 +1100,6 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
-        distilbert_output = self.distilbert(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
-            training=inputs["training"],
-        )
-
         hidden_states = distilbert_output[0]  # (bs, max_query_len, dim)
         hidden_states = self.dropout(hidden_states, training=inputs["training"])  # (bs, max_query_len, dim)
         logits = self.qa_outputs(hidden_states)  # (bs, max_query_len, 2)
