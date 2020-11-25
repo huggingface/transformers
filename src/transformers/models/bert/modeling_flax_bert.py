@@ -298,7 +298,7 @@ class FlaxBertModule(nn.Module):
         )(embeddings, attention_mask)
 
         pooled = FlaxBertPooler(name="pooler")(encoder)
-        return pooled, encoder
+        return encoder, pooled
 
 
 @add_start_docstrings(
@@ -507,7 +507,7 @@ class FlaxBertForMaskedLM(FlaxBertModel):
             jnp.array(position_ids, dtype="i4"),
         )
 
-        return pooled, logits
+        return logits, pooled
 
     def init_head(self, rng):
         fake_input_ids = jnp.ones((1, 10), dtype='i4')
