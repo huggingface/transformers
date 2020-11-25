@@ -54,7 +54,7 @@ The documentation is organized in five parts:
     - **MODELS** for the classes and functions related to each model implemented in the library.
     - **INTERNAL HELPERS** for the classes and functions we use internally.
 
-The library currently contains PyTorch, Tensorflow and sometimes Flax implementations, pretrained model weights, usage
+The library currently contains PyTorch, Tensorflow and Flax implementations, pretrained model weights, usage
 scripts and conversion utilities for the following models:
 
 ..
