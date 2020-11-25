@@ -98,6 +98,7 @@ from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
 from .models.auto import (
     ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     CONFIG_MAPPING,
+    MODEL_NAMES_MAPPING,
     TOKENIZER_MAPPING,
     AutoConfig,
     AutoTokenizer,
@@ -876,6 +877,7 @@ else:
 
 
 if is_flax_available():
+    from .models.auto import FLAX_MODEL_MAPPING, FlaxAutoModel
     from .models.bert import FlaxBertModel
     from .models.roberta import FlaxRobertaModel
 else:
