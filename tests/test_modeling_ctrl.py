@@ -29,9 +29,9 @@ if is_torch_available():
     from transformers import (
         CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
         CTRLConfig,
+        CTRLForSequenceClassification,
         CTRLLMHeadModel,
         CTRLModel,
-        CTRLForSequenceClassification
     )
 
 
@@ -154,11 +154,10 @@ class CTRLModelTester:
         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "head_mask": head_mask}
 
         return config, inputs_dict
-    
-    def create_and_check_ctrl_for_sequence_classification(
-        self, config, input_ids, head_mask, token_type_ids, *args
-    ):
+
+    def create_and_check_ctrl_for_sequence_classification(self, config, input_ids, head_mask, token_type_ids, *args):
         pass
+
     #     config.num_labels = self.num_labels
     #     model = OpenAIGPTForSequenceClassification(config)
     #     model.to(torch_device)

@@ -18,10 +18,10 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutput
 from ...modeling_utils import Conv1D, PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_ctrl import CTRLConfig
@@ -581,7 +581,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         self.classifier = nn.Linear(config.n_embd, self.num_labels, bias=False)
 
         self.init_weights()
-    
+
     def forward(
         self,
         input_ids=None,
@@ -617,4 +617,47 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         hidden_states = transformer_outputs[0]
         logits = self.classifier(hidden_states)
 
-        print(logits)
+        if input_ids is not None:
+            batch_size, sequence_length = input_ids.shape[:2]
+        else:
+            batch_size, sequence_length = inputs_embeds.shape[:2]
+
+        # TODO: it is not working right now, i think we should set config.pad_token_id=1 not None
+        # assert (
+        #     self.config.pad_token_id is not None or batch_size == 1
+        # ), "Cannot handle batch sizes > 1 if no padding token is defined."
+
+        if self.config.pad_token_id is None:
+            sequence_lengths = -1
+        else:
+            if input_ids is not None:
+                sequence_lengths = torch.ne(input_ids, self.config.pad_token_id).sum(-1) - 1
+            else:
+                sequence_lengths = -1
+                logger.warning(
+                    f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                    f"unexpected if using padding tokens in conjuction with `inputs_embeds.`"
+                )
+
+        pooled_logits = logits[range(batch_size), sequence_lengths]
+
+        loss = None
+        if labels is not None:
+            if self.num_labels == 1:
+                #  We are doing regression
+                loss_fct = MSELoss()
+                loss = loss_fct(pooled_logits.view(-1), labels.to(self.dtype).view(-1))
+            else:
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (pooled_logits,) + transformer_outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=pooled_logits,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )

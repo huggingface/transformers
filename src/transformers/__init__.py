@@ -391,10 +391,10 @@ if is_torch_available():
     )
     from .models.ctrl import (
         CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        CTRLForSequenceClassification,
         CTRLLMHeadModel,
         CTRLModel,
         CTRLPreTrainedModel,
-        CTRLForSequenceClassification
     )
     from .models.deberta import (
         DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
