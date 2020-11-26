@@ -17,15 +17,7 @@ else:
     absl.logging.set_stderrthreshold("info")
     absl.logging._warn_preinit_stderr = False
 
-# Integrations: this needs to come before other ml imports
-# in order to allow any 3rd-party code to initialize properly
-from .integrations import (  # isort:skip
-    is_comet_available,
-    is_optuna_available,
-    is_ray_available,
-    is_tensorboard_available,
-    is_wandb_available,
-)
+from . import dependency_versions_check
 
 # Configuration
 from .configuration_utils import PretrainedConfig
@@ -99,6 +91,7 @@ from .models.conv_bert import CONV_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertC
 from .models.auto import (
     ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     CONFIG_MAPPING,
+    MODEL_NAMES_MAPPING,
     TOKENIZER_MAPPING,
     AutoConfig,
     AutoTokenizer,
@@ -204,6 +197,17 @@ from .tokenization_utils_base import (
 )
 
 
+# Integrations: this needs to come before other ml imports
+# in order to allow any 3rd-party code to initialize properly
+from .integrations import (  # isort:skip
+    is_comet_available,
+    is_optuna_available,
+    is_ray_available,
+    is_tensorboard_available,
+    is_wandb_available,
+)
+
+
 if is_sentencepiece_available():
     from .models.albert import AlbertTokenizer
     from .models.bert_generation import BertGenerationTokenizer
@@ -254,6 +258,7 @@ else:
 # Trainer
 from .trainer_callback import (
     DefaultFlowCallback,
+    EarlyStoppingCallback,
     PrinterCallback,
     ProgressCallback,
     TrainerCallback,
@@ -889,6 +894,7 @@ else:
 
 
 if is_flax_available():
+    from .models.auto import FLAX_MODEL_MAPPING, FlaxAutoModel
     from .models.bert import FlaxBertModel
     from .models.roberta import FlaxRobertaModel
 else:

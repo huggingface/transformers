@@ -135,17 +135,17 @@ class ModelTesterMixin:
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    def test_save_load_keys_to_never_save(self):
+    def test_save_load__keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            keys_to_never_save = getattr(model, "keys_to_never_save", None)
-            if keys_to_never_save is None:
+            _keys_to_ignore_on_save = getattr(model, "_keys_to_ignore_on_save", None)
+            if _keys_to_ignore_on_save is None:
                 continue
 
             # check the keys are in the original state_dict
-            for k in keys_to_never_save:
+            for k in _keys_to_ignore_on_save:
                 self.assertIn(k, model.state_dict())
 
             # check that certain keys didn't get saved with the model
@@ -153,7 +153,7 @@ class ModelTesterMixin:
                 model.save_pretrained(tmpdirname)
                 output_model_file = os.path.join(tmpdirname, WEIGHTS_NAME)
                 state_dict_saved = torch.load(output_model_file)
-                for k in keys_to_never_save:
+                for k in _keys_to_ignore_on_save:
                     self.assertNotIn(k, state_dict_saved)
 
     def test_initialization(self):
@@ -688,6 +688,56 @@ class ModelTesterMixin:
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_retain_grad_hidden_states_attentions(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+        output = outputs[0]
+
+        if config.is_encoder_decoder:
+            # Seq2Seq models
+            encoder_hidden_states = outputs.encoder_hidden_states[0]
+            encoder_attentions = outputs.encoder_attentions[0]
+            encoder_hidden_states.retain_grad()
+            encoder_attentions.retain_grad()
+
+            decoder_hidden_states = outputs.decoder_hidden_states[0]
+            decoder_attentions = outputs.decoder_attentions[0]
+            decoder_hidden_states.retain_grad()
+            decoder_attentions.retain_grad()
+
+            cross_attentions = outputs.cross_attentions[0]
+            cross_attentions.retain_grad()
+
+            output.flatten()[0].backward(retain_graph=True)
+
+            self.assertIsNotNone(encoder_hidden_states.grad)
+            self.assertIsNotNone(encoder_attentions.grad)
+            self.assertIsNotNone(decoder_hidden_states.grad)
+            self.assertIsNotNone(decoder_attentions.grad)
+            self.assertIsNotNone(cross_attentions.grad)
+        else:
+            # Encoder-/Decoder-only models
+            hidden_states = outputs.hidden_states[0]
+            attentions = outputs.attentions[0]
+
+            hidden_states.retain_grad()
+            attentions.retain_grad()
+
+            output.flatten()[0].backward(retain_graph=True)
+
+            self.assertIsNotNone(hidden_states.grad)
+            self.assertIsNotNone(attentions.grad)
 
     def test_feed_forward_chunking(self):
         (

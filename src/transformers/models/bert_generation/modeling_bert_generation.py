@@ -173,7 +173,7 @@ class BertGenerationPreTrainedModel(PreTrainedModel):
 
     config_class = BertGenerationConfig
     base_model_prefix = "bert"
-    authorized_missing_keys = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """
