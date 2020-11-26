@@ -28,8 +28,9 @@ from transformers.testing_utils import require_torch_non_multi_gpu_but_fix_me
 sys.path.append(os.path.join(os.getcwd()))  # noqa: E402 # noqa: E402 # isort:skip
 
 from distributed_pytorch_retriever import RagPyTorchDistributedRetriever  # noqa: E402 # isort:skip
-import ray
-from distributed_ray_retriever import RagRayDistributedRetriever, RayRetriever
+
+import ray # noqa: E402 # isort:skip
+from distributed_ray_retriever import RagRayDistributedRetriever, RayRetriever # noqa: E402 # isort:skip
 
 
 def require_distributed_retrieval(test_case):
