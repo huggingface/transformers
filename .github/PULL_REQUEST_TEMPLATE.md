@@ -58,5 +58,5 @@ members/contributors which may be interested in your PR.
  tensorflow: @jplu
  examples/token-classification: @stefan-it
  documentation: @sgugger
- FSTM: @stas00
+ FSMT: @stas00
  -->
