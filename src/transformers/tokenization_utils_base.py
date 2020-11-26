@@ -2866,7 +2866,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 encoded_inputs["special_tokens_mask"] = [0] * len(sequence)
 
         # Check lengths
-        self.eventual_warn_about_too_long_sequence(encoded_inputs["input_ids"], max_length, verbose)
+        self._eventual_warn_about_too_long_sequence(encoded_inputs["input_ids"], max_length, verbose)
 
         # Padding
         if padding_strategy != PaddingStrategy.DO_NOT_PAD or return_attention_mask:
@@ -3176,13 +3176,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     @staticmethod
     def clean_up_tokenization(out_string: str) -> str:
         """
-        Clean up a list of simple English tokenization artifacts like spaces before punctuations and abbreviated forms.
+        clean up a list of simple english tokenization artifacts like spaces before punctuations and abbreviated forms.
 
-        Args:
-            out_string (:obj:`str`): The text to clean up.
+        args: out_string (:obj:`str`): the text to clean up.
 
-        Returns:
-            :obj:`str`: The cleaned-up string.
+        returns: :obj:`str`: the cleaned-up string.
         """
         out_string = (
             out_string.replace(" .", ".")
@@ -3198,7 +3196,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         )
         return out_string
 
-    def eventual_warn_about_too_long_sequence(self, ids: List[int], max_length: Optional[int], verbose: bool):
+    def _eventual_warn_about_too_long_sequence(self, ids: List[int], max_length: Optional[int], verbose: bool):
+        """
+        Depending on the input and internal state we might trigger a warning about a sequence that is too long for it's
+        corresponding model
+
+        Args:
+            ids (:obj:`List[str]`): The ids produced by the tokenization
+            max_length (:obj:`int`, `optional`): The max_length desired (does not trigger a warning if it is set)
+            verbose (:obj:`bool`): Whether or not to print more information and warnings.
+
+        """
         if max_length is None and len(ids) > self.model_max_length and verbose:
             if not self.deprecation_warnings.get("sequence-length-is-longer-than-the-specified-maximum", False):
                 logger.warning(

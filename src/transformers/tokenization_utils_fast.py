@@ -419,7 +419,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             sanitized_tokens["overflow_to_sample_mapping"] = overflow_to_sample_mapping
 
         for input_ids in sanitized_tokens["input_ids"]:
-            self.eventual_warn_about_too_long_sequence(input_ids, max_length, verbose)
+            self._eventual_warn_about_too_long_sequence(input_ids, max_length, verbose)
         return BatchEncoding(sanitized_tokens, sanitized_encodings, tensor_type=return_tensors)
 
     def _encode_plus(
@@ -476,7 +476,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
                 batched_output.encodings,
             )
 
-        self.eventual_warn_about_too_long_sequence(batched_output["input_ids"], max_length, verbose)
+        self._eventual_warn_about_too_long_sequence(batched_output["input_ids"], max_length, verbose)
 
         return batched_output
 
