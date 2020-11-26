@@ -13,9 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Dict
+from typing import Callable, Dict, Union
 
-import numpy as np
+import numpy as onp
 
 import flax.linen as nn
 import jax
@@ -25,6 +25,8 @@ from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_fo
 from ...modeling_flax_utils import FlaxPreTrainedModel, gelu
 from ...utils import logging
 from .configuration_bert import BertConfig
+
+NDArray = Union[onp.ndarray, jnp.ndarray]
 
 
 logger = logging.get_logger(__name__)
@@ -138,7 +140,7 @@ class FlaxBertEmbedding(nn.Module):
 
     vocab_size: int
     hidden_size: int
-    emb_init: Callable[..., np.ndarray] = nn.initializers.normal(stddev=0.1)
+    emb_init: Callable[..., NDArray] = nn.initializers.normal(stddev=0.1)
 
     @nn.compact
     def __call__(self, inputs):
