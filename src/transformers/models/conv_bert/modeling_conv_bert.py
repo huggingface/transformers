@@ -92,11 +92,11 @@ def load_tf_weights_in_conv_bert(model, config, tf_checkpoint_path):
         result = retriever(model)
         tf_name = param_mapping[param_name]
         value = torch.from_numpy(tf_data[tf_name])
+        # print(param_name, tf_name)
         if tf_name.endswith("/kernel"):
-            if tf_name.endswith("/intermediate/g_dense/kernel") or tf_name.endswith("/output/g_dense/kernel"):
-                value = value
-            else:
-                value = value.T
+            if not tf_name.endswith("/intermediate/g_dense/kernel"):
+                if not tf_name.endswith("/output/g_dense/kernel"):
+                    value = value.T
         if tf_name.endswith("/depthwise_kernel"):
             value = value.permute(1, 2, 0)  # 2, 0, 1
         if tf_name.endswith("/pointwise_kernel"):
@@ -106,6 +106,7 @@ def load_tf_weights_in_conv_bert(model, config, tf_checkpoint_path):
         if value.shape != result.data.shape:
             print(param_name, tf_name, result.data.shape, value.shape)
         result.data = value
+        # print(p)
     return model
 
 
@@ -844,7 +845,7 @@ class ConvBertClassificationHead(nn.Module):
         x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
         x = self.dropout(x)
         x = self.dense(x)
-        x = get_activation("gelu")(x)  # although BERT uses tanh here, it seems ConvBert authors used gelu here
+        x = get_activation("gelu")(x)  # although BERT uses tanh here, it seems ELECTRA authors used gelu here
         x = self.dropout(x)
         x = self.out_proj(x)
         return x

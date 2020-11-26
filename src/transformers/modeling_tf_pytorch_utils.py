@@ -182,6 +182,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, config=None, tf_i
         array = pt_state_dict[name].numpy()
 
         if config.model_type == "conv_bert":
+            print("here", name)
             if name.endswith("depthwise.weight"):
                 array = numpy.transpose(array, axes=(2, 0, 1))
                 transpose = False
@@ -200,9 +201,6 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, config=None, tf_i
 
         if transpose:
             array = numpy.transpose(array)
-
-        if symbolic_weight.shape != array.shape:
-            print(symbolic_weight.shape, array.shape)
 
         if len(symbolic_weight.shape) < len(array.shape):
             array = numpy.squeeze(array)
