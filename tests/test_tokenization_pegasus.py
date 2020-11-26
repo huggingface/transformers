@@ -30,8 +30,7 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return PegasusTokenizer.from_pretrained("google/pegasus-large")
 
     def get_tokenizer(self, **kwargs) -> PegasusTokenizer:
-        tok = PegasusTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-        return tok
+        return PegasusTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_input_output_texts(self, tokenizer):
         return ("This is a test", "This is a test")
