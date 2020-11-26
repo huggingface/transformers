@@ -890,8 +890,11 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
         self.nsp = TFBertNSPHead(config, name="nsp___cls")
         self.mlm = TFBertMLMHead(config, self.bert.embeddings, name="mlm___cls")
 
-    def get_bias(self):
+    def get_output_layer_with_bias(self):
         return self.mlm.predictions
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -999,8 +1002,11 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         self.bert = TFBertMainLayer(config, add_pooling_layer=False, name="bert")
         self.mlm = TFBertMLMHead(config, self.bert.embeddings, name="mlm___cls")
 
-    def get_bias(self):
+    def get_output_layer_with_bias(self):
         return self.mlm.predictions
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

@@ -1052,14 +1052,17 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
     def resize_token_embeddings(self, new_num_tokens):
         super().resize_token_embeddings(new_num_tokens=new_num_tokens)
 
+        # BART is a special case where the bias has two dimensions
+        # and not named just `bias`
         if new_num_tokens is not None:
+            name = self.name + "/final_logits_bias"
             num_tokens_to_copy = min(self.final_logits_bias.shape[0], new_num_tokens)
             init_bias = self.final_logits_bias.value()[:num_tokens_to_copy]
             self.final_logits_bias = self.add_weight(
                 shape=(1, new_num_tokens),
                 initializer="zeros",
                 trainable=False,
-                name=self.final_logits_bias.name.split(":")[0],
+                name=name,
             )
             self.final_logits_bias.assign(init_bias)
 

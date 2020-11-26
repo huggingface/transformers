@@ -742,9 +742,6 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             config, initializer_range=config.initializer_range, name="multiple_choice_head"
         )
 
-    def get_output_embeddings(self):
-        return self.transformer.wte
-
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFGPT2DoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
