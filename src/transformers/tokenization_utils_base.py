@@ -1868,7 +1868,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         # If there is a complementary special token map, load it
         special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
-
         if special_tokens_map_file is not None:
             with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
                 special_tokens_map = json.load(special_tokens_map_handle)
