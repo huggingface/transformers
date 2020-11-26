@@ -610,10 +610,10 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
             kwargs_call=kwargs,
         )
 
-        if training:
-            use_mems = use_mems if use_mems is not None else self.use_mems_train
+        if training and inputs["use_mems"] is None:
+            inputs["use_mems"] = self.use_mems_train
         else:
-            use_mems = use_mems if use_mems is not None else self.use_mems_eval
+            inputs["use_mems"] = self.use_mems_eval
 
         # the original code for XLNet uses shapes [len, bsz] with the batch dimension at the end
         # but we want a unified interface in the library with the batch size on the first dimension
@@ -750,7 +750,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         hidden_states = [] if inputs["output_hidden_states"] else None
         for i, layer_module in enumerate(self.layer):
             # cache new mems
-            if use_mems:
+            if inputs["use_mems"]:
                 new_mems = new_mems + (self.cache_mem(output_h, inputs["mems"][i]),)
             if inputs["output_hidden_states"]:
                 hidden_states.append((output_h, output_g) if output_g is not None else output_h)
@@ -781,11 +781,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         # Prepare outputs, we transpose back here to shape [bsz, len, hidden_dim] (cf. beginning of forward() method)
         output = tf.transpose(output, perm=(1, 0, 2))
 
-<<<<<<< HEAD
-        if not use_mems:
-=======
-        if not (self.mem_len is not None and self.mem_len > 0 and inputs["use_cache"]):
->>>>>>> 18a78e522... Add boolean processing for the inputs
+        if not inputs["use_mems"]:
             new_mems = None
         if inputs["output_hidden_states"]:
             if output_g is not None:
@@ -1352,6 +1348,23 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
+        transformer_outputs = self.transformer(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            mems=inputs["mems"],
+            perm_mask=inputs["perm_mask"],
+            target_mapping=inputs["target_mapping"],
+            token_type_ids=inputs["token_type_ids"],
+            input_mask=inputs["input_mask"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            use_cache=inputs["use_cache"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
+        )
         hidden_state = transformer_outputs[0]
         logits = self.lm_loss(hidden_state, training=inputs["training"])
 
@@ -1707,6 +1720,24 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
+        transformer_outputs = self.transformer(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            mems=inputs["mems"],
+            perm_mask=inputs["perm_mask"],
+            target_mapping=inputs["target_mapping"],
+            token_type_ids=inputs["token_type_ids"],
+            input_mask=inputs["input_mask"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            use_cache=inputs["use_cache"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
+        )
+
         output = transformer_outputs[0]
         logits = self.classifier(output)
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
@@ -1813,6 +1844,24 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
+        transformer_outputs = self.transformer(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            mems=inputs["mems"],
+            perm_mask=inputs["perm_mask"],
+            target_mapping=inputs["target_mapping"],
+            token_type_ids=inputs["token_type_ids"],
+            input_mask=inputs["input_mask"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            use_cache=inputs["use_cache"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
+        )
+
         sequence_output = transformer_outputs[0]
 
         logits = self.qa_outputs(sequence_output)
