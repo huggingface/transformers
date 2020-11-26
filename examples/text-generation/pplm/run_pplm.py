@@ -515,10 +515,9 @@ def generate_text_pplm(
                 pert_past = past
 
         lm_output = model(last, past_key_values=pert_past)
-        pert_logits, past, pert_all_hidden = (
+        pert_logits, past = (
             lm_output["logits"],
             lm_output["past_key_values"],
-            lm_output["hidden_states"],
         )
         pert_logits = pert_logits[:, -1, :] / temperature  # + SMALL_CONST
 
