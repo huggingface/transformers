@@ -808,8 +808,14 @@ class Trainer:
             logger.info(
                 f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric})."
             )
+            is_data_parallel = True
+            if isinstance(model, torch.nn.DataParallel):
+                model = model.module
             if isinstance(model, PreTrainedModel):
                 self.model = model.from_pretrained(self.state.best_model_checkpoint)
+                if is_data_parallel:
+                    # re-wrap with DataParallel
+                    self.model = torch.nn.DataParallel(self.model)
                 if not self.args.model_parallel:
                     self.model = self.model.to(self.args.device)
             else:
