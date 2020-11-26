@@ -54,6 +54,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = PegasusTokenizer
+    model_input_names = ["attention_mask"]
 
     def __init__(
         self,
@@ -100,7 +101,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         if special_tokens:
             # IMPORTANT:
             # TODO(Thom, Patrick) -> huge hack to make PegasusFastTokenizer tests pass
-            # needs correction at this point
+            # This whole function should be deleted once PegasusFastTokenizer includes special tokens
             tokens_to_add = list(
                 filter(lambda x: isinstance(x, AddedToken) or ("unk_token" not in x and "mask" not in x), new_tokens)
             )
