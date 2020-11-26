@@ -103,13 +103,12 @@ class PegasusTokenizer(PreTrainedTokenizer):
             assert isinstance(
                 additional_special_tokens, list
             ), f"additional_special_tokens should be of type {type(list)}, but is {type(additional_special_tokens)}"
-            assert (
-                len(additional_special_tokens) <= self.offset - 2
-            ), f"len(additional_special_tokens) should be smaller or equal to (self.offset - number of mask tokens) = {self.offset - 2}"
 
-            additional_special_tokens = [mask_token_sent] + additional_special_tokens
+            if mask_token_sent not in additional_special_tokens:
+                additional_special_tokens = [mask_token_sent] + additional_special_tokens
+            # fill additional tokens with ..., <unk_token_102> in case not all additional tokens are already taken
             additional_special_tokens += [
-                f"<unk_token_{i}>" for i in range(2, self.offset - len(additional_special_tokens))
+                f"<unk_token_{i}>" for i in range(2, min(self.offset - len(additional_special_tokens), 2))
             ]
         else:
             additional_special_tokens = [mask_token_sent]
@@ -127,6 +126,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
         self.vocab_file = vocab_file
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(vocab_file)
+        self.mask_token_sent = mask_token_sent
 
         # add special tokens to encoder dict
         self.encoder: Dict[int, str] = {
@@ -137,7 +137,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
         }
         # entries 2-104 are only used for pretraining and called <mask_1>, <mask_2>, unk_2, ...unk_102
         # mask_token_sent is already added to list -> so start at 1
-        self.encoder.update({i + 3: additional_special_tokens[i] for i in range(1, self.offset)})
+        self.encoder.update({i + 3: additional_special_tokens[i] for i in range(1, self.offset - 1)})
         self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
 
     @property

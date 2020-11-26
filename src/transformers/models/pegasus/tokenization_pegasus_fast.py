@@ -111,13 +111,12 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             assert isinstance(
                 additional_special_tokens, list
             ), f"additional_special_tokens should be of type {type(list)}, but is {type(additional_special_tokens)}"
-            assert (
-                len(additional_special_tokens) <= self.offset - 2
-            ), f"len(additional_special_tokens) should be smaller or equal to (self.offset - number of mask tokens) = {self.offset - 2}"
 
-            additional_special_tokens = [mask_token_sent] + additional_special_tokens
+            if mask_token_sent not in additional_special_tokens:
+                additional_special_tokens = [mask_token_sent] + additional_special_tokens
+            # fill additional tokens with ..., <unk_token_102> in case not all additional tokens are already taken
             additional_special_tokens += [
-                f"<unk_token_{i}>" for i in range(2, self.offset - len(additional_special_tokens))
+                f"<unk_token_{i}>" for i in range(2, min(self.offset - len(additional_special_tokens), 2))
             ]
         else:
             additional_special_tokens = [mask_token_sent]

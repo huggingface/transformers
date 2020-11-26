@@ -48,7 +48,7 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self._large_tokenizer
         # <mask_1> masks whole sentence while <mask_2> masks single word
         raw_input_str = "<mask_1> To ensure a <mask_2> flow of bank resolutions."
-        desired_result = [3, 413, 615, 114, 2, 1971, 113, 1679, 10710, 107, 1]
+        desired_result = [2, 413, 615, 114, 3, 1971, 113, 1679, 10710, 107, 1]
         ids = tokenizer([raw_input_str], return_tensors=None).input_ids[0]
         self.assertListEqual(desired_result, ids)
 
@@ -66,7 +66,7 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         desired_result = [413, 615, 114, 2291, 1971, 113, 1679, 10710, 107, 1]
         ids = tokenizer([raw_input_str], return_tensors=None).input_ids[0]
         self.assertListEqual(desired_result, ids)
-        assert tokenizer.convert_ids_to_tokens([0, 1, 2, 3]) == ["<pad>", "</s>", "<mask_2>", "<mask_1>"]
+        assert tokenizer.convert_ids_to_tokens([0, 1, 2, 3]) == ["<pad>", "</s>", "<mask_1>", "<mask_2>"]
 
     @require_torch
     def test_large_seq2seq_truncation(self):
