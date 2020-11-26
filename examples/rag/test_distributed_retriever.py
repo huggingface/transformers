@@ -180,6 +180,7 @@ class RagRetrieverTest(TestCase):
             )
             if init_retrieval:
                 retriever.init_retrieval()
+        ray.shutdown()
         return retriever
 
     def get_dummy_custom_hf_index_pytorch_retriever(self, init_retrieval: bool, from_disk: bool, port=12345):
@@ -255,6 +256,7 @@ class RagRetrieverTest(TestCase):
             )
         if init_retrieval:
             retriever.init_retrieval()
+        ray.shutdown()
         return retriever
 
     @require_torch_non_multi_gpu_but_fix_me
