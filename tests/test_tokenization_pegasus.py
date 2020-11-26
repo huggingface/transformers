@@ -16,7 +16,7 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = PegasusTokenizer
     rust_tokenizer_class = PegasusTokenizerFast
-    test_rust_tokenizer = True
+    test_rust_tokenizer = False
 
     def setUp(self):
         super().setUp()
@@ -56,7 +56,7 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         desired_result = [413, 615, 114, 2291, 1971, 113, 1679, 10710, 107, 1]
         ids = tokenizer([raw_input_str], return_tensors=None).input_ids[0]
         self.assertListEqual(desired_result, ids)
-        assert tokenizer.convert_ids_to_tokens([0, 1, 2]) == ["<pad>", "</s>", "unk_2"]
+        assert tokenizer.convert_ids_to_tokens([0, 1, 2]) == ["<pad>", "</s>", "<mask_2>"]
 
     @require_torch
     def test_pegasus_large_seq2seq_truncation(self):
