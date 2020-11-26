@@ -170,8 +170,7 @@ class RagRetrieverTest(TestCase):
         )
         remote_cls = ray.remote(RayRetriever)
         workers = [remote_cls.remote() for _ in range(1)]
-        with patch("transformers.models.rag.retrieval_rag.load_dataset") as \
-                mock_load_dataset:
+        with patch("transformers.models.rag.retrieval_rag.load_dataset") as mock_load_dataset:
             mock_load_dataset.return_value = self.get_dummy_dataset()
             retriever = RagRayDistributedRetriever(
                 config,
