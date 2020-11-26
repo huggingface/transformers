@@ -47,8 +47,15 @@ try:
     import ray  # noqa: F401
 
     _has_ray = True
+    try:
+        # Ray Tune has additional dependencies.
+        from ray import tune # noqa: F401
+        _has_ray_tune = True
+    except (ImportError):
+        _has_ray_tune = False
 except (ImportError):
     _has_ray = False
+    _has_ray_tune = False
 
 try:
     from torch.utils.tensorboard import SummaryWriter  # noqa: F401
@@ -102,6 +109,9 @@ def is_optuna_available():
 
 def is_ray_available():
     return _has_ray
+
+def is_ray_tune_available():
+    return _has_ray_tune
 
 
 def is_azureml_available():
