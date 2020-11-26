@@ -612,9 +612,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         else:
             raise NotImplementedError
 
-    def get_bias(self) -> Union[None, tf.keras.layers.Layer]:
+    def get_output_layer_with_bias(self) -> Union[None, tf.keras.layers.Layer]:
         """
-        Get the layer that handles a bias attribute in case the model has an LM head.
+        Get the layer that handles a bias attribute in case the model has an LM head with weights tied to the
+        embeddings.
 
         Return:
             :obj:`tf.keras.layers.Layer`: The layer that handles the bias, None if not an LM model.
