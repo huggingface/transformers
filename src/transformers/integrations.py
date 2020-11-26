@@ -49,7 +49,8 @@ try:
     _has_ray = True
     try:
         # Ray Tune has additional dependencies.
-        from ray import tune # noqa: F401
+        from ray import tune  # noqa: F401
+
         _has_ray_tune = True
     except (ImportError):
         _has_ray_tune = False
@@ -109,6 +110,7 @@ def is_optuna_available():
 
 def is_ray_available():
     return _has_ray
+
 
 def is_ray_tune_available():
     return _has_ray_tune

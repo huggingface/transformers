@@ -203,7 +203,7 @@ except ImportError:
     _tokenizers_available = False
 
 try:
-    import ray # noqa: F401
+    import ray  # noqa: F401
 
     _ray_available = True
 
@@ -317,6 +317,7 @@ def is_tokenizers_available():
 
 def is_in_notebook():
     return _in_notebook
+
 
 def is_ray_available():
     return _ray_available

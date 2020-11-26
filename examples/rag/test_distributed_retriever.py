@@ -12,18 +12,24 @@ from datasets import Dataset
 
 import faiss
 from transformers import BartConfig, BartTokenizer, DPRConfig, DPRQuestionEncoderTokenizer, RagConfig
-from transformers.file_utils import is_datasets_available, \
-    is_faiss_available, is_psutil_available, is_torch_available, is_ray_available
+from transformers.file_utils import (
+    is_datasets_available,
+    is_faiss_available,
+    is_psutil_available,
+    is_ray_available,
+    is_torch_available,
+)
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.models.rag.retrieval_rag import CustomHFIndex
 from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 from transformers.testing_utils import require_torch_non_multi_gpu_but_fix_me
 
+
 sys.path.append(os.path.join(os.getcwd()))  # noqa: E402 # noqa: E402 # isort:skip
 
 from distributed_pytorch_retriever import RagPyTorchDistributedRetriever  # noqa: E402 # isort:skip
-from distributed_ray_retriever import RagRayDistributedRetriever, RayRetriever
 import ray
+from distributed_ray_retriever import RagRayDistributedRetriever, RayRetriever
 
 
 def require_distributed_retrieval(test_case):
@@ -34,12 +40,16 @@ def require_distributed_retrieval(test_case):
     These tests are skipped when respective libraries are not installed.
 
     """
-    if not (is_torch_available() and is_datasets_available() and
-            is_faiss_available() and is_psutil_available() and
-            is_ray_available()):
-        test_case = unittest.skip("test requires PyTorch, Datasets, Faiss, "
-                                  "psutil, Ray")(test_case)
+    if not (
+        is_torch_available()
+        and is_datasets_available()
+        and is_faiss_available()
+        and is_psutil_available()
+        and is_ray_available()
+    ):
+        test_case = unittest.skip("test requires PyTorch, Datasets, Faiss, " "psutil, Ray")(test_case)
     return test_case
+
 
 @require_distributed_retrieval
 class RagRetrieverTest(TestCase):
@@ -122,12 +132,10 @@ class RagRetrieverTest(TestCase):
                 "id": ["0", "1"],
                 "text": ["foo", "bar"],
                 "title": ["Foo", "Bar"],
-                "embeddings": [np.ones(self.retrieval_vector_size),
-                               2 * np.ones(self.retrieval_vector_size)],
+                "embeddings": [np.ones(self.retrieval_vector_size), 2 * np.ones(self.retrieval_vector_size)],
             }
         )
-        dataset.add_faiss_index("embeddings", string_factory="Flat",
-                                metric_type=faiss.METRIC_INNER_PRODUCT)
+        dataset.add_faiss_index("embeddings", string_factory="Flat", metric_type=faiss.METRIC_INNER_PRODUCT)
         return dataset
 
     def get_dummy_pytorch_distributed_retriever(
@@ -150,8 +158,7 @@ class RagRetrieverTest(TestCase):
                 retriever.init_retrieval(port)
         return retriever
 
-    def get_dummy_ray_distributed_retriever(self, init_retrieval: bool) -> \
-            RagRayDistributedRetriever:
+    def get_dummy_ray_distributed_retriever(self, init_retrieval: bool) -> RagRayDistributedRetriever:
         # Have to run in local mode because sys.path modifications at top of
         # file are not propogated to remote workers.
         # https://stackoverflow.com/questions/54338013/parallel-import-a-python-file-from-sibling-folder
@@ -163,8 +170,7 @@ class RagRetrieverTest(TestCase):
         )
         remote_cls = ray.remote(RayRetriever)
         workers = [remote_cls.remote() for _ in range(1)]
-        with patch(
-                "transformers.retrieval_rag.load_dataset") as mock_load_dataset:
+        with patch("transformers.retrieval_rag.load_dataset") as mock_load_dataset:
             mock_load_dataset.return_value = self.get_dummy_dataset()
             retriever = RagRayDistributedRetriever(
                 config,
@@ -176,8 +182,7 @@ class RagRetrieverTest(TestCase):
                 retriever.init_retrieval()
         return retriever
 
-    def get_dummy_custom_hf_index_pytorch_retriever(self, init_retrieval:
-    bool, from_disk: bool, port=12345):
+    def get_dummy_custom_hf_index_pytorch_retriever(self, init_retrieval: bool, from_disk: bool, port=12345):
         dataset = self.get_dummy_dataset()
         config = RagConfig(
             retrieval_vector_size=self.retrieval_vector_size,
@@ -208,8 +213,7 @@ class RagRetrieverTest(TestCase):
             retriever.init_retrieval(port)
         return retriever
 
-    def get_dummy_custom_hf_index_ray_retriever(self, init_retrieval: bool,
-                                                from_disk: bool):
+    def get_dummy_custom_hf_index_ray_retriever(self, init_retrieval: bool, from_disk: bool):
         # Have to run in local mode because sys.path modifications at top of
         # file are not propogated to remote workers.
         # https://stackoverflow.com/questions/54338013/parallel-import-a-python-file-from-sibling-folder
@@ -230,22 +234,25 @@ class RagRetrieverTest(TestCase):
             dataset.drop_index("embeddings")
             dataset.save_to_disk(os.path.join(self.tmpdirname, "dataset"))
             del dataset
-            retriever = RagRayDistributedRetriever(config,
-                                                   question_encoder_tokenizer=self.get_dpr_tokenizer(),
-                                                   generator_tokenizer=self.get_bart_tokenizer(),
-                                                   retrieval_workers=workers,
-                                                   index=CustomHFIndex.load_from_disk(
-                vector_size=config.retrieval_vector_size,
-                dataset_path=config.passages_path,
-                index_path=config.index_path,
-            ))
+            retriever = RagRayDistributedRetriever(
+                config,
+                question_encoder_tokenizer=self.get_dpr_tokenizer(),
+                generator_tokenizer=self.get_bart_tokenizer(),
+                retrieval_workers=workers,
+                index=CustomHFIndex.load_from_disk(
+                    vector_size=config.retrieval_vector_size,
+                    dataset_path=config.passages_path,
+                    index_path=config.index_path,
+                ),
+            )
         else:
-            retriever = RagRayDistributedRetriever(config,
-                                                   question_encoder_tokenizer=self.get_dpr_tokenizer(),
-                                                   generator_tokenizer=self.get_bart_tokenizer(),
-                                                   retrieval_workers=workers,
-                                                   index=CustomHFIndex(
-                                                       config.retrieval_vector_size, dataset))
+            retriever = RagRayDistributedRetriever(
+                config,
+                question_encoder_tokenizer=self.get_dpr_tokenizer(),
+                generator_tokenizer=self.get_bart_tokenizer(),
+                retrieval_workers=workers,
+                index=CustomHFIndex(config.retrieval_vector_size, dataset),
+            )
         if init_retrieval:
             retriever.init_retrieval()
         return retriever
@@ -254,83 +261,60 @@ class RagRetrieverTest(TestCase):
     def test_distributed_retriever_retrieve(self):
         n_docs = 1
         hidden_states = np.array(
-            [np.ones(self.retrieval_vector_size),
-             -np.ones(self.retrieval_vector_size)], dtype=np.float32
+            [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
         )
+
         def test_retriever(retriever):
-            retrieved_doc_embeds, doc_ids, doc_dicts = retriever.retrieve(
-                hidden_states, n_docs=n_docs)
-            self.assertEqual(retrieved_doc_embeds.shape,
-                             (2, n_docs, self.retrieval_vector_size))
+            retrieved_doc_embeds, doc_ids, doc_dicts = retriever.retrieve(hidden_states, n_docs=n_docs)
+            self.assertEqual(retrieved_doc_embeds.shape, (2, n_docs, self.retrieval_vector_size))
             self.assertEqual(len(doc_dicts), 2)
-            self.assertEqual(sorted(doc_dicts[0]),
-                             ["embeddings", "id", "text", "title"])
+            self.assertEqual(sorted(doc_dicts[0]), ["embeddings", "id", "text", "title"])
             self.assertEqual(len(doc_dicts[0]["id"]), n_docs)
-            self.assertEqual(doc_dicts[0]["id"][0],
-                             "1")  # max inner product is reached with second doc
-            self.assertEqual(doc_dicts[1]["id"][0],
-                             "0")  # max inner product is reached with first doc
+            self.assertEqual(doc_dicts[0]["id"][0], "1")  # max inner product is reached with second doc
+            self.assertEqual(doc_dicts[1]["id"][0], "0")  # max inner product is reached with first doc
             self.assertListEqual(doc_ids.tolist(), [[1], [0]])
 
-
-        test_retriever(self.get_dummy_pytorch_distributed_retriever(
-            init_retrieval=True))
-        test_retriever(self.get_dummy_ray_distributed_retriever(
-                init_retrieval=True))
+        test_retriever(self.get_dummy_pytorch_distributed_retriever(init_retrieval=True))
+        test_retriever(self.get_dummy_ray_distributed_retriever(init_retrieval=True))
 
     @require_torch_non_multi_gpu_but_fix_me
     def test_custom_hf_index_retriever_retrieve(self):
         n_docs = 1
         hidden_states = np.array(
-            [np.ones(self.retrieval_vector_size),
-             -np.ones(self.retrieval_vector_size)], dtype=np.float32
+            [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
         )
+
         def test_retriever(retriever):
-            retrieved_doc_embeds, doc_ids, doc_dicts = retriever.retrieve(
-                hidden_states, n_docs=n_docs)
-            self.assertEqual(retrieved_doc_embeds.shape,
-                             (2, n_docs, self.retrieval_vector_size))
+            retrieved_doc_embeds, doc_ids, doc_dicts = retriever.retrieve(hidden_states, n_docs=n_docs)
+            self.assertEqual(retrieved_doc_embeds.shape, (2, n_docs, self.retrieval_vector_size))
             self.assertEqual(len(doc_dicts), 2)
-            self.assertEqual(sorted(doc_dicts[0]),
-                             ["embeddings", "id", "text", "title"])
+            self.assertEqual(sorted(doc_dicts[0]), ["embeddings", "id", "text", "title"])
             self.assertEqual(len(doc_dicts[0]["id"]), n_docs)
-            self.assertEqual(doc_dicts[0]["id"][0],
-                             "1")  # max inner product is reached with second doc
-            self.assertEqual(doc_dicts[1]["id"][0],
-                             "0")  # max inner product is reached with first doc
+            self.assertEqual(doc_dicts[0]["id"][0], "1")  # max inner product is reached with second doc
+            self.assertEqual(doc_dicts[1]["id"][0], "0")  # max inner product is reached with first doc
             self.assertListEqual(doc_ids.tolist(), [[1], [0]])
 
-        test_retriever(self.get_dummy_custom_hf_index_pytorch_retriever(
-            init_retrieval=True, from_disk=False))
+        test_retriever(self.get_dummy_custom_hf_index_pytorch_retriever(init_retrieval=True, from_disk=False))
 
         with self.assertRaises(ValueError):
-            test_retriever(self.get_dummy_custom_hf_index_ray_retriever(
-                init_retrieval=True, from_disk=False))
+            test_retriever(self.get_dummy_custom_hf_index_ray_retriever(init_retrieval=True, from_disk=False))
 
     @require_torch_non_multi_gpu_but_fix_me
     def test_custom_distributed_retriever_retrieve_from_disk(self):
         n_docs = 1
         hidden_states = np.array(
-            [np.ones(self.retrieval_vector_size),
-             -np.ones(self.retrieval_vector_size)], dtype=np.float32
+            [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
         )
+
         def test_retriever(retriever):
-            retrieved_doc_embeds, doc_ids, doc_dicts = retriever.retrieve(
-                hidden_states, n_docs=n_docs)
-            self.assertEqual(retrieved_doc_embeds.shape,
-                             (2, n_docs, self.retrieval_vector_size))
+            retrieved_doc_embeds, doc_ids, doc_dicts = retriever.retrieve(hidden_states, n_docs=n_docs)
+            self.assertEqual(retrieved_doc_embeds.shape, (2, n_docs, self.retrieval_vector_size))
             self.assertEqual(len(doc_dicts), 2)
-            self.assertEqual(sorted(doc_dicts[0]),
-                             ["embeddings", "id", "text", "title"])
+            self.assertEqual(sorted(doc_dicts[0]), ["embeddings", "id", "text", "title"])
             self.assertEqual(len(doc_dicts[0]["id"]), n_docs)
-            self.assertEqual(doc_dicts[0]["id"][0],
-                             "1")  # max inner product is reached with second doc
-            self.assertEqual(doc_dicts[1]["id"][0],
-                             "0")  # max inner product is reached with first doc
+            self.assertEqual(doc_dicts[0]["id"][0], "1")  # max inner product is reached with second doc
+            self.assertEqual(doc_dicts[1]["id"][0], "0")  # max inner product is reached with first doc
             self.assertListEqual(doc_ids.tolist(), [[1], [0]])
 
-        test_retriever(self.get_dummy_custom_hf_index_pytorch_retriever(
-            init_retrieval=True, from_disk=True))
-        test_retriever(self.get_dummy_custom_hf_index_ray_retriever(
-            init_retrieval=True, from_disk=True))
-
+        test_retriever(self.get_dummy_custom_hf_index_pytorch_retriever(init_retrieval=True, from_disk=True))
+        test_retriever(self.get_dummy_custom_hf_index_ray_retriever(init_retrieval=True, from_disk=True))

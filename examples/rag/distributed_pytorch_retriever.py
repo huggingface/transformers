@@ -37,7 +37,7 @@ class RagPyTorchDistributedRetriever(RagRetriever):
             question_encoder_tokenizer=question_encoder_tokenizer,
             generator_tokenizer=generator_tokenizer,
             index=index,
-            init_retrieval=False
+            init_retrieval=False,
         )
         self.process_group = None
 
