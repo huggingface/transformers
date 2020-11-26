@@ -1052,8 +1052,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
                     f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
                 )
-            else:
-                logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
+
             if len(missing_keys) > 0:
                 logger.warning(
                     f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
@@ -1062,7 +1061,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 )
             else:
                 logger.info(
-                    f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
                     f"If your task is similar to the task the model of the checkpoint was trained on, "
                     f"you can already use {model.__class__.__name__} for predictions without further training."
                 )
