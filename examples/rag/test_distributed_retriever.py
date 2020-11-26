@@ -170,7 +170,8 @@ class RagRetrieverTest(TestCase):
         )
         remote_cls = ray.remote(RayRetriever)
         workers = [remote_cls.remote() for _ in range(1)]
-        with patch("transformers.retrieval_rag.load_dataset") as mock_load_dataset:
+        with patch("transformers.models.rag.retrieval_rag.load_dataset") as \
+                mock_load_dataset:
             mock_load_dataset.return_value = self.get_dummy_dataset()
             retriever = RagRayDistributedRetriever(
                 config,
@@ -180,7 +181,6 @@ class RagRetrieverTest(TestCase):
             )
             if init_retrieval:
                 retriever.init_retrieval()
-        ray.shutdown()
         return retriever
 
     def get_dummy_custom_hf_index_pytorch_retriever(self, init_retrieval: bool, from_disk: bool, port=12345):
@@ -256,7 +256,6 @@ class RagRetrieverTest(TestCase):
             )
         if init_retrieval:
             retriever.init_retrieval()
-        ray.shutdown()
         return retriever
 
     @require_torch_non_multi_gpu_but_fix_me
@@ -278,6 +277,7 @@ class RagRetrieverTest(TestCase):
 
         test_retriever(self.get_dummy_pytorch_distributed_retriever(init_retrieval=True))
         test_retriever(self.get_dummy_ray_distributed_retriever(init_retrieval=True))
+        ray.shutdown()
 
     @require_torch_non_multi_gpu_but_fix_me
     def test_custom_hf_index_retriever_retrieve(self):
@@ -300,6 +300,7 @@ class RagRetrieverTest(TestCase):
 
         with self.assertRaises(ValueError):
             test_retriever(self.get_dummy_custom_hf_index_ray_retriever(init_retrieval=True, from_disk=False))
+        ray.shutdown()
 
     @require_torch_non_multi_gpu_but_fix_me
     def test_custom_distributed_retriever_retrieve_from_disk(self):
@@ -320,3 +321,4 @@ class RagRetrieverTest(TestCase):
 
         test_retriever(self.get_dummy_custom_hf_index_pytorch_retriever(init_retrieval=True, from_disk=True))
         test_retriever(self.get_dummy_custom_hf_index_ray_retriever(init_retrieval=True, from_disk=True))
+        ray.shutdown()
