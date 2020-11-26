@@ -2639,7 +2639,6 @@ class TokenizerTesterMixin:
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 sentence = "A, <mask> AllenNLP sentence."
-
                 tokens_r = tokenizer_r.encode_plus(
                     sentence,
                     add_special_tokens=True,
