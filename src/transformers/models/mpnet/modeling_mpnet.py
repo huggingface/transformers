@@ -120,10 +120,13 @@ class MPNetEmbeddings(nn.Module):
         return embeddings
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
-        """We are provided embeddings directly. We cannot infer which are padded so just generate
-        sequential position ids.
-        :param torch.Tensor inputs_embeds:
-        :return torch.Tensor:
+        """
+        We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
+
+        Args:
+            inputs_embeds: torch.Tensor
+
+        Returns: torch.Tensor
         """
         input_shape = inputs_embeds.size()[:-1]
         sequence_length = input_shape[1]

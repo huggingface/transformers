@@ -27,6 +27,7 @@ if is_tf_available():
     from .modeling_tf_mpnet import (
         TF_MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFMPNetEmbeddings, 
+        TFMPNetForMaskedLM,
         TFMPNetForMultipleChoice,
         TFMPNetForQuestionAnswering,
         TFMPNetForSequenceClassification,
