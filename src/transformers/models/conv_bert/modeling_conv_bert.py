@@ -382,13 +382,14 @@ class GroupedLinearLayer(nn.Module):
         self.bias = nn.Parameter(torch.Tensor(output_size))
 
     def forward(self, x):
-        bs = list(x.size())[0]
+        batch_size = list(x.size())[0]
         x = torch.reshape(x, [-1, self.num_groups, self.group_in_dim])
-        x = x.transpose(0, 1)
+        x = x.permute(1, 0, 2)
         x = torch.matmul(x, self.weight)
-        x = x.transpose(0, 1)
-        outputs = torch.reshape(x, [bs, -1, self.output_size])
-        return outputs
+        x = x.permute(1, 0, 2)
+        x = torch.reshape(x, [batch_size, -1, self.output_size])
+        x = x + self.bias
+        return x
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate

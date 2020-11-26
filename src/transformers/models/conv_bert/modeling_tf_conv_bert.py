@@ -262,14 +262,14 @@ class GroupedLinearLayer(tf.keras.layers.Layer):
             "bias", shape=[self.output_size], initializer=self.kernel_initializer, dtype=self.dtype, trainable=True
         )
 
-    def call(self, inputs):
-        batch_size = shape_list(inputs)[0]
-        inputs = tf.transpose(tf.reshape(inputs, [-1, self.num_groups, self.group_in_dim]), [1, 0, 2])
-        group_out = tf.matmul(inputs, self.kernel)
-        outputs = tf.transpose(group_out, [1, 0, 2])
-        outputs = tf.reshape(outputs, [batch_size, -1, self.output_size])
-        outputs = outputs + self.bias
-        return outputs
+    def call(self, x):
+        batch_size = shape_list(x)[0]
+        x = tf.transpose(tf.reshape(x, [-1, self.num_groups, self.group_in_dim]), [1, 0, 2])
+        x = tf.matmul(x, self.kernel)
+        x = tf.transpose(x, [1, 0, 2])
+        x = tf.reshape(x, [batch_size, -1, self.output_size])
+        x = x + self.bias
+        return x
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate

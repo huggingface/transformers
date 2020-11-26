@@ -7,7 +7,7 @@ from .tokenization_conv_bert import ConvBertTokenizer
 
 import tensorflow as tf
 
-model_path = "/home/abhishek/huggingface/models/convbert_models/convbert_small"
+model_path = "/home/abhishek/huggingface/models/convbert_models/convbert_medium_small"
 
 if __name__ == "__main__":
     conf = ConvBertConfig.from_json_file(os.path.join(model_path, "config.json"))
