@@ -60,8 +60,7 @@ SPIECE_UNDERLINE = "▁"
 class CamembertTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" CamemBERT tokenizer (backed by HuggingFace's `tokenizers` library). Adapted from
-    :class:`~transformers.RobertaTokenizer` and :class:`~transformers.XLNetTokenizer`. Based on `SentencePiece
-    <https://github.com/google/sentencepiece>`__.
+    :class:`~transformers.RobertaTokenizer` and :class:`~transformers.XLNetTokenizer`. Based on SentencePiece.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
     methods. Users should refer to this superclass for more information regarding those methods.

@@ -40,13 +40,48 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 logger = logging.get_logger(__name__)
 
 
-class PegasusTokenizer(PreTrainedTokenizer):
+class PEGASUSTokenizer(PreTrainedTokenizer):
     r"""
-    Construct a Pegasus tokenizer.
+    Construct a PEGASUS tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__.
 
-    :class:`~transformers.PegasusTokenizer` is identical to :class:`~transformers.ReformerTokenizer` and adds a new
-    :meth:`~transformers.PegasusTokenizer.prepare_seq2seq_batch`
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    Users should refer to this superclass for more information regarding those methods.
+
+    Args:
+        vocab_file (:obj:`str`):
+            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
+            contains the vocabulary necessary to instantiate a tokenizer.
+        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            The end of sequence token.
+
+            .. note::
+
+                When building a sequence using special tokens, this is not the token that is used for the end of
+                sequence. The token used is the :obj:`sep_token`.
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask_2>"`):
+            The token used for masking single token values. This is the token used when training this model with masked
+            language modeling (MLM). This is the token that the PEGASUS encoder will try to predict during pretraining.
+            It corresponds to `[MASK2]` in `PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive
+            Summarization <https://arxiv.org/pdf/1912.08777.pdf>`__.
+        mask_token_sent (:obj:`str`, `optional`, defaults to :obj:`"<mask_1>"`):
+            The token used for masking whole target sentences. This is the token used when training this model with gap
+            sentences generation (GSG). This is the sentence that the PEGASUS decoder will try to predict during
+            pretraining. It corresponds to `[MASK1]` in `PEGASUS: Pre-training with Extracted Gap-sentences for
+            Abstractive Summarization <https://arxiv.org/pdf/1912.08777.pdf>`__.
+        additional_special_tokens (:obj:`List[str]`, `optional`):
+            Additional special tokens used by the tokenizer. If no additional_special_tokens are provided <mask_2> and
+            <unk_2, ..., unk_102> are used as additional special tokens corresponding to the `original PEGASUS
+            tokenizer
+            <https://github.com/google-research/pegasus/blob/939830367bcf411193d2b5eca2f2f90f3f9260ca/pegasus/ops/pretrain_parsing_ops.cc#L66>`__
+            that uses the tokens 2 - 104 only for pretraining
     """
+    vocab_files_names = VOCAB_FILES_NAMES
+
     offset = 103  # entries 2 - 104 are only used for pretraining
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
@@ -64,10 +99,21 @@ class PegasusTokenizer(PreTrainedTokenizer):
         additional_special_tokens=None,
         **kwargs
     ):
-        # Add extra_ids to the special token list
-        if self.offset > 0 and additional_special_tokens is None:
+        if additional_special_tokens is not None:
+            assert isinstance(
+                additional_special_tokens, list
+            ), f"additional_special_tokens should be of type {type(list)}, but is {type(additional_special_tokens)}"
+            assert (
+                len(additional_special_tokens) <= self.offset - 2
+            ), f"len(additional_special_tokens) should be smaller or equal to (self.offset - number of mask tokens) = {self.offset - 2}"
+
+            additional_special_tokens = [mask_token_sent] + additional_special_tokens
+            additional_special_tokens += [
+                f"<unk_token_{i}>" for i in range(2, self.offset - len(additional_special_tokens))
+            ]
+        else:
             additional_special_tokens = [mask_token_sent]
-            additional_special_tokens += [f"<unk_token_{i+2}>" for i in range(self.offset - 2)]
+            additional_special_tokens += [f"<unk_token_{i}>" for i in range(2, self.offset)]
 
         super().__init__(
             eos_token=eos_token,
@@ -82,15 +128,16 @@ class PegasusTokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(vocab_file)
 
-        # Don't use reserved words added_token_encoder, added_tokens_decoder because of
-        # AssertionError: Non-consecutive added token '1' found. in from_pretrained
+        # add special tokens to encoder dict
         self.encoder: Dict[int, str] = {
             0: self.pad_token,
             1: self.eos_token,
-            2: self.mask_token,
+            2: self.mask_token_sent,
+            3: self.mask_token,
         }
-        # entries 2-104 are only used for pretraining and called <mask_2>, <mask_1>, unk_2, ...unk_102
-        self.encoder.update({i: additional_special_tokens[i - 3] for i in range(3, self.offset + 2)})
+        # entries 2-104 are only used for pretraining and called <mask_1>, <mask_2>, unk_2, ...unk_102
+        # mask_token_sent is already added to list -> so start at 1
+        self.encoder.update({i + 3: additional_special_tokens[i] for i in range(1, self.offset)})
         self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
 
     @property
@@ -172,7 +219,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequences for sequence classification tasks by concatenating
-        and adding special tokens. A Pegasus sequence has the following format, where ``X`` represents the sequence:
+        and adding special tokens. A PEGASUS sequence has the following format, where ``X`` represents the sequence:
 
         - single sequence: ``X </s>``
         - pair of sequences: ``A B </s>`` (not intended use)
