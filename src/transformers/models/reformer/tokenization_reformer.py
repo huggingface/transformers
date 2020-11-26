@@ -56,7 +56,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class ReformerTokenizer(PreTrainedTokenizer):
     """
-    Construct a Reformer tokenizer. Based on SentencePiece <https://github.com/google/sentencepiece>`__ .
+    Construct a Reformer tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__ .
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
