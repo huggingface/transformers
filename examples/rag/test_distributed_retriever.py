@@ -29,8 +29,8 @@ sys.path.append(os.path.join(os.getcwd()))  # noqa: E402 # noqa: E402 # isort:sk
 
 from distributed_pytorch_retriever import RagPyTorchDistributedRetriever  # noqa: E402 # isort:skip
 
-import ray # noqa: E402 # isort:skip
-from distributed_ray_retriever import RagRayDistributedRetriever, RayRetriever # noqa: E402 # isort:skip
+import ray  # noqa: E402 # isort:skip
+from distributed_ray_retriever import RagRayDistributedRetriever, RayRetriever  # noqa: E402 # isort:skip
 
 
 def require_distributed_retrieval(test_case):
