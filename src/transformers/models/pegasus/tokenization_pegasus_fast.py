@@ -48,7 +48,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-class PEGASUSTokenizerFast(PreTrainedTokenizerFast):
+class PegasusTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" PEGASUS tokenizer (backed by HuggingFace's `tokenizers` library). Based on SentencePiece.
 

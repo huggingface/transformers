@@ -40,7 +40,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 logger = logging.get_logger(__name__)
 
 
-class PEGASUSTokenizer(PreTrainedTokenizer):
+class PegasusTokenizer(PreTrainedTokenizer):
     r"""
     Construct a PEGASUS tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__.
 
