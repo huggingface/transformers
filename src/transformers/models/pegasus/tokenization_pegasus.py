@@ -47,7 +47,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
     :class:`~transformers.PegasusTokenizer` is identical to :class:`~transformers.ReformerTokenizer` and adds a new
     :meth:`~transformers.PegasusTokenizer.prepare_seq2seq_batch`
     """
-    offset = 103  # entries 2-104 are only used for pretraining
+    offset = 103  # entries 4 - 104 are only used for pretraining
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
@@ -61,42 +61,36 @@ class PegasusTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         mask_token="<mask_2>",
         mask_token_sent="<mask_1>",
-        offset=101,
         additional_special_tokens=None,
         **kwargs
     ):
         # Add extra_ids to the special token list
-        if offset > 0 and additional_special_tokens is None:
+        if self.offset > 0 and additional_special_tokens is None:
             additional_special_tokens = [mask_token_sent]
-            additional_special_tokens += [f"<unk_token_{i+2}>" for i in range(offset)]
+            additional_special_tokens += [f"<unk_token_{i+2}>" for i in range(self.offset - 2)]
 
         super().__init__(
             eos_token=eos_token,
             unk_token=unk_token,
             mask_token=mask_token,
             pad_token=pad_token,
-            mask_token_sent=mask_token_sent,
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
-
         self.vocab_file = vocab_file
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(vocab_file)
 
-        self.mask_token_sent = mask_token_sent
         # Don't use reserved words added_token_encoder, added_tokens_decoder because of
         # AssertionError: Non-consecutive added token '1' found. in from_pretrained
         self.encoder: Dict[int, str] = {
             0: self.pad_token,
             1: self.eos_token,
             2: self.mask_token,
-            3: self.mask_token_sent,
         }
-        # entries 4-104 are only used for pretraining and called unk_2, ...unk_102
-        self.encoder.update({i: self.additional_special_tokens[i] for i in range(1, offset + 1)})
+        # entries 2-104 are only used for pretraining and called <mask_2>, <mask_1>, unk_2, ...unk_102
+        self.encoder.update({i: additional_special_tokens[i - 3] for i in range(3, self.offset + 2)})
         self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
-        # import ipdb; ipdb.set_trace()
 
     @property
     def vocab_size(self) -> int:
