@@ -424,24 +424,20 @@ MPNET_START_DOCSTRING = r"""
 MPNET_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary.
-            Indices can be obtained using :class:`transformers.MPNetTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.encode_plus` for details.
-            `What are input IDs? <../glossary.html#input-ids>`__
+            Indices of input sequence tokens in the vocabulary. Indices can be obtained using
+            :class:`transformers.MPNetTokenizer`. See :func:`transformers.PreTrainedTokenizer.encode` and
+            :func:`transformers.PreTrainedTokenizer.encode_plus` for details. `What are input IDs?
+            <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
-            Mask to avoid performing attention on padding token indices.
-            Mask values selected in ``[0, 1]``:
-            ``1`` for tokens that are NOT MASKED, ``0`` for MASKED tokens.
-            `What are attention masks? <../glossary.html#attention-mask>`__
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``: ``1`` for
+            tokens that are NOT MASKED, ``0`` for MASKED tokens. `What are attention masks?
+            <../glossary.html#attention-mask>`__
         position_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`, defaults to :obj:`None`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
-            `What are position IDs? <../glossary.html#position-ids>`_
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``. `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`, defaults to :obj:`None`):
-            Mask to nullify selected heads of the self-attention modules.
-            Mask values selected in ``[0, 1]``:
-            :obj:`1` indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``: :obj:`1`
+            indicates the head is **not masked**, :obj:`0` indicates the head is **masked**.
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`, defaults to :obj:`None`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
@@ -548,7 +544,7 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.lm_head.decoder
-    
+
     @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -635,8 +631,10 @@ class MPNetLMHead(nn.Module):
 
 
 @add_start_docstrings(
-    """MPNet Model transformer with a sequence classification/regression head on top (a linear layer
-    on top of the pooled output) e.g. for GLUE tasks. """,
+    """
+    MPNet Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    output) e.g. for GLUE tasks.
+    """,
     MPNET_START_DOCSTRING,
 )
 class MPNetForSequenceClassification(MPNetPreTrainedModel):
@@ -717,8 +715,10 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    """MPNet Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    """
+    MPNet Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RocStories/SWAG tasks.
+    """,
     MPNET_START_DOCSTRING,
 )
 class MPNetForMultipleChoice(MPNetPreTrainedModel):
@@ -808,8 +808,10 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    """MPNet Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    MPNet Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
     MPNET_START_DOCSTRING,
 )
 class MPNetForTokenClassification(MPNetPreTrainedModel):
@@ -848,8 +850,8 @@ class MPNetForTokenClassification(MPNetPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -917,8 +919,10 @@ class MPNetClassificationHead(nn.Module):
 
 
 @add_start_docstrings(
-    """MPNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layers on top of
-    the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    MPNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     MPNET_START_DOCSTRING,
 )
 class MPNetForQuestionAnswering(MPNetPreTrainedModel):
@@ -1018,11 +1022,9 @@ class MPNetForQuestionAnswering(MPNetPreTrainedModel):
 
 
 def create_position_ids_from_input_ids(input_ids, padding_idx):
-    """Replace non-padding symbols with their position numbers. Position numbers begin at
-    padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
-    `utils.make_positions`.
-    :param torch.Tensor x:
-    :return torch.Tensor:
+    """
+    Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
+    are ignored. This is modified from fairseq's `utils.make_positions`. :param torch.Tensor x: :return torch.Tensor:
     """
     # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
     mask = input_ids.ne(padding_idx).int()

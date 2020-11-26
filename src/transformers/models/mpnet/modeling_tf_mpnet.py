@@ -53,7 +53,7 @@ TF_MPNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 class TFMPNetPreTrainedModel(TFPreTrainedModel):
     """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained 
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
@@ -98,11 +98,10 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def create_position_ids_from_input_ids(self, x):
-        """Replace non-padding symbols with their position numbers. Position numbers begin at
-        padding_idx+1. Padding symbols are ignored. This is modified from fairseq's
-        `utils.make_positions`.
-        :param tf.Tensor x:
-        :return tf.Tensor:
+        """
+        Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
+        symbols are ignored. This is modified from fairseq's `utils.make_positions`. :param tf.Tensor x: :return
+        tf.Tensor:
         """
         mask = tf.cast(tf.math.not_equal(x, self.padding_idx), dtype=tf.int32)
         incremental_indicies = tf.math.cumsum(mask, axis=1) * mask
@@ -110,10 +109,9 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
         return incremental_indicies + self.padding_idx
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
-        """We are provided embeddings directly. We cannot infer which are padded so just generate
-        sequential position ids.
-        :param tf.Tensor inputs_embeds:
-        :return tf.Tensor:
+        """
+        We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
+        :param tf.Tensor inputs_embeds: :return tf.Tensor:
         """
         seq_length = shape_list(inputs_embeds)[1]
         position_ids = tf.range(self.padding_idx + 1, seq_length + self.padding_idx + 1, dtype=tf.int32)[tf.newaxis, :]
@@ -129,17 +127,20 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
         mode="embedding",
         training=False,
     ):
-        """Get token embeddings of inputs.
+        """
+        Get token embeddings of inputs
+
         Args:
             inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
-            mode: string, a valid value is one of "embedding" and "linear".
+            mode: string, a valid value is one of "embedding" and "linear"
+
         Returns:
-            outputs: (1) If mode == "embedding", output embedding tensor, float32 with
-                shape [batch_size, length, embedding_size]; (2) mode == "linear", output
-                linear tensor, float32 with shape [batch_size, length, vocab_size].
+            outputs: (1) If mode == "embedding", output embedding tensor, float32 with shape [batch_size, length,
+            embedding_size]; (2) mode == "linear", output linear tensor, float32 with shape [batch_size, length,
+            vocab_size]
+
         Raises:
-            ValueError: if mode is not valid.
-        Shared weights logic adapted from
+            ValueError: if mode is not valid. Shared weights logic adapted from
             https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
         if mode == "embedding":
@@ -181,9 +182,12 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
         return embeddings
 
     def _linear(self, inputs):
-        """Computes logits by running inputs through a linear layer.
+        """
+        Computes logits by running inputs through a linear layer
+
         Args:
-            inputs: A float32 tensor with shape [batch_size, length, hidden_size]
+            inputs: A float32 tensor with shape [batch_size, length, hidden_size
+
         Returns:
             float32 tensor with shape [batch_size, length, vocab_size].
         """
@@ -485,9 +489,8 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
     # Copied from transformers.modeling_tf_bert.TFBertMainLayer._prune_heads
     def _prune_heads(self, heads_to_prune):
         """
-        Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        See base class PreTrainedModel
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
         """
         raise NotImplementedError
 
@@ -547,7 +550,7 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
             inputs["input_ids"],
             inputs["position_ids"],
             inputs["token_type_ids"],
-            inputs["inputs_embeds"], 
+            inputs["inputs_embeds"],
             training=inputs["training"],
         )
 
@@ -604,8 +607,8 @@ MPNET_START_DOCSTRING = r"""
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use 
-    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage 
+    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
+    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
     and behavior.
 
     .. note::
@@ -615,7 +618,7 @@ MPNET_START_DOCSTRING = r"""
         - having all inputs as keyword arguments (like PyTorch models), or
         - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all 
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
         the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
         If you choose this second option, there are three possibilities you can use to gather all the input Tensor in
@@ -630,8 +633,8 @@ MPNET_START_DOCSTRING = r"""
     Args:
         config (:class:`~transformers.MPNetConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the
-            model weights.
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 MPNET_INPUTS_DOCSTRING = r"""
@@ -639,8 +642,8 @@ MPNET_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.MPNetTokenizer`. See 
-            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for 
+            Indices can be obtained using :class:`~transformers.MPNetTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
             details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
@@ -705,7 +708,7 @@ class TFMPNetModel(TFMPNetPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
-        self, 
+        self,
         input_ids=None,
         attention_mask=None,
         token_type_ids=None,
@@ -894,8 +897,8 @@ class TFMPNetClassificationHead(tf.keras.layers.Layer):
 
 @add_start_docstrings(
     """
-    MPNet Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled 
-    output) e.g. for GLUE tasks. 
+    MPNet Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    output) e.g. for GLUE tasks.
     """,
     MPNET_START_DOCSTRING,
 )
@@ -930,7 +933,7 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ..., 
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
@@ -982,7 +985,7 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
 
 @add_start_docstrings(
     """
-    MPNet Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a 
+    MPNet Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
     softmax) e.g. for RocStories/SWAG tasks.
     """,
     MPNET_START_DOCSTRING,
@@ -999,7 +1002,8 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
 
     @property
     def dummy_inputs(self):
-        """Dummy inputs to build the network.
+        """
+        Dummy inputs to build the network.
 
         Returns:
             tf.Tensor with dummy inputs
@@ -1030,8 +1034,8 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ..., 
-            num_choices]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See 
+            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+            num_choices]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
             :obj:`input_ids` above)
         """
         inputs = input_processing(
@@ -1050,7 +1054,7 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
             kwargs_call=kwargs,
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mpnet.return_dict
-        
+
         if inputs["input_ids"] is not None:
             num_choices = shape_list(inputs["input_ids"])[1]
             seq_length = shape_list(inputs["input_ids"])[2]
@@ -1104,8 +1108,10 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
 
 
 @add_start_docstrings(
-    """MPNet Model with a token classification head on top (a linear layer on top of
-       the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+       MPNet Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+       Named-Entity-Recognition (NER) tasks.
+       """,
     MPNET_START_DOCSTRING,
 )
 class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificationLoss):
@@ -1143,7 +1149,7 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels - 
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
             1]``.
         """
         inputs = input_processing(
@@ -1192,8 +1198,9 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
 
 
 @add_start_docstrings(
-    """MPNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-       layers on top of the hidden-states output to compute `span start logits` and `span end logits`). 
+    """
+    MPNet Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     MPNET_START_DOCSTRING,
 )
@@ -1236,11 +1243,11 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
         r"""
         start_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the 
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
         end_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the 
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
         """
         inputs = input_processing(
@@ -1271,7 +1278,7 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=return_dict,
             training=inputs["training"],
-        )        
+        )
         sequence_output = outputs[0]
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = tf.split(logits, 2, axis=-1)

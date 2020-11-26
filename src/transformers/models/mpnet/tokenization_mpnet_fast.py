@@ -34,7 +34,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
     },
     "tokenizer_file": {
         "mpnet-base": "",
-    }
+    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
@@ -58,22 +58,18 @@ class MPNetTokenizerFast(BertTokenizerFast):
             Path to the vocabulary file.
         bos_token (:obj:`string`, `optional`, defaults to "<s>"):
             The beginning of sequence token that was used during pre-training. Can be used a sequence classifier token.
-            .. note::
-                When building a sequence using special tokens, this is not the token that is used for the beginning
-                of sequence. The token used is the :obj:`cls_token`.
+            .. note:: When building a sequence using special tokens, this is not the token that is used for the
+            beginning of sequence. The token used is the :obj:`cls_token`.
         eos_token (:obj:`string`, `optional`, defaults to "</s>"):
-            The end of sequence token.
-            .. note::
-                When building a sequence using special tokens, this is not the token that is used for the end
-                of sequence. The token used is the :obj:`sep_token`.
+            The end of sequence token. .. note:: When building a sequence using special tokens, this is not the token
+            that is used for the end of sequence. The token used is the :obj:`sep_token`.
         sep_token (:obj:`string`, `optional`, defaults to "</s>"):
-            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences
-            for sequence classification or for a text and a question for question answering.
-            It is also used as the last token of a sequence built with special tokens.
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens.
         cls_token (:obj:`string`, `optional`, defaults to "<s>"):
-            The classifier token which is used when doing sequence classification (classification of the whole
-            sequence instead of per-token classification). It is the first token of the sequence when built with
-            special tokens.
+            The classifier token which is used when doing sequence classification (classification of the whole sequence
+            instead of per-token classification). It is the first token of the sequence when built with special tokens.
         unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -141,7 +137,7 @@ class MPNetTokenizerFast(BertTokenizerFast):
         # So we set lstrip to True
         value = AddedToken(value, lstrip=True, rstrip=False) if isinstance(value, str) else value
         self._mask_token = value
- 
+
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
         if token_ids_1 is None:
@@ -153,13 +149,15 @@ class MPNetTokenizerFast(BertTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Creates a mask from the two sequences passed to be used in a sequence-pair classification task.
-        MPNet does not make use of token type ids, therefore a list of zeros is returned.
+        Creates a mask from the two sequences passed to be used in a sequence-pair classification task. MPNet does not
+        make use of token type ids, therefore a list of zeros is returned
+
         Args:
             token_ids_0 (:obj:`List[int]`):
                 List of ids.
             token_ids_1 (:obj:`List[int]`, `optional`, defaults to :obj:`None`):
-                Optional second list of IDs for sequence pairs.
+                Optional second list of IDs for sequence pairs
+
         Returns:
             :obj:`List[int]`: List of zeros.
         """

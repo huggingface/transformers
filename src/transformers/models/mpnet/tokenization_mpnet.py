@@ -46,30 +46,26 @@ class MPNetTokenizer(BertTokenizer):
     """
     Constructs a MPNet tokenizer, derived from the Bert tokenizer. Peculiarities:
 
-    This tokenizer inherits from :class:`~transformers.BertTokenizer` which contains most of the methods. Users
-    should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from :class:`~transformers.BertTokenizer` which contains most of the methods. Users should
+    refer to the superclass for more information regarding methods.
 
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
         bos_token (:obj:`string`, `optional`, defaults to "<s>"):
             The beginning of sequence token that was used during pre-training. Can be used a sequence classifier token.
-            .. note::
-                When building a sequence using special tokens, this is not the token that is used for the beginning
-                of sequence. The token used is the :obj:`cls_token`.
+            .. note:: When building a sequence using special tokens, this is not the token that is used for the
+            beginning of sequence. The token used is the :obj:`cls_token`.
         eos_token (:obj:`string`, `optional`, defaults to "</s>"):
-            The end of sequence token.
-            .. note::
-                When building a sequence using special tokens, this is not the token that is used for the end
-                of sequence. The token used is the :obj:`sep_token`.
+            The end of sequence token. .. note:: When building a sequence using special tokens, this is not the token
+            that is used for the end of sequence. The token used is the :obj:`sep_token`.
         sep_token (:obj:`string`, `optional`, defaults to "</s>"):
-            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences
-            for sequence classification or for a text and a question for question answering.
-            It is also used as the last token of a sequence built with special tokens.
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens.
         cls_token (:obj:`string`, `optional`, defaults to "<s>"):
-            The classifier token which is used when doing sequence classification (classification of the whole
-            sequence instead of per-token classification). It is the first token of the sequence when built with
-            special tokens.
+            The classifier token which is used when doing sequence classification (classification of the whole sequence
+            instead of per-token classification). It is the first token of the sequence when built with special tokens.
         unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -103,7 +99,7 @@ class MPNetTokenizer(BertTokenizer):
         cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
-        
+
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
@@ -123,7 +119,7 @@ class MPNetTokenizer(BertTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and 
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A MPNet sequence has the following format:
 
         - single sequence: ``<s> X </s>``
@@ -178,7 +174,7 @@ class MPNetTokenizer(BertTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Creates a mask from the two sequences passed to be used in a sequence-pair classification task. MPNet does not 
+        Creates a mask from the two sequences passed to be used in a sequence-pair classification task. MPNet does not
         make use of token type ids, therefore a list of zeros is returned.
 
         Args:
