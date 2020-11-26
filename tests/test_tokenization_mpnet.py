@@ -39,7 +39,23 @@ class MPNetTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        vocab_tokens = ["<s>,"]
+        vocab_tokens = [
+            "[UNK]",
+            "[CLS]",
+            "[SEP]",
+            "[PAD]",
+            "[MASK]",
+            "want",
+            "##want",
+            "##ed",
+            "wa",
+            "un",
+            "runn",
+            "##ing",
+            ",",
+            "low",
+            "lowest",
+        ]
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
@@ -53,8 +69,8 @@ class MPNetTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.tokenizer_class(self.vocab_file)
 
         tokens = tokenizer.tokenize("UNwant\u00E9d,running")
-        self.assertListEqual(tokens, ["unwanted", ",", "running"])
-        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [18166, 1014, 2774])
+        self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
+        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [9, 6, 7, 12, 10, 11])
 
     @slow
     def test_sequence_builders(self):
