@@ -47,7 +47,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
     :class:`~transformers.PegasusTokenizer` is identical to :class:`~transformers.ReformerTokenizer` and adds a new
     :meth:`~transformers.PegasusTokenizer.prepare_seq2seq_batch`
     """
-    offset = 103  # entries 4 - 104 are only used for pretraining
+    offset = 103  # entries 2 - 104 are only used for pretraining
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
