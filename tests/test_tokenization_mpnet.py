@@ -68,5 +68,3 @@ class MPNetTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
         assert encoded_sentence == [0] + text + [2]
         assert encoded_pair == [0] + text + [2] + [2] + text_2 + [2]
-
-
