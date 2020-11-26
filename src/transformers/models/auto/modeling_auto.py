@@ -60,7 +60,7 @@ from ..camembert.modeling_camembert import (
     CamembertForTokenClassification,
     CamembertModel,
 )
-from ..ctrl.modeling_ctrl import CTRLLMHeadModel, CTRLModel
+from ..ctrl.modeling_ctrl import CTRLLMHeadModel, CTRLModel, CTRLForSequenceClassification
 from ..deberta.modeling_deberta import DebertaForSequenceClassification, DebertaModel
 from ..distilbert.modeling_distilbert import (
     DistilBertForMaskedLM,

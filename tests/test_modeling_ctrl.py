@@ -26,7 +26,13 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 if is_torch_available():
     import torch
 
-    from transformers import CTRL_PRETRAINED_MODEL_ARCHIVE_LIST, CTRLConfig, CTRLLMHeadModel, CTRLModel
+    from transformers import (
+        CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        CTRLConfig,
+        CTRLLMHeadModel,
+        CTRLModel,
+        CTRLForSequenceClassification
+    )
 
 
 class CTRLModelTester:
@@ -148,12 +154,44 @@ class CTRLModelTester:
         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "head_mask": head_mask}
 
         return config, inputs_dict
+    
+    def create_and_check_ctrl_for_sequence_classification(
+        self, config, input_ids, head_mask, token_type_ids, *args
+    ):
+        pass
+    #     config.num_labels = self.num_labels
+    #     model = OpenAIGPTForSequenceClassification(config)
+    #     model.to(torch_device)
+    #     model.eval()
+    #     # print(config.num_labels, sequence_labels.size())
+    #     sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+    #     result = model(input_ids, token_type_ids=token_type_ids, labels=sequence_labels)
+    #     self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
+    # def prepare_config_and_inputs_for_common(self):
+    #     config_and_inputs = self.prepare_config_and_inputs()
+    #     (
+    #         config,
+    #         input_ids,
+    #         head_mask,
+    #         token_type_ids,
+    #         sequence_labels,
+    #         token_labels,
+    #         choice_labels,
+    #     ) = config_and_inputs
+    #     inputs_dict = {
+    #         "input_ids": input_ids,
+    #         "token_type_ids": token_type_ids,
+    #         "head_mask": head_mask,
+    #     }
+
+    #     return config, inputs_dict
 
 
 @require_torch
 class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
-    all_model_classes = (CTRLModel, CTRLLMHeadModel) if is_torch_available() else ()
+    all_model_classes = (CTRLModel, CTRLLMHeadModel, CTRLForSequenceClassification) if is_torch_available() else ()
     all_generative_model_classes = (CTRLLMHeadModel,) if is_torch_available() else ()
     test_pruning = True
     test_torchscript = False

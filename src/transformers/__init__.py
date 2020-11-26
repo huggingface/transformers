@@ -389,7 +389,13 @@ if is_torch_available():
         CamembertForTokenClassification,
         CamembertModel,
     )
-    from .models.ctrl import CTRL_PRETRAINED_MODEL_ARCHIVE_LIST, CTRLLMHeadModel, CTRLModel, CTRLPreTrainedModel
+    from .models.ctrl import (
+        CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        CTRLLMHeadModel,
+        CTRLModel,
+        CTRLPreTrainedModel,
+        CTRLForSequenceClassification
+    )
     from .models.deberta import (
         DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         DebertaForSequenceClassification,
