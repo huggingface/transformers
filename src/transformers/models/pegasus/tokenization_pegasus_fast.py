@@ -26,9 +26,9 @@ from ...utils import logging
 
 
 if is_sentencepiece_available():
-    from .tokenization_pegasus import PEGASUSTokenizer
+    from .tokenization_pegasus import PegasusTokenizer
 else:
-    PEGASUSTokenizer = None
+    PegasusTokenizer = None
 
 
 logger = logging.get_logger(__name__)
@@ -92,7 +92,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    slow_tokenizer_class = PEGASUSTokenizer
+    slow_tokenizer_class = PegasusTokenizer
     model_input_names = ["attention_mask"]
 
     def __init__(
