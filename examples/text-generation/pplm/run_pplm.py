@@ -464,10 +464,14 @@ def generate_text_pplm(
         if past is None and output_so_far is not None:
             last = output_so_far[:, -1:]
             if output_so_far.shape[1] > 1:
-                past = model(output_so_far[:, :-1])['past_key_values']
+                past = model(output_so_far[:, :-1])["past_key_values"]
 
-        lm_output= model(output_so_far)
-        unpert_logits, unpert_past, unpert_all_hidden = lm_output["logits"], lm_output["past_key_values"], lm_output["hidden_states"]
+        lm_output = model(output_so_far)
+        unpert_logits, unpert_past, unpert_all_hidden = (
+            lm_output["logits"],
+            lm_output["past_key_values"],
+            lm_output["hidden_states"],
+        )
         unpert_last_hidden = unpert_all_hidden[-1]
 
         # check if we are abowe grad max length
@@ -511,7 +515,11 @@ def generate_text_pplm(
                 pert_past = past
 
         lm_output = model(last, past_key_values=pert_past)
-        pert_logits, past, pert_all_hidden = lm_output["logits"], lm_output["past_key_values"], lm_output["hidden_states"]
+        pert_logits, past, pert_all_hidden = (
+            lm_output["logits"],
+            lm_output["past_key_values"],
+            lm_output["hidden_states"],
+        )
         pert_logits = pert_logits[:, -1, :] / temperature  # + SMALL_CONST
 
         for token_idx in set(output_so_far[0].tolist()):
