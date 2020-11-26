@@ -17,10 +17,10 @@
 
 import os
 from shutil import copyfile
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 from ...file_utils import add_start_docstrings, is_sentencepiece_available
-from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncoding
+from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, AddedToken, BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 
@@ -64,7 +64,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         unk_token="<unk>",
         mask_token="<mask_2>",
         mask_token_sent="<mask_1>",
-        additional_special_tokens=[],
+        additional_special_tokens=None,
         **kwargs
     ):
         # Add extra_ids to the special token list
@@ -79,6 +79,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             eos_token=eos_token,
             unk_token=unk_token,
             mask_token=mask_token,
+            mask_token_sent=mask_token_sent,
             additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
@@ -88,8 +89,24 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
     def _special_token_mask(self, seq):
         all_special_ids = set(self.all_special_ids)  # call it once instead of inside list comp
         all_special_ids.remove(self.unk_token_id)  # <unk> is only sometimes special
-        assert all_special_ids == set([0, 1, 2])
+
+        assert all_special_ids == set(
+            range(len(self.additional_special_tokens) + 3)
+        ), f"There should be 3 special tokens: mask_token, pad_token, and eos_token + {len(self.additional_special_tokens)} additional_special_tokens, but got {all_special_ids}"
+
         return [1 if x in all_special_ids else 0 for x in seq]
+
+    def _add_tokens(self, new_tokens: List[Union[str, AddedToken]], special_tokens=False) -> int:
+        if special_tokens:
+            # IMPORTANT:
+            # TODO(Thom, Patrick) -> huge hack to make PegasusFastTokenizer tests pass
+            # needs correction at this point
+            tokens_to_add = list(
+                filter(lambda x: isinstance(x, AddedToken) or ("unk_token" not in x and "mask" not in x), new_tokens)
+            )
+            return self._tokenizer.add_special_tokens(tokens_to_add)
+
+        return self._tokenizer.add_tokens(new_tokens)
 
     def get_special_tokens_mask(
         self, token_ids_0: List, token_ids_1: Optional[List] = None, already_has_special_tokens: bool = False

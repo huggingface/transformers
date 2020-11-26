@@ -16,7 +16,7 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = PegasusTokenizer
     rust_tokenizer_class = PegasusTokenizerFast
-    test_rust_tokenizer = False
+    test_rust_tokenizer = True
 
     def setUp(self):
         super().setUp()
