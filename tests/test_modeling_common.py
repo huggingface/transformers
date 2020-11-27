@@ -1022,7 +1022,7 @@ class ModelTesterMixin:
     @require_torch_multi_gpu
     def test_model_parallelization(self):
         if not self.test_model_parallel:
-            pass
+            return
 
         import subprocess
 
@@ -1079,7 +1079,7 @@ class ModelTesterMixin:
     @require_torch_multi_gpu
     def test_model_parallel_equal_results(self):
         if not self.test_model_parallel:
-            pass
+            return
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
