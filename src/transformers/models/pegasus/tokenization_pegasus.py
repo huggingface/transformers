@@ -107,12 +107,10 @@ class PegasusTokenizer(PreTrainedTokenizer):
             if mask_token_sent not in additional_special_tokens:
                 additional_special_tokens = [mask_token_sent] + additional_special_tokens
             # fill additional tokens with ..., <unk_token_102> in case not all additional tokens are already taken
-            additional_special_tokens += [
-                f"<unk_token_{i}>" for i in range(2, self.offset - len(additional_special_tokens))
-            ]
+            additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset - len(additional_special_tokens))]
         else:
             additional_special_tokens = [mask_token_sent]
-            additional_special_tokens += [f"<unk_token_{i}>" for i in range(2, self.offset)]
+            additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
 
         super().__init__(
             eos_token=eos_token,
