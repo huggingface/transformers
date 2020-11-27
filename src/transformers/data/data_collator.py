@@ -26,8 +26,8 @@ def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Ten
         - ``label``: handles a single value (int or float) per object
         - ``label_ids``: handles a list of values per object
 
-    Does not do any additional preprocessing: property names of the input object will be used as corresponding inputs to
-    the model. See glue and ner for example of how it's useful.
+    Does not do any additional preprocessing: property names of the input object will be used as corresponding inputs
+    to the model. See glue and ner for example of how it's useful.
     """
 
     # In this function we'll make the assumption that all `features` in the batch
