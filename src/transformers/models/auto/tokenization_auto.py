@@ -267,7 +267,7 @@ class AutoTokenizer:
         List options
 
         Params:
-            pretrained_model_name_or_path (:obj:`str`):
+            pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
                 Can be either:
 
                     - A string, the `model id` of a predefined tokenizer hosted inside a model repo on huggingface.co.
@@ -283,7 +283,7 @@ class AutoTokenizer:
                 Will be passed along to the Tokenizer ``__init__()`` method.
             config (:class:`~transformers.PreTrainedConfig`, `optional`)
                 The configuration object used to dertermine the tokenizer class to instantiate.
-            cache_dir (:obj:`str`, `optional`):
+            cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
             force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
