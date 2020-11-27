@@ -91,7 +91,7 @@ print(tokenizer_greek.convert_ids_to_tokens(outputs[0, 5].max(0)[1].item()))
 # ================ EXAMPLE 2 ================
 text_2 = 'Είναι ένας [MASK] άνθρωπος.'
 # EN: 'He is a [MASK] person.'
-input_ids = tokenizer_greek.encode(text_1)
+input_ids = tokenizer_greek.encode(text_2)
 print(tokenizer_greek.convert_ids_to_tokens(input_ids))
 # ['[CLS]', 'ειναι', 'ενας', '[MASK]', 'ανθρωπος', '.', '[SEP]']
 outputs = lm_model_greek(torch.tensor([input_ids]))[0]
