@@ -656,7 +656,7 @@ class T5PreTrainedModel(PreTrainedModel):
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, T5LayerNorm):
             module.weight.data.fill_(factor * 1.0)
-        elif isinstance(module, (T5Model, T5ForConditionalGeneration)):
+        elif isinstance(module, (T5Model, T5ForConditionalGeneration, T5EncoderModel)):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
@@ -1369,15 +1369,14 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
         return reordered_decoder_past
 
-    
+
 @add_start_docstrings(
     "The bare T5 Model transformer outputting encoder's raw hidden-states" "without any specific head on top.",
     T5_START_DOCSTRING,
 )
-class T5ModelEncoder(T5PreTrainedModel):
+class T5EncoderModel(T5PreTrainedModel):
     authorized_missing_keys = [
         r"encoder\.embed_tokens\.weight",
-        r"decoder\.(.*?)"
     ]
 
     def __init__(self, config: T5Config):
@@ -1400,7 +1399,7 @@ class T5ModelEncoder(T5PreTrainedModel):
 
     def get_encoder(self):
         return self.encoder
-    
+
     def _prune_heads(self, heads_to_prune):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
@@ -1423,16 +1422,16 @@ class T5ModelEncoder(T5PreTrainedModel):
     ):
         r"""
         Returns:
+
         Example::
-            >>> from transformers import T5Tokenizer, T5ModelEncoder
+            >>> from transformers import T5Tokenizer, T5EncoderModel
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-            >>> model = T5ModelEncoder.from_pretrained('t5-small')
+            >>> model = T5EncoderModel.from_pretrained('t5-small')
             >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
             >>> outputs = model(input_ids=input_ids)
             >>> last_hidden_states = outputs.last_hidden_state
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
 
         encoder_outputs = self.encoder(
             input_ids=input_ids,
@@ -1443,12 +1442,12 @@ class T5ModelEncoder(T5PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        
+
         if return_dict:
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs.last_hidden_state,
-                hidden_states=encoder_outputs.hidden_states if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs.attentions if len(encoder_outputs) > 2 else None,
-        )
+                hidden_states=encoder_outputs.hidden_states,
+                attentions=encoder_outputs.attentions,
+            )
 
         return encoder_outputs

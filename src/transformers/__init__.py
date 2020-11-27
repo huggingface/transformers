@@ -554,7 +554,7 @@ if is_torch_available():
     )
     from .models.t5 import (
         T5_PRETRAINED_MODEL_ARCHIVE_LIST,
-        T5ModelEncoder,
+        T5EncoderModel,
         T5ForConditionalGeneration,
         T5Model,
         T5PreTrainedModel,
@@ -820,7 +820,7 @@ if is_tf_available():
     )
     from .models.t5 import (
         TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFT5ModelEncoder,
+        TFT5EncoderModel,
         TFT5ForConditionalGeneration,
         TFT5Model,
         TFT5PreTrainedModel,

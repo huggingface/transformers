@@ -34,7 +34,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_tf_outputs import TFSeq2SeqLMOutput, TFSeq2SeqModelOutput, TFBaseModelOutput
+from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput, TFSeq2SeqModelOutput
 from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
@@ -1453,12 +1453,12 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             reordered_decoder_past = reordered_decoder_past + (reordered_layer_past_states,)
         return past + (reordered_decoder_past,)
 
-    
+
 @add_start_docstrings(
     "The bare T5 Model transformer outputting encoder's raw hidden-states" "without any specific head on top.",
     T5_START_DOCSTRING,
 )
-class TFT5ModelEncoder(TFT5PreTrainedModel):
+class TFT5EncoderModel(TFT5PreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, name="shared")
@@ -1511,7 +1511,7 @@ class TFT5ModelEncoder(TFT5PreTrainedModel):
             >>> from transformers import T5Tokenizer, TFT5Model
 
             >>> tokenizer = T5Tokenizer.from_pretrained('t5-small')
-            >>> model = TFT5ModelEncoder.from_pretrained('t5-small')
+            >>> model = TFT5EncoderModel.from_pretrained('t5-small')
 
             >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="tf").input_ids  # Batch size 1
             >>> outputs = model(input_ids)
@@ -1545,7 +1545,6 @@ class TFT5ModelEncoder(TFT5PreTrainedModel):
         output_hidden_states = output_hidden_states if output_hidden_states else self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-
         encoder_outputs = self.encoder(
             input_ids,
             attention_mask=attention_mask,
@@ -1561,4 +1560,3 @@ class TFT5ModelEncoder(TFT5PreTrainedModel):
         )
 
         return encoder_outputs
-  
