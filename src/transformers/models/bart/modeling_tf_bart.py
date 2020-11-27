@@ -632,9 +632,10 @@ class TFBartDecoder(tf.keras.layers.Layer):
             all_hidden_states += (x,)
             # T x B x C -> B x T x C
             all_hidden_states = tuple(tf.transpose(hs, perm=(1, 0, 2)) for hs in all_hidden_states)
+            all_hidden_states = tf.convert_to_tensor(all_hidden_states)
         else:
             all_hidden_states = None
-        all_self_attns = list(all_self_attns) if output_attentions else None
+        all_self_attns = tf.convert_to_tensor(list(all_self_attns)) if output_attentions else None
 
         x = tf.transpose(x, perm=(1, 0, 2))
         encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))  # could maybe be avoided.

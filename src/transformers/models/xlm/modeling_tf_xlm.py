@@ -509,6 +509,10 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
         # Add last hidden state
         if inputs["output_hidden_states"]:
             hidden_states = hidden_states + (tensor,)
+            hidden_states = tf.convert_to_tensor(hidden_states)
+        
+        if output_attentions:
+            attentions = tf.convert_to_tensor(attentions)
 
         # update cache length
         if inputs["cache"] is not None:
