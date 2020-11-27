@@ -10,7 +10,7 @@ from transformers.testing_utils import require_flax, require_torch
 if is_flax_available():
     import os
 
-    os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"  # avoid unnecessary OOMs
+    os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = "0.12"  # assumed parallelism: 8
 
     import jax
     from transformers.models.bert.modeling_flax_bert import FlaxBertModel
