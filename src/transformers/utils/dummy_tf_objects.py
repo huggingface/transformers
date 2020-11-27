@@ -997,6 +997,15 @@ class TFMobileBertPreTrainedModel:
         requires_tf(self)
 
 
+class TFMT5EncoderModel:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
 class TFMT5ForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_tf(self)

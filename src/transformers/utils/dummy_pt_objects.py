@@ -1361,6 +1361,15 @@ def load_tf_weights_in_mobilebert(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_mobilebert)
 
 
+class MT5EncoderModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class MT5ForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
