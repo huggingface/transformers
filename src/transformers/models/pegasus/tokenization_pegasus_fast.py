@@ -50,7 +50,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class PegasusTokenizerFast(PreTrainedTokenizerFast):
     r"""
-    Construct a "fast" PEGASUS tokenizer (backed by HuggingFace's `tokenizers` library). Based on SentencePiece.
+    Construct a "fast" PEGASUS tokenizer (backed by HuggingFace's `tokenizers` library). Based on `Unigram
+    <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models>`__.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
