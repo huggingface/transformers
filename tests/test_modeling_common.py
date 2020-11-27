@@ -659,12 +659,14 @@ class ModelTesterMixin:
 
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            hidden_states = outputs["hidden_states"] if "hidden_states" in outputs else outputs[-1]
+
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
+
             if hasattr(self.model_tester, "encoder_seq_length"):
                 seq_length = self.model_tester.encoder_seq_length
                 if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
@@ -676,6 +678,19 @@ class ModelTesterMixin:
                 list(hidden_states[0].shape[-2:]),
                 [seq_length, self.model_tester.hidden_size],
             )
+
+            if config.is_encoder_decoder:
+                hidden_states = outputs.decoder_hidden_states
+
+                self.assertIsInstance(hidden_states, (list, tuple))
+                self.assertEqual(len(hidden_states), expected_num_layers)
+                seq_len = getattr(self.model_tester, "seq_length", None)
+                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]),
+                    [decoder_seq_length, self.model_tester.hidden_size],
+                )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
