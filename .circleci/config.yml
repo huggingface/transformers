@@ -5,13 +5,17 @@ orbs:
 
 commands:
   check-skip-ci-on-doc-files-only:
-    description: "Halt CircleCI step for PRs with only doc changes"
+    description: "Halt this job for PRs with only doc changes"
     steps:
-      - run: |
-          if ! git diff --name-only $(git merge-base --fork-point master) | egrep -qv '\.(md|rst)$'
+      - run:
+        name: skip check
+        command: |
+          if git diff --name-only $(git merge-base --fork-point master) | egrep -qv '\.(md|rst)$'
           then
-            echo "Only docs were modified in this PR, not running the code checking CI job"
-            circleci step halt
+              echo "Non-docs were modified in this PR, proceeding normally"
+          else
+              echo "Only docs were modified in this PR, quitting this job"
+              circleci step halt
           fi
 
 # TPU REFERENCES
