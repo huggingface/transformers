@@ -1,4 +1,3 @@
-
 """
 Simple check list from AllenNLP repo: https://github.com/allenai/allennlp/blob/master/setup.py
 
