@@ -56,7 +56,7 @@ class Distiller:
         self.student_config = student.config
         self.vocab_size = student.config.vocab_size
 
-        if params.n_gpu <= 1:
+        if params.gpus <= 1:
             sampler = RandomSampler(dataset)
         else:
             sampler = DistributedSampler(dataset)
@@ -85,8 +85,8 @@ class Distiller:
             assert 0.0 <= self.mlm_mask_prop <= 1.0
             assert params.word_mask + params.word_keep + params.word_rand == 1.0
             self.pred_probs = torch.FloatTensor([params.word_mask, params.word_keep, params.word_rand])
-            self.pred_probs = self.pred_probs.to(f"cuda:{params.local_rank}") if params.n_gpu > 0 else self.pred_probs
-            self.token_probs = token_probs.to(f"cuda:{params.local_rank}") if params.n_gpu > 0 else token_probs
+            self.pred_probs = self.pred_probs.to(f"cuda:{params.local_rank}") if params.gpus > 0 else self.pred_probs
+            self.token_probs = token_probs.to(f"cuda:{params.local_rank}") if params.gpus > 0 else token_probs
             if self.fp16:
                 self.pred_probs = self.pred_probs.half()
                 self.token_probs = self.token_probs.half()
@@ -345,7 +345,7 @@ class Distiller:
 
             iter_bar = tqdm(self.dataloader, desc="-Iter", disable=self.params.local_rank not in [-1, 0])
             for batch in iter_bar:
-                if self.params.n_gpu > 0:
+                if self.params.gpus > 0:
                     batch = tuple(t.to(f"cuda:{self.params.local_rank}") for t in batch)
 
                 if self.mlm:
