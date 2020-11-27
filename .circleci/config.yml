@@ -8,15 +8,15 @@ commands:
     description: "Halt this job for PRs with only doc changes"
     steps:
       - run:
-        name: skip check
-        command: |
-          if git diff --name-only $(git merge-base --fork-point master) | egrep -qv '\.(md|rst)$'
-          then
-              echo "Non-docs were modified in this PR, proceeding normally"
-          else
-              echo "Only docs were modified in this PR, quitting this job"
-              circleci step halt
-          fi
+          name: skip check
+          command: |
+            if git diff --name-only $(git merge-base --fork-point master) | egrep -qv '\.(md|rst)$'
+            then
+                echo "Non-docs were modified in this PR, proceeding normally"
+            else
+                echo "Only docs were modified in this PR, quitting this job"
+                circleci step halt
+            fi
 
 # TPU REFERENCES
 references:
