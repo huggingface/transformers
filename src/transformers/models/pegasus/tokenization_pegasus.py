@@ -104,10 +104,24 @@ class PegasusTokenizer(PreTrainedTokenizer):
                 additional_special_tokens, list
             ), f"additional_special_tokens should be of type {type(list)}, but is {type(additional_special_tokens)}"
 
-            if mask_token_sent not in additional_special_tokens:
-                additional_special_tokens = [mask_token_sent] + additional_special_tokens
+            additional_special_tokens_extended = (
+                ([mask_token_sent] + additional_special_tokens)
+                if mask_token_sent not in additional_special_tokens
+                else additional_special_tokens
+            )
             # fill additional tokens with ..., <unk_token_102> in case not all additional tokens are already taken
-            additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset - len(additional_special_tokens))]
+            additional_special_tokens_extended += [
+                f"<unk_{i}>" for i in range(len(additional_special_tokens_extended), self.offset - 1)
+            ]
+
+            if len(set(additional_special_tokens_extended)) != len(additional_special_tokens_extended):
+                import ipdb
+
+                ipdb.set_trace()
+                raise ValueError(
+                    f"Please make sure that the provided additional_special_tokens do not contain an incorrectly shifted list of <unk_x> tokens. Found {additional_special_tokens_extended}."
+                )
+            additional_special_tokens = additional_special_tokens_extended
         else:
             additional_special_tokens = [mask_token_sent]
             additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
