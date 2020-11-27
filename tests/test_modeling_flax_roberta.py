@@ -48,6 +48,7 @@ class FlaxRobertaModelTest(unittest.TestCase):
 
 
 @require_flax
+@require_torch
 @pytest.mark.parametrize("jit", ["disable_jit", "enable_jit"])
 def test_multiple_sentences(jit):
     tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
