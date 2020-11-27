@@ -404,17 +404,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.
-        - **authorized_missing_keys** (:obj:`Optional[List[str]]`) -- A list of re pattern of tensor names to ignore
-          when loading the model (and avoid unnecessary warnings).
-        - **keys_to_never_save** (:obj:`Optional[List[str]]`) -- A list of of tensor names to ignore when saving the
-          model (useful for keys that aren't trained, but which are deterministic)
-
     """
     config_class = None
     base_model_prefix = ""
-    authorized_missing_keys = None
-    authorized_unexpected_keys = None
-    keys_to_never_save = None
+    # a list of re pattern of tensor names to ignore from the model when loading the model weights
+    # (and avoid unnecessary warnings).
+    _keys_to_ignore_on_load_missing = None
+    # a list of re pattern of tensor names to ignore from the weights when loading the model weights
+    # (and avoid unnecessary warnings).
+    _keys_to_ignore_on_load_unexpected = None
+    # a list of of tensor names to ignore when saving the model (useful for keys that aren't
+    # trained, but which are deterministic)
+    _keys_to_ignore_on_save = None
 
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
@@ -696,13 +697,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         self.base_model._prune_heads(heads_to_prune)
 
-    def save_pretrained(self, save_directory):
+    def save_pretrained(self, save_directory: Union[str, os.PathLike]):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
         `:func:`~transformers.PreTrainedModel.from_pretrained`` class method.
 
         Arguments:
-            save_directory (:obj:`str`):
+            save_directory (:obj:`str` or :obj:`os.PathLike`):
                 Directory to which to save. Will be created if it doesn't exist.
         """
         if os.path.isfile(save_directory):
@@ -719,8 +720,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         state_dict = model_to_save.state_dict()
 
         # Handle the case where some state_dict keys shouldn't be saved
-        if self.keys_to_never_save is not None:
-            state_dict = {k: v for k, v in state_dict.items() if k not in self.keys_to_never_save}
+        if self._keys_to_ignore_on_save is not None:
+            state_dict = {k: v for k, v in state_dict.items() if k not in self._keys_to_ignore_on_save}
 
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
@@ -740,7 +741,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         logger.info("Model weights saved in {}".format(output_model_file))
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
         r"""
         Instantiate a pretrained pytorch model from a pre-trained model configuration.
 
@@ -755,7 +756,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         weights are discarded.
 
         Parameters:
-            pretrained_model_name_or_path (:obj:`str`, `optional`):
+            pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`, `optional`):
                 Can be either:
 
                     - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
@@ -771,11 +772,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                       arguments ``config`` and ``state_dict``).
             model_args (sequence of positional arguments, `optional`):
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
-            config (:obj:`Union[PretrainedConfig, str]`, `optional`):
+            config (:obj:`Union[PretrainedConfig, str, os.PathLike]`, `optional`):
                 Can be either:
 
                     - an instance of a class derived from :class:`~transformers.PretrainedConfig`,
-                    - a string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained`.
+                    - a string or path valid as input to :func:`~transformers.PretrainedConfig.from_pretrained`.
 
                 Configuration for the model to use instead of an automatically loaded configuation. Configuration can
                 be automatically loaded when:
@@ -793,7 +794,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 weights. In this case though, you should check if using
                 :func:`~transformers.PreTrainedModel.save_pretrained` and
                 :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
-            cache_dir (:obj:`str`, `optional`):
+            cache_dir (:obj:`Union[str, os.PathLike]`, `optional`):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
             from_tf (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -880,6 +881,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         # Load model
         if pretrained_model_name_or_path is not None:
+            pretrained_model_name_or_path = str(pretrained_model_name_or_path)
             if os.path.isdir(pretrained_model_name_or_path):
                 if from_tf and os.path.isfile(os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME + ".index")):
                     # Load from a TF 1.0 checkpoint in priority if from_tf
@@ -1034,12 +1036,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
             # Some models may have keys that are not in the state by design, removing them before needlessly warning
             # the user.
-            if cls.authorized_missing_keys is not None:
-                for pat in cls.authorized_missing_keys:
+            if cls._keys_to_ignore_on_load_missing is not None:
+                for pat in cls._keys_to_ignore_on_load_missing:
                     missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
 
-            if cls.authorized_unexpected_keys is not None:
-                for pat in cls.authorized_unexpected_keys:
+            if cls._keys_to_ignore_on_load_unexpected is not None:
+                for pat in cls._keys_to_ignore_on_load_unexpected:
                     unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
             if len(unexpected_keys) > 0:

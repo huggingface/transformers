@@ -279,7 +279,7 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
     config_class = OpenAIGPTConfig
     load_tf_weights = load_tf_weights_in_openai_gpt
     base_model_prefix = "transformer"
-    authorized_missing_keys = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -502,7 +502,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         for i, block in enumerate(self.h):
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
             outputs = block(hidden_states, attention_mask, head_mask[i], output_attentions=output_attentions)
             hidden_states = outputs[0]

@@ -229,7 +229,7 @@ class LineByLineWithSOPTextDataset(Dataset):
         # to `block_size` anyways, so short sequences are generally wasted
         # computation. However, we *sometimes*
         # (i.e., short_seq_prob == 0.1 == 10% of the time) want to use shorter
-        # sequences to minimize the mismatch between pre-training and fine-tuning.
+        # sequences to minimize the mismatch between pretraining and fine-tuning.
         # The `target_seq_length` is just a rough target however, whereas
         # `block_size` is a hard limit.
         target_seq_length = max_num_tokens
@@ -425,7 +425,7 @@ class TextDatasetForNextSentencePrediction(Dataset):
         # to `block_size` anyways, so short sequences are generally wasted
         # computation. However, we *sometimes*
         # (i.e., short_seq_prob == 0.1 == 10% of the time) want to use shorter
-        # sequences to minimize the mismatch between pre-training and fine-tuning.
+        # sequences to minimize the mismatch between pretraining and fine-tuning.
         # The `target_seq_length` is just a rough target however, whereas
         # `block_size` is a hard limit.
         target_seq_length = max_num_tokens

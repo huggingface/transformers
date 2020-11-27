@@ -4,6 +4,14 @@ language: multilingual
 datasets: wikipedia
 
 license: apache-2.0
+
+widget:
+- text: "Google generated 46 billion [MASK] in revenue."
+- text: "Paris is the capital of [MASK]."
+- text: "Algiers is the largest city in [MASK]."
+- text: "Paris est la [MASK] de la France."
+- text: "Paris est la capitale de la [MASK]."
+- text: "L'élection américaine a eu [MASK] en novembre 2020."
 ---
 
 # bert-base-en-fr-cased
@@ -23,6 +31,8 @@ tokenizer = AutoTokenizer.from_pretrained("Geotrend/bert-base-en-fr-cased")
 model = AutoModel.from_pretrained("Geotrend/bert-base-en-fr-cased")
 
 ```
+
+To generate other smaller versions of multilingual transformers please visit [our Github repo](https://github.com/Geotrend-research/smaller-transformers).
 
 ### How to cite
 

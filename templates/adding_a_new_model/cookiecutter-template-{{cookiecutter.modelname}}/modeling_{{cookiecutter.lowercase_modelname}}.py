@@ -540,7 +540,7 @@ class {{cookiecutter.camelcase_modelname}}PreTrainedModel(PreTrainedModel):
     config_class = {{cookiecutter.camelcase_modelname}}Config
     load_tf_weights = load_tf_weights_in_{{cookiecutter.lowercase_modelname}}
     base_model_prefix = "{{cookiecutter.lowercase_modelname}}"
-    authorized_missing_keys = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """

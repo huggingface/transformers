@@ -47,7 +47,7 @@ class ModelTester:
 class SelectiveCommonTest(unittest.TestCase):
     all_model_classes = (MBartForConditionalGeneration,) if is_torch_available() else ()
 
-    test_save_load_keys_to_never_save = ModelTesterMixin.test_save_load_keys_to_never_save
+    test_save_load__keys_to_ignore_on_save = ModelTesterMixin.test_save_load__keys_to_ignore_on_save
 
     def setUp(self):
         self.model_tester = ModelTester(self)
@@ -62,7 +62,7 @@ class AbstractSeq2SeqIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.tokenizer = AutoTokenizer.from_pretrained(cls.checkpoint_name)
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.checkpoint_name, use_fast=False)
         return cls
 
     @cached_property

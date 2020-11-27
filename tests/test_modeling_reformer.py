@@ -570,6 +570,10 @@ class ReformerTesterMixin:
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_reformer_for_sequence_classification(*config_and_inputs, is_decoder=False)
 
+    def test_retain_grad_hidden_states_attentions(self):
+        # reformer cannot keep gradients in attentions or hidden states
+        return
+
 
 @require_torch
 class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, ModelTesterMixin, unittest.TestCase):
