@@ -274,7 +274,7 @@ class AutoConfig:
         List options
 
         Args:
-            pretrained_model_name_or_path (:obj:`str`):
+            pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
                 Can be either:
 
                     - A string, the `model id` of a pretrained model configuration hosted inside a model repo on
@@ -285,7 +285,7 @@ class AutoConfig:
                       :meth:`~transformers.PreTrainedModel.save_pretrained` method, e.g., ``./my_model_directory/``.
                     - A path or url to a saved configuration JSON `file`, e.g.,
                       ``./my_model_directory/configuration.json``.
-            cache_dir (:obj:`str`, `optional`):
+            cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
             force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -346,7 +346,7 @@ class AutoConfig:
         else:
             # Fallback: use pattern matching on the string.
             for pattern, config_class in CONFIG_MAPPING.items():
-                if pattern in pretrained_model_name_or_path:
+                if pattern in str(pretrained_model_name_or_path):
                     return config_class.from_dict(config_dict, **kwargs)
 
         raise ValueError(

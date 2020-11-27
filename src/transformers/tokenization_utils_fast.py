@@ -498,7 +498,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
     def _save_pretrained(
         self,
-        save_directory: str,
+        save_directory: Union[str, os.PathLike],
         file_names: Tuple[str],
         legacy_format: bool = True,
         filename_prefix: Optional[str] = None,
