@@ -573,6 +573,18 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """
+    The CTRL Model transformer with a sequence classification head on top (linear layer).
+    :class:`~transformers.CTRLForSequenceClassification` uses the last token in order to do the classification, as
+    other causal models (e.g. GPT-2) do. Since it does classification on the last token, it requires to know the
+    position of the last token. If a :obj:`pad_token_id` is defined in the configuration, it finds the last token that
+    is not a padding token in each row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each
+    row of the batch. Since it cannot guess the padding tokens when :obj:`inputs_embeds` are passed instead of
+    :obj:`input_ids`, it does the same (take the last value in each row of the batch).
+    """,
+    CTRL_START_DOCSTRING,
+)
 class CTRLForSequenceClassification(CTRLPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -582,6 +594,13 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
 
         self.init_weights()
 
+    @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="ctrl",
+        output_type=SequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids=None,
@@ -597,6 +616,12 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
