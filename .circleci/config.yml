@@ -5,7 +5,7 @@ orbs:
 
 commands:
   skip-job-on-doc-only-changes:
-    description: "Halt this job for PRs with only doc changes"
+    description: "Do not continue this job and exit with success for PRs with only doc changes"
     steps:
 
       - run:
