@@ -7,16 +7,15 @@ commands:
   check-skip-ci-on-doc-files-only:
     description: "Halt this job for PRs with only doc changes"
     steps:
+
       - run:
           name: skip check
           command: |
-            COMMIT_RANGE=$(echo "${CIRCLE_COMPARE_URL}" | cut -d/ -f7)
-            if [[ $COMMIT_RANGE != *"..."* ]]; then
-                COMMIT_RANGE="${COMMIT_RANGE}...${COMMIT_RANGE}"
-            fi
-            git diff --name-only $COMMIT_RANGE | egrep -v '\.(md|rst)$'
-            #git diff --name-only $(git merge-base --fork-point master) | egrep -qv '\.(md|rst)$'
-            if git diff --name-only $COMMIT_RANGE | egrep -qv '\.(md|rst)$'
+            git diff --name-only << pipeline.git.base_revision >>..<< pipeline.git.revision >>
+            git diff --name-only << pipeline.git.base_revision >>..<< pipeline.git.revision >> | egrep -v '\.(md|rst)$'
+            git diff --name-only << pipeline.git.base_revision >>..<< pipeline.git.revision >> | egrep -qv '\.(md|rst)$'
+            
+            if git diff --name-only << pipeline.git.base_revision >>..<< pipeline.git.revision >> | egrep -v '\.(md|rst)$'
             then
                 echo "Non-docs were modified in this PR, proceeding normally"
             else
