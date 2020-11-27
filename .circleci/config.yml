@@ -4,7 +4,7 @@ orbs:
     go: circleci/go@1.3.0
 
 commands:
-  check-skip-ci-on-doc-files-only:
+  skip-job-on-doc-only-changes:
     description: "Halt this job for PRs with only doc changes"
     steps:
 
@@ -88,7 +88,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - check-skip-ci-on-doc-files-only
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-torch_and_tf-{{ checksum "setup.py" }}
@@ -115,7 +115,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - check-skip-ci-on-doc-files-only
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
@@ -142,7 +142,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - check-skip-ci-on-doc-files-only
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-tf-{{ checksum "setup.py" }}
@@ -169,7 +169,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - check-skip-ci-on-doc-files-only
+            - skip-job-on-doc-only-changes
             - restore_cache:
                 keys:
                     - v0.4-flax-{{ checksum "setup.py" }}
@@ -196,7 +196,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - check-skip-ci-on-doc-files-only
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
@@ -223,7 +223,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - check-skip-ci-on-doc-files-only
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-tf-{{ checksum "setup.py" }}
@@ -248,7 +248,7 @@ jobs:
             RUN_CUSTOM_TOKENIZERS: yes
         steps:
             - checkout
-            - check-skip-ci-on-doc-files-only
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-custom_tokenizers-{{ checksum "setup.py" }}
@@ -276,7 +276,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - check-skip-ci-on-doc-files-only
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-torch_examples-{{ checksum "setup.py" }}
