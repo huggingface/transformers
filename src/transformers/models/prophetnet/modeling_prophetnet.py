@@ -695,6 +695,14 @@ class ProphetNetSelfAttention(nn.Module):
         if attention_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights + attention_mask
 
+        # need two reshapes to keep gradient at attention weights
+        attn_weights_reshaped = attn_weights.view(
+            batch_size, self.num_attn_heads, sequence_length, key_sequence_length
+        )
+        attn_weights = attn_weights_reshaped.view(
+            batch_size * self.num_attn_heads, sequence_length, key_sequence_length
+        )
+
         attn_weights = F.softmax(attn_weights, dim=-1)
         attn_probs = F.dropout(
             attn_weights,
@@ -712,9 +720,8 @@ class ProphetNetSelfAttention(nn.Module):
 
         attn_output = self.out_proj(attn_output)
 
-        attn_weights = attn_weights.view(batch_size, self.num_attn_heads, sequence_length, key_sequence_length)
         attn_output = F.dropout(attn_output, p=self.dropout, training=self.training)
-        return attn_output, attn_weights
+        return attn_output, attn_weights_reshaped
 
 
 class ProhpetNetFeedForward(nn.Module):
@@ -1221,7 +1228,9 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
 
         for encoder_layer in self.layers:
             if output_hidden_states:
-                encoder_hidden_states = encoder_hidden_states + (hidden_states.transpose(0, 1),)
+                hidden_states = hidden_states.transpose(0, 1)
+                encoder_hidden_states = encoder_hidden_states + (hidden_states,)
+                hidden_states = hidden_states.transpose(0, 1)
             hidden_states, attn_probs = encoder_layer(hidden_states, attention_mask=extended_attention_mask)
             if output_attentions:
                 all_attentions = all_attentions + (attn_probs,)
@@ -1413,6 +1422,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
+                # grad cannot be kept because tensor is sliced
                 all_main_stream_hidden_states += (hidden_states[:sequence_length].transpose(0, 1),)
                 if self.config.ngram > 0:
                     all_ngram_stream_hidden_states += (hidden_states[sequence_length:].transpose(0, 1),)

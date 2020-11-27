@@ -72,6 +72,7 @@ from .configuration_auto import (
     MarianConfig,
     MBartConfig,
     MobileBertConfig,
+    MT5Config,
     OpenAIGPTConfig,
     PegasusConfig,
     ProphetNetConfig,
@@ -173,6 +174,7 @@ TOKENIZER_MAPPING = OrderedDict(
     [
         (RetriBertConfig, (RetriBertTokenizer, RetriBertTokenizerFast)),
         (T5Config, (T5Tokenizer, T5TokenizerFast)),
+        (MT5Config, (T5Tokenizer, T5TokenizerFast)),
         (MobileBertConfig, (MobileBertTokenizer, MobileBertTokenizerFast)),
         (DistilBertConfig, (DistilBertTokenizer, DistilBertTokenizerFast)),
         (AlbertConfig, (AlbertTokenizer, AlbertTokenizerFast)),
@@ -185,8 +187,6 @@ TOKENIZER_MAPPING = OrderedDict(
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
         (BartConfig, (BartTokenizer, BartTokenizerFast)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
-        (RobertaConfig, (BertweetTokenizer, None)),
-        (RobertaConfig, (PhobertTokenizer, None)),
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
         (ReformerConfig, (ReformerTokenizer, ReformerTokenizerFast)),
         (ElectraConfig, (ElectraTokenizer, ElectraTokenizerFast)),
@@ -195,7 +195,6 @@ TOKENIZER_MAPPING = OrderedDict(
         (LayoutLMConfig, (LayoutLMTokenizer, LayoutLMTokenizerFast)),
         (DPRConfig, (DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast)),
         (SqueezeBertConfig, (SqueezeBertTokenizer, SqueezeBertTokenizerFast)),
-        (BertConfig, (HerbertTokenizer, HerbertTokenizerFast)),
         (BertConfig, (BertTokenizer, BertTokenizerFast)),
         (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),
         (GPT2Config, (GPT2Tokenizer, GPT2TokenizerFast)),
@@ -213,11 +212,32 @@ TOKENIZER_MAPPING = OrderedDict(
     ]
 )
 
+# For tokenizers which are not directly mapped from a config
+NO_CONFIG_TOKENIZER = [
+    BertJapaneseTokenizer,
+    BertweetTokenizer,
+    HerbertTokenizer,
+    HerbertTokenizerFast,
+    PhobertTokenizer,
+]
+
+
 SLOW_TOKENIZER_MAPPING = {
     k: (v[0] if v[0] is not None else v[1])
     for k, v in TOKENIZER_MAPPING.items()
     if (v[0] is not None or v[1] is not None)
 }
+
+
+def tokenizer_class_from_name(class_name: str):
+    all_tokenizer_classes = (
+        [v[0] for v in TOKENIZER_MAPPING.values() if v[0] is not None]
+        + [v[1] for v in TOKENIZER_MAPPING.values() if v[1] is not None]
+        + NO_CONFIG_TOKENIZER
+    )
+    for c in all_tokenizer_classes:
+        if c.__name__ == class_name:
+            return c
 
 
 class AutoTokenizer:
@@ -307,17 +327,17 @@ class AutoTokenizer:
         if not isinstance(config, PretrainedConfig):
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-        if "bert-base-japanese" in str(pretrained_model_name_or_path):
-            return BertJapaneseTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-
         use_fast = kwargs.pop("use_fast", True)
 
         if config.tokenizer_class is not None:
+            tokenizer_class = None
             if use_fast and not config.tokenizer_class.endswith("Fast"):
                 tokenizer_class_candidate = f"{config.tokenizer_class}Fast"
-            else:
+                tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
+            if tokenizer_class is None:
                 tokenizer_class_candidate = config.tokenizer_class
-            tokenizer_class = globals().get(tokenizer_class_candidate)
+                tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
+
             if tokenizer_class is None:
                 raise ValueError(
                     "Tokenizer class {} does not exist or is not currently imported.".format(tokenizer_class_candidate)

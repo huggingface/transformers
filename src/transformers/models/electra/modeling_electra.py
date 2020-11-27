@@ -165,6 +165,7 @@ class ElectraEmbeddings(nn.Module):
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.position_embedding_type = config.position_embedding_type
 
     # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.forward
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
@@ -183,10 +184,12 @@ class ElectraEmbeddings(nn.Module):
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
-        position_embeddings = self.position_embeddings(position_ids)
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
-        embeddings = inputs_embeds + position_embeddings + token_type_embeddings
+        embeddings = inputs_embeds + token_type_embeddings
+        if self.position_embedding_type == "absolute":
+            position_embeddings = self.position_embeddings(position_ids)
+            embeddings += position_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
@@ -211,6 +214,10 @@ class ElectraSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.position_embedding_type = config.position_embedding_type
+        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+            self.max_position_embeddings = config.max_position_embeddings
+            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -245,6 +252,23 @@ class ElectraSelfAttention(nn.Module):
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+
+        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+            seq_length = hidden_states.size()[1]
+            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
+            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
+            distance = position_ids_l - position_ids_r
+            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
+            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
+
+            if self.position_embedding_type == "relative_key":
+                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+                attention_scores = attention_scores + relative_position_scores
+            elif self.position_embedding_type == "relative_key_query":
+                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
+                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
+
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in ElectraModel forward() function)
@@ -544,8 +568,8 @@ class ElectraPreTrainedModel(PreTrainedModel):
     config_class = ElectraConfig
     load_tf_weights = load_tf_weights_in_electra
     base_model_prefix = "electra"
-    authorized_missing_keys = [r"position_ids"]
-    authorized_unexpected_keys = [r"electra\.embeddings_project\.weight", r"electra\.embeddings_project\.bias"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
+    _keys_to_ignore_on_load_unexpected = [r"electra\.embeddings_project\.weight", r"electra\.embeddings_project\.bias"]
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
@@ -867,8 +891,7 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Electra model with a binary classification head on top as used during pre-training for identifying generated
-    tokens.
+    Electra model with a binary classification head on top as used during pretraining for identifying generated tokens.
 
     It is recommended to load the discriminator checkpoint into that model.
     """,

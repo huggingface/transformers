@@ -19,7 +19,7 @@ Encoder Representations from Transformers) framework to learn these vision-and-l
 build a large-scale Transformer model that consists of three encoders: an object relationship encoder, a language
 encoder, and a cross-modality encoder. Next, to endow our model with the capability of connecting vision and language
 semantics, we pre-train the model with large amounts of image-and-sentence pairs, via five diverse representative
-pre-training tasks: masked language modeling, masked object prediction (feature regression and label classification),
+pretraining tasks: masked language modeling, masked object prediction (feature regression and label classification),
 cross-modality matching, and image question answering. These tasks help in learning both intra-modality and
 cross-modality relationships. After fine-tuning from our pretrained parameters, our model achieves the state-of-the-art
 results on two visual question answering datasets (i.e., VQA and GQA). We also show the generalizability of our
