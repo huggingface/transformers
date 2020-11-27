@@ -94,10 +94,16 @@ PegasusConfig
 PegasusTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-warning: ``add_tokens`` does not work at the moment.
-
 .. autoclass:: transformers.PegasusTokenizer
     :members: __call__, prepare_seq2seq_batch
+
+
+PegasusTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.PegasusTokenizerFast
+    :members: __call__, prepare_seq2seq_batch
+
 
 
 PegasusForConditionalGeneration
