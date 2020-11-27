@@ -8,7 +8,7 @@ commands:
     description: "Halt CircleCI step for PRs with only doc changes"
     steps:
       - run: |
-          if ! git diff --name-only $(git merge-base --fork-point master) | egrep -v '\.(md|rst)$'
+          if ! git diff --name-only $(git merge-base --fork-point master) | egrep -qv '\.(md|rst)$'
           then
             echo "Only docs were modified in this PR, not running the code checking CI job"
             circleci step halt
