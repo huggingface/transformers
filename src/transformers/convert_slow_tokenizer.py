@@ -382,6 +382,22 @@ class AlbertConverter(SpmConverter):
         )
 
 
+class BarthezConverter(SpmConverter):
+    def unk_id(self, proto):
+        unk_id = 3
+        return unk_id
+
+    def post_processor(self):
+        return processors.TemplateProcessing(
+            single="<s> $A </s>",
+            pair="<s> $A </s> </s> $B </s>",
+            special_tokens=[
+                ("<s>", self.original_tokenizer.convert_tokens_to_ids("<s>")),
+                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
+            ],
+        )
+
+
 class CamembertConverter(SpmConverter):
     def vocab(self, proto):
         vocab = [
@@ -572,6 +588,7 @@ class T5Converter(SpmConverter):
 SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
     "BartTokenizer": RobertaConverter,
+    "BarthezTokenizer": BarthezConverter,
     "BertTokenizer": BertConverter,
     "CamembertTokenizer": CamembertConverter,
     "DistilBertTokenizer": BertConverter,
