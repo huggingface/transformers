@@ -374,6 +374,10 @@ class TFTransformer(tf.keras.layers.Layer):
         # Add last layer
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_state,)
+            all_hidden_states = tf.convert_to_tensor(all_hidden_states)
+        
+        if output_attentions:
+            all_attentions = tf.convert_to_tensor(all_attentions)
 
         if not return_dict:
             return tuple(v for v in [hidden_state, all_hidden_states, all_attentions] if v is not None)

@@ -397,11 +397,13 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         hidden_states = tf.reshape(hidden_states, output_shape)
         if inputs["output_hidden_states"]:
             all_hidden_states = all_hidden_states + (hidden_states,)
+            all_hidden_states = tf.convert_to_tensor(all_hidden_states)
 
         if inputs["output_attentions"]:
             # let the number of heads free (-1) so we can extract attention even after head pruning
             attention_output_shape = input_shape[:-1] + [-1] + shape_list(all_attentions[0])[-2:]
             all_attentions = tuple(tf.reshape(t, attention_output_shape) for t in all_attentions)
+            all_attentions = tf.convert_to_tensor(all_attentions)
 
         if not inputs["return_dict"]:
             return tuple(v for v in [hidden_states, presents, all_hidden_states, all_attentions] if v is not None)

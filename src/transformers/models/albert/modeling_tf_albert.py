@@ -422,9 +422,15 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
 
             if output_attentions:
                 all_attentions = all_attentions + layer_group_output[-1]
-
+                
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if output_attentions:
+            all_attentions = tf.convert_to_tensor(all_attentions)
+        
+        if output_hidden_states:
+            all_hidden_states = tf.convert_to_tensor(all_hidden_states)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)

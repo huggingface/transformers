@@ -790,6 +790,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
                 hidden_states = tuple(tf.transpose(hs, perm=(1, 0, 2)) for hs in hidden_states)
         if inputs["output_attentions"]:
             attentions = tuple(tf.transpose(t, perm=(2, 3, 0, 1)) for t in attentions)
+            attentions = tf.convert_to_tensor(attentions)
 
         if not inputs["return_dict"]:
             return tuple(v for v in [output, new_mems, hidden_states, attentions] if v is not None)
