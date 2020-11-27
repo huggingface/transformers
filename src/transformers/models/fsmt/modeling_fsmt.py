@@ -692,6 +692,12 @@ class FSMTDecoder(nn.Module):
                 all_self_attns += (layer_self_attn,)
                 all_cross_attns += (layer_cross_attn,)
 
+        # add hidden states from the last decoder layer
+        if output_hidden_states:
+            x = x.transpose(0, 1)
+            all_hidden_states += (x,)
+            x = x.transpose(0, 1)
+
         # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         x = x.transpose(0, 1)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)

@@ -610,6 +610,12 @@ class BartDecoder(nn.Module):
                 all_self_attns += (layer_self_attn,)
                 all_cross_attentions += (layer_cross_attn,)
 
+        # add hidden states from the last decoder layer
+        if output_hidden_states:
+            x = x.transpose(0, 1)
+            all_hidden_states += (x,)
+            x = x.transpose(0, 1)
+
         if self.layer_norm:  # if config.add_final_layer_norm (mBART)
             x = self.layer_norm(x)
 
