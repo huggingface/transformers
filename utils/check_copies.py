@@ -19,6 +19,7 @@ import importlib
 import os
 import re
 import tempfile
+import warnings
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -330,33 +331,48 @@ def get_model_table_from_auto_modules():
     has_fast_tokenizers = [name for name, tok in tokenizers.items() if tok[1] is not None]
 
     # Model names that have a PyTorch implementation.
-    has_pt_model = [name for name, config in model_name_to_config.items() if config in transformers.MODEL_MAPPING]
-    # Some of the GenerationModel don't have a base model.
-    has_pt_model.extend(
-        [
-            name
-            for name, config in model_name_to_config.items()
-            if config in transformers.MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
-        ]
-    )
-    # Special exception for RAG
-    has_pt_model.append("RAG")
+    # If the PyTorch package is not installed `transformers.MODEL_MAPPING` is `None`
+    has_pt_model = []
+
+    if transformers.MODEL_MAPPING is not None:
+        has_pt_model = [name for name, config in model_name_to_config.items() if config in transformers.MODEL_MAPPING]
+
+        # Some of the GenerationModel don't have a base model.
+        has_pt_model.extend(
+            [
+                name
+                for name, config in model_name_to_config.items()
+                if config in transformers.MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+            ]
+        )
+        # Special exception for RAG
+        has_pt_model.append("RAG")
 
     # Model names that have a TensorFlow implementation.
-    has_tf_model = [name for name, config in model_name_to_config.items() if config in transformers.TF_MODEL_MAPPING]
-    # Some of the GenerationModel don't have a base model.
-    has_tf_model.extend(
-        [
-            name
-            for name, config in model_name_to_config.items()
-            if config in transformers.TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+    # If the TensorFlow package is not installed `transformers.TF_MODEL_MAPPING` is `None`
+    has_tf_model = []
+
+    if transformers.TF_MODEL_MAPPING is not None:
+        has_tf_model = [
+            name for name, config in model_name_to_config.items() if config in transformers.TF_MODEL_MAPPING
         ]
-    )
+        # Some of the GenerationModel don't have a base model.
+        has_tf_model.extend(
+            [
+                name
+                for name, config in model_name_to_config.items()
+                if config in transformers.TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+            ]
+        )
 
     # Model names that have a Flax implementation.
-    has_flax_model = [
-        name for name, config in model_name_to_config.items() if config in transformers.FLAX_MODEL_MAPPING
-    ]
+    # If the jax/flax package is not installed `transformers.FLAX_MODEL_MAPPING` is `None`
+    has_flax_model = []
+
+    if transformers.FLAX_MODEL_MAPPING is not None:
+        has_flax_model = [
+            name for name, config in model_name_to_config.items() if config in transformers.FLAX_MODEL_MAPPING
+        ]
 
     # Let's build that table!
     model_names = list(model_name_to_config.keys())
@@ -401,8 +417,8 @@ def check_model_table(overwrite=False):
             with open(os.path.join(PATH_TO_DOCS, "index.rst"), "w", encoding="utf-8", newline="\n") as f:
                 f.writelines(lines[:start_index] + [new_table] + lines[end_index:])
         else:
-            raise ValueError(
-                "The model table in the `index.rst` has not been updated. Run `make fix-copies` to fix this."
+            warnings.warn(
+                "Make sure you have PyTorch, TensorFlow and Flax installed, and then run `make fix-copies` to fix this."
             )
 
 
