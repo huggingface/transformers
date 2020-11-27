@@ -93,6 +93,7 @@ from .configuration_auto import (
 
 if is_sentencepiece_available():
     from ..albert.tokenization_albert import AlbertTokenizer
+    from ..barthez.tokenization_barthez import BarthezTokenizer
     from ..bert_generation.tokenization_bert_generation import BertGenerationTokenizer
     from ..camembert.tokenization_camembert import CamembertTokenizer
     from ..marian.tokenization_marian import MarianTokenizer
@@ -105,6 +106,7 @@ if is_sentencepiece_available():
     from ..xlnet.tokenization_xlnet import XLNetTokenizer
 else:
     AlbertTokenizer = None
+    BarthezTokenizer = None
     BertGenerationTokenizer = None
     CamembertTokenizer = None
     MarianTokenizer = None
@@ -119,6 +121,7 @@ else:
 if is_tokenizers_available():
     from ..albert.tokenization_albert_fast import AlbertTokenizerFast
     from ..bart.tokenization_bart_fast import BartTokenizerFast
+    from ..barthez.tokenization_barthez_fast import BarthezTokenizerFast
     from ..bert.tokenization_bert_fast import BertTokenizerFast
     from ..camembert.tokenization_camembert_fast import CamembertTokenizerFast
     from ..distilbert.tokenization_distilbert_fast import DistilBertTokenizerFast
@@ -144,6 +147,7 @@ if is_tokenizers_available():
 else:
     AlbertTokenizerFast = None
     BartTokenizerFast = None
+    BarthezTokenizerFast = None
     BertTokenizerFast = None
     CamembertTokenizerFast = None
     DistilBertTokenizerFast = None
@@ -185,6 +189,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (MarianConfig, (MarianTokenizer, None)),
         (BlenderbotConfig, (BlenderbotSmallTokenizer, None)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
+        (BartConfig, (BarthezTokenizer, BarthezTokenizerFast)),
         (BartConfig, (BartTokenizer, BartTokenizerFast)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),

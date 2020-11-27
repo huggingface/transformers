@@ -20,6 +20,15 @@ class BartTokenizerFast:
         requires_tokenizers(self)
 
 
+class BarthezTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+
 class BertTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_tokenizers(self)
