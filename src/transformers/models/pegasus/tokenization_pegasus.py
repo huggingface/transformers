@@ -115,9 +115,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
             ]
 
             if len(set(additional_special_tokens_extended)) != len(additional_special_tokens_extended):
-                import ipdb
-
-                ipdb.set_trace()
                 raise ValueError(
                     f"Please make sure that the provided additional_special_tokens do not contain an incorrectly shifted list of <unk_x> tokens. Found {additional_special_tokens_extended}."
                 )
