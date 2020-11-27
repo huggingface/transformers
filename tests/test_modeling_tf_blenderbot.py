@@ -18,18 +18,16 @@ import unittest
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_tf_bart import TFBartModelTester
 from tests.test_modeling_tf_common import TFModelTesterMixin
-from transformers import BlenderbotConfig, is_tf_available, BlenderbotSmallTokenizer
-
+from transformers import BlenderbotConfig, BlenderbotSmallTokenizer, is_tf_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import is_pt_tf_cross_test, require_tf, require_tokenizers, slow
+
 
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import (
-        TFAutoModelForSeq2SeqLM,
-        TFBlenderbotForConditionalGeneration,
-    )
+    from transformers import TFAutoModelForSeq2SeqLM, TFBlenderbotForConditionalGeneration
+
 
 class TFBlenderbotModelTester(TFBartModelTester):
     config_updates = dict(

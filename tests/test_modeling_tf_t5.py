@@ -281,7 +281,7 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_t5_decoder_model_past_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_t5_decoder_model_past_large_inputs(*config_and_inputs)
-    
+
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

@@ -93,7 +93,7 @@ class TestTFMarianCommon(TFModelTesterMixin, unittest.TestCase):
         # Compile extended model
         extended_model = tf.keras.Model(inputs=[input_ids], outputs=[outputs])
         extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
-    
+
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

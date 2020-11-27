@@ -162,7 +162,7 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
         self.model_tester.set_seed()
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_transfo_xl_lm_head(*config_and_inputs)
-    
+
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
