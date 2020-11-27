@@ -11,7 +11,10 @@ commands:
       - run:
           name: skip check
           command: |
+            git merge-base --fork-point master
+            
             git diff --name-only << pipeline.git.base_revision >>..<< pipeline.git.revision >>
+            git diff --name-only << pipeline.git.base_revision >>...<< pipeline.git.revision >>
             git diff --name-only << pipeline.git.base_revision >>..<< pipeline.git.revision >> | egrep -v '\.(md|rst)$'
             git diff --name-only << pipeline.git.base_revision >>..<< pipeline.git.revision >> | egrep -qv '\.(md|rst)$'
             
