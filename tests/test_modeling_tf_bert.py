@@ -340,6 +340,7 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertTrue(layer.split("_")[0] in ["dropout", "classifier"])
 
 
+@require_tf
 class TFBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
@@ -347,7 +348,7 @@ class TFBertModelIntegrationTest(unittest.TestCase):
         input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
-        expected_shape = [1, 6, 10]
+        expected_shape = [1, 6, 32000]
         self.assertEqual(output.shape, expected_shape)
 
         print(output[:, :3, :3])
@@ -355,9 +356,9 @@ class TFBertModelIntegrationTest(unittest.TestCase):
         expected_slice = tf.constant(
             [
                 [
-                    [0.03706957, 0.10124919, 0.03616843],
-                    [-0.06099961, 0.02266058, 0.00601412],
-                    [-0.06066202, 0.05684517, 0.02038802],
+                    [-0.05243197, -0.04498899, 0.05512108],
+                    [-0.07444685, -0.01064632, 0.04352357],
+                    [-0.05020351, 0.05530146, 0.00700043],
                 ]
             ]
         )

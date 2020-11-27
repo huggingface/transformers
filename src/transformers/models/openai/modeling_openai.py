@@ -19,7 +19,6 @@
 import json
 import math
 import os
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -280,7 +279,7 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
     config_class = OpenAIGPTConfig
     load_tf_weights = load_tf_weights_in_openai_gpt
     base_model_prefix = "transformer"
-    authorized_missing_keys = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """Initialize the weights."""
@@ -503,7 +502,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         for i, block in enumerate(self.h):
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
             outputs = block(hidden_states, attention_mask, head_mask[i], output_attentions=output_attentions)
             hidden_states = outputs[0]
@@ -645,7 +644,6 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs
     ):
         r"""
         mc_token_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input):
@@ -659,8 +657,6 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
             Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
             num_choices]`` where `num_choices` is the size of the second dimension of the input tensors. (see
             `input_ids` above)
-        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
-            Used to hide legacy arguments that have been deprecated.
 
         Return:
 
@@ -683,13 +679,6 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
             >>> mc_logits = outputs.mc_logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        if "lm_labels" in kwargs:
-            warnings.warn(
-                "The `lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
-                FutureWarning,
-            )
-            labels = kwargs.pop("lm_labels")
-        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         transformer_outputs = self.transformer(
             input_ids,

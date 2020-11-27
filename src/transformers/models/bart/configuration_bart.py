@@ -108,8 +108,11 @@ class BartConfig(PretrainedConfig):
         force_bos_token_to_be_generated (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to force BOS token to be generated at step 1 (after ``decoder_start_token_id``), only
             :obj:`True` for `bart-large-cnn`.
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not the model should return the last key/values attentions (not used by all models).
     """
     model_type = "bart"
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
@@ -133,9 +136,6 @@ class BartConfig(PretrainedConfig):
         classifier_dropout=0.0,
         num_labels=3,
         is_encoder_decoder=True,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
         normalize_before=False,
         add_final_layer_norm=False,
         do_blenderbot_90_layernorm=False,
@@ -144,6 +144,10 @@ class BartConfig(PretrainedConfig):
         static_position_embeddings=False,
         add_bias_logits=False,
         force_bos_token_to_be_generated=False,
+        use_cache=True,
+        pad_token_id=1,
+        bos_token_id=0,
+        eos_token_id=2,
         **common_kwargs
     ):
         r"""
@@ -206,6 +210,8 @@ class BartConfig(PretrainedConfig):
         self.force_bos_token_to_be_generated = force_bos_token_to_be_generated
 
         self.do_blenderbot_90_layernorm = do_blenderbot_90_layernorm
+
+        self.use_cache = use_cache
 
     @property
     def num_attention_heads(self) -> int:

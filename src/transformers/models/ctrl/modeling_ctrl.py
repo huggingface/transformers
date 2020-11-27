@@ -15,9 +15,6 @@
 # limitations under the License.
 """ PyTorch CTRL model."""
 
-
-import warnings
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -369,15 +366,7 @@ class CTRLModel(CTRLPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs,
     ):
-        if "past" in kwargs:
-            warnings.warn(
-                "The `past` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = kwargs.pop("past")
-        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -452,13 +441,12 @@ class CTRLModel(CTRLPreTrainedModel):
 
         hidden_states = self.dropout(hidden_states)
 
-        output_shape = input_shape + (inputs_embeds.size(-1),)
         presents = () if use_cache else None
         all_hidden_states = () if output_hidden_states else None
-        all_attentions = [] if output_attentions else None
+        all_attentions = () if output_attentions else None
         for i, (h, layer_past) in enumerate(zip(self.h, past_key_values)):
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states.view(*output_shape),)
+                all_hidden_states = all_hidden_states + (hidden_states,)
             outputs = h(
                 hidden_states,
                 mask,
@@ -473,17 +461,11 @@ class CTRLModel(CTRLPreTrainedModel):
                 presents = presents + (present,)
 
             if output_attentions:
-                all_attentions.append(outputs[2])
+                all_attentions += (outputs[2],)
 
         hidden_states = self.layernorm(hidden_states)
-        hidden_states = hidden_states.view(*output_shape)
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if output_attentions:
-            # let the number of heads free (-1) so we can extract attention even after head pruning
-            attention_output_shape = input_shape[:-1] + (-1,) + all_attentions[0].shape[-2:]
-            all_attentions = tuple(t.view(*attention_output_shape) for t in all_attentions)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, presents, all_hidden_states, all_attentions] if v is not None)
@@ -542,7 +524,6 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -550,13 +531,6 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
             ``labels = input_ids`` Indices are selected in ``[-100, 0, ..., config.vocab_size]`` All labels set to
             ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size]``
         """
-        if "past" in kwargs:
-            warnings.warn(
-                "The `past` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = kwargs.pop("past")
-        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_outputs = self.transformer(

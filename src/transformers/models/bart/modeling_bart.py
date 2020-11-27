@@ -15,7 +15,6 @@
 """PyTorch BART model, ported from the fairseq repo."""
 import math
 import random
-import warnings
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -359,11 +358,13 @@ class BartEncoder(nn.Module):
         # B x T x C -> T x B x C
         x = x.transpose(0, 1)
 
-        encoder_states = [] if output_hidden_states else None
+        encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         for encoder_layer in self.layers:
             if output_hidden_states:
-                encoder_states.append(x)
+                x = x.transpose(0, 1)  # T x B x C -> B x T x C
+                encoder_states = encoder_states + (x,)
+                x = x.transpose(0, 1)  # B x T x C -> T x B x C
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
@@ -376,13 +377,12 @@ class BartEncoder(nn.Module):
 
         if self.layer_norm:
             x = self.layer_norm(x)
-        if output_hidden_states:
-            encoder_states.append(x)
-            # T x B x C -> B x T x C
-            encoder_states = tuple(hidden_state.transpose(0, 1) for hidden_state in encoder_states)
 
         # T x B x C -> B x T x C
         x = x.transpose(0, 1)
+
+        if output_hidden_states:
+            encoder_states = encoder_states + (x,)
 
         if not return_dict:
             return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
@@ -529,7 +529,6 @@ class BartDecoder(nn.Module):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
-        **unused,
     ):
         """
         Includes several features from "Jointly Learning to Align and Translate with Transformer Models" (Garg et al.,
@@ -551,18 +550,6 @@ class BartDecoder(nn.Module):
                 - hidden states
                 - attentions
         """
-        if "decoder_cached_states" in unused:
-            warnings.warn(
-                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = unused.pop("decoder_cached_states")
-        if "decoder_past_key_values" in unused:
-            warnings.warn(
-                "The `decoder_past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = unused.pop("decoder_past_key_values")
 
         # check attention mask and invert
         if encoder_padding_mask is not None:
@@ -597,7 +584,9 @@ class BartDecoder(nn.Module):
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
+                x = x.transpose(0, 1)
                 all_hidden_states += (x,)
+                x = x.transpose(0, 1)
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.layerdrop):
                 continue
@@ -625,8 +614,6 @@ class BartDecoder(nn.Module):
             x = self.layer_norm(x)
 
         # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
-        if output_hidden_states:
-            all_hidden_states = tuple(hidden_state.transpose(0, 1) for hidden_state in all_hidden_states)
         x = x.transpose(0, 1)
         encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
@@ -742,7 +729,16 @@ class Attention(nn.Module):
             reshaped = key_padding_mask.unsqueeze(1).unsqueeze(2)
             attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+
         attn_weights = F.softmax(attn_weights, dim=-1)
+
+        if output_attentions:
+            # make sure that attn_weights are included in graph
+            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+        else:
+            attn_weights_reshaped = None
+
         attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
 
         assert v is not None
@@ -750,11 +746,8 @@ class Attention(nn.Module):
         assert attn_output.size() == (bsz * self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
         attn_output = self.out_proj(attn_output)
-        if output_attentions:
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights = None
-        return attn_output, attn_weights
+
+        return attn_output, attn_weights_reshaped
 
     def _concat_saved_state(self, k, v, saved_state, static_kv, bsz) -> Tuple[Tensor]:
         # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
@@ -873,14 +866,7 @@ class BartModel(PretrainedBartModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **kwargs,
     ):
-        if "decoder_past_key_values" in kwargs:
-            warnings.warn(
-                "The `decoder_past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = kwargs.pop("decoder_past_key_values")
 
         if decoder_input_ids is None:
             use_cache = False
@@ -967,7 +953,7 @@ class BartModel(PretrainedBartModel):
 )
 class BartForConditionalGeneration(PretrainedBartModel):
     base_model_prefix = "model"
-    authorized_missing_keys = [r"final_logits_bias", r"encoder\.version", r"decoder\.version"]
+    _keys_to_ignore_on_load_missing = [r"final_logits_bias", r"encoder\.version", r"decoder\.version"]
 
     def __init__(self, config: BartConfig):
         super().__init__(config)
@@ -1006,7 +992,6 @@ class BartForConditionalGeneration(PretrainedBartModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
-        **unused,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1034,24 +1019,6 @@ class BartForConditionalGeneration(PretrainedBartModel):
             >>> tokenizer.decode(predictions).split()
             >>> # ['good', 'great', 'all', 'really', 'very']
         """
-        if "lm_labels" in unused:
-            warnings.warn(
-                "The `lm_labels` argument is deprecated and will be removed in a future version, use `labels` instead.",
-                FutureWarning,
-            )
-            labels = unused.pop("lm_labels")
-        if "decoder_cached_states" in unused:
-            warnings.warn(
-                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = unused.pop("decoder_cached_states")
-        if "decoder_past_key_values" in unused:
-            warnings.warn(
-                "The `decoder_past_key_values` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-                FutureWarning,
-            )
-            past_key_values = unused.pop("decoder_past_key_values")
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:

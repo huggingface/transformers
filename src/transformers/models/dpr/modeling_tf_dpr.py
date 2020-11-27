@@ -14,13 +14,10 @@
 # limitations under the License.
 """ TensorFlow DPR model for Open Domain Question Answering."""
 
-
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import tensorflow as tf
-from tensorflow import Tensor
-from tensorflow.keras.layers import Dense
 
 from ...file_utils import (
     ModelOutput,
@@ -29,8 +26,7 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_tf_outputs import TFBaseModelOutputWithPooling
-from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, shape_list
-from ...tokenization_utils import BatchEncoding
+from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, input_processing, shape_list
 from ...utils import logging
 from ..bert.modeling_tf_bert import TFBertMainLayer
 from .configuration_dpr import DPRConfig
@@ -82,7 +78,7 @@ class TFDPRContextEncoderOutput(ModelOutput):
             heads.
     """
 
-    pooler_output: tf.Tensor
+    pooler_output: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
 
@@ -110,7 +106,7 @@ class TFDPRQuestionEncoderOutput(ModelOutput):
             heads.
     """
 
-    pooler_output: tf.Tensor
+    pooler_output: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
     attentions: Optional[Tuple[tf.Tensor]] = None
 
@@ -141,7 +137,7 @@ class TFDPRReaderOutput(ModelOutput):
             heads.
     """
 
-    start_logits: tf.Tensor
+    start_logits: tf.Tensor = None
     end_logits: tf.Tensor = None
     relevance_logits: tf.Tensor = None
     hidden_states: Optional[Tuple[tf.Tensor]] = None
@@ -162,26 +158,25 @@ class TFDPREncoder(TFPreTrainedModel):
         assert self.bert_model.config.hidden_size > 0, "Encoder hidden_size can't be zero"
         self.projection_dim = config.projection_dim
         if self.projection_dim > 0:
-            self.encode_proj = Dense(
+            self.encode_proj = tf.keras.layers.Dense(
                 config.projection_dim, kernel_initializer=get_initializer(config.initializer_range), name="encode_proj"
             )
 
     def call(
         self,
-        input_ids: Tensor,
-        attention_mask: Optional[Tensor] = None,
-        token_type_ids: Optional[Tensor] = None,
-        inputs_embeds: Optional[Tensor] = None,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
+        input_ids: tf.Tensor = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        output_attentions: bool = None,
+        output_hidden_states: bool = None,
         return_dict: bool = None,
         training: bool = False,
-    ) -> Union[TFBaseModelOutputWithPooling, Tuple[Tensor, ...]]:
-
-        return_dict = return_dict if return_dict is not None else self.bert_model.return_dict
-
-        outputs = self.bert_model(
-            inputs=input_ids,
+        **kwargs,
+    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor, ...]]:
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
@@ -189,7 +184,20 @@ class TFDPREncoder(TFPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            kwargs_call=kwargs,
         )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert_model.return_dict
+        outputs = self.bert_model(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
+        )
+
         sequence_output, pooled_output = outputs[:2]
         pooled_output = sequence_output[:, 0, :]
         if self.projection_dim > 0:
@@ -220,33 +228,53 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
         super().__init__(config, *args, **kwargs)
         self.encoder = TFDPREncoder(config, name="encoder")
 
-        self.qa_outputs = Dense(2, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs")
-        self.qa_classifier = Dense(
+        self.qa_outputs = tf.keras.layers.Dense(
+            2, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
+        )
+        self.qa_classifier = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="qa_classifier"
         )
 
     def call(
         self,
-        input_ids: Tensor,
-        attention_mask: Tensor,
-        inputs_embeds: Optional[Tensor] = None,
+        input_ids: tf.Tensor,
+        attention_mask: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = False,
         training: bool = False,
-    ) -> Union[TFDPRReaderOutput, Tuple[Tensor, ...]]:
+        **kwargs,
+    ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
         # notations: N - number of questions in a batch, M - number of passages per questions, L - sequence length
         n_passages, sequence_length = shape_list(input_ids) if input_ids is not None else shape_list(inputs_embeds)[:2]
         # feed encoder
 
-        outputs = self.encoder(
-            input_ids,
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            kwargs_call=kwargs,
+        )
+        return_dict = (
+            inputs["return_dict"] if inputs["return_dict"] is not None else self.encoder.bert_model.return_dict
+        )
+        outputs = self.encoder(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
         )
         sequence_output = outputs[0]
 
@@ -450,15 +478,16 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
     @replace_return_docstrings(output_type=TFDPRContextEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        inputs,
-        attention_mask: Optional[Tensor] = None,
-        token_type_ids: Optional[Tensor] = None,
-        inputs_embeds: Optional[Tensor] = None,
+        input_ids=None,
+        attention_mask: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
         training: bool = False,
-    ) -> Union[TFDPRContextEncoderOutput, Tuple[Tensor, ...]]:
+        **kwargs,
+    ) -> Union[TFDPRContextEncoderOutput, Tuple[tf.Tensor, ...]]:
         r"""
         Return:
 
@@ -470,52 +499,9 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
             >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='tf')["input_ids"]
             >>> embeddings = model(input_ids).pooler_output
         """
-
-        if isinstance(inputs, (tuple, list)):
-            input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            inputs_embeds = inputs[2] if len(inputs) > 2 else inputs_embeds
-            output_attentions = inputs[3] if len(inputs) > 3 else output_attentions
-            output_hidden_states = inputs[4] if len(inputs) > 4 else output_hidden_states
-            return_dict = inputs[5] if len(inputs) > 5 else return_dict
-            assert len(inputs) <= 6, "Too many inputs."
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            input_ids = inputs.get("input_ids")
-            attention_mask = inputs.get("attention_mask", attention_mask)
-            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            output_attentions = inputs.get("output_attentions", output_attentions)
-            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            return_dict = inputs.get("return_dict", return_dict)
-            assert len(inputs) <= 6, "Too many inputs."
-        else:
-            input_ids = inputs
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = shape_list(input_ids)
-        elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        if attention_mask is None:
-            attention_mask = (
-                tf.ones(input_shape, dtype=tf.dtypes.int32)
-                if input_ids is None
-                else (input_ids != self.config.pad_token_id)
-            )
-        if token_type_ids is None:
-            token_type_ids = tf.zeros(input_shape, dtype=tf.dtypes.int32)
-
-        outputs = self.ctx_encoder(
-            input_ids,
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
@@ -523,6 +509,45 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            kwargs_call=kwargs,
+        )
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"]
+            if inputs["output_hidden_states"] is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
+
+        if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif inputs["input_ids"] is not None:
+            input_shape = shape_list(inputs["input_ids"])
+        elif inputs["inputs_embeds"] is not None:
+            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        if inputs["attention_mask"] is None:
+            inputs["attention_mask"] = (
+                tf.ones(input_shape, dtype=tf.dtypes.int32)
+                if inputs["input_ids"] is None
+                else (inputs["input_ids"] != self.config.pad_token_id)
+            )
+        if inputs["token_type_ids"] is None:
+            inputs["token_type_ids"] = tf.zeros(input_shape, dtype=tf.dtypes.int32)
+
+        outputs = self.ctx_encoder(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=inputs["training"],
         )
 
         if not return_dict:
@@ -549,15 +574,16 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
     @replace_return_docstrings(output_type=TFDPRQuestionEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        inputs,
-        attention_mask: Optional[Tensor] = None,
-        token_type_ids: Optional[Tensor] = None,
-        inputs_embeds: Optional[Tensor] = None,
+        input_ids=None,
+        attention_mask: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
         training: bool = False,
-    ) -> Union[TFDPRQuestionEncoderOutput, Tuple[Tensor, ...]]:
+        **kwargs,
+    ) -> Union[TFDPRQuestionEncoderOutput, Tuple[tf.Tensor, ...]]:
         r"""
         Return:
 
@@ -569,52 +595,9 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
             >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors='tf')["input_ids"]
             >>> embeddings = model(input_ids).pooler_output
         """
-
-        if isinstance(inputs, (tuple, list)):
-            input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            inputs_embeds = inputs[2] if len(inputs) > 2 else inputs_embeds
-            output_attentions = inputs[3] if len(inputs) > 3 else output_attentions
-            output_hidden_states = inputs[4] if len(inputs) > 4 else output_hidden_states
-            return_dict = inputs[5] if len(inputs) > 5 else return_dict
-            assert len(inputs) <= 6, "Too many inputs."
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            input_ids = inputs.get("input_ids")
-            attention_mask = inputs.get("attention_mask", attention_mask)
-            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            output_attentions = inputs.get("output_attentions", output_attentions)
-            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            return_dict = inputs.get("return_dict", return_dict)
-            assert len(inputs) <= 6, "Too many inputs."
-        else:
-            input_ids = inputs
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = shape_list(input_ids)
-        elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        if attention_mask is None:
-            attention_mask = (
-                tf.ones(input_shape, dtype=tf.dtypes.int32)
-                if input_ids is None
-                else (input_ids != self.config.pad_token_id)
-            )
-        if token_type_ids is None:
-            token_type_ids = tf.zeros(input_shape, dtype=tf.dtypes.int32)
-
-        outputs = self.question_encoder(
-            input_ids,
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
@@ -622,6 +605,45 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            kwargs_call=kwargs,
+        )
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"]
+            if inputs["output_hidden_states"] is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
+
+        if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif inputs["input_ids"] is not None:
+            input_shape = shape_list(inputs["input_ids"])
+        elif inputs["inputs_embeds"] is not None:
+            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        if inputs["attention_mask"] is None:
+            inputs["attention_mask"] = (
+                tf.ones(input_shape, dtype=tf.dtypes.int32)
+                if inputs["input_ids"] is None
+                else (inputs["input_ids"] != self.config.pad_token_id)
+            )
+        if inputs["token_type_ids"] is None:
+            inputs["token_type_ids"] = tf.zeros(input_shape, dtype=tf.dtypes.int32)
+
+        outputs = self.question_encoder(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=inputs["training"],
         )
 
         if not return_dict:
@@ -648,14 +670,16 @@ class TFDPRReader(TFDPRPretrainedReader):
     @replace_return_docstrings(output_type=TFDPRReaderOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        inputs,
-        attention_mask: Optional[Tensor] = None,
-        inputs_embeds: Optional[Tensor] = None,
+        input_ids=None,
+        attention_mask: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         output_attentions: bool = None,
         output_hidden_states: bool = None,
         return_dict=None,
         training: bool = False,
-    ) -> Union[TFDPRReaderOutput, Tuple[Tensor, ...]]:
+        **kwargs,
+    ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
         r"""
         Return:
 
@@ -676,49 +700,50 @@ class TFDPRReader(TFDPRPretrainedReader):
             >>> relevance_logits = outputs.relevance_logits
 
         """
-        if isinstance(inputs, (tuple, list)):
-            input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            inputs_embeds = inputs[2] if len(inputs) > 2 else inputs_embeds
-            output_attentions = inputs[3] if len(inputs) > 3 else output_attentions
-            output_hidden_states = inputs[4] if len(inputs) > 4 else output_hidden_states
-            return_dict = inputs[5] if len(inputs) > 5 else return_dict
-            assert len(inputs) <= 6, "Too many inputs."
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            input_ids = inputs.get("input_ids")
-            attention_mask = inputs.get("attention_mask", attention_mask)
-            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            output_attentions = inputs.get("output_attentions", output_attentions)
-            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            return_dict = inputs.get("return_dict", return_dict)
-            assert len(inputs) <= 6, "Too many inputs."
-        else:
-            input_ids = inputs
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = shape_list(input_ids)
-        elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        if attention_mask is None:
-            attention_mask = tf.ones(input_shape, dtype=tf.dtypes.int32)
-
-        return self.span_predictor(
-            input_ids,
-            attention_mask,
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            kwargs_call=kwargs,
+        )
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"]
+            if inputs["output_hidden_states"] is not None
+            else self.config.output_hidden_states
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
+
+        if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif inputs["input_ids"] is not None:
+            input_shape = shape_list(inputs["input_ids"])
+        elif inputs["inputs_embeds"] is not None:
+            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        if inputs["attention_mask"] is None:
+            inputs["attention_mask"] = tf.ones(input_shape, dtype=tf.dtypes.int32)
+
+        if token_type_ids is None:
+            token_type_ids = tf.zeros(input_shape, dtype=tf.dtypes.int32)
+
+        return self.span_predictor(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=inputs["training"],
         )

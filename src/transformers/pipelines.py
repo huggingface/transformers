@@ -1182,7 +1182,6 @@ class FillMaskPipeline(Pipeline):
         device: int = -1,
         top_k=5,
         task: str = "",
-        **kwargs
     ):
         super().__init__(
             model=model,
@@ -1196,15 +1195,7 @@ class FillMaskPipeline(Pipeline):
         )
 
         self.check_model_type(TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_MASKED_LM_MAPPING)
-
-        if "topk" in kwargs:
-            warnings.warn(
-                "The `topk` argument is deprecated and will be removed in a future version, use `top_k` instead.",
-                FutureWarning,
-            )
-            self.top_k = kwargs.pop("topk")
-        else:
-            self.top_k = top_k
+        self.top_k = top_k
 
     def ensure_exactly_one_mask_token(self, masked_index: np.ndarray):
         numel = np.prod(masked_index.shape)
@@ -1633,7 +1624,17 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
         elif "data" in kwargs:
             inputs = kwargs["data"]
         elif "question" in kwargs and "context" in kwargs:
-            inputs = [{"question": kwargs["question"], "context": kwargs["context"]}]
+            if isinstance(kwargs["question"], list) and isinstance(kwargs["context"], str):
+                inputs = [{"question": Q, "context": kwargs["context"]} for Q in kwargs["question"]]
+            elif isinstance(kwargs["question"], list) and isinstance(kwargs["context"], list):
+                if len(kwargs["question"]) != len(kwargs["context"]):
+                    raise ValueError("Questions and contexts don't have the same lengths")
+
+                inputs = [{"question": Q, "context": C} for Q, C in zip(kwargs["question"], kwargs["context"])]
+            elif isinstance(kwargs["question"], str) and isinstance(kwargs["context"], str):
+                inputs = [{"question": kwargs["question"], "context": kwargs["context"]}]
+            else:
+                raise ValueError("Arguments can't be understood")
         else:
             raise ValueError("Unknown arguments {}".format(kwargs))
 
