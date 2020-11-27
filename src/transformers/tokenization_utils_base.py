@@ -1905,7 +1905,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         return tokenizer
 
     def save_pretrained(
-        self, save_directory: Union[str, os.PathLike], legacy_format: bool = True, filename_prefix: Optional[str] = None
+        self,
+        save_directory: Union[str, os.PathLike],
+        legacy_format: bool = True,
+        filename_prefix: Optional[str] = None,
     ) -> Tuple[str]:
         """
         Save the full tokenizer state.
