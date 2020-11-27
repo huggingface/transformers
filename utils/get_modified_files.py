@@ -13,11 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# this script reports modified .py files under the desired list of top-level sub-dirs passed as a list of arguments, e.g.:
+# this script prints a list of modified files in the current branch since the branch was made
+#
+# 1. w/o any arguments it returns all modified files
+#
+# 2. if a list of top-level sub-dirs is passed as its arguments, it'll (1) grep only `.py$` files, (2) only
+# under those sub-dirs. Example:
+#
 #   python ./utils/get_modified_files.py utils src tests examples
 #
-# it uses git to find the forking point and which files were modified - i.e. files not under git won't be considered
-# since the output of this script is fed into Makefile commands it doesn't print a newline after the results
+# notes:
+#
+# - it uses git to find the forking point at which files were modified - i.e. files not under git won't be considered
+#
+# - since the output of this script is fed into Makefile commands it doesn't print a newline after the results
 
 import re
 import subprocess
@@ -27,8 +36,11 @@ import sys
 fork_point_sha = subprocess.check_output("git merge-base --fork-point master".split()).decode("utf-8")
 modified_files = subprocess.check_output(f"git diff --name-only {fork_point_sha}".split()).decode("utf-8").split()
 
-joined_dirs = "|".join(sys.argv[1:])
-regex = re.compile(fr"^({joined_dirs}).*?\.py$")
+# XXX: could make it into a proper argparse program down the road, and if so add an actual flag to grep for py files
+if len(sys.argv) > 1:
+    joined_dirs = "|".join(sys.argv[1:])
+    regex = re.compile(fr"^({joined_dirs}).*?\.py$")
 
-relevant_modified_files = [x for x in modified_files if regex.match(x)]
-print(" ".join(relevant_modified_files), end="")
+    modified_files = [x for x in modified_files if regex.match(x)]
+    
+print(" ".join(modified_files), end="")
