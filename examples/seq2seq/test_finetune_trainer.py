@@ -4,7 +4,14 @@ from unittest.mock import patch
 
 from transformers import BertTokenizer, EncoderDecoderModel
 from transformers.file_utils import is_datasets_available
-from transformers.testing_utils import TestCasePlus, execute_subprocess_async, get_gpu_count, slow
+from transformers.testing_utils import (
+    TestCasePlus,
+    execute_subprocess_async,
+    get_gpu_count,
+    require_torch_multi_gpu,
+    require_torch_non_multi_gpu,
+    slow,
+)
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import set_seed
 
@@ -18,12 +25,25 @@ MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
 
 
 class TestFinetuneTrainer(TestCasePlus):
-    def test_finetune_trainer(self):
-        output_dir = self.run_trainer(1, "12", MBART_TINY, 1)
+    def finetune_trainer_quick(self, dist=None):
+        output_dir = self.run_trainer(1, "12", MBART_TINY, 1, dist)
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
         eval_metrics = [log for log in logs if "eval_loss" in log.keys()]
         first_step_stats = eval_metrics[0]
         assert "eval_bleu" in first_step_stats
+
+    # the following test that the trainer can handle dist={None|dp|ddp}
+    @require_torch_non_multi_gpu
+    def test_finetune_trainer_no_dist(self):
+        self.finetune_trainer_quick()
+
+    @require_torch_multi_gpu
+    def test_finetune_trainer_dp(self):
+        self.finetune_trainer_quick(dist="dp")
+
+    @require_torch_multi_gpu
+    def test_finetune_trainer_ddp(self):
+        self.finetune_trainer_quick(dist="ddp")
 
     @slow
     def test_finetune_trainer_slow(self):
@@ -158,7 +178,10 @@ class TestFinetuneTrainer(TestCasePlus):
         # start training
         trainer.train()
 
-    def run_trainer(self, eval_steps: int, max_len: str, model_name: str, num_train_epochs: int):
+    def run_trainer(self, eval_steps: int, max_len: str, model_name: str, num_train_epochs: int, dist: str = None):
+        """
+        arg `dist` is one of `dp` or `dpp` and is only relevant if n_gpu > 1
+        """
         data_dir = self.examples_dir / "seq2seq/test_data/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()
         args = f"""
@@ -195,12 +218,17 @@ class TestFinetuneTrainer(TestCasePlus):
 
         n_gpu = get_gpu_count()
         if n_gpu > 1:
-            distributed_args = f"""
-                -m torch.distributed.launch
-                --nproc_per_node={n_gpu}
-                {self.test_file_dir}/finetune_trainer.py
-            """.split()
-            cmd = [sys.executable] + distributed_args + args
+            if dist is None:
+                assert f"for n_gpu={n_gpu} pass `dp` or `dpp` for the `dist` arg"
+            launch_args = []
+            if dist == "ddp":
+                launch_args = f"""
+                    -m torch.distributed.launch
+                    --nproc_per_node={n_gpu}
+                """.split()
+            launch_args.append(f"{self.test_file_dir}/finetune_trainer.py")
+
+            cmd = [sys.executable] + launch_args + args
             execute_subprocess_async(cmd, env=self.get_env())
         else:
             # 0 or 1 gpu
