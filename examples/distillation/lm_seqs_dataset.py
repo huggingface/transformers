@@ -18,6 +18,7 @@
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+from tqdm.auto import tqdm
 
 from utils import logger
 
@@ -76,8 +77,11 @@ class LmSeqsDataset(Dataset):
             cls_id, sep_id = self.params.special_tok_ids["cls_token"], self.params.special_tok_ids["sep_token"]
         else:
             cls_id, sep_id = self.params.special_tok_ids["bos_token"], self.params.special_tok_ids["eos_token"]
-
-        for seq_, len_ in zip(self.token_ids, self.lengths):
+        
+        pbar = tqdm(zip(self.token_ids, self.lengths))
+        pbar.total = len(self.token_ids)
+        
+        for seq_, len_ in pbar:
             assert (seq_[0] == cls_id) and (seq_[-1] == sep_id), seq_
             if len_ <= max_len:
                 new_tok_ids.append(seq_)

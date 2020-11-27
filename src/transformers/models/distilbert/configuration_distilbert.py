@@ -69,8 +69,7 @@ class DistilBertConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         attention_type (:obj:`str`, `optional`, defaults to :obj:`'softmax'`):
             The type of attention mechanism to use. Possibilities are :obj:`'softmax'` and :obj:`'performer'`, with the
-            latter referring to the linear-time FAVOR+ algorithm put forward in the paper "Rethinking Attention with
-            Performers".
+            latter referring to the FAVOR+ algorithm put forward in the paper "Rethinking Attention with Performers".
         performer_attention_config (:obj:`str`, `optional`, defaults to :obj:`None`):
             An instance of FavorAttentionConfig carrying options for the FavorAttention module. Only used when
             :obj:`attention_type` = :obj:`'favor'`.

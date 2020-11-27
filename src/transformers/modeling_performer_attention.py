@@ -1,18 +1,39 @@
 from torch import nn
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 import logging
 import numpy as np
 import torch
+import torch.nn.functional as F
 
+from .configuration_performer_attention import PerformerAttentionConfig
 from .modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer
 )
 
+def cosh_kernel(x, h, use_stabilizer):
+    if use_stabilizer:
+        stabilizer = torch.max(h_of_x)# if not is_query else torch.max(h_of_x, axis=-1, keepdim=True).values
+    else:
+        stabilizer = 0.0
+    
+    f_1 = torch.exp(h + x - stabilizer)
+    f_2 = torch.exp(h - x - stabilizer)
+    return torch.cat((f_1, f_2), dim=-1)
+
+def exp_kernel(x, h, use_stabilizer):
+    if use_stabilizer:
+        stabilizer = torch.max(h_of_x)# if not is_query else torch.max(h_of_x, axis=-1, keepdim=True).values
+    else:
+        stabilizer = 0.0
+    
+    return torch.exp(h + x - stabilizer)
+
 KERNEL_CALLABLES = {
-    'exp': lambda x, h, stabilizer: torch.exp(h + x - stabilizer),
-    'cosh': lambda x, h, stabilizer: torch.cat((torch.exp(h + x - stabilizer), torch.exp(h - x - stabilizer)), dim=-1),
-    'relu': lambda x, h, stabilizer: nn.ReLU()(x) + 1e-3 # Adding epsilon prevents dividing by zero when we normalize
+    'cosh': cosh_kernel,
+    'elu': lambda x, h, use_stabilizer: F.elu(x) + 1,
+    'exp': exp_kernel, # Default
+    'relu': lambda x, h, use_stabilizer: F.relu(x) + 1e-3 # Adding epsilon prevents dividing by zero when we normalize
 }
 
 SHORT_SEQUENCE_BEHAVIOR_CALLABLES = {
@@ -21,132 +42,34 @@ SHORT_SEQUENCE_BEHAVIOR_CALLABLES = {
     'never_use_softmax': lambda L, M, training: False
 }
 
-class PerformerAttentionConfig(object):
-    r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.PerformerAttention` module. It is used
-    to define the behavior of a Performer/FAVOR+ attention module when it is initialized.
-    
-    Args:
-        attention_dropout (:obj:`float`, `optional`, defaults to 0.1):
-            The dropout ratio for the attention probabilities.
-        kernel_type (:obj:`str`,  `optional`, defaults to :obj:`'exp'`):
-            The type of kernel function to use for comparing the queries and keys. Possible options are :obj:`'exp'`,
-            :obj:`'cosh'`, and :obj:`'relu'`. The :obj:`'cosh' option approximates softmax attention with a smaller
-            variance than :obj:`'exp'`, but at the cost of using twice as many random features. :obj:`'relu'` may result
-            in better performance than :obj:`'exp'` and :obj:`'cosh'` in certain circumstances, but it is not an unbiased
-            estimator of softmax attention and thus should not be used with pretrained models that were pretrained with
-            softmax attention.
-        short_sequence_behavior (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`'use_softmax_eval_only'`):
-            This parameter determines if and when the module should fall back to regular softmax attention. Softmax attention
-            is generally faster than FAVOR+ when the sequence length is not significantly larger than the number of random
-            features used— which is equal to round(d*log(d)), where d is the number of dimensions per attention head. The
-            default behavior is to use FAVOR+ regardless of sequence length while training, but to use softmax attention at
-            test time when the sequence length is less than twice the number of random features. Note that this means that for
-            BERT-based models, where :obj:`'d_model'` = 768 and :obj:`'num_heads'` = 12, PerformerAttention will use softmax
-            attention at test time when sequences do not exceed the usual maximum sequence length of 512 tokens.
-            Possible values for this parameter are :obj:`'use_softmax_eval_only'`, :obj:`'use_softmax_eval_and_train'`,
-            :obj:`'never_use_softmax'`. The option :obj:`'use_softmax_eval_and_train'` should probably only be used if the
-            training set has a significant number of long sequences; otherwise, the model may not learn to deal with the
-            random noise inherent in the FAVOR+ algorithm. If a :obj:`Callable`, should take three arguments, :obj:`L`,
-            :obj:`M`, and :obj:`training`, where :obj:`L` is the sequence length, :obj:`M` is the number of random features
-            that FAVOR+ plans to use, and :obj:`training` is whether the module is in training mode, and return a :obj:`bool`
-            which is True if softmax attention should be used, and False if FAVOR+ should be used.
-        use_orthogonal_features (:obj:`bool`, `optional`, defaults to True):
-            Whether to use strictly orthogonal random features, as opposed to features drawn from a standard Gaussian
-            distribution. Orthogonal features result in outputs that more closely approximate softmax attention, but at
-            the cost of doing QR decomposition on the CPU every time the features are redrawn. Best combined with a
-            reasonably large value of :obj:`feature_redraw_interval` (1-5k).
-        regularize_feature_norms (:obj:`bool`, `optional`, defaults to False):
-            Whether to ensure that the random feature vectors have a norm of sqrt(`d`), where `d` is the dimensionality of
-            each attention head.
-        feature_redraw_interval (:obj:`int`, `optional`, defaults to 1000):
-            The number of forward passes after which the random feature matrix should be redrawn. If None, then the feature
-            matrix is never redrawn. It is recommended to set this property to some value on the order of 1-5k while
-            training in order to get the best model performance. When combined with :obj:`redraw_stochastically`, this parameter
-            determines the expected value of the redraw interval.
-        redraw_stochastically (:obj:`bool`, `optional`, defaults to False):
-            If true, PerformerAttention will redraw its random features each forward pass with a probability equal to
-            (1 / :obj:`feature_redraw_interval`), instead of deterministically redrawing once every N passes. This could be
-            desirable in large models to ensure that the attention layers don't all redraw their features at the same time.
-        redraw_verbose (:obj:`bool`, `optional`, defaults to False):
-            Whether to log a message when random features are redrawn during training.
-        dim (:obj:`int`, `optional`):
-            Dimensionality of the queries, keys, and values.
-        num_heads (:obj:`int`, `optional`):
-            Number of attention heads.
-    """
-    
-    def __init__(
-        self,
-        attention_dropout: float = 0.1,
-        kernel_type: str = 'exp',
-        use_orthogonal_features: bool = True,
-        regularize_feature_norms: bool = False,
-        
-        # Default determined in PerformerAttention.__init__()
-        short_sequence_behavior: Optional[Union[str, Callable]] = None,
-        
-        feature_redraw_interval: int = 1000,
-        redraw_stochastically: bool = False,
-        redraw_verbose: bool = False,
-        
-        # Optional here so the user doesn't have to set redundant parameters, but must be set by model before config is
-        # passed to PerformerAttention.__init__()
-        d_model: Optional[int] = None,
-        num_heads: Optional[int] = None
-    ):
-        self.attention_dropout = attention_dropout
-        self.kernel_type = kernel_type
-        self.short_sequence_behavior = short_sequence_behavior
-        self.use_orthogonal_features = use_orthogonal_features
-        self.regularize_feature_norms = regularize_feature_norms
-        
-        self.feature_redraw_interval = feature_redraw_interval
-        self.redraw_stochastically = redraw_stochastically
-        self.redraw_verbose = redraw_verbose
-        
-        self.d_model = d_model
-        self.num_heads = num_heads
-    
-    def __repr__(self):
-        return str(self.__dict__)
-
-
 class PerformerAttention(nn.Module):
     def __init__(self, config: Optional[Union[dict, PerformerAttentionConfig]] = None, **kwargs):
         super().__init__()
         
-        # Three possibilities: config == None, config is a dict, or config is a PerformerAttentionConfig object
-        if not config:
-            config = PerformerAttentionConfig(**kwargs)
-        elif isinstance(config, dict):
-            config = PerformerAttentionConfig(**config)
-        else:
-            for key, value in kwargs.items():
-                setattr(config, key, value)
+        if config is not None:
+            # config can either be a dictionary or a PerformerAttentionConfig object
+            if not isinstance(config, dict):
+                config = config.__dict__
+            
+            # Just copy over all the parameters
+            self.__dict__.update(config)
         
-        if config.num_heads is not None and config.d_model is not None:
-            self.num_heads = config.num_heads
-            self.d_model = config.d_model
-        else:
-            raise ValueError("PerformerAttention: config.num_heads and config.d_model must be non-None")
+        # kwargs take precedence over the default values that might be stored in the config object
+        self.__dict__.update(kwargs)
         
-        self.dropout = nn.Dropout(p=config.attention_dropout)
+        if self.num_heads is None or self.d_model is None:
+            raise ValueError("PerformerAttention: num_heads and d_model must be non-None")
         
-        self.use_orthogonal_features = config.use_orthogonal_features
-        self.regularize_feature_norms = config.regularize_feature_norms
-        self.register_buffer('calls_since_last_redraw', torch.tensor(0)) # Should be persistent
+        self.dropout = nn.Dropout(p=self.attention_dropout)
+        self.calls_since_last_redraw = 0
+        self.random_features = None
         
-        self.feature_redraw_interval = config.feature_redraw_interval
-        self.redraw_stochastically = config.redraw_stochastically
-        self.redraw_verbose = config.redraw_verbose
-        
-        behavior = config.short_sequence_behavior
+        behavior = self.short_sequence_behavior
         if not behavior:
-            behavior = 'never_use_softmax' if config.kernel_type == 'relu' else 'use_softmax_eval_only'
+            behavior = 'never_use_softmax' if self.kernel_type == 'relu' else 'use_softmax_eval_only'
             self.should_fallback_to_softmax = SHORT_SEQUENCE_BEHAVIOR_CALLABLES[behavior]
         
-        elif config.kernel_type == 'relu' and behavior != 'never_use_softmax':
+        elif self.kernel_type == 'relu' and behavior != 'never_use_softmax':
             raise ValueError(f"PerformerAttention: short_sequence_behavior = {behavior} cannot be combined with the relu "
                              "kernel type")
         
@@ -157,14 +80,14 @@ class PerformerAttention(nn.Module):
         else:
             raise ValueError("PerformerAttention: short_sequence_behavior must be either str or Callable")
         
-        self.kernel_fn = KERNEL_CALLABLES[config.kernel_type]
+        self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
         assert self.d_model % self.num_heads == 0
 
-        self.q_lin = nn.Linear(in_features=config.d_model, out_features=config.d_model)
-        self.k_lin = nn.Linear(in_features=config.d_model, out_features=config.d_model)
-        self.v_lin = nn.Linear(in_features=config.d_model, out_features=config.d_model)
-        self.out_lin = nn.Linear(in_features=config.d_model, out_features=config.d_model)
+        self.q_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
+        self.k_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
+        self.v_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
+        self.out_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
 
         self.pruned_heads = set()
 
@@ -190,7 +113,7 @@ class PerformerAttention(nn.Module):
         if self.training and self.redraw_verbose:
             logging.info(f"PerformerAttention: Just redrew random features.")
         
-        self.calls_since_last_redraw = torch.tensor(0)
+        self.calls_since_last_redraw = 0
 
     def forward(self, query, key, value, mask=None, head_mask=None, output_attentions=False):
         """
@@ -242,43 +165,29 @@ class PerformerAttention(nn.Module):
         if output_attentions:
             raise ValueError("PerformerAttention: Can't output attention maps when using FAVOR+ linear attention.")
         
-        # We haven't created the projection matrix yet, let's create it
-        if not hasattr(self, 'random_features'):
-            self._generate_feature_matrix(q.device)
-        
-        elif self.feature_redraw_interval is not None:
-            if self.redraw_stochastically:
-                # Flip a (very biased) coin
-                if np.random.default_rng().binomial(1, 1. / self.feature_redraw_interval):
-                    self.redraw_features_now()
-            
-            # It's time to redraw the projection matrix
-            elif self.calls_since_last_redraw >= self.feature_redraw_interval:
-                self.redraw_features_now()
-        
-            # Keep track of how many forward passes we do before we redraw again
-            else:
-                self.calls_since_last_redraw += 1
-        
-        # Broadcast the feature matrix across the batch dimension
-        self.random_features.expand(q.shape[0], self.num_heads, m, dim_per_head)
-        W_t = self.random_features.transpose(-2, -1)
-        
         # By multiplying Q' and K' by 1/sqrt(m), we ensure the final matrix product will contain a factor of 1/m. This means
         # that each row of Q'K'^T can be interpreted as an average over the exp(omega^T * q) * exp(omega^T * k) terms.
         epsilon = 1e-4
-        def phi(x, is_query):
+        def phi(x, is_query, feature_matrix):
             # The h(x) function, defined in Lemma 1 in Choromanski et al. pg. 4
             h_of_x = -torch.sum(x ** 2, dim=-1, keepdim=True) / 2
             
-            projected_x = x @ W_t
-            stabilizer = torch.max(h_of_x) if not is_query else torch.max(h_of_x, axis=-1, keepdim=True).values
-            kernel_output = self.kernel_fn(projected_x, h_of_x, stabilizer)
+            projected_x = x @ feature_matrix if feature_matrix is not None else x
+            kernel_output = self.kernel_fn(projected_x, h_of_x, self.use_kernel_stabilizer)
             
             return (kernel_output.shape[-1] ** -0.5) * (kernel_output + epsilon)
         
+        if self.use_random_features:
+            self._redraw_features_if_needed(q.device)
+            
+            # Broadcast the feature matrix across the batch dimension
+            self.random_features.expand(q.shape[0], self.num_heads, m, dim_per_head)
+            W_t = self.random_features.transpose(-2, -1)
+        else:
+            W_t = None
+        
         # Get the transformed values of Q and K
-        q_prime, k_prime = phi(q, True), phi(k, False)
+        q_prime, k_prime = phi(q, True, W_t), phi(k, False, W_t)
         
         # Now apply the padding mask to K'. Also applying it to Q' would be redundant.
         if mask is not None:
@@ -342,7 +251,23 @@ class PerformerAttention(nn.Module):
             final_matrix = torch.diag(multiplier) @ final_matrix
         
         random_features = final_matrix.to(device)
+        self.random_features = random_features
+    
+    def _redraw_features_if_needed(self, device):
+        # We haven't created the projection matrix yet, let's create it
+        if self.random_features is None:
+            self._generate_feature_matrix(device)
         
-        # Make sure this is persistent so that, if someone saves a model while training in between feature redraws and then
-        # later loads it and continues training, the training will behave the same as if they hadn't paused training
-        self.register_buffer('random_features', random_features)
+        elif self.feature_redraw_interval is not None:
+            if self.redraw_stochastically:
+                # Flip a (very biased) coin
+                if np.random.default_rng().binomial(1, 1. / self.feature_redraw_interval):
+                    self.redraw_features_now()
+            
+            # It's time to redraw the projection matrix
+            elif self.calls_since_last_redraw >= self.feature_redraw_interval:
+                self.redraw_features_now()
+        
+            # Keep track of how many forward passes we do before we redraw again
+            else:
+                self.calls_since_last_redraw += 1

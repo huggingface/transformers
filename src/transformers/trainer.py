@@ -706,7 +706,7 @@ class Trainer:
         model.zero_grad()
 
         self.control = self.callback_handler.on_train_begin(self.args, self.state, self.control)
-
+        
         for epoch in range(epochs_trained, num_train_epochs):
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
@@ -725,7 +725,7 @@ class Trainer:
 
             steps_in_epoch = len(epoch_iterator) if train_dataset_is_sized else self.args.max_steps
             self.control = self.callback_handler.on_epoch_begin(self.args, self.state, self.control)
-
+            
             for step, inputs in enumerate(epoch_iterator):
 
                 # Skip past any already trained steps if resuming training
@@ -767,7 +767,7 @@ class Trainer:
                         self.scaler.update()
                     else:
                         self.optimizer.step()
-
+                    
                     self.lr_scheduler.step()
                     model.zero_grad()
                     self.state.global_step += 1
