@@ -671,7 +671,7 @@ class T5EncoderOnlyModelTester:
         return config, inputs_dict
 
 
-class T5EncoderOnlyModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class T5EncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (T5EncoderModel,) if is_torch_available() else ()
     test_pruning = False
     test_torchscript = True

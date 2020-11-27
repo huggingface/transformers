@@ -1468,7 +1468,7 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
     @replace_return_docstrings(output_type=TFBaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        inputs,
+        input_ids,
         attention_mask=None,
         head_mask=None,
         inputs_embeds=None,
@@ -1493,45 +1493,49 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
 
 
         """
-        if isinstance(inputs, (tuple, list)):
-            input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            head_mask = inputs[6] if len(inputs) > 6 else head_mask
-            inputs_embeds = inputs[7] if len(inputs) > 7 else inputs_embeds
-            output_attentions = inputs[10] if len(inputs) > 10 else output_attentions
-            output_hidden_states = inputs[11] if len(inputs) > 11 else output_hidden_states
-            return_dict = inputs[12] if len(inputs) > 12 else return_dict
-            assert len(inputs) <= 13, "Too many inputs."
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            if "inputs" in inputs:
-                warnings.warn("Using `inputs` as a keyword argument is deprecated. Please use `input_ids` instead.")
-                input_ids = inputs.get("inputs")
-            input_ids = inputs.get("input_ids")
-            attention_mask = inputs.get("attention_mask", attention_mask)
-            head_mask = inputs.get("head_mask", head_mask)
-            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            output_attentions = inputs.get("output_attentions", output_attentions)
-            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            assert len(inputs) <= 13, "Too many inputs."
-        else:
-            input_ids = inputs
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
 
-        output_attentions = output_attentions if output_attentions else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states else self.config.output_hidden_states
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        output_attentions = inputs["output_attentions"] if output_attentions else self.config.output_attentions
+        output_hidden_states = (
+            inputs["output_hidden_states"] if output_hidden_states else self.config.output_hidden_states
+        )
+        return_dict = return_dict if inputs["return_dict"] is not None else self.config.return_dict
 
         encoder_outputs = self.encoder(
             input_ids,
-            attention_mask=attention_mask,
+            attention_mask=inputs["attention_mask"],
             encoder_hidden_states=None,
             encoder_attention_mask=None,
-            inputs_embeds=inputs_embeds,
+            inputs_embeds=inputs["inputs_embeds"],
             head_mask=head_mask,
             past_key_values=None,
             use_cache=False,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            training=training,
+            training=inputs["training"],
         )
 
-        return encoder_outputs
+        if not return_dict:
+            return encoder_outputs
+
+        if not cast_bool_to_primitive(output_hidden_states, self.config.output_hidden_states):
+            encoder_outputs = encoder_outputs[:1] + (None,) + encoder_outputs[1:]
+        if not cast_bool_to_primitive(output_attentions, self.config.output_attentions):
+            encoder_outputs = encoder_outputs + (None,)
+
+        return TFBaseModelOutput(
+            last_hidden_state=encoder_outputs[0],
+            hidden_states=encoder_outputs[1],
+            attentions=encoder_outputs[2],
+        )

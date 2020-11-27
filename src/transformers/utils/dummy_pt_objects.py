@@ -1719,6 +1719,15 @@ class SqueezeBertPreTrainedModel:
 T5_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class T5EncoderModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class T5ForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)

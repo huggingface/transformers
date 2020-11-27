@@ -1142,6 +1142,15 @@ class TFRobertaPreTrainedModel:
 TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class TFT5EncoderModel:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
 class TFT5ForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_tf(self)

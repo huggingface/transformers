@@ -1632,11 +1632,4 @@ class T5EncoderModel(T5PreTrainedModel):
             return_dict=return_dict,
         )
 
-        if return_dict:
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs.last_hidden_state,
-                hidden_states=encoder_outputs.hidden_states,
-                attentions=encoder_outputs.attentions,
-            )
-
         return encoder_outputs
