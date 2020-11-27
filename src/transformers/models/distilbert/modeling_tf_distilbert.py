@@ -484,6 +484,13 @@ class TFDistilBertPreTrainedModel(TFPreTrainedModel):
     config_class = DistilBertConfig
     base_model_prefix = "distilbert"
 
+    @tf.function(input_signature=[{
+        "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+        "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+    }])
+    def serving(self, inputs):
+        return dict(self.call(inputs))
+
 
 DISTILBERT_START_DOCSTRING = r"""
 
@@ -941,6 +948,13 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
             tf.Tensor with dummy inputs
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
+    
+    @tf.function(input_signature=[{
+        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+    }])
+    def serving(self, inputs):
+        return dict(self.call(inputs))
 
     @add_start_docstrings_to_model_forward(
         DISTILBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")

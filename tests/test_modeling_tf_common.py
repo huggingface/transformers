@@ -164,7 +164,7 @@ class TFModelTesterMixin:
                 expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    @slow
+    #@slow
     def test_saved_model_with_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
@@ -178,11 +178,9 @@ class TFModelTesterMixin:
                 config.use_cache = class_inputs_dict.pop("use_cache")
             model = model_class(config)
             num_out = len(model(class_inputs_dict))
-            model._saved_model_inputs_spec = None
-            model._set_save_spec(class_inputs_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
-                tf.saved_model.save(model, tmpdirname)
+                tf.saved_model.save(model, tmpdirname, signatures=model.serving)
                 model = tf.keras.models.load_model(tmpdirname)
                 outputs = model(class_inputs_dict)
 

@@ -824,6 +824,15 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
             "decoder_attention_mask": input_mask,
         }
         return dummy_inputs
+    
+    @tf.function(input_signature=[{
+        "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+        "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+        "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+        "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
+    }])
+    def serving(self, inputs):
+        return dict(self.call(inputs))
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id

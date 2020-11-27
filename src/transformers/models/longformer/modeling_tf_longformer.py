@@ -1830,6 +1830,14 @@ class TFLongformerPreTrainedModel(TFPreTrainedModel):
             "attention_mask": attention_mask,
             "global_attention_mask": global_attention_mask,
         }
+    
+    @tf.function(input_signature=[{
+        "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+        "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+        "global_attention_mask": tf.TensorSpec((None, None), tf.int32, name="global_attention_mask"),
+    }])
+    def serving(self, inputs):
+        return dict(self.call(inputs))
 
 
 LONGFORMER_START_DOCSTRING = r"""
@@ -2376,6 +2384,14 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         # make sure global layers are initialized
         global_attention_mask = tf.convert_to_tensor([[[0, 0, 0, 1], [0, 0, 0, 1]]] * 2)
         return {"input_ids": input_ids, "global_attention_mask": global_attention_mask}
+    
+    @tf.function(input_signature=[{
+        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+        "global_attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="global_attention_mask"),
+    }])
+    def serving(self, inputs):
+        return dict(self.call(inputs))
 
     @add_start_docstrings_to_model_forward(
         LONGFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")

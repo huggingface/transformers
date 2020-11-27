@@ -363,6 +363,13 @@ class TFOpenAIGPTPreTrainedModel(TFPreTrainedModel):
     config_class = OpenAIGPTConfig
     base_model_prefix = "transformer"
 
+    @tf.function(input_signature=[{
+        "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+        "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+    }])
+    def serving(self, inputs):
+        return dict(self.call(inputs))
+
 
 @dataclass
 class TFOpenAIGPTDoubleHeadsModelOutput(ModelOutput):
@@ -654,6 +661,14 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         self.multiple_choice_head = TFSequenceSummary(
             config, initializer_range=config.initializer_range, name="multiple_choice_head"
         )
+    
+    @tf.function(input_signature=[{
+        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+        "mc_token_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
+    }])
+    def serving(self, inputs):
+        return dict(self.call(inputs))
 
     def get_output_embeddings(self):
         return self.transformer.tokens_embed

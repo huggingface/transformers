@@ -1256,6 +1256,14 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             },
             **({"obj_labels": obj_labels} if self.config.task_obj_predict else {}),
         }
+    
+    @tf.function(input_signature=[{
+        "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+        "visual_feats": tf.TensorSpec((None, None, None), tf.float32, name="visual_feats"),
+        "visual_pos": tf.TensorSpec((None, None, 4), tf.float32, name="visual_pos"),
+    }])
+    def serving(self, inputs):
+        return dict(self.call(inputs))
 
     def get_output_embeddings(self):
         return self.lxmert.embeddings

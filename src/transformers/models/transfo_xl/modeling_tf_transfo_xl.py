@@ -659,6 +659,12 @@ class TFTransfoXLPreTrainedModel(TFPreTrainedModel):
     config_class = TransfoXLConfig
     base_model_prefix = "transformer"
 
+    @tf.function(input_signature=[{
+        "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+    }])
+    def serving(self, inputs):
+        return dict(self.call(inputs))
+
 
 @dataclass
 class TFTransfoXLModelOutput(ModelOutput):

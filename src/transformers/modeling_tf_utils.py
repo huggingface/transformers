@@ -30,7 +30,7 @@ from tensorflow.python.keras.saving import hdf5_format
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
-    DUMMY_INPUTS,
+    DUMMY_INPUTS, DUMMY_MASK,
     TF2_WEIGHTS_NAME,
     WEIGHTS_NAME,
     ModelOutput,
@@ -568,7 +568,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         Returns:
             :obj:`Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        return {"input_ids": tf.constant(DUMMY_INPUTS)}
+        return {
+            "input_ids": tf.constant(DUMMY_INPUTS),
+            #"attention_mask": tf.constant(DUMMY_MASK),
+            #"token_type_ids": tf.constant(DUMMY_TOKEN_TYPE_IDS),
+        }
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -583,6 +587,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
+    
+    @tf.function(input_signature=[{
+        "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+        "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+        "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
+    }])
+    def serving(self, inputs):
+        return dict(self.call(inputs))
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         """
@@ -808,7 +820,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         """
         raise NotImplementedError
 
-    def save_pretrained(self, save_directory):
+    def save_pretrained(self, save_directory, saved_model=False):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
         :func:`~transformers.TFPreTrainedModel.from_pretrained` class method.
@@ -816,11 +828,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         Arguments:
             save_directory (:obj:`str`):
                 Directory to which to save. Will be created if it doesn't exist.
+            saved_model (:obj:`bool`, `optional`, defaults to False):
+                If the model has to be saved in saved model format as well or not.
         """
         if os.path.isfile(save_directory):
             logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
             return
         os.makedirs(save_directory, exist_ok=True)
+
+        if saved_model:
+            tf.saved_model.save(self, save_directory, signatures=self.serving)
+            logger.info(f"Saved model saved in {save_directory}")
 
         # Save configuration file
         self.config.save_pretrained(save_directory)
@@ -1033,7 +1051,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             # Load from a PyTorch checkpoint
             return load_pytorch_checkpoint_in_tf2_model(model, resolved_archive_file, allow_missing_keys=True)
 
-        model(model.dummy_inputs, training=False)  # build the network with dummy inputs
+        model(model.dummy_inputs)  # build the network with dummy inputs
 
         assert os.path.isfile(resolved_archive_file), "Error retrieving file {}".format(resolved_archive_file)
         # 'by_name' allow us to do transfer learning by skipping/adding layers
@@ -1046,7 +1064,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 "If you tried to load a TF 2.0 model from a PyTorch checkpoint, please set from_pt=True. "
             )
 
-        model(model.dummy_inputs, training=False)  # Make sure restore ops are run
+        model(model.dummy_inputs)  # Make sure restore ops are run
 
         if cls._keys_to_ignore_on_load_missing is not None:
             for pat in cls._keys_to_ignore_on_load_missing:

@@ -416,6 +416,13 @@ class TFGPT2PreTrainedModel(TFPreTrainedModel):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"h.\d+.attn.bias"]
 
+    @tf.function(input_signature=[{
+        "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+        "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+    }])
+    def serving(self, inputs):
+        return dict(self.call(inputs))
+
 
 @dataclass
 class TFGPT2DoubleHeadsModelOutput(ModelOutput):
@@ -744,6 +751,14 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
 
     def get_output_embeddings(self):
         return self.transformer.wte
+    
+    @tf.function(input_signature=[{
+        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+        "mc_token_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
+    }])
+    def serving(self, inputs):
+        return dict(self.call(inputs))
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFGPT2DoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
