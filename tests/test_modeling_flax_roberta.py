@@ -53,7 +53,7 @@ class FlaxRobertaModelTest(unittest.TestCase):
         encodings = tokenizer(sentences, return_tensors=TensorType.JAX, padding=True, truncation=True)
 
         @jax.jit
-        def model_jitted(input_ids, attention_mask, token_type_ids):
+        def model_jitted(input_ids, attention_mask=None, token_type_ids=None):
             return model(input_ids, attention_mask, token_type_ids)
 
         with self.subTest("JIT Disabled"):
