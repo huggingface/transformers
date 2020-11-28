@@ -49,8 +49,8 @@ class FlaxBertModelTest(unittest.TestCase):
 
 @require_flax
 @require_torch
-@pytest.mark.parametrize("jit", [False, True])
-def test_multiple_sentences(jit):
+@pytest.mark.parametrize("use_jit", [False, True])
+def test_multiple_sentences(use_jit):
     tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
     model = FlaxBertModel.from_pretrained("bert-base-cased")
 
@@ -61,7 +61,7 @@ def test_multiple_sentences(jit):
     def model_jitted(input_ids, attention_mask, token_type_ids):
         return model(input_ids, attention_mask, token_type_ids)
 
-    if jit:
+    if use_jit:
         tokens, pooled = model_jitted(**encodings)
     else:
         with jax.disable_jit():

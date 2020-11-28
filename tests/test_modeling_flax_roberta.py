@@ -49,8 +49,8 @@ class FlaxRobertaModelTest(unittest.TestCase):
 
 @require_flax
 @require_torch
-@pytest.mark.parametrize("jit", [False, True])
-def test_multiple_sentences(jit):
+@pytest.mark.parametrize("use_jit", [False, True])
+def test_multiple_sentences(use_jit):
     tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
     model = FlaxRobertaModel.from_pretrained("roberta-base")
 
@@ -61,7 +61,7 @@ def test_multiple_sentences(jit):
     def model_jitted(input_ids, attention_mask):
         return model(input_ids, attention_mask)
 
-    if jit:
+    if use_jit:
         tokens, pooled = model_jitted(**encodings)
     else:
         with jax.disable_jit():
