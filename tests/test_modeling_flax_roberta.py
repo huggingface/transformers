@@ -1,6 +1,5 @@
 import unittest
 
-import pytest
 from numpy import ndarray
 
 from transformers import RobertaTokenizerFast, TensorType, is_flax_available, is_torch_available
