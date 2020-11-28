@@ -497,7 +497,7 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
     # Copied from transformers.modeling_tf_bert.TFBertMainLayer.call
     def call(
         self,
-        inputs,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -559,7 +559,7 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-        extended_attention_mask = attention_mask[:, tf.newaxis, tf.newaxis, :]
+        extended_attention_mask = inputs["attention_mask"][:, tf.newaxis, tf.newaxis, :]
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
@@ -953,7 +953,7 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mpnet.return_dict
         outputs = self.mpnet(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
