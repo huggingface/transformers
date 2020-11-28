@@ -48,6 +48,7 @@ class FlaxBertModelTest(unittest.TestCase):
 
 
 @require_flax
+@require_torch
 @pytest.mark.parametrize("jit", [False, True])
 def test_multiple_sentences(jit):
     tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
