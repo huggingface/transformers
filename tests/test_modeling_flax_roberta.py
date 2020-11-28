@@ -23,7 +23,6 @@ if is_torch_available():
 @require_flax
 @require_torch
 class FlaxRobertaModelTest(unittest.TestCase):
-
     def assert_almost_equals(self, a: ndarray, b: ndarray, tol: float):
         diff = (a - b).sum()
         self.assertLessEqual(diff, tol, "Difference between torch and flax is {} (>= {})".format(diff, tol))
@@ -68,4 +67,3 @@ class FlaxRobertaModelTest(unittest.TestCase):
 
             self.assertEqual(jitted_tokens.shape, (3, 7, 768))
             self.assertEqual(jitted_pooled.shape, (3, 768))
-

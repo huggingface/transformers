@@ -67,4 +67,3 @@ class FlaxBertModelTest(unittest.TestCase):
 
             self.assertEqual(jitted_tokens.shape, (3, 7, 768))
             self.assertEqual(jitted_pooled.shape, (3, 768))
-
