@@ -24,6 +24,11 @@ if is_torch_available():
 @require_flax
 @require_torch
 class FlaxRobertaModelTest(unittest.TestCase):
+
+    def assert_almost_equals(self, a: ndarray, b: ndarray, tol: float):
+        diff = (a - b).sum()
+        self.assertLessEqual(diff, tol, "Difference between torch and flax is {} (>= {})".format(diff, tol))
+
     def test_from_pytorch(self):
         with torch.no_grad():
             with self.subTest("roberta-base"):
@@ -42,30 +47,26 @@ class FlaxRobertaModelTest(unittest.TestCase):
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs.to_tuple()):
                     self.assert_almost_equals(fx_output, pt_output.numpy(), 6e-4)
 
-    def assert_almost_equals(self, a: ndarray, b: ndarray, tol: float):
-        diff = (a - b).sum()
-        self.assertLessEqual(diff, tol, "Difference between torch and flax is {} (>= {})".format(diff, tol))
+    def test_multiple_sentences(self):
+        tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
+        model = FlaxRobertaModel.from_pretrained("roberta-base")
 
+        sentences = ["this is an example sentence", "this is another", "and a third one"]
+        encodings = tokenizer(sentences, return_tensors=TensorType.JAX, padding=True, truncation=True)
 
-@require_flax
-@require_torch
-@pytest.mark.parametrize("use_jit", [False, True])
-def test_multiple_sentences(use_jit):
-    tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
-    model = FlaxRobertaModel.from_pretrained("roberta-base")
+        @jax.jit
+        def model_jitted(input_ids, attention_mask, token_type_ids):
+            return model(input_ids, attention_mask, token_type_ids)
 
-    sentences = ["this is an example sentence", "this is another", "and a third one"]
-    encodings = tokenizer(sentences, return_tensors=TensorType.JAX, padding=True, truncation=True)
+        with self.subTest("JIT Disabled"):
+            with jax.disable_jit():
+                tokens, pooled = model_jitted(**encodings)
+                self.assertEqual(tokens.shape, (3, 7, 768))
+                self.assertEqual(pooled.shape, (3, 768))
 
-    @jax.jit
-    def model_jitted(input_ids, attention_mask):
-        return model(input_ids, attention_mask)
+        with self.subTest("JIT Enabled"):
+            jitted_tokens, jitted_pooled = model_jitted(**encodings)
 
-    if use_jit:
-        tokens, pooled = model_jitted(**encodings)
-    else:
-        with jax.disable_jit():
-            tokens, pooled = model_jitted(**encodings)
+            self.assertEqual(jitted_tokens.shape, (3, 7, 768))
+            self.assertEqual(jitted_pooled.shape, (3, 768))
 
-    assert tokens.shape == (3, 7, 768)
-    assert pooled.shape == (3, 768)
