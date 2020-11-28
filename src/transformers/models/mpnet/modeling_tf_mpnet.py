@@ -919,7 +919,7 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
     )
     def call(
         self,
-        inputs=None,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -930,6 +930,7 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
         return_dict=None,
         labels=None,
         training=False,
+        **kwargs,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1019,7 +1020,7 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
     )
     def call(
         self,
-        inputs,
+        inputs_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -1134,7 +1135,7 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
     )
     def call(
         self,
-        inputs=None,
+        inputs_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -1226,7 +1227,7 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
     )
     def call(
         self,
-        inputs=None,
+        inputs_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
