@@ -25,7 +25,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from ...activations import ACT2FN
+from ...activations import ACT2FN, gelu
 from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -593,7 +593,7 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
-            outputs = (prediction_scores,) + outputs[2:]
+            output = (prediction_scores,) + outputs[2:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(

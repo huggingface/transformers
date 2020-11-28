@@ -758,14 +758,14 @@ class TFMPNetLMHead(tf.keras.layers.Layer):
 
         self.vocab_size = config.vocab_size
         self.dense = tf.keras.layers.Dense(
-            config.hidden_size, kernel_initializer(config.initializer_range), name="dense"
+            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.act = get_tf_activation("gelu")
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = inputs_embeddings
+        self.decoder = input_embeddings
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
