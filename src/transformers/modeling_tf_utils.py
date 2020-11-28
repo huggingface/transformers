@@ -391,15 +391,15 @@ def input_processing(func, config, input_ids, **kwargs):
             output["past_key_values"] = input_ids.pop("decoder_cached_states")
 
         for k, v in dict(input_ids).items():
-            if not isinstance(v, allowed_types):
-                raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
+            if isinstance(v, allowed_types) or v is None:
+                output[k] = v
             elif k not in parameter_names and "args" not in parameter_names:
                 logger.warn(
                     f"The parameter {k} does not belongs to the parameter list {parameter_names} and will be ignored."
                 )
                 continue
             else:
-                output[k] = v
+                raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
     else:
         if isinstance(input_ids, tf.Tensor) or input_ids is None:
             output[parameter_names[0]] = input_ids
