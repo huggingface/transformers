@@ -18,7 +18,7 @@ from dataclasses import fields
 from functools import partial, wraps
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, BinaryIO, Dict, Optional, Tuple, Union, List
+from typing import Any, BinaryIO, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 from zipfile import ZipFile, is_zipfile
 
