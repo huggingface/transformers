@@ -12,11 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Dict, List, Optional
+import os
+from shutil import copyfile
+from typing import Dict, List, Optional, Tuple
+
+import sentencepiece as spm
 
 from ...file_utils import add_start_docstrings
+from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncoding
-from ..reformer.tokenization_reformer import ReformerTokenizer
+from ...utils import logging
 
 
 SPIECE_UNDERLINE = "▁"
@@ -32,30 +37,144 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-class PegasusTokenizer(ReformerTokenizer):
+logger = logging.get_logger(__name__)
+
+
+class PegasusTokenizer(PreTrainedTokenizer):
     r"""
-    Construct a Pegasus tokenizer.
+    Construct a PEGASUS tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__.
 
-    :class:`~transformers.PegasusTokenizer` is identical to :class:`~transformers.ReformerTokenizer` and adds a new
-    :meth:`~transformers.PegasusTokenizer.prepare_seq2seq_batch`
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    Users should refer to this superclass for more information regarding those methods.
 
-    Refer to superclass :class:`~transformers.ReformerTokenizer` for usage examples and documentation concerning the
-    initialization parameters and other methods.
+    Args:
+        vocab_file (:obj:`str`):
+            `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
+            contains the vocabulary necessary to instantiate a tokenizer.
+        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            The end of sequence token.
+
+            .. note::
+
+                When building a sequence using special tokens, this is not the token that is used for the end of
+                sequence. The token used is the :obj:`sep_token`.
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask_2>"`):
+            The token used for masking single token values. This is the token used when training this model with masked
+            language modeling (MLM). This is the token that the PEGASUS encoder will try to predict during pretraining.
+            It corresponds to `[MASK2]` in `PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive
+            Summarization <https://arxiv.org/pdf/1912.08777.pdf>`__.
+        mask_token_sent (:obj:`str`, `optional`, defaults to :obj:`"<mask_1>"`):
+            The token used for masking whole target sentences. This is the token used when training this model with gap
+            sentences generation (GSG). This is the sentence that the PEGASUS decoder will try to predict during
+            pretraining. It corresponds to `[MASK1]` in `PEGASUS: Pre-training with Extracted Gap-sentences for
+            Abstractive Summarization <https://arxiv.org/pdf/1912.08777.pdf>`__.
+        additional_special_tokens (:obj:`List[str]`, `optional`):
+            Additional special tokens used by the tokenizer. If no additional_special_tokens are provided <mask_2> and
+            <unk_2, ..., unk_102> are used as additional special tokens corresponding to the `original PEGASUS
+            tokenizer
+            <https://github.com/google-research/pegasus/blob/939830367bcf411193d2b5eca2f2f90f3f9260ca/pegasus/ops/pretrain_parsing_ops.cc#L66>`__
+            that uses the tokens 2 - 104 only for pretraining
     """
-    offset = 103  # entries 2-104 are only used for pretraining
+    vocab_files_names = VOCAB_FILES_NAMES
+
+    offset = 103  # entries 2 - 104 are only used for pretraining
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["attention_mask"]
 
-    def __init__(self, *args, pad_token="<pad>", **kwargs):
-        super().__init__(*args, **kwargs, pad_token="<pad>")
-        # Don't use reserved words added_token_encoder, added_tokens_decoder because of
-        # AssertionError: Non-consecutive added token '1' found. in from_pretrained
-        assert len(self.added_tokens_decoder) == 0
-        self.encoder: Dict[int, str] = {0: self.pad_token, 1: self.eos_token}
-        # entries 2-104 are only used for pretraining and called unk_2, ...unk_104
-        self.encoder.update({i: f"unk_{i}" for i in range(2, self.offset + 2)})
+    def __init__(
+        self,
+        vocab_file,
+        pad_token="<pad>",
+        eos_token="</s>",
+        unk_token="<unk>",
+        mask_token="<mask_2>",
+        mask_token_sent="<mask_1>",
+        additional_special_tokens=None,
+        **kwargs
+    ):
+        if additional_special_tokens is not None:
+            assert isinstance(
+                additional_special_tokens, list
+            ), f"additional_special_tokens should be of type {type(list)}, but is {type(additional_special_tokens)}"
+
+            additional_special_tokens_extended = (
+                ([mask_token_sent] + additional_special_tokens)
+                if mask_token_sent not in additional_special_tokens
+                else additional_special_tokens
+            )
+            # fill additional tokens with ..., <unk_token_102> in case not all additional tokens are already taken
+            additional_special_tokens_extended += [
+                f"<unk_{i}>" for i in range(len(additional_special_tokens_extended), self.offset - 1)
+            ]
+
+            if len(set(additional_special_tokens_extended)) != len(additional_special_tokens_extended):
+                raise ValueError(
+                    f"Please make sure that the provided additional_special_tokens do not contain an incorrectly shifted list of <unk_x> tokens. Found {additional_special_tokens_extended}."
+                )
+            additional_special_tokens = additional_special_tokens_extended
+        else:
+            additional_special_tokens = [mask_token_sent]
+            additional_special_tokens += [f"<unk_{i}>" for i in range(2, self.offset)]
+
+        super().__init__(
+            eos_token=eos_token,
+            unk_token=unk_token,
+            mask_token=mask_token,
+            pad_token=pad_token,
+            mask_token_sent=mask_token_sent,
+            additional_special_tokens=additional_special_tokens,
+            **kwargs,
+        )
+        self.vocab_file = vocab_file
+        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model.Load(vocab_file)
+        self.mask_token_sent = mask_token_sent
+
+        # add special tokens to encoder dict
+        self.encoder: Dict[int, str] = {
+            0: self.pad_token,
+            1: self.eos_token,
+            2: self.mask_token_sent,
+            3: self.mask_token,
+        }
+        # entries 2-104 are only used for pretraining and called <mask_1>, <mask_2>, unk_2, ...unk_102
+        # mask_token_sent is already added to list -> so start at 1
+        self.encoder.update({i + 3: additional_special_tokens[i] for i in range(1, self.offset - 1)})
         self.decoder: Dict[str, int] = {v: k for k, v in self.encoder.items()}
+
+    @property
+    def vocab_size(self) -> int:
+        return len(self.sp_model) + self.offset
+
+    def get_vocab(self) -> Dict[str, int]:
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
+        return vocab
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["sp_model"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model.Load(self.vocab_file)
+
+    def _tokenize(self, text, sample=False):
+        """Take as input a string and return a list of strings (tokens) for words/sub-words"""
+        if not sample:
+            pieces = self.sp_model.EncodeAsPieces(text)
+        else:
+            pieces = self.sp_model.SampleEncodeAsPieces(text, 64, 0.1)
+        return pieces
 
     def _convert_token_to_id(self, token: str) -> int:
         """ Converts a token (str) to an id using the vocab. """
@@ -73,13 +192,13 @@ class PegasusTokenizer(ReformerTokenizer):
         elif index in self.added_tokens_encoder:
             return self.added_tokens_encoder[index]
         else:
-            # assert index > self.offset, f"cannot decode ids between 2 and {self.offset}. Got {index}"
             token = self.sp_model.IdToPiece(index - self.offset)
         return token
 
-    @property
-    def vocab_size(self) -> int:
-        return len(self.sp_model) + self.offset
+    def convert_tokens_to_string(self, tokens):
+        """ Converts a sequence of tokens (string) in a single string. """
+        out_string = self.sp_model.decode_pieces(tokens)
+        return out_string
 
     def num_special_tokens_to_add(self, pair=False):
         """Just EOS"""
@@ -88,7 +207,11 @@ class PegasusTokenizer(ReformerTokenizer):
     def _special_token_mask(self, seq):
         all_special_ids = set(self.all_special_ids)  # call it once instead of inside list comp
         all_special_ids.remove(self.unk_token_id)  # <unk> is only sometimes special
-        assert all_special_ids == set([0, 1])
+
+        assert all_special_ids == set(
+            range(len(self.additional_special_tokens) + 3)
+        ), f"There should be 3 special tokens: mask_token, pad_token, and eos_token + {len(self.additional_special_tokens)} additional_special_tokens, but got {all_special_ids}"
+
         return [1 if x in all_special_ids else 0 for x in seq]
 
     def get_special_tokens_mask(
@@ -105,7 +228,7 @@ class PegasusTokenizer(ReformerTokenizer):
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequences for sequence classification tasks by concatenating
-        and adding special tokens. A Pegasus sequence has the following format, where ``X`` represents the sequence:
+        and adding special tokens. A PEGASUS sequence has the following format, where ``X`` represents the sequence:
 
         - single sequence: ``X </s>``
         - pair of sequences: ``A B </s>`` (not intended use)
@@ -156,3 +279,16 @@ class PegasusTokenizer(ReformerTokenizer):
         labels: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)["input_ids"]
         model_inputs["labels"] = labels
         return model_inputs
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        if not os.path.isdir(save_directory):
+            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            return
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        )
+
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
+            copyfile(self.vocab_file, out_vocab_file)
+
+        return (out_vocab_file,)

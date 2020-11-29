@@ -547,10 +547,12 @@ class BertGenerationConverter(SpmConverter):
 class PegasusConverter(SpmConverter):
     def vocab(self, proto):
         vocab = [
-            (self.original_tokenizer.pad_token, 0),
-            (self.original_tokenizer.eos_token, 0),
+            (self.original_tokenizer.pad_token, 0.0),
+            (self.original_tokenizer.eos_token, 0.0),
+            (self.original_tokenizer.mask_token_sent, 0.0),
+            (self.original_tokenizer.mask_token, 0.0),
         ]
-        vocab += [(f"unk_{i}", -100) for i in range(2, 2 + self.original_tokenizer.offset)]
+        vocab += [(f"<unk_{i}>", -100.0) for i in range(2, self.original_tokenizer.offset)]
         vocab += [(piece.piece, piece.score) for piece in proto.pieces[2:]]
         return vocab
 
@@ -559,13 +561,10 @@ class PegasusConverter(SpmConverter):
 
     def post_processor(self):
         eos = self.original_tokenizer.eos_token
-        return processors.TemplateProcessing(
-            single=["$A", eos],
-            pair=["$A", "$B", eos],
-            special_tokens=[
-                (eos, self.original_tokenizer.eos_token_id),
-            ],
-        )
+        special_tokens = [
+            (eos, self.original_tokenizer.eos_token_id),
+        ]
+        return processors.TemplateProcessing(single=["$A", eos], pair=["$A", "$B", eos], special_tokens=special_tokens)
 
 
 class T5Converter(SpmConverter):
