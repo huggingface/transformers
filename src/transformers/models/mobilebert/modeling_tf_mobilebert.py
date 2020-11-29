@@ -701,6 +701,10 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
 
     def get_input_embeddings(self):
         return self.embeddings
+    
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+        self.embeddings.vocab_size = value.shape[0]
 
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
@@ -1138,13 +1142,30 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
         self.mobilebert = TFMobileBertMainLayer(config, add_pooling_layer=False, name="mobilebert")
         self.mlm = TFMobileBertMLMHead(config, name="mlm___cls")
 
-    def get_output_embeddings(self):
-        return self.mobilebert.embeddings
-
     def resize_token_embeddings(self, new_num_tokens):
         super().resize_token_embeddings(new_num_tokens=new_num_tokens)
 
-        self.mlm.predictions.resize_bias(new_num_tokens)
+        if new_num_tokens is not None:
+            num_tokens_to_copy = min(self.mlm.predictions.bias.shape[0], new_num_tokens)
+            self.mlm.predictions.vocab_size = num_tokens_to_copy
+            init_bias = self.mlm.predictions.bias.value()[:num_tokens_to_copy]
+            name = self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name + "/bias"
+            self.mlm.predictions.bias = self.add_weight(
+                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
+            )
+            self.mlm.predictions.bias.assign(init_bias)
+
+            init_weights = self.mlm.predictions.decoder.value()[:num_tokens_to_copy]
+            name = (
+                self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name + "/decoder/weight"
+            )
+            self.mlm.predictions.decoder = self.add_weight(
+                shape=(new_num_tokens, self.mlm.predictions.config.embedding_size),
+                initializer="zeros",
+                trainable=True,
+                name=name,
+            )
+            self.mlm.predictions.decoder.assign(init_weights)
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

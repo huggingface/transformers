@@ -747,19 +747,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 raise ValueError("bias is not defined.")
 
             # initialize bias
-            bias_layer.bias = self.add_weight(
+            new_bias = self.add_weight(
                 shape=(new_num_tokens,),
                 initializer="zeros",
                 trainable=True,
                 name=self.get_prefix_bias_name() + "/bias",
             )
-            init_bias = tf.make_ndarray(tf.make_tensor_proto(bias_layer.bias.value()))
+            init_bias = tf.make_ndarray(tf.make_tensor_proto(bias_layer.bias.value()))[:num_tokens_to_copy]
 
-            # Copy bias from the previous one
-            init_bias[:num_tokens_to_copy] = bias_layer.bias.value()[:num_tokens_to_copy]
-            base_layer.vocab_size = num_tokens_to_copy
+            new_bias.assign(init_bias)
 
-            bias_layer.bias.assign(init_bias)
+            bias_layer.bias = new_bias
 
         return new_embeddings
 

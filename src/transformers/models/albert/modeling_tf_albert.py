@@ -832,21 +832,18 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
         if new_num_tokens is not None:
             num_tokens_to_copy = min(self.predictions.bias.shape[0], new_num_tokens)
             init_bias = self.predictions.bias.value()[:num_tokens_to_copy]
+            name = self.name + "/" + self.predictions.name + "/bias"
             self.predictions.bias = self.add_weight(
-                shape=(new_num_tokens,),
-                initializer="zeros",
-                trainable=True,
-                name=self.predictions.bias.name.split(":")[0],
+                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
             )
             self.predictions.bias.assign(init_bias)
 
             init_decoder_bias = self.predictions.decoder_bias.value()[:num_tokens_to_copy]
+            name = self.name + "/" + self.predictions.name + "/decoder_bias"
             self.predictions.decoder_bias = self.add_weight(
-                shape=(new_num_tokens,),
-                initializer="zeros",
-                trainable=True,
-                name=self.predictions.decoder_bias.name.split(":")[0],
+                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
             )
+            self.predictions.vocab_size = num_tokens_to_copy
             self.predictions.decoder_bias.assign(init_decoder_bias)
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -963,14 +960,14 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
         if new_num_tokens is not None:
             num_tokens_to_copy = min(self.predictions.bias.shape[0], new_num_tokens)
             init_bias = self.predictions.bias.value()[:num_tokens_to_copy]
-            name = self.name + "/" + self.predictions + "/bias"
+            name = self.name + "/" + self.predictions.name + "/bias"
             self.predictions.bias = self.add_weight(
                 shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
             )
             self.predictions.bias.assign(init_bias)
 
             init_decoder_bias = self.predictions.decoder_bias.value()[:num_tokens_to_copy]
-            name = self.name + "/" + self.predictions + "/decoder_bias"
+            name = self.name + "/" + self.predictions.name + "/decoder_bias"
             self.predictions.decoder_bias = self.add_weight(
                 shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
             )
