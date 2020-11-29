@@ -1148,14 +1148,16 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
         if new_num_tokens is not None:
             num_tokens_to_copy = min(self.mlm.predictions.bias.shape[0], new_num_tokens)
             self.mlm.predictions.vocab_size = num_tokens_to_copy
-            init_bias = self.mlm.predictions.bias.value()[:num_tokens_to_copy]
+            init_bias = tf.zeros((new_num_tokens,))
+            init_bias[:num_tokens_to_copy] = self.mlm.predictions.bias.value()[:num_tokens_to_copy]
             name = self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name + "/bias"
             self.mlm.predictions.bias = self.add_weight(
                 shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
             )
             self.mlm.predictions.bias.assign(init_bias)
 
-            init_weights = self.mlm.predictions.decoder.value()[:num_tokens_to_copy]
+            init_weights = tf.zeros((new_num_tokens,))
+            init_weights[:num_tokens_to_copy] = self.mlm.predictions.decoder.value()[:num_tokens_to_copy]
             name = (
                 self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name + "/decoder/weight"
             )

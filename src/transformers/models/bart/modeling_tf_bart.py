@@ -1055,9 +1055,10 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         # BART is a special case where the bias has two dimensions
         # and not named just `bias`
         if new_num_tokens is not None:
-            name = self.name + "/final_logits_bias"
             num_tokens_to_copy = min(self.final_logits_bias.shape[0], new_num_tokens)
-            init_bias = self.final_logits_bias.value()[:num_tokens_to_copy]
+            init_bias = tf.zeros((new_num_tokens,))
+            init_bias[:num_tokens_to_copy] = self.final_logits_bias.value()[:num_tokens_to_copy]
+            name = self.name + "/final_logits_bias"
             self.final_logits_bias = self.add_weight(
                 shape=(1, new_num_tokens),
                 initializer="zeros",

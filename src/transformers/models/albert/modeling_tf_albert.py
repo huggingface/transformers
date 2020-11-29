@@ -831,19 +831,22 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
         # just to make the loading weights from a PT model happy
         if new_num_tokens is not None:
             num_tokens_to_copy = min(self.predictions.bias.shape[0], new_num_tokens)
-            init_bias = self.predictions.bias.value()[:num_tokens_to_copy]
+            self.predictions.vocab_size = num_tokens_to_copy
+            init_bias = tf.zeros((new_num_tokens,))
+            init_bias[:num_tokens_to_copy] = self.predictions.bias.value()[:num_tokens_to_copy]
             name = self.name + "/" + self.predictions.name + "/bias"
             self.predictions.bias = self.add_weight(
                 shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
             )
             self.predictions.bias.assign(init_bias)
 
-            init_decoder_bias = self.predictions.decoder_bias.value()[:num_tokens_to_copy]
+            init_decoder_bias = tf.zeros((new_num_tokens,))
+            init_decoder_bias[:num_tokens_to_copy] = self.predictions.decoder_bias.value()[:num_tokens_to_copy]
             name = self.name + "/" + self.predictions.name + "/decoder_bias"
             self.predictions.decoder_bias = self.add_weight(
                 shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
             )
-            self.predictions.vocab_size = num_tokens_to_copy
+
             self.predictions.decoder_bias.assign(init_decoder_bias)
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
