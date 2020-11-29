@@ -626,7 +626,7 @@ class BatchEncoding(UserDict):
             :class:`~transformers.BatchEncoding`:
             The same instance of :class:`~transformers.BatchEncoding` after modification.
         """
-        self.data = {k: v.to(device) for k, v in self.data.items()}
+        self.data = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in self.data.items()}
         return self
 
 
