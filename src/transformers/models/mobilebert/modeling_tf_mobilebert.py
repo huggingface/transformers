@@ -701,7 +701,7 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
 
     def get_input_embeddings(self):
         return self.embeddings
-    
+
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
         self.embeddings.vocab_size = value.shape[0]
@@ -1033,17 +1033,17 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
         if new_num_tokens is not None:
             num_tokens_to_copy = min(self.predictions.predictions.bias.shape[0], new_num_tokens)
             self.predictions.predictions.vocab_size = num_tokens_to_copy
-            init_bias = self.predictions.predictions.bias.value()[:num_tokens_to_copy]
+            init_bias = tf.zeros((new_num_tokens,))
+            init_bias[:num_tokens_to_copy] = self.predictions.predictions.bias.value()[:num_tokens_to_copy]
             name = self.name + "/" + self.predictions.name + "/" + self.predictions.predictions.name + "/bias"
             self.predictions.predictions.bias = self.add_weight(
                 shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
             )
             self.predictions.predictions.bias.assign(init_bias)
 
-            init_weights = self.predictions.predictions.decoder.value()[:num_tokens_to_copy]
-            name = (
-                self.name + "/" + self.predictions.name + "/" + self.predictions.predictions.name + "/decoder/weight"
-            )
+            init_weights = tf.zeros((new_num_tokens,))
+            init_weights[:num_tokens_to_copy] = self.predictions.predictions.decoder.value()[:num_tokens_to_copy]
+            name = self.name + "/" + self.predictions.name + "/" + self.predictions.predictions.name + "/decoder/weight"
             self.predictions.predictions.decoder = self.add_weight(
                 shape=(new_num_tokens, self.predictions.predictions.config.embedding_size),
                 initializer="zeros",
@@ -1158,9 +1158,7 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
 
             init_weights = tf.zeros((new_num_tokens,))
             init_weights[:num_tokens_to_copy] = self.mlm.predictions.decoder.value()[:num_tokens_to_copy]
-            name = (
-                self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name + "/decoder/weight"
-            )
+            name = self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name + "/decoder/weight"
             self.mlm.predictions.decoder = self.add_weight(
                 shape=(new_num_tokens, self.mlm.predictions.config.embedding_size),
                 initializer="zeros",

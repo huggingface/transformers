@@ -748,7 +748,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
             # initialize bias
             init_bias = np.zeros((new_num_tokens,))
-            init_bias[:num_tokens_to_copy] = tf.make_ndarray(tf.make_tensor_proto(bias_layer.bias.value()))[:num_tokens_to_copy]
+            init_bias[:num_tokens_to_copy] = tf.make_ndarray(tf.make_tensor_proto(bias_layer.bias.value()))[
+                :num_tokens_to_copy
+            ]
 
             bias_layer.bias = self.add_weight(
                 shape=(new_num_tokens,),
