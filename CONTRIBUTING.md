@@ -125,7 +125,7 @@ Follow these steps to start contributing:
    $ git checkout -b a-descriptive-name-for-my-changes
    ```
 
-   **do not** work on the `master` branch.
+   **Do not** work on the `master` branch.
 
 4. Set up a development environment by running the following command in a virtual environment:
 

@@ -20,14 +20,14 @@ DataCollator = NewType("DataCollator", Callable[[List[InputDataClass]], Dict[str
 
 def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Tensor]:
     """
-    Very simple data collator that simply collates batches of dict-like objects and erforms special handling for
+    Very simple data collator that simply collates batches of dict-like objects and performs special handling for
     potential keys named:
 
         - ``label``: handles a single value (int or float) per object
         - ``label_ids``: handles a list of values per object
 
-    Des not do any additional preprocessing: property names of the input object will be used as corresponding inputs to
-    the model. See glue and ner for example of how it's useful.
+    Does not do any additional preprocessing: property names of the input object will be used as corresponding inputs
+    to the model. See glue and ner for example of how it's useful.
     """
 
     # In this function we'll make the assumption that all `features` in the batch
