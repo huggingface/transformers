@@ -72,6 +72,7 @@ class TFMT5EncoderModel(TFT5EncoderModel):
     documentation alongside usage examples.
 
     Examples::
+    
         >>> from transformers import TFMT5EncoderModel, T5Tokenizer
         >>> model = TFMT5EncoderModel.from_pretrained("google/mt5-small")
         >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
