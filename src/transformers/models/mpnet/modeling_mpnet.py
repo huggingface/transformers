@@ -461,7 +461,7 @@ class MPNetModel(MPNetPreTrainedModel):
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    def __init__(self, config, , add_pooling_layer=True):
+    def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
@@ -820,7 +820,7 @@ class MPNetForTokenClassification(MPNetPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.mpnet = MPNetModel(config)
+        self.mpnet = MPNetModel(config, add_pooling_layer=False)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
@@ -931,7 +931,7 @@ class MPNetForQuestionAnswering(MPNetPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.mpnet = MPNetModel(config)
+        self.mpnet = MPNetModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
