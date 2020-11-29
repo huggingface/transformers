@@ -1043,7 +1043,9 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
 
             init_weights = tf.zeros((new_num_tokens,))
             init_weights[:num_tokens_to_copy] = self.predictions.predictions.decoder.value()[:num_tokens_to_copy]
-            name = self.name + "/" + self.predictions.name + "/" + self.predictions.predictions.name + "/decoder/weight"
+            name = (
+                self.name + "/" + self.predictions.name + "/" + self.predictions.predictions.name + "/decoder/weight"
+            )
             self.predictions.predictions.decoder = self.add_weight(
                 shape=(new_num_tokens, self.predictions.predictions.config.embedding_size),
                 initializer="zeros",
