@@ -70,8 +70,8 @@ inference.
     optimizations afterwards.
 
 .. note::
-    For more information about the optimizations enabled by ONNXRuntime, please have a look at the (`ONNXRuntime Github
-    <https://github.com/microsoft/onnxruntime/tree/master/onnxruntime/python/tools/transformers>`_)
+    For more information about the optimizations enabled by ONNXRuntime, please have a look at the `ONNXRuntime Github
+    <https://github.com/microsoft/onnxruntime/tree/master/onnxruntime/python/tools/transformers>`_.
 
 Quantization
 -----------------------------------------------------------------------------------------------------------------------
