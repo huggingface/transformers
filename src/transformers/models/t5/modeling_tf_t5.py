@@ -955,7 +955,7 @@ T5_ENCODER_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
             should be able to pad the inputs on the right or the left.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
+            Indices can be obtained using :class:`~transformers.T5Tokenizer`. See
             :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
             details.
 
