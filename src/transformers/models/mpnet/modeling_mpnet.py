@@ -459,9 +459,9 @@ MPNET_INPUTS_DOCSTRING = r"""
 )
 class MPNetModel(MPNetPreTrainedModel):
 
-    base_model_prefix = "mpnet"
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    def __init__(self, config):
+    def __init__(self, config, , add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
@@ -531,13 +531,13 @@ class MPNetModel(MPNetPreTrainedModel):
 
 
 class MPNetForMaskedLM(MPNetPreTrainedModel):
-
-    base_model_prefix = "mpnet"
+    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
         super().__init__(config)
 
-        self.mpnet = MPNetModel(config)
+        self.mpnet = MPNetModel(config, add_pooling_layer=False)
         self.lm_head = MPNetLMHead(config)
 
         self.init_weights()
@@ -638,14 +638,13 @@ class MPNetLMHead(nn.Module):
     MPNET_START_DOCSTRING,
 )
 class MPNetForSequenceClassification(MPNetPreTrainedModel):
-
-    base_model_prefix = "mpnet"
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.mpnet = MPNetModel(config)
+        self.mpnet = MPNetModel(config, add_pooling_layer=False)
         self.classifier = MPNetClassificationHead(config)
 
         self.init_weights()
@@ -702,7 +701,7 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
-        if return_dict:
+        if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -722,8 +721,7 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
     MPNET_START_DOCSTRING,
 )
 class MPNetForMultipleChoice(MPNetPreTrainedModel):
-
-    base_model_prefix = "mpnet"
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -795,7 +793,7 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
 
-        if return_dict:
+        if not return_dict:
             output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -815,8 +813,8 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
     MPNET_START_DOCSTRING,
 )
 class MPNetForTokenClassification(MPNetPreTrainedModel):
-
-    base_model_prefix = "mpnet"
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -926,8 +924,8 @@ class MPNetClassificationHead(nn.Module):
     MPNET_START_DOCSTRING,
 )
 class MPNetForQuestionAnswering(MPNetPreTrainedModel):
-
-    base_model_prefix = "mpnet"
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
