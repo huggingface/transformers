@@ -151,6 +151,17 @@ class GenerationTesterMixin:
                 **logits_process_kwargs,
             )
 
+            output_ids_generate_diverse_sequences = model.generate(
+                input_ids,
+                attention_mask=attention_mask,
+                do_sample=False,
+                num_beams=1,
+                max_length=max_length,
+                num_return_sequences=4,
+                diverse_sequences=True,
+                **logits_process_kwargs,
+            )
+
             if model.config.is_encoder_decoder:
                 encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
                     model, input_ids, attention_mask
@@ -165,7 +176,19 @@ class GenerationTesterMixin:
                     logits_processor=logits_processor,
                     **kwargs,
                 )
+                output_ids_greedy_diverse_sequences = model.greedy_search(
+                    input_ids,
+                    max_length=max_length,
+                    attention_mask=attention_mask,
+                    logits_processor=logits_processor,
+                    num_return_sequences=4,
+                    diverse_sequences=True,
+                    **kwargs,
+                )
             self.assertListEqual(output_ids_generate.tolist(), output_ids_greedy.tolist())
+            self.assertListEqual(
+                output_ids_generate_diverse_sequences.tolist(), output_ids_greedy_diverse_sequences.tolist()
+            )
 
     def test_sample_generate(self):
         for model_class in self.all_generative_model_classes:
@@ -192,6 +215,17 @@ class GenerationTesterMixin:
                 **logits_warper_kwargs,
                 **process_kwargs,
             )
+            torch.manual_seed(0)
+            output_ids_generate_diverse = model.generate(
+                input_ids,
+                do_sample=True,
+                num_beams=1,
+                max_length=max_length,
+                attention_mask=attention_mask,
+                diverse_sequences=True,
+                **logits_warper_kwargs,
+                **process_kwargs,
+            )
 
             torch.manual_seed(0)
             kwargs = {}
@@ -213,7 +247,20 @@ class GenerationTesterMixin:
                     logits_warper=logits_warper,
                     **kwargs,
                 )
+                torch.manual_seed(0)
+                output_ids_sample_diverse = model.sample(
+                    input_ids_clone,
+                    attention_mask=attention_mask_clone,
+                    max_length=max_length,
+                    logits_processor=logits_processor,
+                    logits_warper=logits_warper,
+                    diverse_sequences=True,
+                    **kwargs,
+                )
             self.assertListEqual(output_ids_generate.tolist(), output_ids_sample.tolist())
+            self.assertListEqual(output_ids_generate_diverse.tolist(), output_ids_sample_diverse.tolist())
+            self.assertListEqual(output_ids_generate.tolist(), output_ids_generate_diverse.tolist())
+            self.assertListEqual(output_ids_sample.tolist(), output_ids_sample_diverse.tolist())
 
             # check `generate()` and `sample()` yield equal results for `num_return_sequences`
             num_return_sequences = 3
@@ -231,18 +278,39 @@ class GenerationTesterMixin:
                 **logits_warper_kwargs,
                 **process_kwargs,
             )
+            torch.manual_seed(0)
+            output_ids_generate_diverse = model.generate(
+                input_ids,
+                do_sample=True,
+                num_beams=1,
+                max_length=max_length,
+                num_return_sequences=num_return_sequences,
+                attention_mask=attention_mask,
+                diverse_sequences=True,
+                **logits_warper_kwargs,
+                **process_kwargs,
+            )
 
             torch.manual_seed(0)
             kwargs = {}
+            kwargs_diverse = {}
             if model.config.is_encoder_decoder:
                 encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
                     model, input_ids, attention_mask, num_interleave=num_return_sequences
                 )
+                (
+                    encoder_outputs_diverse,
+                    input_ids_clone_diverse,
+                    attention_mask_clone_diverse,
+                ) = self._get_encoder_outputs(model, input_ids, attention_mask, num_interleave=1)
                 kwargs["encoder_outputs"] = encoder_outputs
+                kwargs_diverse["encoder_outputs"] = encoder_outputs_diverse
                 input_ids_clone = input_ids_clone.repeat_interleave(num_return_sequences, dim=0)
             else:
                 attention_mask_clone = attention_mask.repeat_interleave(num_return_sequences, dim=0)
                 input_ids_clone = input_ids.repeat_interleave(num_return_sequences, dim=0)
+                attention_mask_clone_diverse = attention_mask.clone()
+                input_ids_clone_diverse = input_ids.clone()
 
             with torch.no_grad():
                 output_ids_sample = model.sample(
@@ -253,7 +321,19 @@ class GenerationTesterMixin:
                     logits_warper=logits_warper,
                     **kwargs,
                 )
+                torch.manual_seed(0)
+                output_ids_sample_diverse = model.sample(
+                    input_ids_clone_diverse,
+                    attention_mask=attention_mask_clone_diverse,
+                    max_length=max_length,
+                    logits_processor=logits_processor,
+                    logits_warper=logits_warper,
+                    num_return_sequences=num_return_sequences,
+                    diverse_sequences=True,
+                    **kwargs_diverse,
+                )
             self.assertListEqual(output_ids_generate.tolist(), output_ids_sample.tolist())
+            self.assertListEqual(output_ids_generate_diverse.tolist(), output_ids_sample_diverse.tolist())
 
     def test_beam_search_generate(self):
         for model_class in self.all_generative_model_classes:

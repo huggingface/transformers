@@ -315,6 +315,7 @@ class GenerationMixin:
         decoder_start_token_id: Optional[int] = None,
         use_cache: Optional[bool] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
+        diverse_sequences: Optional[bool] = False,
         **model_kwargs
     ) -> torch.LongTensor:
         r"""
@@ -388,6 +389,9 @@ class GenerationMixin:
                 conditioned on the previously generated tokens :obj:`inputs_ids` and the batch ID :obj:`batch_id`. This
                 argument is useful for constrained generation conditioned on the prefix, as described in
                 `Autoregressive Entity Retrieval <https://arxiv.org/abs/2010.00904>`__.
+            diverse_sequences (:obj:`bool`, `optional`, defaults to False):
+                if :obj:`True`, greedy search or sampling method can generate sequences with each sequence started with
+                one of the :obj:`num_return_sequences` different tokens predicted.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
                 model is an Encoder-Decoder model, encoder specific kwargs should not be prefixed and decoder specific
@@ -499,6 +503,9 @@ class GenerationMixin:
         # set model_kwargs
         model_kwargs["use_cache"] = use_cache
 
+        # set num_return_sequences
+        model_kwargs["num_return_sequences"] = num_return_sequences
+
         # get distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
             repetition_penalty=repetition_penalty,
@@ -511,7 +518,7 @@ class GenerationMixin:
         )
 
         if is_greedy_gen_mode:
-            if num_return_sequences > 1:
+            if (num_return_sequences > 1) and not diverse_sequences:
                 raise ValueError(
                     f"num_return_sequences has to be 1, but is {num_return_sequences} when doing greedy search."
                 )
@@ -523,22 +530,26 @@ class GenerationMixin:
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
+                diverse_sequences=diverse_sequences,
                 **model_kwargs,
             )
 
         elif is_sample_gen_mode:
             # get probability distribution warper
             logits_warper = self._get_logits_warper(
-                top_k=top_k, top_p=top_p, temperature=temperature, num_beams=num_beams
+                top_k=top_k,
+                top_p=top_p,
+                temperature=temperature,
+                num_beams=num_beams,
             )
-
-            # expand input_ids with `num_return_sequences` additional sequences per batch
-            input_ids, model_kwargs = self._expand_inputs_for_generation(
-                input_ids,
-                expand_size=num_return_sequences,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-                **model_kwargs,
-            )
+            if not diverse_sequences:
+                # expand input_ids with `num_return_sequences` additional sequences per batch
+                input_ids, model_kwargs = self._expand_inputs_for_generation(
+                    input_ids,
+                    expand_size=num_return_sequences,
+                    is_encoder_decoder=self.config.is_encoder_decoder,
+                    **model_kwargs,
+                )
 
             # sample
             return self.sample(
@@ -548,6 +559,7 @@ class GenerationMixin:
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
+                diverse_sequences=diverse_sequences,
                 **model_kwargs,
             )
 
@@ -626,6 +638,7 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        diverse_sequences: Optional[bool] = False,
         **model_kwargs
     ):
         r"""
@@ -646,6 +659,9 @@ class GenerationMixin:
                 The id of the `padding` token.
             eos_token_id (:obj:`int`, `optional`):
                 The id of the `end-of-sequence` token.
+            diverse_sequences (:obj:`bool`, `optional`, defaults to False):
+                if :obj:`True` the method can generate sequences with each sequence started with one of the top
+                :obj:`num_return_sequences` tokens predicted.
             model_kwargs:
                 Additional model specific keyword arguments will be forwarded to the :obj:`forward` function of the
                 model. If model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
@@ -693,6 +709,12 @@ class GenerationMixin:
         sequence_lengths, unfinished_sequences, cur_len = self._init_sequence_length_for_generation(
             input_ids, max_length
         )
+        if ("num_return_sequences" in model_kwargs) and diverse_sequences:
+            num_return_sequences = model_kwargs["num_return_sequences"]
+            starting_length = cur_len
+        else:
+            num_return_sequences = 1
+            starting_length = None
 
         while cur_len < max_length:
             # prepare model inputs
@@ -705,13 +727,31 @@ class GenerationMixin:
             # pre-process distribution
             scores = logits_processor(input_ids, next_token_logits)
 
-            # argmax
-            next_tokens = torch.argmax(scores, dim=-1)
+            # argmax or top-num_return_sequences tokens
+            if (cur_len == starting_length) and (num_return_sequences > 1) and diverse_sequences:
+                top_num = int(min(num_return_sequences, scores.size(-1)))  # Safety check
+                next_tokens = torch.topk(scores, top_num).indices.reshape(-1)
+                # Once we got next_tokens, we have expand metadata
+                unfinished_sequences = unfinished_sequences.repeat_interleave(num_return_sequences, dim=0)
+                sequence_lengths = sequence_lengths.repeat_interleave(num_return_sequences, dim=0)
+            else:
+                next_tokens = torch.argmax(scores, dim=-1)
 
-            # add code that transfomers next_tokens to tokens_to_add
+            # add code that transforms next_tokens (to tokens_to_add)
             if eos_token_id is not None:
                 assert pad_token_id is not None, "If eos_token_id is defined, make sure that pad_token_id is defined."
                 next_tokens = next_tokens * unfinished_sequences + (pad_token_id) * (1 - unfinished_sequences)
+
+            if (cur_len == starting_length) and (num_return_sequences > 1) and diverse_sequences:
+                # expand input_ids with `num_return_sequences` additional sequences per batch
+                input_ids, model_kwargs = self._expand_inputs_for_generation(
+                    input_ids,
+                    expand_size=num_return_sequences,
+                    is_encoder_decoder=self.config.is_encoder_decoder,
+                    **model_kwargs,
+                )
+                # have to drop past_key_values because input_ids resizing
+                outputs["past_key_values"] = None
 
             # add token and increase length by one
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
@@ -727,7 +767,7 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
 
-            # stop when there is a </s> in each sentence, or if we exceed the maximul length
+            # stop when there is a </s> in each sentence, or if we exceed the maximum length
             if unfinished_sequences.max() == 0:
                 break
 
@@ -744,6 +784,7 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        diverse_sequences: Optional[bool] = False,
         **model_kwargs
     ):
         r"""
@@ -768,6 +809,9 @@ class GenerationMixin:
                 The id of the `padding` token.
             eos_token_id (:obj:`int`, `optional`):
                 The id of the `end-of-sequence` token.
+            diverse_sequences (:obj:`bool`, `optional`, defaults to False):
+                if :obj:`True` the method can generate sequences with each sequence started with one of
+                :obj:`num_return_sequences` different first tokens predicted.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
@@ -823,6 +867,12 @@ class GenerationMixin:
         sequence_lengths, unfinished_sequences, cur_len = self._init_sequence_length_for_generation(
             input_ids, max_length
         )
+        if ("num_return_sequences" in model_kwargs) and diverse_sequences:
+            num_return_sequences = model_kwargs["num_return_sequences"]
+            starting_length = cur_len
+        else:
+            num_return_sequences = 1
+            starting_length = None
 
         # auto-regressive generation
         while cur_len < max_length:
@@ -837,14 +887,33 @@ class GenerationMixin:
             scores = logits_processor(input_ids, next_token_logits)
             scores = logits_warper(input_ids, scores)
 
-            # sample
-            probs = F.softmax(scores, dim=-1)
-            next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+            if (cur_len == starting_length) and (num_return_sequences > 1) and diverse_sequences:
+                # sample num_return_sequences tokens
+                probs = F.softmax(scores, dim=-1)
+                next_tokens = torch.multinomial(probs, num_samples=num_return_sequences).reshape(-1)
+                # Once we got next_tokens, we have expand metadata
+                unfinished_sequences = unfinished_sequences.repeat_interleave(num_return_sequences, dim=0)
+                sequence_lengths = sequence_lengths.repeat_interleave(num_return_sequences, dim=0)
+            else:
+                # sample
+                probs = F.softmax(scores, dim=-1)
+                next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
 
-            # add code that transfomers next_tokens to tokens_to_add
+            # add code that transforms next_tokens (to tokens_to_add)
             if eos_token_id is not None:
                 assert pad_token_id is not None, "If eos_token_id is defined, make sure that pad_token_id is defined."
                 next_tokens = next_tokens * unfinished_sequences + (pad_token_id) * (1 - unfinished_sequences)
+
+            if (cur_len == starting_length) and (num_return_sequences > 1) and diverse_sequences:
+                # expand input_ids with `num_return_sequences` additional sequences per batch
+                input_ids, model_kwargs = self._expand_inputs_for_generation(
+                    input_ids,
+                    expand_size=num_return_sequences,
+                    is_encoder_decoder=self.config.is_encoder_decoder,
+                    **model_kwargs,
+                )
+                # have to drop past_key_values because input_ids resizing
+                outputs["past_key_values"] = None
 
             # add token and increase length by one
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
