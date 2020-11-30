@@ -2604,7 +2604,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
                 Instead of :obj:`List[int]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors),
                 see the note above for the return type.
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
+            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
 
