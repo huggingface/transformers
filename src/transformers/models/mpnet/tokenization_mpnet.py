@@ -29,16 +29,16 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "mpnet-base": "",
+        "microsoft/mpnet-base": "https://huggingface.co/microsoft/mpnet-base/resolve/main/vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "mpnet-base": 512,
+    "microsoft/mpnet-base": 512,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "mpnet-base": {"do_lower_case": True},
+    "microsoft/mpnet-base": {"do_lower_case": True},
 }
 
 

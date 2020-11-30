@@ -58,7 +58,7 @@ _TOKENIZER_FOR_DOC = "MPNetTokenizer"
 
 
 MPNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "mpnet-base",
+    "microsoft/mpnet-base",
 ]
 
 
