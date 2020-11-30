@@ -197,6 +197,7 @@ class MonoInputPipelineCommonMixin(CustomInputPipelineCommonMixin):
 
     def _test_pipeline(self, nlp: Pipeline):
         self.assertIsNotNone(nlp)
+        self.assertIsNotNone(nlp.task)
 
         mono_result = nlp(self.valid_inputs[0], **self.pipeline_running_kwargs)
         self.assertIsInstance(mono_result, list)

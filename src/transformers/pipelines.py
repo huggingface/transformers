@@ -516,7 +516,7 @@ class Pipeline(_ScikitCompat):
         if framework is None:
             framework = get_framework(model)
 
-        self.task = task or self.task
+        self.task = task or getattr(self, "task", "")
         self.model = model
         self.tokenizer = tokenizer
         self.modelcard = modelcard
@@ -949,7 +949,7 @@ class TextClassificationPipeline(Pipeline):
 
     task = "text-classification"
 
-    def __init__(self, return_all_scores: bool = False, return_raw_outputs: bool = None, **kwargs):
+    def __init__(self, return_all_scores: bool = None, function_to_apply: str = None, **kwargs):
         super().__init__(**kwargs)
 
         self.check_model_type(
@@ -958,13 +958,16 @@ class TextClassificationPipeline(Pipeline):
             else MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING
         )
 
-        if hasattr(self.model.config, "return_raw_outputs") and return_raw_outputs is None:
-            return_raw_outputs = self.model.config.return_raw_outputs
+        if hasattr(self.model.config, "return_all_scores") and return_all_scores is None:
+            return_all_scores = self.model.config.return_all_scores
 
-        self.return_all_scores = return_all_scores
-        self.return_raw_outputs = return_raw_outputs if return_raw_outputs is not None else False
+        if hasattr(self.model.config, "function_to_apply") and function_to_apply is None:
+            function_to_apply = self.model.config.function_to_apply
 
-    def __call__(self, *args, **kwargs):
+        self.return_all_scores = return_all_scores if return_all_scores is not None else False
+        self.function_to_apply = function_to_apply if function_to_apply is not None else "default"
+
+    def __call__(self, *args, return_all_scores=None, function_to_apply=None, **kwargs):
         """
         Classify the text(s) given as inputs.
 
@@ -982,15 +985,30 @@ class TextClassificationPipeline(Pipeline):
         """
         outputs = super().__call__(*args, **kwargs)
 
-        if self.return_raw_outputs:
+        return_all_scores = return_all_scores if return_all_scores is not None else self.return_all_scores
+        function_to_apply = function_to_apply if function_to_apply is not None else self.function_to_apply
+
+        def sigmoid(_outputs):
+            return 1.0 / (1.0 + np.exp(-_outputs))
+
+        def softmax(_outputs):
+            return np.exp(_outputs) / np.exp(_outputs).sum(-1, keepdims=True)
+
+        if function_to_apply == "default":
+            if self.model.config.num_labels == 1:
+                scores = sigmoid(outputs)
+            else:
+                scores = softmax(outputs)
+        elif function_to_apply == "sigmoid":
+            scores = sigmoid(outputs)
+        elif function_to_apply == "softmax":
+            scores = softmax(outputs)
+        elif function_to_apply.lower() == "none":
             scores = outputs
         else:
-            if self.model.config.num_labels == 1:
-                scores = 1.0 / (1.0 + np.exp(-outputs))
-            else:
-                scores = np.exp(outputs) / np.exp(outputs).sum(-1, keepdims=True)
+            raise ValueError(f"Unrecognized `function_to_apply` argument: {function_to_apply}")
 
-        if self.return_all_scores:
+        if return_all_scores:
             return [
                 [{"label": self.model.config.id2label[i], "score": score.item()} for i, score in enumerate(item)]
                 for item in scores
@@ -1051,6 +1069,8 @@ class ZeroShotClassificationPipeline(Pipeline):
     The models that this pipeline can use are models that have been fine-tuned on an NLI task. See the up-to-date list
     of available models on `huggingface.co/models <https://huggingface.co/models?search=nli>`__.
     """
+
+    task = "zero-shot"
 
     def __init__(self, args_parser=ZeroShotClassificationArgumentHandler(), *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1183,6 +1203,8 @@ class FillMaskPipeline(Pipeline):
 
         This pipeline only works for inputs with exactly one token masked.
     """
+
+    task = "fill-mask"
 
     def __init__(
         self,
@@ -1373,6 +1395,7 @@ class TokenClassificationPipeline(Pipeline):
     <https://huggingface.co/models?filter=token-classification>`__.
     """
 
+    task = "token-classification"
     default_input_names = "sequences"
 
     def __init__(
@@ -1679,6 +1702,7 @@ class QuestionAnsweringPipeline(Pipeline):
     <https://huggingface.co/models?filter=question-answering>`__.
     """
 
+    task = "question-answering"
     default_input_names = "question,context"
 
     def __init__(
@@ -2079,6 +2103,8 @@ class SummarizationPipeline(Pipeline):
         summarizer("Sam Shleifer writes the best docstring examples in the whole world.", min_length=5, max_length=20)
     """
 
+    task = "summarization"
+
     def __init__(self, *args, **kwargs):
         kwargs.update(task="summarization")
         super().__init__(*args, **kwargs)
@@ -2200,6 +2226,8 @@ class TranslationPipeline(Pipeline):
         en_fr_translator("How old are you?")
     """
 
+    task = "translation"
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -2308,6 +2336,8 @@ class Text2TextGenerationPipeline(Pipeline):
         text2text_generator = pipeline("text2text-generation")
         text2text_generator("question: What is 42 ? context: 42 is the answer to life, the universe and everything")
     """
+
+    task = "text2text-generation"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -2533,6 +2563,8 @@ class ConversationalPipeline(Pipeline):
 
         conversational_pipeline([conversation_1, conversation_2])
     """
+
+    task = "conversational"
 
     def __init__(self, min_length_for_response=32, *args, **kwargs):
         super().__init__(*args, **kwargs)
