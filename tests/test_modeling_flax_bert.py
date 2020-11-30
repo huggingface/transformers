@@ -45,12 +45,12 @@ class FlaxBertModelTest(unittest.TestCase):
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
                     self.assert_almost_equals(fx_output, pt_output.numpy(), 5e-3)
 
-    def test_multiple_sentences(self):
+    def test_multiple_sequences(self):
         tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
         model = FlaxBertModel.from_pretrained("bert-base-cased")
 
-        sentences = ["this is an example sentence", "this is another", "and a third one"]
-        encodings = tokenizer(sentences, return_tensors=TensorType.JAX, padding=True, truncation=True)
+        sequences = ["this is an example sentence", "this is another", "and a third one"]
+        encodings = tokenizer(sequences, return_tensors=TensorType.JAX, padding=True, truncation=True)
 
         @jax.jit
         def model_jitted(input_ids, attention_mask=None, token_type_ids=None):

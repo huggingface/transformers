@@ -45,12 +45,12 @@ class FlaxRobertaModelTest(unittest.TestCase):
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs.to_tuple()):
                     self.assert_almost_equals(fx_output, pt_output.numpy(), 6e-4)
 
-    def test_multiple_sentences(self):
+    def test_multiple_sequences(self):
         tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
         model = FlaxRobertaModel.from_pretrained("roberta-base")
 
-        sentences = ["this is an example sentence", "this is another", "and a third one"]
-        encodings = tokenizer(sentences, return_tensors=TensorType.JAX, padding=True, truncation=True)
+        sequences = ["this is an example sentence", "this is another", "and a third one"]
+        encodings = tokenizer(sequences, return_tensors=TensorType.JAX, padding=True, truncation=True)
 
         @jax.jit
         def model_jitted(input_ids, attention_mask=None, token_type_ids=None):
