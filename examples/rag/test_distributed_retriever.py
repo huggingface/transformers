@@ -12,18 +12,12 @@ from datasets import Dataset
 
 import faiss
 from transformers import BartConfig, BartTokenizer, DPRConfig, DPRQuestionEncoderTokenizer, RagConfig
-from transformers.file_utils import (
-    is_datasets_available,
-    is_faiss_available,
-    is_psutil_available,
-    is_torch_available,
-)
+from transformers.file_utils import is_datasets_available, is_faiss_available, is_psutil_available, is_torch_available
 from transformers.integrations import is_ray_available
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.models.rag.retrieval_rag import CustomHFIndex, RagRetriever
 from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
-from transformers.testing_utils import \
-    require_torch_non_multi_gpu_but_fix_me, require_ray
+from transformers.testing_utils import require_ray, require_torch_non_multi_gpu_but_fix_me
 
 
 sys.path.append(os.path.join(os.getcwd()))  # noqa: E402 # noqa: E402 # isort:skip
@@ -50,13 +44,8 @@ def require_distributed_retrieval(test_case):
     These tests are skipped when respective libraries are not installed.
 
     """
-    if not (
-        is_datasets_available()
-        and is_faiss_available()
-        and is_psutil_available()
-    ):
-        test_case = unittest.skip("test requires Datasets, Faiss, "
-                                  "psutil")(test_case)
+    if not (is_datasets_available() and is_faiss_available() and is_psutil_available()):
+        test_case = unittest.skip("test requires Datasets, Faiss, " "psutil")(test_case)
     return test_case
 
 
@@ -266,21 +255,14 @@ class RagRetrieverTest(TestCase):
             retriever.init_retrieval()
         return retriever
 
-    def distributed_retriever_check(self, retriever: RagRetriever,
-                                    hidden_states: np.array,
-                                    n_docs: int) -> None:
-        retrieved_doc_embeds, doc_ids, doc_dicts = retriever.retrieve(
-            hidden_states, n_docs=n_docs)
-        self.assertEqual(retrieved_doc_embeds.shape,
-                         (2, n_docs, self.retrieval_vector_size))
+    def distributed_retriever_check(self, retriever: RagRetriever, hidden_states: np.array, n_docs: int) -> None:
+        retrieved_doc_embeds, doc_ids, doc_dicts = retriever.retrieve(hidden_states, n_docs=n_docs)
+        self.assertEqual(retrieved_doc_embeds.shape, (2, n_docs, self.retrieval_vector_size))
         self.assertEqual(len(doc_dicts), 2)
-        self.assertEqual(sorted(doc_dicts[0]),
-                         ["embeddings", "id", "text", "title"])
+        self.assertEqual(sorted(doc_dicts[0]), ["embeddings", "id", "text", "title"])
         self.assertEqual(len(doc_dicts[0]["id"]), n_docs)
-        self.assertEqual(doc_dicts[0]["id"][0],
-                         "1")  # max inner product is reached with second doc
-        self.assertEqual(doc_dicts[1]["id"][0],
-                         "0")  # max inner product is reached with first doc
+        self.assertEqual(doc_dicts[0]["id"][0], "1")  # max inner product is reached with second doc
+        self.assertEqual(doc_dicts[1]["id"][0], "0")  # max inner product is reached with first doc
         self.assertListEqual(doc_ids.tolist(), [[1], [0]])
 
     @require_torch_non_multi_gpu_but_fix_me
@@ -291,8 +273,8 @@ class RagRetrieverTest(TestCase):
         )
 
         self.distributed_retriever_check(
-            self.get_dummy_pytorch_distributed_retriever(
-                init_retrieval=True), hidden_states, n_docs)
+            self.get_dummy_pytorch_distributed_retriever(init_retrieval=True), hidden_states, n_docs
+        )
 
     @require_torch_non_multi_gpu_but_fix_me
     def test_custom_hf_index_pytorch_retriever_retrieve(self):
@@ -301,8 +283,11 @@ class RagRetrieverTest(TestCase):
             [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
         )
 
-        self.distributed_retriever_check(self.get_dummy_custom_hf_index_pytorch_retriever(
-            init_retrieval=True, from_disk=False), hidden_states, n_docs)
+        self.distributed_retriever_check(
+            self.get_dummy_custom_hf_index_pytorch_retriever(init_retrieval=True, from_disk=False),
+            hidden_states,
+            n_docs,
+        )
 
     @require_torch_non_multi_gpu_but_fix_me
     def test_custom_pytorch_distributed_retriever_retrieve_from_disk(self):
@@ -311,45 +296,46 @@ class RagRetrieverTest(TestCase):
             [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
         )
 
-        self.distributed_retriever_check(self.get_dummy_custom_hf_index_pytorch_retriever(
-            init_retrieval=True, from_disk=True), hidden_states, n_docs)
+        self.distributed_retriever_check(
+            self.get_dummy_custom_hf_index_pytorch_retriever(init_retrieval=True, from_disk=True),
+            hidden_states,
+            n_docs,
+        )
 
     @require_ray
     def test_ray_distributed_retriever_retrieve(self):
         n_docs = 1
         hidden_states = np.array(
-            [np.ones(self.retrieval_vector_size),
-             -np.ones(self.retrieval_vector_size)], dtype=np.float32
+            [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
         )
 
         self.distributed_retriever_check(
-            self.get_dummy_ray_distributed_retriever(
-                init_retrieval=True), hidden_states, n_docs)
+            self.get_dummy_ray_distributed_retriever(init_retrieval=True), hidden_states, n_docs
+        )
         ray.shutdown()
 
     @require_ray
     def test_custom_hf_index_ray_retriever_retrieve(self):
         n_docs = 1
         hidden_states = np.array(
-            [np.ones(self.retrieval_vector_size),
-             -np.ones(self.retrieval_vector_size)], dtype=np.float32
+            [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
         )
         with self.assertRaises(ValueError):
             self.distributed_retriever_check(
-                self.get_dummy_custom_hf_index_ray_retriever(
-                    init_retrieval=True, from_disk=False), hidden_states, n_docs)
+                self.get_dummy_custom_hf_index_ray_retriever(init_retrieval=True, from_disk=False),
+                hidden_states,
+                n_docs,
+            )
         ray.shutdown()
 
     @require_ray
     def test_custom_ray_distributed_retriever_retrieve_from_disk(self):
         n_docs = 1
         hidden_states = np.array(
-            [np.ones(self.retrieval_vector_size),
-             -np.ones(self.retrieval_vector_size)], dtype=np.float32
+            [np.ones(self.retrieval_vector_size), -np.ones(self.retrieval_vector_size)], dtype=np.float32
         )
 
         self.distributed_retriever_check(
-            self.get_dummy_custom_hf_index_ray_retriever(init_retrieval=True,
-                                                         from_disk=True),
-            hidden_states, n_docs)
+            self.get_dummy_custom_hf_index_ray_retriever(init_retrieval=True, from_disk=True), hidden_states, n_docs
+        )
         ray.shutdown()

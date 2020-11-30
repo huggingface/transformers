@@ -503,8 +503,8 @@ class GenerativeQAModule(BaseTransformer):
             type=int,
             default=1,
             help="The number of retrieval actors to use when Ray is selected"
-                 "for the distributed retriever. Has no effect when "
-                 "distributed_retriever is set to pytorch.",
+            "for the distributed retriever. Has no effect when "
+            "distributed_retriever is set to pytorch.",
         )
 
         # Ray cluster address.
@@ -513,9 +513,9 @@ class GenerativeQAModule(BaseTransformer):
             default="auto",
             type=str,
             help="The address of the Ray cluster to connect to. If not "
-                 "specified, Ray will attempt to automatically detect the "
-                 "cluster. Has no effect if pytorch is used as the distributed "
-                 "retriever.",
+            "specified, Ray will attempt to automatically detect the "
+            "cluster. Has no effect if pytorch is used as the distributed "
+            "retriever.",
         )
 
         return parser
