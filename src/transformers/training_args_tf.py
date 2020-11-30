@@ -39,7 +39,6 @@ class TFTrainingArguments(TrainingArguments):
 
                 * :obj:`"no"`: No evaluation is done during training.
                 * :obj:`"steps"`: Evaluation is done (and logged) every :obj:`eval_steps`.
-                * :obj:`"epoch"`: Evaluation is done at the end of each epoch.
 
         per_device_train_batch_size (:obj:`int`, `optional`, defaults to 8):
             The batch size per GPU/TPU core/CPU for training.
