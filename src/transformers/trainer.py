@@ -808,8 +808,8 @@ class Trainer:
             logger.info(
                 f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric})."
             )
-            if isinstance(model, PreTrainedModel):
-                self.model = model.from_pretrained(self.state.best_model_checkpoint)
+            if isinstance(self.model, PreTrainedModel):
+                self.model = self.model.from_pretrained(self.state.best_model_checkpoint)
                 if not self.args.model_parallel:
                     self.model = self.model.to(self.args.device)
             else:

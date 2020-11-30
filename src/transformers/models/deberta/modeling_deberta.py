@@ -772,7 +772,7 @@ DEBERTA_START_DOCSTRING = r"""
     The DeBERTa model was proposed in `DeBERTa: Decoding-enhanced BERT with Disentangled Attention
     <https://arxiv.org/abs/2006.03654>`_ by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen. It's build on top of
     BERT/RoBERTa with two improvements, i.e. disentangled attention and enhanced mask decoder. With those two
-    improvements, it out perform BERT/RoBERTa on a majority of tasks with 80GB pre-training data.
+    improvements, it out perform BERT/RoBERTa on a majority of tasks with 80GB pretraining data.
 
     This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
     subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to

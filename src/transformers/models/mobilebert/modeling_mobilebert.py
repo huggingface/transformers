@@ -933,7 +933,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    MobileBert Model with two heads on top as done during the pre-training: a `masked language modeling` head and a
+    MobileBert Model with two heads on top as done during the pretraining: a `masked language modeling` head and a
     `next sentence prediction (classification)` head.
     """,
     MOBILEBERT_START_DOCSTRING,

@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "4.0.0-rc-1"
+__version__ = "4.1.0.dev0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -17,16 +17,7 @@ else:
     absl.logging.set_stderrthreshold("info")
     absl.logging._warn_preinit_stderr = False
 
-# Integrations: this needs to come before other ml imports
-# in order to allow any 3rd-party code to initialize properly
-from .integrations import (  # isort:skip
-    is_comet_available,
-    is_optuna_available,
-    is_ray_available,
-    is_ray_tune_available,
-    is_tensorboard_available,
-    is_wandb_available,
-)
+from . import dependency_versions_check
 
 # Configuration
 from .configuration_utils import PretrainedConfig
@@ -99,6 +90,7 @@ from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
 from .models.auto import (
     ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     CONFIG_MAPPING,
+    MODEL_NAMES_MAPPING,
     TOKENIZER_MAPPING,
     AutoConfig,
     AutoTokenizer,
@@ -204,8 +196,21 @@ from .tokenization_utils_base import (
 )
 
 
+# Integrations: this needs to come before other ml imports
+# in order to allow any 3rd-party code to initialize properly
+from .integrations import (  # isort:skip
+    is_comet_available,
+    is_optuna_available,
+    is_ray_available,
+    is_ray_tune_available,
+    is_tensorboard_available,
+    is_wandb_available,
+)
+
+
 if is_sentencepiece_available():
     from .models.albert import AlbertTokenizer
+    from .models.barthez import BarthezTokenizer
     from .models.bert_generation import BertGenerationTokenizer
     from .models.camembert import CamembertTokenizer
     from .models.marian import MarianTokenizer
@@ -222,6 +227,7 @@ else:
 if is_tokenizers_available():
     from .models.albert import AlbertTokenizerFast
     from .models.bart import BartTokenizerFast
+    from .models.barthez import BarthezTokenizerFast
     from .models.bert import BertTokenizerFast
     from .models.camembert import CamembertTokenizerFast
     from .models.distilbert import DistilBertTokenizerFast
@@ -254,6 +260,7 @@ else:
 # Trainer
 from .trainer_callback import (
     DefaultFlowCallback,
+    EarlyStoppingCallback,
     PrinterCallback,
     ProgressCallback,
     TrainerCallback,
@@ -500,7 +507,7 @@ if is_torch_available():
         MobileBertPreTrainedModel,
         load_tf_weights_in_mobilebert,
     )
-    from .models.mt5 import MT5ForConditionalGeneration, MT5Model
+    from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
     from .models.openai import (
         OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         OpenAIGPTDoubleHeadsModel,
@@ -555,6 +562,7 @@ if is_torch_available():
     )
     from .models.t5 import (
         T5_PRETRAINED_MODEL_ARCHIVE_LIST,
+        T5EncoderModel,
         T5ForConditionalGeneration,
         T5Model,
         T5PreTrainedModel,
@@ -797,7 +805,7 @@ if is_tf_available():
         TFMobileBertModel,
         TFMobileBertPreTrainedModel,
     )
-    from .models.mt5 import TFMT5ForConditionalGeneration, TFMT5Model
+    from .models.mt5 import TFMT5EncoderModel, TFMT5ForConditionalGeneration, TFMT5Model
     from .models.openai import (
         TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFOpenAIGPTDoubleHeadsModel,
@@ -820,6 +828,7 @@ if is_tf_available():
     )
     from .models.t5 import (
         TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFT5EncoderModel,
         TFT5ForConditionalGeneration,
         TFT5Model,
         TFT5PreTrainedModel,
@@ -877,6 +886,7 @@ else:
 
 
 if is_flax_available():
+    from .models.auto import FLAX_MODEL_MAPPING, FlaxAutoModel
     from .models.bert import FlaxBertModel
     from .models.roberta import FlaxRobertaModel
 else:

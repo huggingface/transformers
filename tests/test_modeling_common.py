@@ -659,12 +659,14 @@ class ModelTesterMixin:
 
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            hidden_states = outputs["hidden_states"] if "hidden_states" in outputs else outputs[-1]
+
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
+
             if hasattr(self.model_tester, "encoder_seq_length"):
                 seq_length = self.model_tester.encoder_seq_length
                 if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
@@ -677,6 +679,19 @@ class ModelTesterMixin:
                 [seq_length, self.model_tester.hidden_size],
             )
 
+            if config.is_encoder_decoder:
+                hidden_states = outputs.decoder_hidden_states
+
+                self.assertIsInstance(hidden_states, (list, tuple))
+                self.assertEqual(len(hidden_states), expected_num_layers)
+                seq_len = getattr(self.model_tester, "seq_length", None)
+                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]),
+                    [decoder_seq_length, self.model_tester.hidden_size],
+                )
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -688,6 +703,56 @@ class ModelTesterMixin:
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_retain_grad_hidden_states_attentions(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+        output = outputs[0]
+
+        if config.is_encoder_decoder:
+            # Seq2Seq models
+            encoder_hidden_states = outputs.encoder_hidden_states[0]
+            encoder_attentions = outputs.encoder_attentions[0]
+            encoder_hidden_states.retain_grad()
+            encoder_attentions.retain_grad()
+
+            decoder_hidden_states = outputs.decoder_hidden_states[0]
+            decoder_attentions = outputs.decoder_attentions[0]
+            decoder_hidden_states.retain_grad()
+            decoder_attentions.retain_grad()
+
+            cross_attentions = outputs.cross_attentions[0]
+            cross_attentions.retain_grad()
+
+            output.flatten()[0].backward(retain_graph=True)
+
+            self.assertIsNotNone(encoder_hidden_states.grad)
+            self.assertIsNotNone(encoder_attentions.grad)
+            self.assertIsNotNone(decoder_hidden_states.grad)
+            self.assertIsNotNone(decoder_attentions.grad)
+            self.assertIsNotNone(cross_attentions.grad)
+        else:
+            # Encoder-/Decoder-only models
+            hidden_states = outputs.hidden_states[0]
+            attentions = outputs.attentions[0]
+
+            hidden_states.retain_grad()
+            attentions.retain_grad()
+
+            output.flatten()[0].backward(retain_graph=True)
+
+            self.assertIsNotNone(hidden_states.grad)
+            self.assertIsNotNone(attentions.grad)
 
     def test_feed_forward_chunking(self):
         (
@@ -957,7 +1022,7 @@ class ModelTesterMixin:
     @require_torch_multi_gpu
     def test_model_parallelization(self):
         if not self.test_model_parallel:
-            pass
+            return
 
         import subprocess
 
@@ -1014,7 +1079,7 @@ class ModelTesterMixin:
     @require_torch_multi_gpu
     def test_model_parallel_equal_results(self):
         if not self.test_model_parallel:
-            pass
+            return
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
