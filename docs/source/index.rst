@@ -172,6 +172,8 @@ and conversion utilities for the following models:
     <https://huggingface.co/users>`__.
 
 
+.. _bigtable:
+
 The table below represents the current support in the library for each of those models, whether they have a Python
 tokenizer (called "slow"). A "fast" tokenizer backed by the 🤗 Tokenizers library, whether they have support in PyTorch,
 TensorFlow and/or Flax.
