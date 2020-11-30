@@ -33,6 +33,8 @@ from flax.optim import Adam
 from typing import Optional
 
 from datasets import load_dataset
+from flax.training import common_utils
+from jax.nn import log_softmax
 from tqdm import tqdm
 
 from transformers import (
@@ -146,16 +148,44 @@ class DataTrainingArguments:
 
 @jax.jit
 def training_step(optimizer, batch):
-    def one_hot(labels, num_classes):
-        x = labels[..., None] == jnp.arange(num_classes)[None]
-        return x.astype(jnp.float32)
+    # def one_hot(labels, num_classes):
+    #     x = labels[..., None] == jnp.arange(num_classes)[None]
+    #     return x.astype(jnp.float32)
+    #
+    # def cross_entropy(logits, labels):
+    #     return -jnp.mean(jnp.sum(one_hot(labels, config.vocab_size) * logits, axis=-1), axis=-1)
+    #
 
-    def cross_entropy(logits, labels):
-        return -jnp.mean(jnp.sum(one_hot(labels, config.vocab_size) * logits, axis=-1), axis=-1)
+    def cross_entropy(logits, targets, label_smoothing=0.0):
+        """Compute cross entropy and entropy for log probs and targets.
+        Args:
+         logits: [batch, length, num_classes] float array.
+         targets: categorical targets [batch, length] int array.
+         label_smoothing: label smoothing constant, used to determine the on and off values.
+        Returns:
+          Tuple of scalar loss and batch normalizing factor.
+        """
+        if logits.ndim != targets.ndim + 1:
+            raise ValueError("Incorrect shapes. Got shape %s logits and %s targets" %
+                             (str(logits.shape), str(targets.shape)))
+        vocab_size = logits.shape[-1]
+        confidence = 1.0 - label_smoothing
+        low_confidence = (1.0 - confidence) / (vocab_size - 1)
+        normalizing_constant = -(
+                confidence * jnp.log(confidence) + (vocab_size - 1) *
+                low_confidence * jnp.log(low_confidence + 1e-20))
+        soft_targets = common_utils.onehot(targets, vocab_size, on_value=confidence, off_value=low_confidence)
+
+        loss = -jnp.sum(soft_targets * log_softmax(logits), axis=-1)
+        loss = loss - normalizing_constant
+
+        normalizing_factor = np.prod(targets.shape)
+        return loss.sum(), normalizing_factor
 
     def loss_fn(params):
         pooled, logits = model(batch["input_ids"], params=params)
-        return jnp.mean(cross_entropy(logits, batch["labels"]), axis=0)
+        loss, weight_sum = cross_entropy(logits, batch["labels"])
+        return loss / weight_sum
 
     grad_fn = jax.value_and_grad(loss_fn)
     loss, grad = grad_fn(optimizer.target)
