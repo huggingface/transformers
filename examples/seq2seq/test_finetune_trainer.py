@@ -25,30 +25,32 @@ MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
 
 
 class TestFinetuneTrainer(TestCasePlus):
-    def finetune_trainer_quick(self, dist=None):
-        output_dir = self.run_trainer(1, "12", MBART_TINY, 1, dist)
+    def finetune_trainer_quick(self, distributed=None):
+        output_dir = self.run_trainer(1, "12", MBART_TINY, 1, distributed)
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
         eval_metrics = [log for log in logs if "eval_loss" in log.keys()]
         first_step_stats = eval_metrics[0]
         assert "eval_bleu" in first_step_stats
 
-    # the following test that the trainer can handle dist={None|dp|ddp}
     @require_torch_non_multi_gpu
     def test_finetune_trainer_no_dist(self):
         self.finetune_trainer_quick()
 
+    # the following 2 tests verify that the trainer can handle distributed and non-distributed with n_gpu > 1
     @require_torch_multi_gpu
     def test_finetune_trainer_dp(self):
-        self.finetune_trainer_quick(dist="dp")
+        self.finetune_trainer_quick(distributed=False)
 
     @require_torch_multi_gpu
     def test_finetune_trainer_ddp(self):
-        self.finetune_trainer_quick(dist="ddp")
+        self.finetune_trainer_quick(distributed=True)
 
     @slow
     def test_finetune_trainer_slow(self):
         # There is a missing call to __init__process_group somewhere
-        output_dir = self.run_trainer(eval_steps=2, max_len="128", model_name=MARIAN_MODEL, num_train_epochs=10)
+        output_dir = self.run_trainer(
+            eval_steps=2, max_len="128", model_name=MARIAN_MODEL, num_train_epochs=10, distributed=False
+        )
 
         # Check metrics
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
@@ -178,7 +180,9 @@ class TestFinetuneTrainer(TestCasePlus):
         # start training
         trainer.train()
 
-    def run_trainer(self, eval_steps: int, max_len: str, model_name: str, num_train_epochs: int, dist: str = None):
+    def run_trainer(
+        self, eval_steps: int, max_len: str, model_name: str, num_train_epochs: int, distributed: bool = False
+    ):
         """
         arg `dist` is one of `dp` or `dpp` and is only relevant if n_gpu > 1
         """
@@ -216,22 +220,16 @@ class TestFinetuneTrainer(TestCasePlus):
         """.split()
         # --eval_beams  2
 
-        n_gpu = get_gpu_count()
-        if n_gpu > 1:
-            if dist is None:
-                assert f"for n_gpu={n_gpu} pass `dp` or `dpp` for the `dist` arg"
-            launch_args = []
-            if dist == "ddp":
-                launch_args = f"""
-                    -m torch.distributed.launch
-                    --nproc_per_node={n_gpu}
-                """.split()
-            launch_args.append(f"{self.test_file_dir}/finetune_trainer.py")
-
+        if distributed:
+            n_gpu = get_gpu_count()
+            launch_args = f"""
+                -m torch.distributed.launch
+                --nproc_per_node={n_gpu}
+                {self.test_file_dir}/finetune_trainer.py
+            """.split()
             cmd = [sys.executable] + launch_args + args
             execute_subprocess_async(cmd, env=self.get_env())
         else:
-            # 0 or 1 gpu
             testargs = ["finetune_trainer.py"] + args
             with patch.object(sys, "argv", testargs):
                 main()
