@@ -122,7 +122,7 @@ class GPT2Config(PretrainedConfig):
     """
 
     model_type = "gpt2"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    output_keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,

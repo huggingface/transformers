@@ -97,4 +97,4 @@ class MarianConfig(BartConfig):
     """
 
     model_type = "marian"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    output_keys_to_ignore_at_inference = ["past_key_values"]

@@ -105,7 +105,7 @@ class TransfoXLConfig(PretrainedConfig):
     """
 
     model_type = "transfo-xl"
-    keys_to_ignore_at_inference = ["mems"]
+    output_keys_to_ignore_at_inference = ["mems"]
 
     def __init__(
         self,

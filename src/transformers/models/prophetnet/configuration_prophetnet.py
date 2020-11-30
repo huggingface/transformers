@@ -94,7 +94,7 @@ class ProphetNetConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
     """
     model_type = "prophetnet"
-    keys_to_ignore_at_inference = ["past_key_values"]
+    output_keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
