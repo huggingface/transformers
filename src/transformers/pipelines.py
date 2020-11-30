@@ -926,6 +926,15 @@ class TextGenerationPipeline(Pipeline):
     r"""
         return_all_scores (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to return all prediction scores or just the one of the predicted class.
+        function_to_apply (:obj:`str`, `optional`, defaults to :obj:`"default"`):
+            The function to apply to the model outputs in order to retrieve the scores.
+            Accepts four different values:
+
+            - :obj:`"default"`: if the model has a single label, will apply the sigmoid function on the output.
+              If the model has several labels, will apply the softmax function on the output.
+            - :obj:`"sigmoid"`: Applies the sigmoid function on the output.
+            - :obj:`"softmax"`: Applies the softmax function on the output.
+            - :obj:`"none"`: Does not apply any function on the output.
     """,
 )
 class TextClassificationPipeline(Pipeline):
@@ -939,8 +948,6 @@ class TextClassificationPipeline(Pipeline):
 
     If multiple classification labels are available (:obj:`model.config.num_labels >= 2`), the pipeline will run a
     softmax over the results. If there is a single label, the pipeline will run a sigmoid over the result.
-
-    If the :obj:`return_raw_outputs` option is set to :obj:`True`, will skip the softmax/sigmoid function.
 
     The models that this pipeline can use are models that have been fine-tuned on a sequence classification task. See
     the up-to-date list of available models on `huggingface.co/models
@@ -974,6 +981,17 @@ class TextClassificationPipeline(Pipeline):
         Args:
             args (:obj:`str` or :obj:`List[str]`):
                 One or several texts (or one list of prompts) to classify.
+            return_all_scores (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether to return scores for all labels.
+            function_to_apply (:obj:`str`, `optional`, defaults to :obj:`"default"`):
+                The function to apply to the model outputs in order to retrieve the scores.
+                Accepts four different values:
+
+                - :obj:`"default"`: if the model has a single label, will apply the sigmoid function on the output.
+                  If the model has several labels, will apply the softmax function on the output.
+                - :obj:`"sigmoid"`: Applies the sigmoid function on the output.
+                - :obj:`"softmax"`: Applies the softmax function on the output.
+                - :obj:`"none"`: Does not apply any function on the output.
 
         Return:
             A list or a list of list of :obj:`dict`: Each result comes as list of dictionaries with the following keys:
