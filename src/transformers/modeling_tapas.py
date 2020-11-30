@@ -310,7 +310,7 @@ class TapasEmbeddings(nn.Module):
 
         if token_type_ids is None:
             token_type_ids = torch.zeros(
-                (*input_shape, self.number_of_token_type_embeddings), dtype=torch.long, device=device
+                (input_shape + self.number_of_token_type_embeddings), dtype=torch.long, device=device
             )
 
         if inputs_embeds is None:
@@ -323,7 +323,7 @@ class TapasEmbeddings(nn.Module):
         token_type_embedding_name = "token_type_embeddings"
 
         for i in range(self.number_of_token_type_embeddings):
-            name = "%s_%d" % (token_type_embedding_name, i)
+            name = f"{token_type_embedding_name}_{i}"
             embeddings += getattr(self, name)(token_type_ids[:, :, i])
 
         embeddings = self.LayerNorm(embeddings)
@@ -827,7 +827,7 @@ class TapasModel(TapasPreTrainedModel):
             attention_mask = torch.ones(input_shape, device=device)
         if token_type_ids is None:
             token_type_ids = torch.zeros(
-                (*input_shape, len(self.config.type_vocab_sizes)), dtype=torch.long, device=device
+                (input_shape + len(self.config.type_vocab_sizes)), dtype=torch.long, device=device
             )
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
@@ -974,6 +974,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         )
 
 
+# Copied from transformers.modeling_roberta.RobertaLMHead with Roberta->Tapas
 class TapasLMHead(nn.Module):
     """Tapas Head for masked language modeling."""
 
@@ -1133,7 +1134,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         # Construct indices for the table.
         if token_type_ids is None:
             token_type_ids = torch.zeros(
-                (*input_shape, len(self.config.type_vocab_sizes)), dtype=torch.long, device=device
+                (input_shape + len(self.config.type_vocab_sizes)), dtype=torch.long, device=device
             )
 
         token_types = [
@@ -1215,7 +1216,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                 aggregate_mask = None
             else:
                 if float_answer is not None:
-                    assert label_ids.shape[0] == float_answer.shape[0]
+                    assert label_ids.shape[0] == float_answer.shape[0], "Make sure the answers are a FloatTensor of shape (batch_size,)"
                     # <float32>[batch_size]
                     aggregate_mask = _calculate_aggregate_mask(
                         float_answer,
@@ -1255,9 +1256,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
 
             ### Supervised cell selection
             #############################
-            if self.config.span_prediction != "none":
-                raise NotImplementedError("Span prediction is not supported right now.")
-            elif self.config.disable_per_token_loss:
+            if self.config.disable_per_token_loss:
                 pass
             elif is_supervised:
                 total_loss += torch.mean(selection_loss_per_example)
@@ -1271,7 +1270,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                 if is_supervised:
                     # Note that `aggregate_mask` is None if the setting is supervised.
                     if aggregation_labels is not None:
-                        assert label_ids.shape[0] == aggregation_labels.shape[0]
+                        assert label_ids.shape[0] == aggregation_labels.shape[0], "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
                         per_example_additional_loss = _calculate_aggregation_loss(
                             logits_aggregation, aggregate_mask, aggregation_labels, self.config
                         )
@@ -1452,7 +1451,7 @@ class IndexMap(object):
         Creates an index
 
         Args:
-            indices (:obj:`torch.LongTensor`, same shape as `values`):
+            indices (:obj:`torch.LongTensor`, same shape as a `values` Tensor to which the indices refer):
                 Tensor containing the indices.
             num_segments (:obj:`torch.LongTensor`):
                 Scalar tensor, the number of segments. All elements in a batched segmented tensor must have the same
@@ -2153,7 +2152,7 @@ def _calculate_expected_result(
         ex = torch.sum(scaled_probability_per_cell, dim=1, keepdim=True) - scaled_probability_per_cell + 1
         average_result = torch.sum(numeric_values_masked * scaled_probability_per_cell / ex, dim=1)
     elif avg_approximation == AverageApproximationFunction.SECOND_ORDER:
-        # The sum of all probabilities exept that correspond to other cells
+        # The sum of all probabilities except that correspond to other cells
         ex = torch.sum(scaled_probability_per_cell, dim=1, keepdim=True) - scaled_probability_per_cell + 1
         pointwise_var = scaled_probability_per_cell * (1 - scaled_probability_per_cell)
         var = torch.sum(pointwise_var, dim=1, keepdim=True) - pointwise_var

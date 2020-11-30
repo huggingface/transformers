@@ -180,16 +180,16 @@ class TapasTokenizer(PreTrainedTokenizer):
         cell_trim_length (:obj:`int`, `optional`, defaults to -1):
             If > 0: Trim cells so that the length is <= this value. Also disables further cell trimming, should thus be
             used with 'drop_rows_to_fit' below.
-        max_column_id (:obj:`int`, `optional`, defaults to None):
+        max_column_id (:obj:`int`, `optional`):
             Max column id to extract.
-        max_row_id (:obj:`int`, `optional`, defaults to None):
+        max_row_id (:obj:`int`, `optional`):
             Max row id to extract.
         strip_column_names (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If true, add empty strings instead of column names.
+            Whether to add empty strings instead of column names.
         update_answer_coordinates (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If true, recompute answer coordinates from the answer text.
+            Whether to recompute the answer coordinates from the answer text.
         drop_rows_to_fit (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If true, drop last rows if table doesn't fit within max sequence length.
+            Whether to drop the last rows if a table doesn't fit within max sequence length.
 
     """
 

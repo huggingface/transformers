@@ -61,7 +61,7 @@ class TapasConfig(PretrainedConfig):
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+            Whether to use gradient checkpointing to save memory at the expense of a slower backward pass.
         positive_label_weight (:obj:`float`, `optional`, defaults to 10.0):
             Weight for positive labels.
         num_aggregation_labels (:obj:`int`, `optional`, defaults to 0):
@@ -73,24 +73,25 @@ class TapasConfig(PretrainedConfig):
         answer_loss_importance (:obj:`float`, `optional`, defaults to 1.0):
             Importance weight for the regression loss.
         use_normalized_answer_loss (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Normalize loss by max of predicted and expected value.
-        huber_loss_delta: (:obj:`float`, `optional`, defaults to None):
+            Whether to normalize the answer loss by the maximum of the predicted and expected value.
+        huber_loss_delta: (:obj:`float`, `optional`):
             Delta parameter used to calculate the regression loss.
         temperature: (:obj:`float`, `optional`, defaults to 1.0):
-            Scales cell logits to control the skewness of probabilities.
+            Value used to control (OR change) the skewness of cell logits probabilities.
         aggregation_temperature: (:obj:`float`, `optional`, defaults to 1.0):
             Scales aggregation logits to control the skewness of probabilities.
         use_gumbel_for_cells: (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Applies Gumbel-Softmax to cell selection.
+            Whether to apply Gumbel-Softmax to cell selection.
         use_gumbel_for_aggregation: (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Applies Gumbel-Softmax to aggregation selection.
+            Whether to apply Gumbel-Softmax to aggregation selection.
         average_approximation_function: (:obj:`string`, `optional`, defaults to :obj:`"ratio"`):
-            Method to calculate expected average of cells in the relaxed case.
-        cell_selection_preference: (:obj:`float`, `optional`, defaults to None):
+            Method to calculate the expected average of cells in the weak supervision case. One of "ratio", 
+            "first_order" or "second_order".
+        cell_selection_preference: (:obj:`float`, `optional`):
             Preference for cell selection in ambiguous cases. Only applicable in case of weak supervision for
             aggregation (WTQ, WikiSQL). If the total mass of the aggregation probabilities (excluding the "NONE"
             operator) is higher than this hyperparameter, then aggregation is predicted for an example.
-        answer_loss_cutoff: (:obj:`float`, `optional`, defaults to None):
+        answer_loss_cutoff: (:obj:`float`, `optional`):
             Ignore examples with answer loss larger than cutoff.
         max_num_rows: (:obj:`int`, `optional`, defaults to 64):
             Maximum number of rows.
@@ -101,15 +102,13 @@ class TapasConfig(PretrainedConfig):
         select_one_column: (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to constrain the model to only select cells from a single column.
         allow_empty_column_selection: (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Allow not to select any column.
+            Whether to allow not to select any column.
         init_cell_selection_weights_to_zero: (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to initialize cell selection weights to 0 so that the initial probabilities are 50%.
         reset_position_index_per_cell: (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Restart position indexes at every cell.
+            Whether to restart position indexes at every cell (i.e. use relative position embeddings).
         disable_per_token_loss: (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Disable any (strong or weak) supervision on cells.
-        span_prediction: (:obj:`string`, `optional`, defaults to :obj:`"none"`):
-            Span selection mode to use. Currently only "none" is supported.
+            Whether to disable any (strong or weak) supervision on cells.
 
     Example::
 

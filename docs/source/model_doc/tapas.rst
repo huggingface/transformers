@@ -61,7 +61,7 @@ Tips:
   efficient at predicting masked tokens and at NLU in general, but is not optimal for text generation. Models trained
   with a causal language modeling (CLM) objective are better in that regard.
 
-.. _original Github repository: https://huggingface.co/models?search=tapas
+.. _original Github repository: https://github.com/google-research/tapas
 
 
 Usage: fine-tuning
@@ -153,8 +153,8 @@ columns:
 - ``float_answer``: the float answer to the question, if there is one (np.nan if there isn't). Only required in case of weak supervision for aggregation (such as WTQ and WikiSQL)
 
 The tables themselves should be present in a folder, each table being a separate csv file. Note that the authors of the TAPAS algorithm used conversion 
-scripts with some automated logic to convert the other datasets (WTQ and WikiSQL) into the SQA format. The author explains this `here`_. This is 
-actually interesting, because these conversion scripts are not perfect (the ``answer_coordinates`` and ``float_answer`` fields are populated based on the ``answer_text``), 
+scripts with some automated logic to convert the other datasets (WTQ and WikiSQL) into the SQA format. The author explains this `here`_. Interestingly,
+these conversion scripts are not perfect (the ``answer_coordinates`` and ``float_answer`` fields are populated based on the ``answer_text``), 
 meaning that WTQ and WikiSQL results could actually be improved.
 
 .. _here: https://github.com/google-research/tapas/issues/50#issuecomment-705465960
@@ -164,8 +164,9 @@ STEP 3: Convert your data into PyTorch tensors using :class:`~transformers.Tapas
 ==========================================================================================
 
 Third, given that you've prepared your data in this TSV/CSV format (and corresponding CSV files containing the tabular data), you can then 
-use :class:`~transformers.TapasTokenizer` to convert table-question pairs into input_ids, attention_mask, token_type_ids and so on. Again, 
-based on which of the three cases you picked above, :class:`~transformers.TapasForQuestionAnswering` needs different things to be fine-tuned:
+use :class:`~transformers.TapasTokenizer` to convert table-question pairs into :obj:`input_ids`, :obj:`attention_mask`, :obj:`token_type_ids`
+and so on. Again, based on which of the three cases you picked above, :class:`~transformers.TapasForQuestionAnswering` requires different inputs 
+to be fine-tuned:
 
 +------------------------------------+----------------------------------------------------------------------------------------------+
 | **Task**                           | **Required inputs**                                                                          |
@@ -195,13 +196,13 @@ Here's an example:
         >>> answer_coordinates = [[(0, 0)], [(1, 0)], [(0, 2), (1, 2), (2, 2)]]
         >>> answer_text = [["Brad Pitt"], ["69"], ["209"]]
         >>> table = pd.Dataframe(data)
-        >>> inputs = tokenizer(table=table, queries=queries, answer_coordinates=answer_coordinates, answer_text=answer_text, return_tensors='pt')
+        >>> inputs = tokenizer(table=table, queries=queries, answer_coordinates=answer_coordinates, answer_text=answer_text, padding='max_length', return_tensors='pt')
         >>> inputs
         {'input_ids': tensor([[ ... ]]), 'attention_mask': tensor([[...]]), 'token_type_ids': tensor([[[...]]]),
         'numeric_values': tensor([[ ... ]]), 'numeric_values_scale: tensor([[ ... ]]), label_ids: tensor([[ ... ]])}
 
 Note that :class:`~transformers.TapasTokenizer` expects the data of the table to be text-only. You can use ``.astype(str)`` on a dataframe to turn it into
-text-only data. Of course, this only shows how to encode a single training example. In reality, you should create a PyTorch dataset and a corresponding dataloader:
+text-only data. Of course, this only shows how to encode a single training example. It is advised to create a PyTorch dataset and a corresponding dataloader:
 
 .. code-block::
 
@@ -252,7 +253,7 @@ You can then fine-tune :class:`~transformers.TapasForQuestionAnswering` using na
 
         >>> from transformers import TapasForQuestionAnswering
 
-        >>> model = TapasForQuestionAnswering.from_pretrained("tapas-base-finetuned-wtq", return_dict=True)
+        >>> model = TapasForQuestionAnswering.from_pretrained("tapas-base-finetuned-wtq")
 
         >>> for epoch in range(2):  # loop over the dataset multiple times
         ...    for idx, batch in enumerate(train_dataloader):
@@ -273,10 +274,11 @@ You can then fine-tune :class:`~transformers.TapasForQuestionAnswering` using na
 Usage: inference
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Here we explain how you can perform inference (i.e. making predictions on new data) with :class:`~transformers.TapasForQuestionAnswering`.
-Basically, for inference, you only need to provide ``input_ids``, ``attention_mask`` and ``token_type_ids`` (which you can obtain using 
-:class:`~transformers.TapasTokenizer`) to the model to obtain the logits. Next, you can use the handy ``convert_logits_to_predictions`` method
-of :class:`~transformers.TapasTokenizer` to convert these into actual predicted coordinates and aggregation indices. 
+Here we explain how you can use :class:`~transformers.TapasForQuestionAnswering` for inference (i.e. making predictions on new data).
+For inference, only ``input_ids``, ``attention_mask`` and ``token_type_ids`` (which you can obtain using 
+:class:`~transformers.TapasTokenizer`) have to provided to the model to obtain the logits. Next, you can use the handy 
+``convert_logits_to_predictions`` method of :class:`~transformers.TapasTokenizer` to convert these into predicted coordinates 
+and optional aggregation indices. 
 
 However, note that inference is **different** depending on whether or not the setup is conversational. In a non-conversational set-up, inference 
 can be done in parallel on all table-question pairs of a batch. Here's an example of that:
@@ -293,9 +295,11 @@ can be done in parallel on all table-question pairs of a batch. Here's an exampl
         >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Number of movies': ["87", "53", "69"]}
         >>> queries = ["What is the name of the first actor?", "How many movies has George Clooney played in?", "What is the total number of movies?"]
         >>> table = pd.Dataframe(data)
-        >>> inputs = tokenizer(table, queries, return_tensors='pt')
-        >>> logits, logits_agg = model(**inputs)
-        >>> predicted_answer_coordinates, predicted_aggregation_indices = tokenizer.convert_logits_to_predictions(inputs, logits, logits_agg)
+        >>> inputs = tokenizer(table=table, queries=queries, padding='max_length', return_tensors="pt") 
+        >>> outputs = model(**inputs)
+        >>> predicted_answer_coordinates, predicted_aggregation_indices = tokenizer.convert_logits_to_predictions(inputs, 
+        ...                                                                                                       output.logits, 
+        ...                                                                                                       outputs.logits_aggregation)
 
         >>> # let's print out the results:
         >>> id2aggregation = {0: "NONE", 1: "SUM", 2: "AVERAGE", 3:"COUNT"}
