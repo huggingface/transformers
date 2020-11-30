@@ -30,11 +30,10 @@ import sys
 from dataclasses import dataclass, field
 
 from flax.optim import Adam
-from rich.logging import RichHandler
-from rich.progress import track
 from typing import Optional
 
 from datasets import load_dataset
+from tqdm import tqdm
 
 from transformers import (
     CONFIG_MAPPING,
@@ -145,7 +144,7 @@ class DataTrainingArguments:
                 assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
 
 
-# @jax.jit
+@jax.jit
 def training_step(optimizer, batch):
     def one_hot(labels, num_classes):
         x = labels[..., None] == jnp.arange(num_classes)[None]
@@ -162,7 +161,6 @@ def training_step(optimizer, batch):
     loss, grad = grad_fn(optimizer.target)
     optimizer = optimizer.apply_gradient(grad)
 
-    logger.info(f"Loss {loss}")
     return loss, optimizer
 
 
@@ -195,7 +193,6 @@ if __name__ == "__main__":
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
         level="NOTSET",
         datefmt="[%X]",
-        handlers=[RichHandler(rich_tracebacks=True)]
     )
 
     # Log on each process the small summary:
@@ -275,7 +272,12 @@ if __name__ == "__main__":
     def tokenize_function(examples):
         # Remove empty lines
         examples["text"] = [line for line in examples["text"] if len(line) > 0 and not line.isspace()]
-        return tokenizer(examples["text"], padding=padding, truncation=True, pad_to_multiple_of=32, max_length=data_args.max_seq_length)
+        return tokenizer(
+            examples["text"],
+            padding=padding,
+            truncation=True,
+            max_length=data_args.max_seq_length
+        )
 
     tokenized_datasets = datasets.map(
         tokenize_function,
@@ -294,7 +296,7 @@ if __name__ == "__main__":
 
     rng, init_rng = jax.random.split(rng)
     model = FlaxBertForMaskedLM.from_pretrained("bert-base-cased")
-    model.init_head(init_rng)
+    model.init(init_rng, (training_args.train_batch_size, model.config.max_length))
 
     # Setup optimizer
     optimizer = Adam(
@@ -302,7 +304,8 @@ if __name__ == "__main__":
         weight_decay=training_args.weight_decay
     ).create(model.params)
 
-    for epoch in track(range(int(training_args.num_train_epochs)), description="Training..."):
+    epochs = tqdm(range(int(training_args.num_train_epochs)), desc=f"Training... (0/{int(training_args.num_train_epochs)})")
+    for epoch in epochs:
         samples_idx = np.random.choice(len(tokenized_datasets["train"]), (training_args.train_batch_size, ))
         samples = [tokenized_datasets["train"][idx.item()] for idx in samples_idx]
         model_inputs = data_collator(samples)
@@ -311,3 +314,6 @@ if __name__ == "__main__":
         # TODO: Remove this conversion by replacing the collator
         model_inputs = {var_name: tensor.numpy() for var_name, tensor in model_inputs.items()}
         loss, optimizer = training_step(optimizer, model_inputs)
+
+        # Update progress bar
+        epochs.desc = f"Training... ({epoch}/{int(training_args.num_train_epochs)}, Loss: {round(loss.item(), 4)})"

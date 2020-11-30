@@ -189,7 +189,7 @@ class FlaxBertAttention(nn.Module):
         # with attn_weights.shape == (*batch_sizes, num_heads, q_length, kv_length)
         attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
         self_att = nn.attention.SelfAttention(num_heads=self.num_heads, qkv_features=self.head_size, name="self")(
-            hidden_state, attention_mask[:, None, None, :]
+            hidden_state, attention_mask
         )
 
         layer_norm = FlaxBertLayerNorm(name="layer_norm")(self_att + hidden_state)
@@ -301,6 +301,60 @@ class FlaxBertModule(nn.Module):
         return encoder, pooled
 
 
+class FlaxBertPredictionHeadTransform(nn.Module):
+    @nn.compact
+    def __call__(self, hidden_states):
+        hidden_states = nn.Dense(hidden_states.shape[-1], name="dense")(hidden_states)
+        hidden_states = nn.elu(hidden_states)  # TODO: ACT2FN[config.hidden_act]
+        return FlaxBertLayerNorm(name="LayerNorm")(hidden_states)
+
+
+class FlaxBertLMPredictionHead(nn.Module):
+
+    vocab_size: int
+
+    @nn.compact
+    def __call__(self, hidden_states):
+        # TODO: The output weights are the same as the input embeddings, but there is
+        #   an output-only bias for each token.
+        #   Need a link between the two variables so that the bias is correctly
+        #   resized with `resize_token_embeddings`
+
+        hidden_states = FlaxBertPredictionHeadTransform(name="transform")(hidden_states)
+        hidden_states = nn.Dense(self.vocab_size, name="decoder")(hidden_states)
+        return hidden_states
+
+
+class FlaxBertOnlyMLMHead(nn.Module):
+    vocab_size: int
+    hidden_size: int
+    intermediate_size: int
+    head_size: int
+    num_heads: int
+    num_encoder_layers: int
+    type_vocab_size: int
+    max_length: int
+
+    @nn.compact
+    def __call__(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, labels=None):
+        # Model
+        encoder, pooled = FlaxBertModule(
+            vocab_size=self.vocab_size,
+            type_vocab_size=self.type_vocab_size,
+            hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
+            head_size=self.hidden_size,
+            num_heads=self.num_heads,
+            num_encoder_layers=self.num_encoder_layers,
+            max_length=self.max_length
+        )(input_ids, attention_mask, token_type_ids, position_ids)
+
+        # Compute the prediction scores
+        logits = FlaxBertLMPredictionHead(vocab_size=self.vocab_size, name="predictions")(encoder)
+
+        return logits, pooled
+
+
 @add_start_docstrings(
     "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
     BERT_START_DOCSTRING,
@@ -402,14 +456,12 @@ class FlaxBertModel(FlaxPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None):
-        if token_type_ids is None:
-            token_type_ids = jnp.ones_like(input_ids)
-
-        if position_ids is None:
-            position_ids = jnp.arange(jnp.atleast_2d(input_ids).shape[-1])
-
-        if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
+        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids
+        )
 
         return self.module.apply(
             {"params": self.params},
@@ -419,59 +471,24 @@ class FlaxBertModel(FlaxPreTrainedModel):
             jnp.array(position_ids, dtype="i4"),
         )
 
+    def _check_inputs(self, input_ids, attention_mask, token_type_ids, position_ids):
+        if token_type_ids is None:
+            token_type_ids = jnp.ones_like(input_ids)
 
-class FlaxBertPredictionHeadTransform(nn.Module):
-    @nn.compact
-    def __call__(self, hidden_states):
-        hidden_states = nn.Dense(hidden_states.shape[-1], name="dense")(hidden_states)
-        hidden_states = nn.elu(hidden_states)  # TODO: ACT2FN[config.hidden_act]
-        return FlaxBertLayerNorm(name="LayerNorm")(hidden_states)
+        if position_ids is None:
+            position_ids = jnp.arange(jnp.atleast_2d(input_ids).shape[-1])
 
+        if attention_mask is None:
+            attention_mask = jnp.ones_like(input_ids)
 
-class FlaxBertLMPredictionHead(nn.Module):
+        return input_ids, attention_mask, token_type_ids, position_ids
 
-    vocab_size: int
+    def init(self, rng, input_shape):
+        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
+            jnp.zeros(input_shape, dtype="i4"), None, None, None
+        )
 
-    @nn.compact
-    def __call__(self, hidden_states):
-        # TODO: The output weights are the same as the input embeddings, but there is
-        #   an output-only bias for each token.
-        #   Need a link between the two variables so that the bias is correctly
-        #   resized with `resize_token_embeddings`
-
-        hidden_states = FlaxBertPredictionHeadTransform(name="transform")(hidden_states)
-        hidden_states = nn.Dense(self.vocab_size, name="decoder")(hidden_states)
-        return hidden_states
-
-
-class FlaxBertOnlyMLMHead(nn.Module):
-    vocab_size: int
-    hidden_size: int
-    intermediate_size: int
-    head_size: int
-    num_heads: int
-    num_encoder_layers: int
-    type_vocab_size: int
-    max_length: int
-
-    @nn.compact
-    def __call__(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, labels=None):
-        # Model
-        pooled, encoder = FlaxBertModule(
-            vocab_size=self.vocab_size,
-            type_vocab_size=self.type_vocab_size,
-            hidden_size=self.hidden_size,
-            intermediate_size=self.intermediate_size,
-            head_size=self.hidden_size,
-            num_heads=self.num_heads,
-            num_encoder_layers=self.num_encoder_layers,
-            max_length=self.max_length
-        )(input_ids, attention_mask, token_type_ids, position_ids)
-
-        # Compute the prediction scores
-        logits = FlaxBertLMPredictionHead(vocab_size=self.vocab_size, name="predictions")(encoder)
-
-        return pooled, logits
+        self.params = self.module.init(rng, input_ids, attention_mask, token_type_ids, position_ids)["params"]
 
 
 class FlaxBertForMaskedLM(FlaxBertModel):
@@ -488,15 +505,13 @@ class FlaxBertForMaskedLM(FlaxBertModel):
             max_length=config.max_length
         )
 
-    def __call__(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, labels=None, params=None):
-        if token_type_ids is None:
-            token_type_ids = jnp.ones_like(input_ids)
-
-        if position_ids is None:
-            position_ids = jnp.arange(jnp.atleast_2d(input_ids).shape[-1])
-
-        if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
+    def __call__(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, params=None):
+        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids
+        )
 
         params = params or self.params
         pooled, logits = self.module.apply(
@@ -508,13 +523,3 @@ class FlaxBertForMaskedLM(FlaxBertModel):
         )
 
         return logits, pooled
-
-    def init_head(self, rng):
-        fake_input_ids = jnp.ones((1, 10), dtype='i4')
-        self.params = self.module.init(
-            rng,
-            input_ids=fake_input_ids,
-            attention_mask=jnp.ones_like(fake_input_ids),
-            token_type_ids=jnp.ones_like(fake_input_ids),
-            position_ids=jnp.arange(fake_input_ids.shape[-1])
-        )["params"]
