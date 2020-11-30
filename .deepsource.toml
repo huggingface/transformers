@@ -1,0 +1,21 @@
+version = 1
+
+test_patterns = ["**/test_*.py"]
+
+[[analyzers]]
+name = "python"
+enabled = true
+dependency_file_paths = [
+  "/examples/requirements.txt"
+]
+
+  [analyzers.meta]
+  runtime_version = "3.x.x"
+
+[[transformers]]
+name = "black"
+enabled = true
+
+[[transformers]]
+name = "isort"
+enabled = true
