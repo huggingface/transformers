@@ -85,7 +85,7 @@ class MT5EncoderModel(T5EncoderModel):
     documentation alongside usage examples.
 
     Examples::
-    
+
         >>> from transformers import MT5EncoderModel, T5Tokenizer
         >>> model = MT5EncoderModel.from_pretrained("google/mt5-small")
         >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
