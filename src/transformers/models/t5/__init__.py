@@ -15,6 +15,7 @@ if is_tokenizers_available():
 if is_torch_available():
     from .modeling_t5 import (
         T5_PRETRAINED_MODEL_ARCHIVE_LIST,
+        T5EncoderModel,
         T5ForConditionalGeneration,
         T5Model,
         T5PreTrainedModel,
@@ -24,6 +25,7 @@ if is_torch_available():
 if is_tf_available():
     from .modeling_tf_t5 import (
         TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFT5EncoderModel,
         TFT5ForConditionalGeneration,
         TFT5Model,
         TFT5PreTrainedModel,

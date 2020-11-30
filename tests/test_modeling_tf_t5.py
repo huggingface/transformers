@@ -25,7 +25,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import T5Tokenizer, TFT5ForConditionalGeneration, TFT5Model
+    from transformers import T5Tokenizer, TFT5EncoderModel, TFT5ForConditionalGeneration, TFT5Model
 
 
 class TFT5ModelTester:
@@ -292,6 +292,128 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_saved_model_with_hidden_states_output(self):
+        pass
+
+
+class TFT5EncoderOnlyModelTester:
+    def __init__(
+        self,
+        parent,
+        vocab_size=99,
+        batch_size=13,
+        encoder_seq_length=7,
+        # For common tests
+        use_attention_mask=True,
+        hidden_size=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        d_ff=37,
+        relative_attention_num_buckets=8,
+        is_training=False,
+        dropout_rate=0.1,
+        initializer_factor=0.002,
+        is_encoder_decoder=False,
+        eos_token_id=1,
+        pad_token_id=0,
+        scope=None,
+    ):
+
+        self.parent = parent
+        self.batch_size = batch_size
+        self.encoder_seq_length = encoder_seq_length
+        # For common tests
+        self.seq_length = self.encoder_seq_length
+        self.use_attention_mask = use_attention_mask
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.d_ff = d_ff
+        self.relative_attention_num_buckets = relative_attention_num_buckets
+        self.dropout_rate = dropout_rate
+        self.initializer_factor = initializer_factor
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.is_encoder_decoder = is_encoder_decoder
+        self.scope = None
+        self.is_training = is_training
+
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
+
+        attention_mask = None
+        if self.use_attention_mask:
+            attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
+
+        config = T5Config(
+            vocab_size=self.vocab_size,
+            d_model=self.hidden_size,
+            d_ff=self.d_ff,
+            d_kv=self.hidden_size // self.num_attention_heads,
+            num_layers=self.num_hidden_layers,
+            num_heads=self.num_attention_heads,
+            relative_attention_num_buckets=self.relative_attention_num_buckets,
+            dropout_rate=self.dropout_rate,
+            initializer_factor=self.initializer_factor,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.pad_token_id,
+            pad_token_id=self.pad_token_id,
+            is_encoder_decoder=self.is_encoder_decoder,
+        )
+
+        return (
+            config,
+            input_ids,
+            attention_mask,
+        )
+
+    def create_and_check_model(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+    ):
+        model = TFT5EncoderModel(config=config)
+        result = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+        )
+        result = model(input_ids=input_ids)
+        encoder_output = result.last_hidden_state
+
+        self.parent.assertEqual(encoder_output.shape, (self.batch_size, self.encoder_seq_length, self.hidden_size))
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            attention_mask,
+        ) = config_and_inputs
+
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+        return config, inputs_dict
+
+
+class TFT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
+    all_model_classes = (TFT5EncoderModel,) if is_tf_available() else ()
+
+    def setUp(self):
+        self.model_tester = TFT5EncoderOnlyModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=T5Config, d_model=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    # is not able to be part of a pipeline
+    def test_train_pipeline_custom_model(self):
         pass
 
 
