@@ -16,7 +16,6 @@
 """PyTorch MPNet model. """
 
 
-import logging
 import math
 import os
 import warnings
@@ -93,8 +92,8 @@ class MPNetEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
+    # Copied from transformers.modeling_roberta.RobertaEmbeddings.forward
     def forward(self, input_ids=None, position_ids=None, inputs_embeds=None, **kwargs):
-        # Copied from transformers.modeling_roberta.RobertaEmbeddings.forward
         if position_ids is None:
             if input_ids is not None:
                 position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx)
@@ -932,7 +931,7 @@ class MPNetClassificationHead(nn.Module):
         self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
 
     def forward(self, features, **kwargs):
-        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
+        x = features[:, 0, :]  # take <s> token (equiv. to BERT's [CLS] token)
         x = self.dropout(x)
         x = self.dense(x)
         x = torch.tanh(x)

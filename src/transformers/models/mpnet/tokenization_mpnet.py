@@ -66,7 +66,7 @@ class MPNetTokenizer(BertTokenizer):
         cls_token (:obj:`string`, `optional`, defaults to "<s>"):
             The classifier token which is used when doing sequence classification (classification of the whole sequence
             instead of per-token classification). It is the first token of the sequence when built with special tokens.
-        unk_token (:obj:`string`, `optional`, defaults to "<unk>"):
+        unk_token (:obj:`string`, `optional`, defaults to "[UNK]"):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
         pad_token (:obj:`string`, `optional`, defaults to "<pad>"):
