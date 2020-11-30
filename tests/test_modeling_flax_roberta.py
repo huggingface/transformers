@@ -25,7 +25,7 @@ if is_torch_available():
 class FlaxRobertaModelTest(unittest.TestCase):
     def assert_almost_equals(self, a: ndarray, b: ndarray, tol: float):
         diff = (a - b).sum()
-        self.assertLessEqual(diff, tol, "Difference between torch and flax is {} (>= {})".format(diff, tol))
+        self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol})")
 
     def test_from_pytorch(self):
         with torch.no_grad():
