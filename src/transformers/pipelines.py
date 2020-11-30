@@ -927,11 +927,10 @@ class TextGenerationPipeline(Pipeline):
         return_all_scores (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to return all prediction scores or just the one of the predicted class.
         function_to_apply (:obj:`str`, `optional`, defaults to :obj:`"default"`):
-            The function to apply to the model outputs in order to retrieve the scores.
-            Accepts four different values:
+            The function to apply to the model outputs in order to retrieve the scores. Accepts four different values:
 
-            - :obj:`"default"`: if the model has a single label, will apply the sigmoid function on the output.
-              If the model has several labels, will apply the softmax function on the output.
+            - :obj:`"default"`: if the model has a single label, will apply the sigmoid function on the output. If the
+              model has several labels, will apply the softmax function on the output.
             - :obj:`"sigmoid"`: Applies the sigmoid function on the output.
             - :obj:`"softmax"`: Applies the softmax function on the output.
             - :obj:`"none"`: Does not apply any function on the output.
@@ -984,11 +983,11 @@ class TextClassificationPipeline(Pipeline):
             return_all_scores (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether to return scores for all labels.
             function_to_apply (:obj:`str`, `optional`, defaults to :obj:`"default"`):
-                The function to apply to the model outputs in order to retrieve the scores.
-                Accepts four different values:
+                The function to apply to the model outputs in order to retrieve the scores. Accepts four different
+                values:
 
-                - :obj:`"default"`: if the model has a single label, will apply the sigmoid function on the output.
-                  If the model has several labels, will apply the softmax function on the output.
+                - :obj:`"default"`: if the model has a single label, will apply the sigmoid function on the output. If
+                  the model has several labels, will apply the softmax function on the output.
                 - :obj:`"sigmoid"`: Applies the sigmoid function on the output.
                 - :obj:`"softmax"`: Applies the softmax function on the output.
                 - :obj:`"none"`: Does not apply any function on the output.
