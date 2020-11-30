@@ -222,12 +222,12 @@ class TestFinetuneTrainer(TestCasePlus):
 
         if distributed:
             n_gpu = get_gpu_count()
-            launch_args = f"""
+            distributed_args = f"""
                 -m torch.distributed.launch
                 --nproc_per_node={n_gpu}
                 {self.test_file_dir}/finetune_trainer.py
             """.split()
-            cmd = [sys.executable] + launch_args + args
+            cmd = [sys.executable] + distributed_args + args
             execute_subprocess_async(cmd, env=self.get_env())
         else:
             testargs = ["finetune_trainer.py"] + args
