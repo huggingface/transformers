@@ -34,8 +34,12 @@ class TFTrainingArguments(TrainingArguments):
             Whether to run evaluation on the dev set or not.
         do_predict (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to run predictions on the test set or not.
-        evaluate_during_training (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to run evaluation during training at each logging step or not.
+        evaluation_strategy (:obj:`str` or :class:`~transformers.trainer_utils.EvaluationStrategy`, `optional`, defaults to :obj:`"no"`):
+            The evaluation strategy to adopt during training. Possible values are:
+
+                * :obj:`"no"`: No evaluation is done during training.
+                * :obj:`"steps"`: Evaluation is done (and logged) every :obj:`eval_steps`.
+
         per_device_train_batch_size (:obj:`int`, `optional`, defaults to 8):
             The batch size per GPU/TPU core/CPU for training.
         per_device_eval_batch_size (:obj:`int`, `optional`, defaults to 8):
