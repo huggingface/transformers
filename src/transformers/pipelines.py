@@ -1420,9 +1420,14 @@ class TokenClassificationPipeline(Pipeline):
 
             - **word** (:obj:`str`) -- The token/word classified.
             - **score** (:obj:`float`) -- The corresponding probability for :obj:`entity`.
-            - **entity** (:obj:`str`) -- The entity predicted for that token/word.
+            - **entity** (:obj:`str`) -- The entity predicted for that token/word (it is named `entity_group` when
+              `grouped_entities` is set to True.
             - **index** (:obj:`int`, only present when ``self.grouped_entities=False``) -- The index of the
               corresponding token in the sentence.
+            - **start** (:obj:`int`, `optional`) -- The index of the start of the corresponding entity in the sentence.
+              Only exists if the offsets are available within the tokenizer
+            - **end** (:obj:`int`, `optional`) -- The index of the end of the corresponding entity in the sentence.
+              Only exists if the offsets are available within the tokenizer
         """
 
         inputs, offset_mappings = self._args_parser(inputs, **kwargs)
@@ -1486,11 +1491,16 @@ class TokenClassificationPipeline(Pipeline):
                 else:
                     word = self.tokenizer.convert_ids_to_tokens(int(input_ids[idx]))
 
+                    start_ind = None
+                    end_ind = None
+
                 entity = {
                     "word": word,
                     "score": score[idx][label_idx].item(),
                     "entity": self.model.config.id2label[label_idx],
                     "index": idx,
+                    "start": start_ind,
+                    "end": end_ind,
                 }
 
                 if self.grouped_entities and self.ignore_subwords:
@@ -1524,6 +1534,8 @@ class TokenClassificationPipeline(Pipeline):
             "entity_group": entity,
             "score": np.mean(scores),
             "word": self.tokenizer.convert_tokens_to_string(tokens),
+            "start": entities[0]["start"],
+            "end": entities[-1]["end"],
         }
         return entity_group
 
