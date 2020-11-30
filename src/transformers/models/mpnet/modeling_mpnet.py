@@ -16,10 +16,10 @@
 """PyTorch MPNet model. """
 
 
+import logging
 import math
 import os
 import warnings
-import logging
 
 import torch
 from torch import nn
