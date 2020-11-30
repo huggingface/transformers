@@ -2,7 +2,6 @@ Preprocessing data
 =======================================================================================================================
 
 In this tutorial, we'll explore how to preprocess your data using 🤗 Transformers. The main tool for this is what we
-
 call a :doc:`tokenizer <main_classes/tokenizer>`. You can build one using the tokenizer class associated to the model
 you would like to use, or directly with the :class:`~transformers.AutoTokenizer` class.
 
@@ -52,7 +51,7 @@ The tokenizer can decode a list of token ids in a proper sentence:
     "[CLS] Hello, I'm a single sentence! [SEP]"
 
 As you can see, the tokenizer automatically added some special tokens that the model expects. Not all models need
-special tokens; for instance, if we had used` gtp2-medium` instead of `bert-base-cased` to create our tokenizer, we
+special tokens; for instance, if we had used `gpt2-medium` instead of `bert-base-cased` to create our tokenizer, we
 would have seen the same sentence as the original one here. You can disable this behavior (which is only advised if you
 have added those special tokens yourself) by passing ``add_special_tokens=False``.
 

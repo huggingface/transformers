@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
+# Copyright 2020 Ecole Polytechnique and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,59 +12,49 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License
-""" Fast tokenization classes for Camembert model."""
+""" Tokenization classes for the BARThez model."""
 
 
 import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
 
-from ...file_utils import is_sentencepiece_available
-from ...tokenization_utils_fast import PreTrainedTokenizerFast
+import sentencepiece as spm
+
+from ...file_utils import add_start_docstrings
+from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncoding
 from ...utils import logging
-
-
-if is_sentencepiece_available():
-    from .tokenization_camembert import CamembertTokenizer
-else:
-    CamembertTokenizer = None
 
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "camembert-base": "https://huggingface.co/camembert-base/resolve/main/sentencepiece.bpe.model",
-    },
-    "tokenizer_file": {
-        "camembert-base": "https://huggingface.co/camembert-base/resolve/main/tokenizer.json",
+        "moussaKam/mbarthez": "https://huggingface.co/moussaKam/mbarthez/resolve/main/sentencepiece.bpe.model",
+        "moussaKam/barthez": "https://huggingface.co/moussaKam/barthez/resolve/main/sentencepiece.bpe.model",
+        "moussaKam/barthez-orangesum-title": "https://huggingface.co/moussaKam/barthez-orangesum-title/resolve/main/sentencepiece.bpe.model",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "camembert-base": 512,
+    "moussaKam/mbarthez": 1024,
+    "moussaKam/barthez": 1024,
+    "moussaKam/barthez-orangesum-title": 1024,
 }
-
-SHARED_MODEL_IDENTIFIERS = [
-    # Load with
-    # `tokenizer = AutoTokenizer.from_pretrained("username/pretrained_model")`
-    "Musixmatch/umberto-commoncrawl-cased-v1",
-    "Musixmatch/umberto-wikipedia-uncased-v1",
-]
 
 SPIECE_UNDERLINE = "▁"
 
 
-class CamembertTokenizerFast(PreTrainedTokenizerFast):
+class BarthezTokenizer(PreTrainedTokenizer):
     """
-    Construct a "fast" CamemBERT tokenizer (backed by HuggingFace's `tokenizers` library). Adapted from
-    :class:`~transformers.RobertaTokenizer` and :class:`~transformers.XLNetTokenizer`. Based on `BPE
-    <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models>`__.
+    Adapted from :class:`~transformers.CamembertTokenizer` and :class:`~transformers.BartTokenizer`. Construct a
+    BARThez tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
-    methods. Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
+    Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):
@@ -102,21 +92,18 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
         additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
 
-    Attributes:
-        sp_model (:obj:`SentencePieceProcessor`):
-            The `SentencePiece` processor that is used for every conversion (string, tokens and IDs).
+    Attributes: sp_model (:obj:`SentencePieceProcessor`): The `SentencePiece` processor that is used for every
+    conversion (string, tokens and IDs).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["attention_mask"]
-    slow_tokenizer_class = CamembertTokenizer
 
     def __init__(
         self,
         vocab_file,
-        tokenizer_file=None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -124,31 +111,34 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
-        additional_special_tokens=["<s>NOTUSED", "</s>NOTUSED"],
         **kwargs
     ):
         super().__init__(
-            vocab_file,
-            tokenizer_file=tokenizer_file,
             bos_token=bos_token,
             eos_token=eos_token,
+            unk_token=unk_token,
             sep_token=sep_token,
             cls_token=cls_token,
-            unk_token=unk_token,
             pad_token=pad_token,
             mask_token=mask_token,
-            additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
 
         self.vocab_file = vocab_file
+        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model.Load(str(vocab_file))
+
+        self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
+
+        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) - 1
+        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
 
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. An CamemBERT sequence has the following format:
+        adding special tokens. A BARThez sequence has the following format:
 
         - single sequence: ``<s> X </s>``
         - pair of sequences: ``<s> A </s></s> B </s>``
@@ -191,7 +181,7 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
             if token_ids_1 is not None:
                 raise ValueError(
                     "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formatted with special tokens for the model."
+                    "ids is already formated with special tokens for the model."
                 )
             return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
 
@@ -203,8 +193,7 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. CamemBERT, like
-        RoBERTa, does not make use of token type ids, therefore a list of zeros is returned.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
@@ -222,6 +211,47 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
+    @property
+    def vocab_size(self):
+        return len(self.sp_model)
+
+    def get_vocab(self):
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
+        return vocab
+
+    def _tokenize(self, text):
+        return self.sp_model.EncodeAsPieces(text)
+
+    def _convert_token_to_id(self, token):
+        """ Converts a token (str) in an id using the vocab. """
+        if token in self.fairseq_tokens_to_ids:
+            return self.fairseq_tokens_to_ids[token]
+        spm_id = self.sp_model.PieceToId(token)
+
+        return spm_id if spm_id else self.unk_token_id
+
+    def _convert_id_to_token(self, index):
+        """Converts an index (integer) in a token (str) using the vocab."""
+        if index in self.fairseq_ids_to_tokens:
+            return self.fairseq_ids_to_tokens[index]
+        return self.sp_model.IdToPiece(index)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["sp_model"] = None
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model.Load(self.vocab_file)
+
+    def convert_tokens_to_string(self, tokens):
+        """Converts a sequence of tokens (strings for sub-words) in a single string."""
+        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
+        return out_string
+
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
@@ -234,3 +264,45 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
+    def prepare_seq2seq_batch(
+        self,
+        src_texts: List[str],
+        tgt_texts: Optional[List[str]] = None,
+        max_length: Optional[int] = None,
+        max_target_length: Optional[int] = None,
+        padding: str = "longest",
+        return_tensors: str = "None",
+        truncation=True,
+        **kwargs,
+    ) -> BatchEncoding:
+        kwargs.pop("src_lang", None)
+        kwargs.pop("tgt_lang", None)
+        if max_length is None:
+            max_length = self.model_max_length
+        model_inputs: BatchEncoding = self(
+            src_texts,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            max_length=max_length,
+            padding=padding,
+            truncation=truncation,
+            **kwargs,
+        )
+        if tgt_texts is None:
+            return model_inputs
+        # Process tgt_texts
+        if max_target_length is None:
+            max_target_length = max_length
+        labels = self(
+            tgt_texts,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            padding=padding,
+            max_length=max_target_length,
+            truncation=truncation,
+            **kwargs,
+        )["input_ids"]
+        model_inputs["labels"] = labels
+        return model_inputs

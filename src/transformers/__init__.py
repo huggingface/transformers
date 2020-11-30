@@ -210,6 +210,7 @@ from .integrations import (  # isort:skip
 
 if is_sentencepiece_available():
     from .models.albert import AlbertTokenizer
+    from .models.barthez import BarthezTokenizer
     from .models.bert_generation import BertGenerationTokenizer
     from .models.camembert import CamembertTokenizer
     from .models.marian import MarianTokenizer
@@ -226,6 +227,7 @@ else:
 if is_tokenizers_available():
     from .models.albert import AlbertTokenizerFast
     from .models.bart import BartTokenizerFast
+    from .models.barthez import BarthezTokenizerFast
     from .models.bert import BertTokenizerFast
     from .models.camembert import CamembertTokenizerFast
     from .models.distilbert import DistilBertTokenizerFast
@@ -517,7 +519,7 @@ if is_torch_available():
         MobileBertPreTrainedModel,
         load_tf_weights_in_mobilebert,
     )
-    from .models.mt5 import MT5ForConditionalGeneration, MT5Model
+    from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
     from .models.openai import (
         OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         OpenAIGPTDoubleHeadsModel,
@@ -572,6 +574,7 @@ if is_torch_available():
     )
     from .models.t5 import (
         T5_PRETRAINED_MODEL_ARCHIVE_LIST,
+        T5EncoderModel,
         T5ForConditionalGeneration,
         T5Model,
         T5PreTrainedModel,
@@ -814,7 +817,7 @@ if is_tf_available():
         TFMobileBertModel,
         TFMobileBertPreTrainedModel,
     )
-    from .models.mt5 import TFMT5ForConditionalGeneration, TFMT5Model
+    from .models.mt5 import TFMT5EncoderModel, TFMT5ForConditionalGeneration, TFMT5Model
     from .models.openai import (
         TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFOpenAIGPTDoubleHeadsModel,
@@ -837,6 +840,7 @@ if is_tf_available():
     )
     from .models.t5 import (
         TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFT5EncoderModel,
         TFT5ForConditionalGeneration,
         TFT5Model,
         TFT5PreTrainedModel,
