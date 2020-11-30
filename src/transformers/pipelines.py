@@ -1655,7 +1655,7 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
             inputs = [inputs]
         elif isinstance(inputs, Iterable):
             # Copy to avoid overriding arguments
-            inputs = [i for i in inputs]
+            inputs = list(inputs)
         else:
             raise ValueError("Invalid arguments {}".format(inputs))
 

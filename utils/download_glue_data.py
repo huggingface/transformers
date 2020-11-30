@@ -108,7 +108,6 @@ def download_diagnostic(data_dir):
     data_file = os.path.join(data_dir, "diagnostic", "diagnostic.tsv")
     urllib.request.urlretrieve(TASK2PATH["diagnostic"], data_file)
     print("\tCompleted!")
-    return
 
 
 def get_tasks(task_names):

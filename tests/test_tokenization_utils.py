@@ -71,7 +71,6 @@ class TokenizerUtilsTest(unittest.TestCase):
 
     @require_tokenizers
     def test_batch_encoding_pickle(self):
-        import numpy as np
 
         tokenizer_p = BertTokenizer.from_pretrained("bert-base-cased")
         tokenizer_r = BertTokenizerFast.from_pretrained("bert-base-cased")

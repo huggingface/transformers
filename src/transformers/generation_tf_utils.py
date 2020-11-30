@@ -462,9 +462,7 @@ class TFGenerationMixin:
                 # create banned_tokens boolean mask
                 banned_tokens_indices_mask = []
                 for banned_tokens_slice in banned_tokens:
-                    banned_tokens_indices_mask.append(
-                        [True if token in banned_tokens_slice else False for token in range(vocab_size)]
-                    )
+                    banned_tokens_indices_mask.append([token in banned_tokens_slice for token in range(vocab_size)])
 
                 next_token_logits = set_tensor_by_indices_to_value(
                     next_token_logits, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
@@ -476,9 +474,7 @@ class TFGenerationMixin:
 
                 banned_tokens_indices_mask = []
                 for banned_tokens_slice in banned_tokens:
-                    banned_tokens_indices_mask.append(
-                        [True if token in banned_tokens_slice else False for token in range(vocab_size)]
-                    )
+                    banned_tokens_indices_mask.append([token in banned_tokens_slice for token in range(vocab_size)])
 
                 next_token_logits = set_tensor_by_indices_to_value(
                     next_token_logits, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
@@ -488,7 +484,7 @@ class TFGenerationMixin:
             if eos_token_id is not None and cur_len < min_length:
                 # create eos_token_id boolean mask
                 is_token_logit_eos_token = tf.convert_to_tensor(
-                    [True if token is eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
+                    [token is eos_token_id for token in range(vocab_size)], dtype=tf.bool
                 )
                 eos_token_indices_mask = tf.broadcast_to(is_token_logit_eos_token, [batch_size, vocab_size])
 
@@ -652,7 +648,7 @@ class TFGenerationMixin:
                 num_batch_hypotheses = batch_size * num_beams
 
                 is_token_logit_eos_token = tf.convert_to_tensor(
-                    [True if token is eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
+                    [token is eos_token_id for token in range(vocab_size)], dtype=tf.bool
                 )
                 eos_token_indices_mask = tf.broadcast_to(is_token_logit_eos_token, [num_batch_hypotheses, vocab_size])
 
@@ -668,9 +664,7 @@ class TFGenerationMixin:
                 # create banned_tokens boolean mask
                 banned_tokens_indices_mask = []
                 for banned_tokens_slice in banned_tokens:
-                    banned_tokens_indices_mask.append(
-                        [True if token in banned_tokens_slice else False for token in range(vocab_size)]
-                    )
+                    banned_tokens_indices_mask.append([token in banned_tokens_slice for token in range(vocab_size)])
 
                 scores = set_tensor_by_indices_to_value(
                     scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
@@ -682,9 +676,7 @@ class TFGenerationMixin:
 
                 banned_tokens_indices_mask = []
                 for banned_tokens_slice in banned_tokens:
-                    banned_tokens_indices_mask.append(
-                        [True if token in banned_tokens_slice else False for token in range(vocab_size)]
-                    )
+                    banned_tokens_indices_mask.append([token in banned_tokens_slice for token in range(vocab_size)])
 
                 scores = set_tensor_by_indices_to_value(
                     scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
@@ -949,11 +941,7 @@ def calc_banned_bad_words_ids(prev_input_ids, bad_words_ids):
             # if bad word tokens are longer than prev tokens they can't be equal
             return False
 
-        if prev_tokens[-len(tokens) :] == tokens:
-            # if tokens match
-            return True
-        else:
-            return False
+        return prev_tokens[-len(tokens) :] == tokens
 
     for prev_input_ids_slice in prev_input_ids:
         banned_tokens_slice = []

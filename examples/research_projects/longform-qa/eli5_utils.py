@@ -600,7 +600,7 @@ def make_qa_dense_index(
     fp = np.memmap(index_name, dtype=dtype, mode="w+", shape=(passages_dset.num_rows, 128))
     n_batches = math.ceil(passages_dset.num_rows / batch_size)
     for i in range(n_batches):
-        passages = [p for p in passages_dset[i * batch_size : (i + 1) * batch_size]["passage_text"]]
+        passages = list(passages_dset[i * batch_size : (i + 1) * batch_size]["passage_text"])
         reps = embed_passages_for_retrieval(passages, tokenizer, qa_embedder, max_length, device)
         fp[i * batch_size : (i + 1) * batch_size] = reps
         if i % 50 == 0:

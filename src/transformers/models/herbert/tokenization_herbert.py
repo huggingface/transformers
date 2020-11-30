@@ -76,6 +76,6 @@ class HerbertTokenizer(XLMTokenizer):
         split_tokens = []
         for token in pre_tokens:
             if token:
-                split_tokens.extend([t for t in self.bpe(token).split(" ")])
+                split_tokens.extend(list(self.bpe(token).split(" ")))
 
         return split_tokens

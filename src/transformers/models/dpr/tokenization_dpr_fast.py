@@ -353,11 +353,9 @@ class CustomDPRReaderTokenizerMixin:
             length = end_index - start_index + 1
             assert length <= max_answer_length, "Span is too long: {} > {}".format(length, max_answer_length)
             if any(
-                [
-                    start_index <= prev_start_index <= prev_end_index <= end_index
-                    or prev_start_index <= start_index <= end_index <= prev_end_index
-                    for (prev_start_index, prev_end_index) in chosen_span_intervals
-                ]
+                start_index <= prev_start_index <= prev_end_index <= end_index
+                or prev_start_index <= start_index <= end_index <= prev_end_index
+                for (prev_start_index, prev_end_index) in chosen_span_intervals
             ):
                 continue
             chosen_span_intervals.append((start_index, end_index))

@@ -322,7 +322,6 @@ class FasterTFBartModelIntegrationTests(unittest.TestCase):
             truncation=True,
         )
         features = self.xsum_1_1_model.get_encoder()(**batch).last_hidden_state
-        import numpy as np
 
         expected = np.array([[-0.0828, -0.0251, -0.0674], [0.1277, 0.3311, -0.0255], [0.2613, -0.0840, -0.2763]])
         assert np.allclose(features[0, :3, :3].numpy(), expected, atol=1e-3)
