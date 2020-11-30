@@ -87,7 +87,6 @@ from .modeling_tf_pytorch_utils import (
     load_tf2_weights_in_pytorch_model,
 )
 from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-from .models.conv_bert import CONV_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig
 from .models.auto import (
     ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     CONFIG_MAPPING,
@@ -114,6 +113,7 @@ from .models.blenderbot import (
     BlenderbotTokenizer,
 )
 from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
+from .models.conv_bert import CONV_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig
 from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
 from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
 from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
@@ -278,18 +278,6 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Modeling
 if is_torch_available():
-    from .models.conv_bert import (
-        CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        ConvBertForMaskedLM,
-        ConvBertForMultipleChoice,
-        ConvBertForQuestionAnswering,
-        ConvBertForSequenceClassification,
-        ConvBertForTokenClassification,
-        ConvBertLayer,
-        ConvBertModel,
-        ConvBertPreTrainedModel,
-        load_tf_weights_in_conv_bert,
-    )
     # Benchmarks
     from .benchmark.benchmark import PyTorchBenchmark
     from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -403,6 +391,18 @@ if is_torch_available():
         CamembertForSequenceClassification,
         CamembertForTokenClassification,
         CamembertModel,
+    )
+    from .models.conv_bert import (
+        CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        ConvBertForMaskedLM,
+        ConvBertForMultipleChoice,
+        ConvBertForQuestionAnswering,
+        ConvBertForSequenceClassification,
+        ConvBertForTokenClassification,
+        ConvBertLayer,
+        ConvBertModel,
+        ConvBertPreTrainedModel,
+        load_tf_weights_in_conv_bert,
     )
     from .models.ctrl import CTRL_PRETRAINED_MODEL_ARCHIVE_LIST, CTRLLMHeadModel, CTRLModel, CTRLPreTrainedModel
     from .models.deberta import (

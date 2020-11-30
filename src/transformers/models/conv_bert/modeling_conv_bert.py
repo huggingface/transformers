@@ -14,11 +14,11 @@
 # limitations under the License.
 """PyTorch ConvBERT model. """
 
-import re
 import math
 import os
-from operator import attrgetter
+import re
 from dataclasses import dataclass
+from operator import attrgetter
 from typing import Optional, Tuple
 
 import torch

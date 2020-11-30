@@ -21,17 +21,6 @@ from collections import OrderedDict
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings
 from ...utils import logging
-
-# Add modeling imports here
-
-from ..conv_bert.modeling_conv_bert import (
-    ConvBertForMaskedLM,
-    ConvBertForMultipleChoice,
-    ConvBertForQuestionAnswering,
-    ConvBertForSequenceClassification,
-    ConvBertForTokenClassification,
-    ConvBertModel,
-)
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -68,6 +57,14 @@ from ..camembert.modeling_camembert import (
     CamembertForSequenceClassification,
     CamembertForTokenClassification,
     CamembertModel,
+)
+from ..conv_bert.modeling_conv_bert import (
+    ConvBertForMaskedLM,
+    ConvBertForMultipleChoice,
+    ConvBertForQuestionAnswering,
+    ConvBertForSequenceClassification,
+    ConvBertForTokenClassification,
+    ConvBertModel,
 )
 from ..ctrl.modeling_ctrl import CTRLLMHeadModel, CTRLModel
 from ..deberta.modeling_deberta import DebertaForSequenceClassification, DebertaModel
@@ -198,7 +195,6 @@ from ..xlnet.modeling_xlnet import (
     XLNetModel,
 )
 from .configuration_auto import (
-    ConvBertConfig,
     AlbertConfig,
     AutoConfig,
     BartConfig,
@@ -206,6 +202,7 @@ from .configuration_auto import (
     BertGenerationConfig,
     BlenderbotConfig,
     CamembertConfig,
+    ConvBertConfig,
     CTRLConfig,
     DebertaConfig,
     DistilBertConfig,
@@ -238,6 +235,10 @@ from .configuration_auto import (
     XLNetConfig,
     replace_list_option_in_docstrings,
 )
+
+
+# Add modeling imports here
+
 
 
 logger = logging.get_logger(__name__)

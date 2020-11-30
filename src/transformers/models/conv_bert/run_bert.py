@@ -1,11 +1,11 @@
 import os
-import torch
-
-from ..bert.modeling_tf_bert import TFBertModel
-from ..bert.modeling_bert import BertModel, BertConfig, load_tf_weights_in_bert
-from ..bert.tokenization_bert import BertTokenizer
 
 import tensorflow as tf
+import torch
+
+from ..bert.modeling_bert import BertConfig, BertModel, load_tf_weights_in_bert
+from ..bert.modeling_tf_bert import TFBertModel
+from ..bert.tokenization_bert import BertTokenizer
 
 
 if __name__ == "__main__":

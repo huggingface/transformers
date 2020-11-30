@@ -1,11 +1,12 @@
 import os
-import torch
-
-from .modeling_tf_conv_bert import TFConvBertForSequenceClassification
-from .modeling_conv_bert import ConvBertForSequenceClassification, ConvBertConfig, load_tf_weights_in_conv_bert
-from .tokenization_conv_bert import ConvBertTokenizer
 
 import tensorflow as tf
+import torch
+
+from .modeling_conv_bert import ConvBertConfig, ConvBertForSequenceClassification, load_tf_weights_in_conv_bert
+from .modeling_tf_conv_bert import TFConvBertForSequenceClassification
+from .tokenization_conv_bert import ConvBertTokenizer
+
 
 model_path = "/home/abhishek/huggingface/models/convbert_models/convbert_medium_small"
 
@@ -25,8 +26,9 @@ if __name__ == "__main__":
     # last_hidden_states = outputs.last_hidden_state
     # print(last_hidden_states)
 
-    from transformers import BertTokenizer, BertForSequenceClassification
     import torch
+
+    from transformers import BertForSequenceClassification, BertTokenizer
 
     tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
     model = BertForSequenceClassification.from_pretrained("bert-base-uncased", return_dict=True)

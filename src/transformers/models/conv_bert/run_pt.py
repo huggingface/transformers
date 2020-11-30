@@ -1,11 +1,12 @@
 import os
-import torch
-
-from .modeling_tf_conv_bert import TFConvBertModel
-from .modeling_conv_bert import ConvBertModel, ConvBertConfig, load_tf_weights_in_conv_bert
-from .tokenization_conv_bert import ConvBertTokenizer
 
 import tensorflow as tf
+import torch
+
+from .modeling_conv_bert import ConvBertConfig, ConvBertModel, load_tf_weights_in_conv_bert
+from .modeling_tf_conv_bert import TFConvBertModel
+from .tokenization_conv_bert import ConvBertTokenizer
+
 
 model_path = "/home/abhishek/huggingface/models/convbert_models/convbert_medium_small"
 

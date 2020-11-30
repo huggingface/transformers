@@ -1,8 +1,9 @@
-import torch
 import tensorflow as tf
+import torch
 
-from .modeling_tf_conv_bert import TFConvBertModel, ConvBertConfig
+from .modeling_tf_conv_bert import ConvBertConfig, TFConvBertModel
 from .tokenization_conv_bert import ConvBertTokenizer
+
 
 tf_checkpoint_path = "/home/abhishek/huggingface/models/convbert/model.ckpt"
 conf = ConvBertConfig.from_json_file("/home/abhishek/huggingface/models/convbert/config.json")
