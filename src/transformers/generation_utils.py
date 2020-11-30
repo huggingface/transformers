@@ -343,7 +343,7 @@ class GenerationMixin:
                 Whether to stop the beam search when at least ``num_beams`` sentences are finished per batch or not.
             num_beams (:obj:`int`, `optional`, defaults to 1):
                 Number of beams for beam search. 1 means no beam search.
-            temperature (:obj:`float`, `optional`, defaults tp 1.0):
+            temperature (:obj:`float`, `optional`, defaults to 1.0):
                 The value used to module the next token probabilities.
             top_k (:obj:`int`, `optional`, defaults to 50):
                 The number of highest probability vocabulary tokens to keep for top-k-filtering.
@@ -491,10 +491,20 @@ class GenerationMixin:
                 raise ValueError("Make sure that `model_kwargs` include `encoder_outputs` of type `ModelOutput`.")
 
         # determine generation mode
+        if num_beams < 1:
+            raise ValueError("num_beams must be >= 1")
         is_greedy_gen_mode = (num_beams == 1) and do_sample is False
         is_sample_gen_mode = (num_beams == 1) and do_sample is True
         is_beam_gen_mode = (num_beams > 1) and do_sample is False
         is_beam_sample_gen_mode = (num_beams > 1) and do_sample is True
+
+        # warn if certain params will be unused
+        if not do_sample:
+            if top_k is not None or top_p is not None or temperature is not None:
+                logger.warning("do_sample is False so top_k, top_p, temperature will be ignored")
+        if num_beams == 1:
+            if early_stopping is not None or length_penalty is not None:
+                logger.warning("no beam search (num_beams==1) so early_stopping and length penalty will be ignored")
 
         # set model_kwargs
         model_kwargs["use_cache"] = use_cache
@@ -618,6 +628,8 @@ class GenerationMixin:
                 eos_token_id=eos_token_id,
                 **model_kwargs,
             )
+        else:
+            raise ValueError("Invalid parameter set given to generate")
 
     def greedy_search(
         self,
