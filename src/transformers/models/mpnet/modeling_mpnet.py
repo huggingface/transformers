@@ -34,6 +34,7 @@ from ...file_utils import (
 )
 from ...modeling_outputs import (
     BaseModelOutput,
+    BaseModelOutputWithPooling,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
@@ -404,6 +405,22 @@ class MPNetEncoder(nn.Module):
         return ret
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPooler
+class MPNetPooler(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states):
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
+
+
 MPNET_START_DOCSTRING = r"""
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
@@ -467,6 +484,7 @@ class MPNetModel(MPNetPreTrainedModel):
 
         self.embeddings = MPNetEmbeddings(config)
         self.encoder = MPNetEncoder(config)
+        self.pooler = MPNetPooler(config) if add_pooling_layer else None
 
         self.init_weights()
 
@@ -523,11 +541,18 @@ class MPNetModel(MPNetPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        sequence_output = encoder_outputs[0]
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return tuple(v for v in encoder_outputs if v is not None)
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
-        return encoder_outputs
+        return BaseModelOutputWithPooling(
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 class MPNetForMaskedLM(MPNetPreTrainedModel):
