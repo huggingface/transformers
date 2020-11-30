@@ -63,6 +63,7 @@ class CTRLModelTester:
         self.num_labels = 3
         self.num_choices = 4
         self.scope = None
+        self.pad_token_id = self.vocab_size - 1
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -100,6 +101,7 @@ class CTRLModelTester:
             n_ctx=self.max_position_embeddings,
             # type_vocab_size=self.type_vocab_size,
             # initializer_range=self.initializer_range,
+            pad_token_id=self.pad_token_id,
         )
 
         head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
