@@ -2,7 +2,7 @@
 export PYTHONPATH="../":"${PYTHONPATH}"
 
 # A sample finetuning run, you need to specify data_dir, output_dir and model_name_or_path
-# run ./examples/rag/finetune.sh --help to see all the possible options
+# run ./examples/rag/finetune_rag.sh --help to see all the possible options
 
 python examples/rag/finetune_rag.py \
     --data_dir $DATA_DIR \

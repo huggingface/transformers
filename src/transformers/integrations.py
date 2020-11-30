@@ -128,7 +128,7 @@ def hp_params(trial):
     if is_optuna_available():
         if isinstance(trial, optuna.Trial):
             return trial.params
-    if is_ray_available():
+    if is_ray_tune_available():
         if isinstance(trial, dict):
             return trial
 
@@ -138,7 +138,7 @@ def hp_params(trial):
 def default_hp_search_backend():
     if is_optuna_available():
         return "optuna"
-    elif is_ray_available():
+    elif is_ray_tune_available():
         return "ray"
 
 

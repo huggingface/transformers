@@ -29,7 +29,7 @@ from transformers import (
     T5ForConditionalGeneration,
 )
 from transformers import logging as transformers_logging
-from transformers.file_utils import is_ray_available
+from transformers.integrations import is_ray_available
 
 
 if is_ray_available():
@@ -486,7 +486,6 @@ class GenerativeQAModule(BaseTransformer):
             default=False,
             help="Whether to use the dummy version of the dataset index. More info about custom indexes in the RagRetriever documentation as well as in `examples/rag/use_own_knowledge_dataset.py`",
         )
-        return parser
 
         parser.add_argument(
             "--num_retrieval_workers",
@@ -495,6 +494,28 @@ class GenerativeQAModule(BaseTransformer):
             help="The number of retrieval actors to use when Ray is selected"
             "for the distributed retriever. Has no effect when "
             "distributed_retriever is set to pytorch.",
+        )
+
+    @staticmethod
+    def add_ray_specific_args(parser):
+        parser.add_argument(
+            "--num_retrieval_workers",
+            type=int,
+            default=1,
+            help="The number of retrieval actors to use when Ray is selected"
+                 "for the distributed retriever. Has no effect when "
+                 "distributed_retriever is set to pytorch.",
+        )
+
+        # Ray cluster address.
+        parser.add_argument(
+            "--ray-address",
+            default="auto",
+            type=str,
+            help="The address of the Ray cluster to connect to. If not "
+                 "specified, Ray will attempt to automatically detect the "
+                 "cluster. Has no effect if pytorch is used as the distributed "
+                 "retriever.",
         )
 
         return parser
@@ -603,23 +624,13 @@ if __name__ == "__main__":
     parser = pl.Trainer.add_argparse_args(parser)
     parser = GenerativeQAModule.add_model_specific_args(parser, os.getcwd())
     parser = GenerativeQAModule.add_retriever_specific_args(parser)
+    parser = GenerativeQAModule.add_ray_specific_args(parser)
 
     # Pytorch Lightning Profiler
     parser.add_argument(
         "--profile",
         action="store_true",
-        help="If True, use pytorch_lightning.profiler.AdvancedProfiler to " "profile the Trainer.",
-    )
-
-    # Ray cluster address
-    parser.add_argument(
-        "--ray-address",
-        default="auto",
-        type=str,
-        help="The address of the Ray cluster to connect to. If not "
-        "specified, Ray will attempt to automatically detect the "
-        "cluster. Has no effect if pytorch is used as the distributed "
-        "retriever.",
+        help="If True, use pytorch_lightning.profiler.AdvancedProfiler to profile the Trainer.",
     )
 
     args = parser.parse_args()

@@ -54,19 +54,21 @@ one with [`torch.distributed`](https://pytorch.org/docs/stable/distributed.html)
 with [`Ray`](https://docs.ray.io/en/master/).
 
 This option can be configured with the `--distributed_retriever` flag which can either be set to `pytorch` or `ray`.
+By default this flag is set to `pytorch`.
 
 For the Pytorch implementation, only training worker 0 loads the index into CPU memory, and a gather/scatter pattern is used
 to collect the inputs from the other training workers and send back the corresponding document embeddings.
 
 For the Ray implementation, the index is loaded in *separate* process(es). The training workers randomly select which 
-retriever worker to query. To configure the number of retrieval workers, you can set the `num_retrieval_workers` flag.
+retriever worker to query. To use Ray for distributed retrieval, you have to set the `--distributed_retriever` arg to `ray`.
+To configure the number of retrieval workers (the number of processes that load the index), you can set the `num_retrieval_workers` flag.
 Also make sure to start the Ray cluster before running fine-tuning.
 
 ```bash
 # Start a single-node Ray cluster.
 ray start --head
 
-python examples/rag/finetune.py \
+python examples/rag/finetune_rag.py \
     --data_dir $DATA_DIR \
     --output_dir $OUTPUT_DIR \
     --model_name_or_path $MODEL_NAME_OR_PATH \
@@ -80,6 +82,9 @@ python examples/rag/finetune.py \
 ray stop
 ```
 
+Using Ray can lead to retrieval speedups on multi-GPU settings since multiple processes load the index rather than
+just the rank 0 training worker. Using Ray also allows you to load the index on GPU since the index is loaded on a separate
+processes than the model, while with pytorch distributed retrieval, both are loaded in the same process potentially leading to GPU OOM.
 
 # Evaluation
 Our evaluation script enables two modes of evaluation (controlled by the `eval_mode` argument): `e2e` - end2end evaluation, returns EM (exact match) and F1 scores calculated for the downstream task and `retrieval` - which returns precision@k of the documents retrieved for provided inputs.

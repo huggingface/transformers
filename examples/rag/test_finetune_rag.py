@@ -11,6 +11,7 @@ from transformers.testing_utils import (
     execute_subprocess_async,
     require_torch_gpu,
     require_torch_multi_gpu,
+    require_ray
 )
 
 
@@ -29,7 +30,7 @@ class RagFinetuneExampleTests(TestCasePlus):
                 with open(os.path.join(data_dir, f"{split}.{field}"), "w") as f:
                     f.write(content)
 
-    def _run_finetune(self, gpus: int, distributed_retriever: str):
+    def _run_finetune(self, gpus: int, distributed_retriever: str = "pytorch"):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
@@ -88,12 +89,22 @@ class RagFinetuneExampleTests(TestCasePlus):
 
     @require_torch_gpu
     def test_finetune_gpu(self):
-        for distributed_retriever in ["pytorch", "ray"]:
-            result = self._run_finetune(gpus=1, distributed_retriever=distributed_retriever)
-            self.assertGreaterEqual(result["test"][0]["test_avg_em"], 0.2)
+        result = self._run_finetune(gpus=1)
+        self.assertGreaterEqual(result["test"][0]["test_avg_em"], 0.2)
 
     @require_torch_multi_gpu
     def test_finetune_multigpu(self):
-        for distributed_retriever in ["pytorch", "ray"]:
-            result = self._run_finetune(gpus=2, distributed_retriever=distributed_retriever)
-            self.assertGreaterEqual(result["test"][0]["test_avg_em"], 0.2)
+        result = self._run_finetune(gpus=2)
+        self.assertGreaterEqual(result["test"][0]["test_avg_em"], 0.2)
+
+    @require_torch_gpu
+    @require_ray
+    def test_finetune_gpu_ray_retrieval(self):
+        result = self._run_finetune(gpus=1, distributed_retriever="ray")
+        self.assertGreaterEqual(result["test"][0]["test_avg_em"], 0.2)
+
+    @require_torch_multi_gpu
+    @require_ray
+    def test_finetune_multigpu_ray_retrieval(self):
+        result = self._run_finetune(gpus=1, distributed_retriever="ray")
+        self.assertGreaterEqual(result["test"][0]["test_avg_em"], 0.2)
