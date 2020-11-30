@@ -123,7 +123,7 @@ class Seq2SeqTrainer(Trainer):
             if self.args.sortish_sampler:
                 self.train_dataset.make_sortish_sampler(
                     self.args.per_device_train_batch_size,
-                    distributed=(self.args.n_gpu > 1 and self.args.local_rank != -1),
+                    distributed=(self.args.local_rank != -1),
                 )
 
             return (
