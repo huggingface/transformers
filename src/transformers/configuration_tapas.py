@@ -68,7 +68,7 @@ class TapasConfig(PretrainedConfig):
             The number of aggregation operators to predict.
         aggregation_loss_weight (:obj:`float`, `optional`, defaults to 1.0):
             Importance weight for the aggregation loss.
-        use_answer_as_supervision (:obj:`bool`, `optional`, defaults to :obj:`None`):
+        use_answer_as_supervision (:obj:`bool`, `optional`):
             Whether to use the answer as the only supervision for aggregation examples.
         answer_loss_importance (:obj:`float`, `optional`, defaults to 1.0):
             Importance weight for the regression loss.

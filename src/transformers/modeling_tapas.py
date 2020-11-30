@@ -736,10 +736,6 @@ class TapasModel(TapasPreTrainedModel):
     all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
     Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
-    To behave as an decoder the model needs to be initialized with the :obj:`is_decoder` argument of the configuration
-    set to :obj:`True`. To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
-    argument and :obj:`add_cross_attention` set to :obj:`True`; an :obj:`encoder_hidden_states` is then expected as an
-    input to the forward pass.
     """
 
     config_class = TapasConfig
@@ -1272,7 +1268,8 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                     if aggregation_labels is not None:
                         assert label_ids.shape[0] == aggregation_labels.shape[0], "Make sure the aggregation labels are a LongTensor of shape (batch_size,)"
                         per_example_additional_loss = _calculate_aggregation_loss(
-                            logits_aggregation, aggregate_mask, aggregation_labels, self.config
+                            logits_aggregation, aggregate_mask, aggregation_labels, 
+                            self.config.use_answer_as_supervision, self.config.num_aggregation_labels
                         )
                     else:
                         raise ValueError(
@@ -1282,7 +1279,8 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                     # Set aggregation labels to zeros
                     aggregation_labels = torch.zeros(label_ids.shape[0], dtype=torch.long, device=label_ids.device)
                     per_example_additional_loss = _calculate_aggregation_loss(
-                        logits_aggregation, aggregate_mask, aggregation_labels, self.config
+                        logits_aggregation, aggregate_mask, aggregation_labels, 
+                        self.config.use_answer_as_supervision, self.config.num_aggregation_labels
                     )
 
                 if self.config.use_answer_as_supervision:
@@ -1331,7 +1329,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
 @add_start_docstrings(
     """
     Tapas Model with a sequence classification head on top (a linear layer on top of the pooled output), e.g. for
-    TabFact (Chen et al., 2020).
+    table entailment tasks, such as TabFact (Chen et al., 2020).
     """,
     TAPAS_START_DOCSTRING,
 )
@@ -2007,7 +2005,9 @@ def _calculate_aggregate_mask(answer, pooled_output, cell_selection_preference, 
     return aggregate_mask
 
 
-def _calculate_aggregation_loss_known(logits_aggregation, aggregate_mask, aggregation_function_id, config):
+def _calculate_aggregation_loss_known(
+    logits_aggregation, aggregate_mask, aggregation_function_id, use_answer_as_supervision, num_aggregation_labels
+):
     """
     Calculates aggregation loss when its type is known during training.
 
@@ -2022,28 +2022,30 @@ def _calculate_aggregation_loss_known(logits_aggregation, aggregate_mask, aggreg
             A mask set to 1 for examples that should use aggregation functions.
         aggregation_function_id (:obj:`torch.LongTensor` of shape :obj:`(batch_size, )`):
             Aggregation function id for every example in the batch.
-        config (:class:`~transformers.TapasConfig`):
-            Model configuration class with all the parameters of the model
+        use_answer_as_supervision (:obj:`bool`, `optional`):
+            Whether to use the answer as the only supervision for aggregation examples.
+        num_aggregation_labels (:obj:`int`, `optional`, defaults to 0):
+            The number of aggregation operators to predict.
 
     Returns:
         aggregation_loss_known (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,)`): Aggregation loss (when its
         type is known during training) per example.
     """
-    if config.use_answer_as_supervision:
+    if use_answer_as_supervision:
         # Prepare "no aggregation" targets for cell selection examples.
         target_aggregation = torch.zeros_like(aggregate_mask, dtype=torch.long)
     else:
         # Use aggregation supervision as the target.
         target_aggregation = aggregation_function_id
 
-    one_hot_labels = torch.nn.functional.one_hot(target_aggregation, num_classes=config.num_aggregation_labels).type(
+    one_hot_labels = torch.nn.functional.one_hot(target_aggregation, num_classes=num_aggregation_labels).type(
         torch.float32
     )
     log_probs = torch.nn.functional.log_softmax(logits_aggregation, dim=-1)
 
     # torch.FloatTensor[batch_size]
     per_example_aggregation_intermediate = -torch.sum(one_hot_labels * log_probs, dim=-1)
-    if config.use_answer_as_supervision:
+    if use_answer_as_supervision:
         # Accumulate loss only for examples requiring cell selection
         # (no aggregation).
         return per_example_aggregation_intermediate * (1 - aggregate_mask)
@@ -2053,7 +2055,7 @@ def _calculate_aggregation_loss_known(logits_aggregation, aggregate_mask, aggreg
 
 def _calculate_aggregation_loss_unknown(logits_aggregation, aggregate_mask):
     """
-    Calculates aggregation loss in the case of answer supervision
+    Calculates aggregation loss in the case of answer supervision.
 
     Args:
         logits_aggregation (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_aggregation_labels)`):
@@ -2065,7 +2067,6 @@ def _calculate_aggregation_loss_unknown(logits_aggregation, aggregate_mask):
         aggregation_loss_unknown (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,)`): Aggregation loss (in case of
         answer supervision) per example.
     """
-
     dist_aggregation = torch.distributions.categorical.Categorical(logits=logits_aggregation)
     # Index 0 correponds to "no aggregation".
     aggregation_ops_total_mass = torch.sum(dist_aggregation.probs[:, 1:], dim=1)
@@ -2076,9 +2077,11 @@ def _calculate_aggregation_loss_unknown(logits_aggregation, aggregate_mask):
     return -torch.log(aggregation_ops_total_mass) * aggregate_mask
 
 
-def _calculate_aggregation_loss(logits_aggregation, aggregate_mask, aggregation_function_id, config):
+def _calculate_aggregation_loss(
+    logits_aggregation, aggregate_mask, aggregation_function_id, use_answer_as_supervision, num_aggregation_labels
+):
     """
-    Calculates the aggregation loss per example
+    Calculates the aggregation loss per example.
 
     Args:
         logits_aggregation (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_aggregation_labels)`):
@@ -2087,17 +2090,19 @@ def _calculate_aggregation_loss(logits_aggregation, aggregate_mask, aggregation_
             A mask set to 1 for examples that should use aggregation functions.
         aggregation_function_id (:obj:`torch.LongTensor` of shape :obj:`(batch_size, )`):
             Aggregation function id for every example in the batch.
-        config (:class:`~transformers.TapasConfig`):
-            Model configuration class with all the parameters of the model
+        use_answer_as_supervision (:obj:`bool`, `optional`):
+            Whether to use the answer as the only supervision for aggregation examples.
+        num_aggregation_labels (:obj:`int`, `optional`, defaults to 0):
+            The number of aggregation operators to predict.
 
     Returns:
         aggregation_loss (:obj:`torch.FloatTensor` of shape :obj:`(batch_size,)`): Aggregation loss per example.
     """
     per_example_aggregation_loss = _calculate_aggregation_loss_known(
-        logits_aggregation, aggregate_mask, aggregation_function_id, config
+        logits_aggregation, aggregate_mask, aggregation_function_id, use_answer_as_supervision, num_aggregation_labels
     )
 
-    if config.use_answer_as_supervision:
+    if use_answer_as_supervision:
         # Add aggregation loss for numeric answers that need aggregation.
         per_example_aggregation_loss += _calculate_aggregation_loss_unknown(logits_aggregation, aggregate_mask)
     return config.aggregation_loss_weight * per_example_aggregation_loss
@@ -2107,7 +2112,7 @@ def _calculate_expected_result(
     dist_per_cell, numeric_values, numeric_values_scale, input_mask_float, logits_aggregation, config
 ):
     """
-    Calculate the expected result given cell and aggregation probabilities
+    Calculates the expected result given cell and aggregation probabilities.
 
     Args:
         dist_per_cell (:obj:`torch.distributions.Bernoulli`):
@@ -2204,7 +2209,7 @@ def _calculate_regression_loss(
     config,
 ):
     """
-    Calculates the regression loss per example
+    Calculates the regression loss per example.
 
     Args:
         answer (:obj: `torch.FloatTensor` of shape :obj:`(batch_size,)`):
