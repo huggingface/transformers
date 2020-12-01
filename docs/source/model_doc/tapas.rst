@@ -76,9 +76,8 @@ STEP 1: Choose one of the 3 ways in which you can use TAPAS - or experiment
 Basically, there are 2 options: either you start from an already-finetuned checkpoint, or you start with a pre-trained base 
 model and randomly initialized classification heads. In case your dataset is rather small (hundreds of training examples), 
 it's advised to start from an already fine-tuned checkpoint. Both pre-trained and fine-tuned checkpoints are available in the
-HuggingFace `model hub`_.
+HuggingFace `model hub <https://huggingface.co/models?search=tapas>`__.
 
-.. _model hub: https://huggingface.co/models?search=tapas
 
 There are 3 different ways in which one can fine-tune an already fine-tuned :class:`~transformers.TapasForQuestionAnswering` 
 checkpoint, corresponding to the different datasets on which Tapas was fine-tuned:
@@ -136,10 +135,8 @@ this way. Here's an example:
 STEP 2: Prepare your data in the SQA format
 ===========================================
 
-Second, no matter what you picked above, you should prepare your dataset in the `SQA format`_. This format is a TSV/CSV file with the following 
-columns:
-
-.. _SQA format: https://www.microsoft.com/en-us/download/details.aspx?id=54253
+Second, no matter what you picked above, you should prepare your dataset in the `SQA format <https://www.microsoft.com/en-us/download/details.aspx?id=54253>`__. 
+This format is a TSV/CSV file with the following columns:
 
 - ``id``: optional, id of the table-question pair, for bookkeeping purposes. 
 - ``annotator``: optional, id of the person who annotated the table-question pair, for bookkeeping purposes. 
@@ -153,11 +150,10 @@ columns:
 - ``float_answer``: the float answer to the question, if there is one (np.nan if there isn't). Only required in case of weak supervision for aggregation (such as WTQ and WikiSQL)
 
 The tables themselves should be present in a folder, each table being a separate csv file. Note that the authors of the TAPAS algorithm used conversion 
-scripts with some automated logic to convert the other datasets (WTQ and WikiSQL) into the SQA format. The author explains this `here`_. Interestingly,
-these conversion scripts are not perfect (the ``answer_coordinates`` and ``float_answer`` fields are populated based on the ``answer_text``), 
+scripts with some automated logic to convert the other datasets (WTQ and WikiSQL) into the SQA format. The author explains this `here <https://github.com/google-research/tapas/issues/50#issuecomment-705465960>`__. 
+Interestingly, these conversion scripts are not perfect (the ``answer_coordinates`` and ``float_answer`` fields are populated based on the ``answer_text``), 
 meaning that WTQ and WikiSQL results could actually be improved.
 
-.. _here: https://github.com/google-research/tapas/issues/50#issuecomment-705465960
 
 ==========================================================================================
 STEP 3: Convert your data into PyTorch tensors using :class:`~transformers.TapasTokenizer`
@@ -297,9 +293,11 @@ can be done in parallel on all table-question pairs of a batch. Here's an exampl
         >>> table = pd.Dataframe(data)
         >>> inputs = tokenizer(table=table, queries=queries, padding='max_length', return_tensors="pt") 
         >>> outputs = model(**inputs)
-        >>> predicted_answer_coordinates, predicted_aggregation_indices = tokenizer.convert_logits_to_predictions(inputs, 
-        ...                                                                                                       output.logits, 
-        ...                                                                                                       outputs.logits_aggregation)
+        >>> predicted_answer_coordinates, predicted_aggregation_indices = tokenizer.convert_logits_to_predictions(
+        ...         inputs, 
+        ...         output.logits, 
+        ...         outputs.logits_aggregation
+        ...)
 
         >>> # let's print out the results:
         >>> id2aggregation = {0: "NONE", 1: "SUM", 2: "AVERAGE", 3:"COUNT"}

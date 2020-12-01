@@ -121,8 +121,8 @@ class TapasTokenizer(PreTrainedTokenizer):
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
     :class:`~transformers.TapasTokenizer` creates several token type ids to encode tabular structure. To be more
-    precise, it adds 7 token type ids, in the following order: "segment_ids", "column_ids", "row_ids",
-    "prev_label_ids", "column_ranks", "inv_column_ranks" and "numeric_relations":
+    precise, it adds 7 token type ids, in the following order: :obj:`segment_ids`, :obj:`column_ids`, :obj:`row_ids`,
+    :obj:`prev_label_ids`, :obj`column_ranks`, :obj`inv_column_ranks` and :obj:`numeric_relations`:
 
     - segment_ids: indicate whether a token belongs to the question (0) or the table (1). 0 for special tokens and
       padding.
@@ -318,8 +318,8 @@ class TapasTokenizer(PreTrainedTokenizer):
             for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
                 if index != token_index:
                     logger.warning(
-                        "Saving vocabulary to {}: vocabulary indices are not consecutive."
-                        " Please check that the vocabulary is not corrupted!".format(vocab_file)
+                        f"Saving vocabulary to {vocab_file}: vocabulary indices are not consecutive."
+                        " Please check that the vocabulary is not corrupted!"
                     )
                     index = token_index
                 writer.write(token + "\n")
@@ -463,8 +463,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 the answer text of a corresponding answer coordinate. In case a batch of table-question pairs is provided, then 
                 the answer_coordinates must be a list of lists of strings (each list corresponding to a single table-question pair). 
 
-        For the other parameters, we refer to the documentation of 
-        :class:`~transformers.PreTrainedTokenizer <https://huggingface.co/transformers/main_classes/tokenizer.html#transformers.PreTrainedTokenizer.__call__>`__.
+        For the other parameters, we refer to the documentation of :meth:`~transformers.PreTrainedTokenizer.__call__`.
 
         """
         assert isinstance(table, pd.DataFrame), "Table must be of type pd.DataFrame"
@@ -600,15 +599,6 @@ class TapasTokenizer(PreTrainedTokenizer):
                 "To use this feature, change your tokenizer to one deriving from "
                 "transformers.PreTrainedTokenizerFast."
             )
-
-        if "return_lengths" in kwargs:
-            if verbose:
-                warnings.warn(
-                    "The PreTrainedTokenizerBase.prepare_for_model `return_lengths` parameter is deprecated. "
-                    "Please use `return_length` instead.",
-                    FutureWarning,
-                )
-            return_length = kwargs["return_lengths"]
 
         return self._batch_encode_plus(
             table=table,
@@ -897,15 +887,6 @@ class TapasTokenizer(PreTrainedTokenizer):
                 "To use this feature, change your tokenizer to one deriving from "
                 "transformers.PreTrainedTokenizerFast."
             )
-
-        if "return_lengths" in kwargs:
-            if verbose:
-                warnings.warn(
-                    "The PreTrainedTokenizerBase.prepare_for_model `return_lengths` parameter is deprecated. "
-                    "Please use `return_length` instead.",
-                    FutureWarning,
-                )
-            return_length = kwargs["return_lengths"]
 
         return self._encode_plus(
             table=table,
@@ -1864,9 +1845,7 @@ class TapasTokenizer(PreTrainedTokenizer):
     #### End of everything related to converting logits to predictions ####
 
 
-""" BasicTokenizer and WordPieceTokenizer (taken from tokenization_bert.py)"""
-
-
+# Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
 class BasicTokenizer(object):
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.)
@@ -2014,6 +1993,7 @@ class BasicTokenizer(object):
         return "".join(output)
 
 
+# Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
 class WordpieceTokenizer(object):
     """Runs WordPiece tokenization."""
 
@@ -2070,19 +2050,16 @@ class WordpieceTokenizer(object):
         return output_tokens
 
 
-"""
-    Below: utilities for TAPAS tokenizer (independent from PyTorch/Tensorflow).
 
-    This includes functions to parse numeric values (dates and numbers) from both the table and questions in order
-    to create the column_ranks, inv_column_ranks, numeric_values, numeric values_scale and numeric_relations in
-    prepare_for_model of TapasTokenizer. 
-
-    These are meant to be used in an academic setup, for production use cases Gold mine or Aqua should be used.
-
-"""
+# Below: utilities for TAPAS tokenizer (independent from PyTorch/Tensorflow).
+# This includes functions to parse numeric values (dates and numbers) from both the table and questions in order
+# to create the column_ranks, inv_column_ranks, numeric_values, numeric values_scale and numeric_relations in
+# prepare_for_model of TapasTokenizer. 
+# These are meant to be used in an academic setup, for production use cases Gold mine or Aqua should be used.
 
 
 # taken from constants.py of the original implementation
+# URL: https://github.com/google-research/tapas/blob/master/tapas/utils/constants.py
 class Relation(enum.Enum):
     HEADER_TO_CELL = 1  # Connects header to cell.
     CELL_TO_HEADER = 2  # Connects cell to header.
@@ -2128,16 +2105,11 @@ class Question:
     numeric_spans: Optional[List[NumericValueSpan]] = None
 
     
-"""   
-    Below: all functions from number_utils.py as well as 2 functions (namely get_all_spans and normalize_for_match)
-    from text_utils.py of the original implementation.
-
-    URL's: 
-    - https://github.com/google-research/tapas/blob/master/tapas/utils/number_utils.py
-    - https://github.com/google-research/tapas/blob/master/tapas/utils/text_utils.py
+# Below: all functions from number_utils.py as well as 2 functions (namely get_all_spans and normalize_for_match)
+# from text_utils.py of the original implementation. URL's: 
+# - https://github.com/google-research/tapas/blob/master/tapas/utils/number_utils.py
+# - https://github.com/google-research/tapas/blob/master/tapas/utils/text_utils.py
     
-"""
-
 
 # Constants for parsing date expressions.
 # Masks that specify (by a bool) which of (year, month, day) will be populated.
@@ -2411,15 +2383,10 @@ def parse_text(text):
     return numeric_value_spans
 
 
-"""
-    Below: all functions from number_annotation_utils.py and 2 functions (namely filter_invalid_unicode
-    and filter_invalid_unicode_from_table) from text_utils.py of the original implementation.
-    
-    URL's: 
-    - https://github.com/google-research/tapas/blob/master/tapas/utils/number_annotation_utils.py
-    - https://github.com/google-research/tapas/blob/master/tapas/utils/text_utils.py 
-
-"""
+# Below: all functions from number_annotation_utils.py and 2 functions (namely filter_invalid_unicode
+# and filter_invalid_unicode_from_table) from text_utils.py of the original implementation. URL's: 
+# - https://github.com/google-research/tapas/blob/master/tapas/utils/number_annotation_utils.py
+# - https://github.com/google-research/tapas/blob/master/tapas/utils/text_utils.py 
 
 
 _PrimitiveNumericValue = Union[float, Tuple[Optional[float], Optional[float], Optional[float]]]
@@ -2516,14 +2483,16 @@ def _consolidate_numeric_values(
         debug_info):
     """Finds the most common numeric values in a column and returns them.
     Args:
-    row_index_to_values: For each row index all the values in that cell.
-    min_consolidation_fraction: Fraction of cells that need to have consolidated
-        value.
-    debug_info: Additional information only used for logging.
+        row_index_to_values: 
+            For each row index all the values in that cell.
+        min_consolidation_fraction: 
+            Fraction of cells that need to have consolidated value.
+        debug_info:    
+            Additional information only used for logging.
     Returns:
-    For each row index the first value that matches the most common value.
-    Rows that don't have a matching value are dropped. Empty list if values can't
-    be consolidated.
+        For each row index the first value that matches the most common value.
+        Rows that don't have a matching value are dropped. Empty list if values can't
+        be consolidated.
     """
     type_counts = collections.Counter()
     for numeric_values in row_index_to_values.values():
@@ -2639,10 +2608,12 @@ def add_numeric_table_values(table,
     """Parses text in table column-wise and adds the consolidated values.
     Consolidation refers to finding values with a common types (date or number).
     Args:
-    table: Table to annotate.
-    min_consolidation_fraction: Fraction of cells in a column that need to have
-        consolidated value.
-    debug_info: Additional information used for logging.
+        table: 
+            Table to annotate.
+        min_consolidation_fraction: 
+            Fraction of cells in a column that need to have consolidated value.
+        debug_info: 
+            Additional information used for logging.
     """
     table = table.copy()
     # First, filter table on invalid unicode

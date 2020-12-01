@@ -793,7 +793,10 @@ class TapasModel(TapasPreTrainedModel):
             >>> tokenizer = TapasTokenizer.from_pretrained('tapas-base-finetuned-wtq')
             >>> model = TapasModel.from_pretrained('tapas-base-finetuned-wtq')
 
-            >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Age': ["56", "45", "59"], 'Number of movies': ["87", "53", "69"]}
+            >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 
+            ...         'Age': ["56", "45", "59"], 
+            ...         'Number of movies': ["87", "53", "69"]
+            ... }
             >>> table = pd.DataFrame.from_dict(data)
             >>> queries = ["How many movies has George Clooney played in?", "How old is Brad Pitt?"]
 
@@ -925,7 +928,10 @@ class TapasForMaskedLM(TapasPreTrainedModel):
             >>> tokenizer = TapasTokenizer.from_pretrained('tapas-base')
             >>> model = TapasForMaskedLM.from_pretrained('tapas-base')
 
-            >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Age': ["56", "45", "59"], 'Number of movies': ["87", "53", "69"]}
+            >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 
+            ...         'Age': ["56", "45", "59"], 
+            ...         'Number of movies': ["87", "53", "69"]
+            ... }
             >>> table = pd.DataFrame.from_dict(data)
 
             >>> inputs = tokenizer(table, "How many [MASK] has George [MASK] played in?", return_tensors="pt")
@@ -1064,8 +1070,11 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             padding are 0.
         label_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
             Labels per token for computing the hierarchical cell selection loss. This encodes the positions of the
-            answer appearing in the table. Can be obtained using :class:`~transformers.TapasTokenizer`. - 1 for tokens
-            that are **part of the answer**, - 0 for tokens that are **not part of the answer**.
+            answer appearing in the table. Can be obtained using :class:`~transformers.TapasTokenizer`. 
+
+            - 1 for tokens that are **part of the answer**, 
+            - 0 for tokens that are **not part of the answer**.
+
         aggregation_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, )`, `optional`):
             Aggregation function index for every example in the batch for computing the aggregation loss. Indices
             should be in :obj:`[0, ..., config.num_aggregation_labels - 1]`. Only required in case of strong
@@ -1091,7 +1100,10 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             >>> tokenizer = TapasTokenizer.from_pretrained('tapas-base-finetuned-wtq')
             >>> model = TapasForQuestionAnswering.from_pretrained('tapas-base-finetuned-wtq')
 
-            >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Age': ["56", "45", "59"], 'Number of movies': ["87", "53", "69"]}
+            >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 
+            ...         'Age': ["56", "45", "59"], 
+            ...         'Number of movies': ["87", "53", "69"]
+            ... }
             >>> table = pd.DataFrame.from_dict(data)
             >>> queries = ["How many movies has George Clooney played in?", "How old is Brad Pitt?"]
 
@@ -1379,7 +1391,10 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
             >>> tokenizer = TapasTokenizer.from_pretrained('tapas-base-finetuned-tabfact')
             >>> model = TapasForSequenceClassification.from_pretrained('tapas-base-finetuned-tabfact')
 
-            >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Age': ["56", "45", "59"], 'Number of movies': ["87", "53", "69"]}
+            >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 
+            ...         'Age': ["56", "45", "59"], 
+            ...         'Number of movies': ["87", "53", "69"]
+            ... }
             >>> table = pd.DataFrame.from_dict(data)
             >>> queries = ["There is only one actor who is 45 years old", "There are 3 actors which played in more than 60 movies"]
 
@@ -1520,7 +1535,7 @@ class ProductIndexMap(IndexMap):
 def gather(values, index, name="segmented_gather"):
     """
     Gathers from `values` using the index map. For each element in the domain of the index map this operation looks up
-    a value for that index in `values`. Two elements from the same segment always get assigned the same value
+    a value for that index in `values`. Two elements from the same segment always get assigned the same value.
 
     Args:
         values (:obj:`torch.Tensor` of shape (B1, ..., Bn, num_segments, V1, ...)):
@@ -1555,7 +1570,7 @@ def flatten(index, name="segmented_flatten"):
     Flattens a batched index map (which is typically of shape batch_size, seq_length) to a 1d index map. This operation
     relabels the segments to keep batch elements distinct. The k-th batch element will have indices shifted by
     `num_segments` * (k - 1). The result is a tensor with `num_segments` multiplied by the number of elements in the
-    batch
+    batch.
 
     Args:
         index (:obj:`IndexMap`):
@@ -1581,7 +1596,7 @@ def flatten(index, name="segmented_flatten"):
 
 def range_index_map(batch_shape, num_segments, name="range_index_map"):
     """
-    Constructs an index map equal to range(num_segments)
+    Constructs an index map equal to range(num_segments).
 
     Args:
         batch_shape (:obj:`torch.Size`):
@@ -1622,7 +1637,7 @@ def range_index_map(batch_shape, num_segments, name="range_index_map"):
 
 def _segment_reduce(values, index, segment_reduce_fn, name):
     """
-    Applies a segment reduction segment-wise
+    Applies a segment reduction segment-wise.
 
     Args:
         values (:obj:`torch.Tensor`):
@@ -1673,13 +1688,14 @@ def _segment_reduce(values, index, segment_reduce_fn, name):
 
 def reduce_sum(values, index, name="segmented_reduce_sum"):
     """
-    Sums a tensor over its segments. Outputs 0 for empty segments. This operations computes the sum over segments, with
-    support for:
-
-        - Batching using the first dimensions [B1, B2, ..., Bn]. Each element in
-        a batch can have different indices. - Vectorization using the last dimension [V1, V2, ...]. If they are present
-        the output will be a sum of vectors rather than scalars. Only the middle dimensions [I1, ..., Ik] are reduced
-        by the operation
+    Sums a tensor over its segments. 
+    
+    Outputs 0 for empty segments. 
+    
+    This operations computes the sum over segments, with support for:
+        - Batching using the first dimensions [B1, B2, ..., Bn]. Each element in a batch can have different indices. 
+        - Vectorization using the last dimension [V1, V2, ...]. If they are present, the output will be a sum of 
+          vectors rather than scalars. Only the middle dimensions [I1, ..., Ik] are reduced by the operation.
 
     Args:
         values (:obj:`torch.Tensor` of shape [B1, B2, ..., Bn, I1, .., Ik, V1, V2, ..]):
@@ -1698,13 +1714,16 @@ def reduce_sum(values, index, name="segmented_reduce_sum"):
 
 def reduce_mean(values, index, name="segmented_reduce_mean"):
     """
-    Averages a tensor over its segments. Outputs 0 for empty segments. This operations computes the mean over segments,
-    with support for:
-
-        - Batching using the first dimensions [B1, B2, ..., Bn]. Each element in
-        a batch can have different indices. - Vectorization using the last dimension [V1, V2, ...]. If they are present
-        the output will be a mean of vectors rather than scalars. Only the middle dimensions [I1, ..., Ik] are reduced
-        by the operation
+    Averages a tensor over its segments. 
+    
+    Outputs 0 for empty segments. 
+    
+    This operations computes the mean over segments, with support for:
+        - Batching using the first dimensions [B1, B2, ..., Bn]. Each element in a batch can have different indices. 
+        - Vectorization using the last dimension [V1, V2, ...]. If they are present, the output will be a mean of 
+          vectors rather than scalars. 
+        
+    Only the middle dimensions [I1, ..., Ik] are reduced by the operation.
 
     Args:
         values (:obj:`torch.Tensor` of shape [B1, B2, ..., Bn, I1, .., Ik, V1, V2, ..]):
@@ -1723,13 +1742,15 @@ def reduce_mean(values, index, name="segmented_reduce_mean"):
 
 def reduce_max(values, index, name="segmented_reduce_max"):
     """
-    Computes the maximum over segments. This operations computes the maximum over segments, with support for:
+    Computes the maximum over segments. 
+    
+    This operation computes the maximum over segments, with support for:
+        - Batching using the first dimensions [B1, B2, ..., Bn]. Each element in a batch can have different indices. 
+        - Vectorization using the last dimension [V1, V2, ...]. If they are present, the output will be an element-wise 
+          maximum of vectors rather than scalars. 
 
-        - Batching using the first dimensions [B1, B2, ..., Bn]. Each element in
-        a batch can have different indices. - Vectorization using the last dimension [V1, V2, ...]. If they are present
-        the output will be an element-wise maximum of vectors rather than scalars. Only the middle dimensions [I1, ...,
-        Ik] are reduced by the operation
-
+    Only the middle dimensions [I1, ..., Ik] are reduced by the operation.
+    
     Args:
         values (:obj:`torch.Tensor` of shape [B1, B2, ..., Bn, I1, .., Ik, V1, V2, ..]):
             Tensor containing the values of which the max must be taken segment-wise.
@@ -1747,12 +1768,14 @@ def reduce_max(values, index, name="segmented_reduce_max"):
 
 def reduce_min(values, index, name="segmented_reduce_min"):
     """
-    Computes the minimum over segments. This operations computes the maximum over segments, with support for:
-
-        - Batching using the first dimensions [B1, B2, ..., Bn]. Each element in
-        a batch can have different indices. - Vectorization using the last dimension [V1, V2, ...]. If they are present
-        the output will be an element-wise maximum of vectors rather than scalars. Only the middle dimensions [I1, ...,
-        Ik] are reduced by the operation
+    Computes the minimum over segments. 
+    
+    This operations computes the minimum over segments, with support for:
+        - Batching using the first dimensions [B1, B2, ..., Bn]. Each element in a batch can have different indices. 
+        - Vectorization using the last dimension [V1, V2, ...]. If they are present, the output will be an element-wise minimum 
+          of vectors rather than scalars. 
+        
+    Only the middle dimensions [I1, ..., Ik] are reduced by the operation.
 
     Args:
         values (:obj:`torch.Tensor` of shape [B1, B2, ..., Bn, I1, .., Ik, V1, V2, ..]):

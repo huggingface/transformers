@@ -85,8 +85,8 @@ class TapasConfig(PretrainedConfig):
         use_gumbel_for_aggregation: (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to apply Gumbel-Softmax to aggregation selection.
         average_approximation_function: (:obj:`string`, `optional`, defaults to :obj:`"ratio"`):
-            Method to calculate the expected average of cells in the weak supervision case. One of "ratio", 
-            "first_order" or "second_order".
+            Method to calculate the expected average of cells in the weak supervision case. One of :obj:`"ratio"`, 
+            :obj:`"first_order"` or :obj:`"second_order"`.
         cell_selection_preference: (:obj:`float`, `optional`):
             Preference for cell selection in ambiguous cases. Only applicable in case of weak supervision for
             aggregation (WTQ, WikiSQL). If the total mass of the aggregation probabilities (excluding the "NONE"
