@@ -461,7 +461,7 @@ class TrainingArguments:
         """
         The current mode used for parallelism if multiple GPUs/TPU cores are available. One of:
 
-        - :obj:`ParallelMode.NO`: no parallelism (CPU or one GPU).
+        - :obj:`ParallelMode.NOT_PARALLEL`: no parallelism (CPU or one GPU).
         - :obj:`ParallelMode.NOT_DISTRIBUTED`: several GPUs in one single process (uses :obj:`torch.nn.DataParallel`).
         - :obj:`ParallelMode.DISTRIBUTED`: several GPUs, each ahving its own process (uses
           :obj:`torch.nn.DistributedDataParallel`).
@@ -474,7 +474,7 @@ class TrainingArguments:
         elif self.n_gpu > 1:
             return ParallelMode.NOT_DISTRIBUTED
         else:
-            return ParallelMode.NO
+            return ParallelMode.NOT_PARALLEL
 
     def to_dict(self):
         """
@@ -507,7 +507,7 @@ class TrainingArguments:
 
 
 class ParallelMode(Enum):
-    NO = "no"
+    NOT_PARALLEL = "not_parallel"
     NOT_DISTRIBUTED = "not_distributed"
     DISTRIBUTED = "distributed"
     TPU = "tpu"
