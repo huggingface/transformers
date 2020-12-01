@@ -20,6 +20,7 @@ from typing import List, Optional, Tuple
 
 from tokenizers import normalizers
 
+from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...tokenization_utils import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
