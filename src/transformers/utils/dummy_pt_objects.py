@@ -634,6 +634,15 @@ class CamembertModel:
 CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class CTRLForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class CTRLLMHeadModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
