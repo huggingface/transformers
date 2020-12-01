@@ -2,6 +2,7 @@
 import math
 import os
 
+from .trainer_utils import EvaluationStrategy
 from .utils import logging
 
 
@@ -212,13 +213,13 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         # Check for `do_eval` and `eval_during_training` for schedulers that require intermediate reporting.
         if isinstance(
             kwargs["scheduler"], (ASHAScheduler, MedianStoppingRule, HyperBandForBOHB, PopulationBasedTraining)
-        ) and (not trainer.args.do_eval or not trainer.args.evaluate_during_training):
+        ) and (not trainer.args.do_eval or trainer.args.evaluation_strategy == EvaluationStrategy.NO):
             raise RuntimeError(
                 "You are using {cls} as a scheduler but you haven't enabled evaluation during training. "
                 "This means your trials will not report intermediate results to Ray Tune, and "
                 "can thus not be stopped early or used to exploit other trials parameters. "
                 "If this is what you want, do not use {cls}. If you would like to use {cls}, "
-                "make sure you pass `do_eval=True` and `evaluate_during_training=True` in the "
+                "make sure you pass `do_eval=True` and `evaluation_strategy='steps'` in the "
                 "Trainer `args`.".format(cls=type(kwargs["scheduler"]).__name__)
             )
 

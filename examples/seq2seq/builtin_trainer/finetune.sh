@@ -3,7 +3,8 @@
 python finetune_trainer.py \
     --learning_rate=3e-5 \
     --fp16 \
-    --do_train --do_eval --do_predict --evaluate_during_training \
+    --do_train --do_eval --do_predict \
+    --evaluation_strategy steps \
     --predict_with_generate \
     --n_val 1000 \
     "$@"
