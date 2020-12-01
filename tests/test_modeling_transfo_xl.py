@@ -57,6 +57,7 @@ class TransfoXLModelTester:
         self.seed = 1
         self.eos_token_id = 0
         self.num_labels = 3
+        self.pad_token_id = self.vocab_size - 1
 
     def prepare_config_and_inputs(self):
         input_ids_1 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -79,6 +80,7 @@ class TransfoXLModelTester:
             div_val=self.div_val,
             n_layer=self.num_hidden_layers,
             eos_token_id=self.eos_token_id,
+            pad_token_id=self.pad_token_id,
         )
 
         return (config, input_ids_1, input_ids_2, lm_labels)
