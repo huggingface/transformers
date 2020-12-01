@@ -776,7 +776,16 @@ class BatchEncoding(UserDict):
             :class:`~transformers.BatchEncoding`: The same instance of :class:`~transformers.BatchEncoding` after
             modification.
         """
-        self.data = {k: v.to(device) for k, v in self.data.items()}
+
+        # This check catches things like APEX blindly calling "to" on all inputs to a module
+        # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
+        # into a HalfTensor
+        if isinstance(device, str) or isinstance(device, torch.device):
+            self.data = {k: v.to(device=device) for k, v in self.data.items()}
+        else:
+            logger.warning(
+                f"Attempting to cast a BatchEncoding to another type, {str(device)}. This is not supported."
+            )
         return self
 
 
