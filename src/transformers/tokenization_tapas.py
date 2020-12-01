@@ -122,7 +122,7 @@ class TapasTokenizer(PreTrainedTokenizer):
     Users should refer to this superclass for more information regarding those methods.
     :class:`~transformers.TapasTokenizer` creates several token type ids to encode tabular structure. To be more
     precise, it adds 7 token type ids, in the following order: :obj:`segment_ids`, :obj:`column_ids`, :obj:`row_ids`,
-    :obj:`prev_label_ids`, :obj`column_ranks`, :obj`inv_column_ranks` and :obj:`numeric_relations`:
+    :obj:`prev_label_ids`, :obj:`column_ranks`, :obj:`inv_column_ranks` and :obj:`numeric_relations`:
 
     - segment_ids: indicate whether a token belongs to the question (0) or the table (1). 0 for special tokens and
       padding.
@@ -1769,7 +1769,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 Tensor containing the aggregation logits.
             cell_classification_threshold (:obj:`float`, `optional`, defaults to 0.5):
                 Threshold to be used for cell selection. All table cells for which their probability is larger than
-                this threshold will be selected
+                this threshold will be selected.
 
         Returns:
             :obj:`tuple` comprising various elements depending on the inputs: 

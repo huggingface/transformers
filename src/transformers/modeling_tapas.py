@@ -687,26 +687,34 @@ TAPAS_START_DOCSTRING = r"""
 TAPAS_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
-            Indices of input sequence tokens in the vocabulary. Indices can be obtained using
-            :class:`~transformers.TapasTokenizer`. See :meth:`transformers.PreTrainedTokenizer.encode` and
-            :meth:`transformers.PreTrainedTokenizer.__call__` for details. `What are input IDs?
-            <../glossary.html#input-ids>`__
+            Indices of input sequence tokens in the vocabulary.
+            Indices can be obtained using :class:`~transformers.TapasTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
+        
+            `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``: - 1 for
-            tokens that are **not masked**, - 0 for tokens that are **masked**. `What are attention masks?
-            <../glossary.html#attention-mask>`__
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0}, 7)`, `optional`):
-            Token indices that encode tabular structure. Indices can be obtained using
-            :class:`~transformers.TapasTokenizer`. See this class for more info. `What are token type IDs?
-            <../glossary.html#token-type-ids>`_
+            Token indices that encode tabular structure. Indices can be obtained using :class:`~transformers.TapasTokenizer`. 
+            See this class for more info.
+            
+            `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings. If
-            ``reset_position_index_per_cell`` of :class:`~transformers.TapasConfig` is set to ``True``, relative
-            position embeddings will be used. Selected in the range ``[0, config.max_position_embeddings - 1]``. `What
-            are position IDs? <../glossary.html#position-ids>`_
+            Indices of positions of each input sequence tokens in the position embeddings. If ``reset_position_index_per_cell`` 
+            of :class:`~transformers.TapasConfig` is set to ``True``, relative position embeddings will be used. Selected in the 
+            range ``[0, config.max_position_embeddings - 1]``.
+            
+            `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``: - 1
-            indicates the head is **not masked**, - 0 indicates the head is **masked**.
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`({0}, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
@@ -790,8 +798,8 @@ class TapasModel(TapasPreTrainedModel):
             >>> from transformers import TapasTokenizer, TapasModel
             >>> import pandas as pd
 
-            >>> tokenizer = TapasTokenizer.from_pretrained('tapas-base-finetuned-wtq')
-            >>> model = TapasModel.from_pretrained('tapas-base-finetuned-wtq')
+            >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base-uncased')
+            >>> model = TapasModel.from_pretrained('google/tapas-base-uncased')
 
             >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 
             ...         'Age': ["56", "45", "59"], 
@@ -800,7 +808,7 @@ class TapasModel(TapasPreTrainedModel):
             >>> table = pd.DataFrame.from_dict(data)
             >>> queries = ["How many movies has George Clooney played in?", "How old is Brad Pitt?"]
 
-            >>> inputs = tokenizer(table, queries, return_tensors="pt")
+            >>> inputs = tokenizer(table=table, queries=queries, padding="max_length", return_tensors="pt")
             >>> outputs = model(**inputs)
 
             >>> last_hidden_states = outputs.last_hidden_state
@@ -925,8 +933,8 @@ class TapasForMaskedLM(TapasPreTrainedModel):
             >>> from transformers import TapasTokenizer, TapasForMaskedLM
             >>> import pandas as pd
 
-            >>> tokenizer = TapasTokenizer.from_pretrained('tapas-base')
-            >>> model = TapasForMaskedLM.from_pretrained('tapas-base')
+            >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base-uncased')
+            >>> model = TapasForMaskedLM.from_pretrained('google/tapas-base-uncased')
 
             >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 
             ...         'Age': ["56", "45", "59"], 
@@ -934,8 +942,8 @@ class TapasForMaskedLM(TapasPreTrainedModel):
             ... }
             >>> table = pd.DataFrame.from_dict(data)
 
-            >>> inputs = tokenizer(table, "How many [MASK] has George [MASK] played in?", return_tensors="pt")
-            >>> labels = tokenizer(table, "How many movies has George Clooney played in?", return_tensors="pt")["input_ids"]
+            >>> inputs = tokenizer(table=table, queries="How many [MASK] has George [MASK] played in?", return_tensors="pt")
+            >>> labels = tokenizer(table=table, queries="How many movies has George Clooney played in?", return_tensors="pt")["input_ids"]
 
             >>> outputs = model(**inputs, labels=labels)
             >>> last_hidden_states = outputs.last_hidden_state
@@ -1097,8 +1105,8 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             >>> from transformers import TapasTokenizer, TapasForQuestionAnswering
             >>> import pandas as pd
 
-            >>> tokenizer = TapasTokenizer.from_pretrained('tapas-base-finetuned-wtq')
-            >>> model = TapasForQuestionAnswering.from_pretrained('tapas-base-finetuned-wtq')
+            >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base-uncased-finetuned-wtq')
+            >>> model = TapasForQuestionAnswering.from_pretrained('google/tapas-base-uncased-finetuned-wtq')
 
             >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 
             ...         'Age': ["56", "45", "59"], 
@@ -1107,7 +1115,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             >>> table = pd.DataFrame.from_dict(data)
             >>> queries = ["How many movies has George Clooney played in?", "How old is Brad Pitt?"]
 
-            >>> inputs = tokenizer(table, queries, return_tensors="pt")
+            >>> inputs = tokenizer(table=table, queries=queries, padding="max_length", return_tensors="pt")
             >>> outputs = model(**inputs)
 
             >>> logits = outputs.logits
@@ -1178,9 +1186,9 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         # Table cells only, without question tokens and table headers.
         if table_mask is None:
             table_mask = torch.where(row_ids > 0, torch.ones_like(row_ids), torch.zeros_like(row_ids))
-        # torch.FloatTensor[batch_size, seq_length] there's probably a more elegant way to do the 4 lines below
-        input_mask_float = attention_mask.type(torch.FloatTensor).to(device)
-        table_mask_float = table_mask.type(torch.FloatTensor).to(device)
+        # torch.FloatTensor[batch_size, seq_length] 
+        input_mask_float = attention_mask.float().to(device)
+        table_mask_float = table_mask.float().to(device)
         # Mask for cells that exist in the table (i.e. that are not padding).
         cell_mask, _ = reduce_mean(input_mask_float, cell_index)
 
@@ -1388,8 +1396,8 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
             >>> import torch
             >>> import pandas as pd
 
-            >>> tokenizer = TapasTokenizer.from_pretrained('tapas-base-finetuned-tabfact')
-            >>> model = TapasForSequenceClassification.from_pretrained('tapas-base-finetuned-tabfact')
+            >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base-uncased-finetuned-tabfact')
+            >>> model = TapasForSequenceClassification.from_pretrained('google/tapas-base-uncased-finetuned-tabfact')
 
             >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 
             ...         'Age': ["56", "45", "59"], 
@@ -1398,7 +1406,7 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
             >>> table = pd.DataFrame.from_dict(data)
             >>> queries = ["There is only one actor who is 45 years old", "There are 3 actors which played in more than 60 movies"]
 
-            >>> inputs = tokenizer(table, queries, return_tensors="pt")
+            >>> inputs = tokenizer(table=table, queries=queries, padding="max_length", return_tensors="pt")
             >>> labels = torch.tensor([1, 0]) # 1 means entailed, 0 means refuted
 
             >>> outputs = model(**inputs, labels=labels)

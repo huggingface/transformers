@@ -73,14 +73,8 @@ Here we explain how you can fine-tune :class:`~transformers.TapasForQuestionAnsw
 STEP 1: Choose one of the 3 ways in which you can use TAPAS - or experiment
 ===========================================================================
 
-Basically, there are 2 options: either you start from an already-finetuned checkpoint, or you start with a pre-trained base 
-model and randomly initialized classification heads. In case your dataset is rather small (hundreds of training examples), 
-it's advised to start from an already fine-tuned checkpoint. Both pre-trained and fine-tuned checkpoints are available in the
-HuggingFace `model hub <https://huggingface.co/models?search=tapas>`__.
-
-
-There are 3 different ways in which one can fine-tune an already fine-tuned :class:`~transformers.TapasForQuestionAnswering` 
-checkpoint, corresponding to the different datasets on which Tapas was fine-tuned:
+Basically, there are 3 different ways in which one can fine-tune :class:`~transformers.TapasForQuestionAnswering`, corresponding to 
+the different datasets on which Tapas was fine-tuned:
 
 1. SQA: if you're interested in asking follow-up questions related to a table, in a conversational set-up. For example if you 
    first ask "what's the name of the first actor?" then you can ask a follow-up question such as "how old is he?". Here, questions 
@@ -105,20 +99,19 @@ To summarize:
 | Strong supervision for aggregation | WikiSQL-supervised   | Questions might involve aggregation, and the model must learn this given the gold aggregation operator            |
 +------------------------------------+----------------------+-------------------------------------------------------------------------------------------------------------------+
 
-Initializing an already fine-tuned model from the model hub is as easy as:
+Initializing a model with a pre-trained base and randomly initialized classification heads from the model hub is as easy as:
 
 .. code-block::
 
         >>> from transformers import TapasForQuestionAnswering
 
-        >>> # for example, the base sized model fine-tuned on WTQ
-        >>> model = TapasForQuestionAnswering.from_pretrained('tapas-base-finetuned-wtq')
+        >>> # for example, the base sized model 
+        >>> model = TapasForQuestionAnswering.from_pretrained('google/tapas-base-uncased')
 
 
-If you want to train the classification heads of :class:`~transformers.TapasForQuestionAnswering` from scratch, then you can actually 
-experiment, and you don't have to choose between one of these 3 options. You can define any hyperparameters you want when initializing 
-:class:`~transformers.TapasConfig`, and then create a :class:`~transformers.TapasForQuestionAnswering` based on that configuration. For 
-example, if you have a dataset that has both conversational questions and questions that might involve aggregation, then you can do it 
+Of course, you don't necessarily have to follow one these three ways in which TAPAS was fine-tuned. You can also experiment by defining any hyperparameters 
+you want when initializing :class:`~transformers.TapasConfig`, and then create a :class:`~transformers.TapasForQuestionAnswering` based on that 
+configuration. For example, if you have a dataset that has both conversational questions and questions that might involve aggregation, then you can do it 
 this way. Here's an example:
 
 .. code-block::
@@ -128,8 +121,12 @@ this way. Here's an example:
         >>> # you can initialize the classification heads any way you want (see docs of TapasConfig)
         >>> config = TapasConfig(num_aggregation_labels=3, average_logits_per_cell=True, select_one_column=False)
         >>> # initializing the pre-trained base sized model with our custom classification heads
-        >>> model = TapasForQuestionAnswering.from_pretrained('tapas-base', config=config)
+        >>> model = TapasForQuestionAnswering.from_pretrained('google/tapas-base-uncased', config=config)
 
+What you can also do is start from an already fine-tuned checkpoint. A note here is that the already fine-tuned checkpoint on WTQ has some issues
+due to the L2-loss which is somewhat brittle. See `here <https://github.com/google-research/tapas/issues/91#issuecomment-735719340>`__ for more info.
+
+For a list of all pre-trained and fine-tuned TAPAS checkpoints available in the HuggingFace model hub, see `here <https://huggingface.co/models?search=tapas>`__.
 
 ===========================================
 STEP 2: Prepare your data in the SQA format
@@ -184,7 +181,7 @@ Here's an example:
         >>> from transformers import TapasTokenizer
         >>> import pandas as pd
 
-        >>> model_name = 'tapas-base-finetuned-wtq'
+        >>> model_name = 'google/tapas-base-uncased'
         >>> tokenizer = TapasTokenizer.from_pretrained(model_name)
 
         >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], 'Number of movies': ["87", "53", "69"]}
@@ -249,7 +246,7 @@ You can then fine-tune :class:`~transformers.TapasForQuestionAnswering` using na
 
         >>> from transformers import TapasForQuestionAnswering
 
-        >>> model = TapasForQuestionAnswering.from_pretrained("tapas-base-finetuned-wtq")
+        >>> model = TapasForQuestionAnswering.from_pretrained("google/tapas-base-uncased")
 
         >>> for epoch in range(2):  # loop over the dataset multiple times
         ...    for idx, batch in enumerate(train_dataloader):
@@ -284,7 +281,7 @@ can be done in parallel on all table-question pairs of a batch. Here's an exampl
         >>> from transformers import TapasTokenizer, TapasForQuestionAnswering
         >>> import pandas as pd 
 
-        >>> model_name = 'tapas-base-finetuned-wtq'
+        >>> model_name = 'google/tapas-base-uncased-finetuned-wtq'
         >>> model = TapasForQuestionAnswering.from_pretrained(model_name)
         >>> tokenizer = TapasTokenizer.from_pretrained(model_name)
 
