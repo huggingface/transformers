@@ -8,7 +8,13 @@ from .tokenization_ctrl import CTRLTokenizer
 
 
 if is_torch_available():
-    from .modeling_ctrl import CTRL_PRETRAINED_MODEL_ARCHIVE_LIST, CTRLLMHeadModel, CTRLModel, CTRLPreTrainedModel
+    from .modeling_ctrl import (
+        CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        CTRLForSequenceClassification,
+        CTRLLMHeadModel,
+        CTRLModel,
+        CTRLPreTrainedModel,
+    )
 
 if is_tf_available():
     from .modeling_tf_ctrl import (
