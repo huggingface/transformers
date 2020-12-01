@@ -214,6 +214,7 @@ if is_sentencepiece_available():
     from .models.camembert import CamembertTokenizer
     from .models.marian import MarianTokenizer
     from .models.mbart import MBartTokenizer
+    from .models.mt5 import MT5Tokenizer
     from .models.pegasus import PegasusTokenizer
     from .models.reformer import ReformerTokenizer
     from .models.t5 import T5Tokenizer
@@ -240,6 +241,7 @@ if is_tokenizers_available():
     from .models.lxmert import LxmertTokenizerFast
     from .models.mbart import MBartTokenizerFast
     from .models.mobilebert import MobileBertTokenizerFast
+    from .models.mt5 import MT5TokenizerFast
     from .models.openai import OpenAIGPTTokenizerFast
     from .models.pegasus import PegasusTokenizerFast
     from .models.reformer import ReformerTokenizerFast

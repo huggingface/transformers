@@ -98,6 +98,7 @@ if is_sentencepiece_available():
     from ..camembert.tokenization_camembert import CamembertTokenizer
     from ..marian.tokenization_marian import MarianTokenizer
     from ..mbart.tokenization_mbart import MBartTokenizer
+    from ..mt5 import MT5Tokenizer
     from ..pegasus.tokenization_pegasus import PegasusTokenizer
     from ..reformer.tokenization_reformer import ReformerTokenizer
     from ..t5.tokenization_t5 import T5Tokenizer
@@ -111,6 +112,7 @@ else:
     CamembertTokenizer = None
     MarianTokenizer = None
     MBartTokenizer = None
+    MT5Tokenizer = None
     PegasusTokenizer = None
     ReformerTokenizer = None
     T5Tokenizer = None
@@ -135,6 +137,7 @@ if is_tokenizers_available():
     from ..lxmert.tokenization_lxmert_fast import LxmertTokenizerFast
     from ..mbart.tokenization_mbart_fast import MBartTokenizerFast
     from ..mobilebert.tokenization_mobilebert_fast import MobileBertTokenizerFast
+    from ..mt5 import MT5TokenizerFast
     from ..openai.tokenization_openai_fast import OpenAIGPTTokenizerFast
     from ..pegasus.tokenization_pegasus_fast import PegasusTokenizerFast
     from ..reformer.tokenization_reformer_fast import ReformerTokenizerFast
@@ -161,6 +164,7 @@ else:
     LxmertTokenizerFast = None
     MBartTokenizerFast = None
     MobileBertTokenizerFast = None
+    MT5TokenizerFast = None
     OpenAIGPTTokenizerFast = None
     PegasusTokenizerFast = None
     ReformerTokenizerFast = None
@@ -178,7 +182,7 @@ TOKENIZER_MAPPING = OrderedDict(
     [
         (RetriBertConfig, (RetriBertTokenizer, RetriBertTokenizerFast)),
         (T5Config, (T5Tokenizer, T5TokenizerFast)),
-        (MT5Config, (T5Tokenizer, T5TokenizerFast)),
+        (MT5Config, (MT5Tokenizer, MT5TokenizerFast)),
         (MobileBertConfig, (MobileBertTokenizer, MobileBertTokenizerFast)),
         (DistilBertConfig, (DistilBertTokenizer, DistilBertTokenizerFast)),
         (AlbertConfig, (AlbertTokenizer, AlbertTokenizerFast)),

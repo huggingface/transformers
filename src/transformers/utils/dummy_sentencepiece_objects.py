@@ -56,6 +56,15 @@ class MBartTokenizer:
         requires_sentencepiece(self)
 
 
+class MT5Tokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+
 class PegasusTokenizer:
     def __init__(self, *args, **kwargs):
         requires_sentencepiece(self)
