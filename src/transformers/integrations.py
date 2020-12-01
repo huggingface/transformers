@@ -72,8 +72,8 @@ except ImportError:
 
 try:
     import mlflow  # noqa: F401
-    from mlflow.utils.validation import MAX_PARAMS_TAGS_PER_BATCH as MLFLOW_MAX_PARAMS_TAGS_PER_BATCH  # noqa: F401
     from mlflow.utils.validation import MAX_PARAM_VAL_LENGTH as MLFLOW_MAX_PARAM_VAL_LENGTH  # noqa: F401
+    from mlflow.utils.validation import MAX_PARAMS_TAGS_PER_BATCH as MLFLOW_MAX_PARAMS_TAGS_PER_BATCH  # noqa: F401
 
     _has_mlflow = True
 except ImportError:
@@ -249,6 +249,7 @@ class TensorBoardCallback(TrainerCallback):
     """
     A :class:`~transformers.TrainerCallback` that sends the logs to `TensorBoard
     <https://www.tensorflow.org/tensorboard>`__.
+
 
     Args:
         tb_writer (:obj:`SummaryWriter`, `optional`):
