@@ -90,8 +90,11 @@ class ProphetNetConfig(PretrainedConfig):
         eps (:obj:`float`, `optional`, defaults to 0.0):
             Controls the ``epsilon`` parameter value for label smoothing in the loss calculation. If set to 0, no label
             smoothing is performed.
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not the model should return the last key/values attentions (not used by all models).
     """
     model_type = "prophetnet"
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
@@ -111,15 +114,16 @@ class ProphetNetConfig(PretrainedConfig):
         init_std=0.02,
         is_encoder_decoder=True,
         add_cross_attention=True,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
         decoder_start_token_id=0,
         ngram=2,
         num_buckets=32,
         relative_max_distance=128,
         disable_ngram_loss=False,
         eps=0.0,
+        use_cache=True,
+        pad_token_id=0,
+        bos_token_id=1,
+        eos_token_id=2,
         **kwargs
     ):
         super().__init__(
@@ -154,6 +158,8 @@ class ProphetNetConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         self.dropout = dropout
+
+        self.use_cache = use_cache
 
     @property
     def num_attention_heads(self) -> int:

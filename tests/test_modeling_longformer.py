@@ -129,7 +129,7 @@ class LongformerModelTester:
         output_without_mask = model(input_ids)["last_hidden_state"]
         self.parent.assertTrue(torch.allclose(output_with_mask[0, 0, :5], output_without_mask[0, 0, :5], atol=1e-4))
 
-    def create_and_check_longformer_model(
+    def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = LongformerModel(config=config)
@@ -141,7 +141,7 @@ class LongformerModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
-    def create_and_check_longformer_model_with_global_attention_mask(
+    def create_and_check_model_with_global_attention_mask(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = LongformerModel(config=config)
@@ -163,7 +163,7 @@ class LongformerModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
-    def create_and_check_longformer_for_masked_lm(
+    def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = LongformerForMaskedLM(config=config)
@@ -172,7 +172,7 @@ class LongformerModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_longformer_for_question_answering(
+    def create_and_check_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = LongformerForQuestionAnswering(config=config)
@@ -189,7 +189,7 @@ class LongformerModelTester:
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
-    def create_and_check_longformer_for_sequence_classification(
+    def create_and_check_for_sequence_classification(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
@@ -199,7 +199,7 @@ class LongformerModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
-    def create_and_check_longformer_for_token_classification(
+    def create_and_check_for_token_classification(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
@@ -209,7 +209,7 @@ class LongformerModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
-    def create_and_check_longformer_for_multiple_choice(
+    def create_and_check_for_multiple_choice(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_choices = self.num_choices
@@ -296,37 +296,41 @@ class LongformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_longformer_model(self):
+    def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_longformer_model(*config_and_inputs)
+        self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_longformer_model_attention_mask_determinism(self):
+    def test_model_attention_mask_determinism(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_attention_mask_determinism(*config_and_inputs)
 
-    def test_longformer_model_global_attention_mask(self):
+    def test_model_global_attention_mask(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_longformer_model_with_global_attention_mask(*config_and_inputs)
+        self.model_tester.create_and_check_model_with_global_attention_mask(*config_and_inputs)
 
-    def test_longformer_for_masked_lm(self):
+    def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_longformer_for_masked_lm(*config_and_inputs)
+        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
-    def test_longformer_for_question_answering(self):
+    def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_question_answering()
-        self.model_tester.create_and_check_longformer_for_question_answering(*config_and_inputs)
+        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_longformer_for_sequence_classification(*config_and_inputs)
+        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_longformer_for_token_classification(*config_and_inputs)
+        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_longformer_for_multiple_choice(*config_and_inputs)
+        self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
+
+    def test_retain_grad_hidden_states_attentions(self):
+        # longformer cannot keep gradients in attentions or hidden states
+        return
 
 
 @require_torch
@@ -691,7 +695,7 @@ class LongformerModelIntegrationTest(unittest.TestCase):
         )  # long input
         input_ids = input_ids.to(torch_device)
 
-        loss, prediction_scores = model(input_ids, labels=input_ids)
+        loss, prediction_scores = model(input_ids, labels=input_ids).to_tuple()
 
         expected_loss = torch.tensor(0.0074, device=torch_device)
         expected_prediction_scores_sum = torch.tensor(-6.1048e08, device=torch_device)

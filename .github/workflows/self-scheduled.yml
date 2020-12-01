@@ -9,7 +9,6 @@ on:
   push:
     branches:
       - ci_*
-      - framework-agnostic-tokenizers
   repository_dispatch:
   schedule:
     - cron: "0 0 * * *"
@@ -50,7 +49,7 @@ jobs:
         run: |
           source .env/bin/activate
           pip install --upgrade pip
-          pip install .[torch,sklearn,testing,onnxruntime]
+          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
           pip install git+https://github.com/huggingface/datasets
           pip list
 
@@ -144,7 +143,7 @@ jobs:
         run: |
           source .env/bin/activate
           pip install --upgrade pip
-          pip install .[tf,sklearn,testing,onnxruntime]
+          pip install .[tf,sklearn,testing,onnxruntime,sentencepiece]
           pip install git+https://github.com/huggingface/datasets
           pip list
 
@@ -223,7 +222,7 @@ jobs:
         run: |
           source .env/bin/activate
           pip install --upgrade pip
-          pip install .[torch,sklearn,testing,onnxruntime]
+          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
           pip install git+https://github.com/huggingface/datasets
           pip list
 
@@ -251,11 +250,11 @@ jobs:
           RUN_SLOW: yes
         run: |
           source .env/bin/activate
-          python -m pytest -n 1 --dist=loadfile -s --make-reports=examples_torch_multi_gpu examples
+          python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_torch_examples_multi_gpu examples
 
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/examples_torch_multi_gpu_failures_short.txt
+        run: cat reports/tests_torch_examples_multi_gpu_failures_short.txt
 
       - name: Run all pipeline tests on multi-GPU
         if: ${{ always() }}
@@ -314,7 +313,7 @@ jobs:
         run: |
           source .env/bin/activate
           pip install --upgrade pip
-          pip install .[tf,sklearn,testing,onnxruntime]
+          pip install .[tf,sklearn,testing,onnxruntime,sentencepiece]
           pip install git+https://github.com/huggingface/datasets
           pip list
 
@@ -345,11 +344,11 @@ jobs:
           RUN_PIPELINE_TESTS: yes
         run: |
           source .env/bin/activate
-          python -m pytest -n 1 --dist=loadfile -s -m is_pipeline_test --make-reports=tests_tf_pipelines_multi_gpu tests
+          python -m pytest -n 1 --dist=loadfile -s -m is_pipeline_test --make-reports=tests_tf_pipeline_multi_gpu tests
           
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/tests_tf_multi_gpu_pipelines_failures_short.txt
+        run: cat reports/tests_tf_pipeline_multi_gpu_failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}

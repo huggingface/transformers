@@ -138,6 +138,8 @@ class ReformerConfig(PretrainedConfig):
             :obj:`inputs_ids` passed when calling :class:`~transformers.ReformerModel`.
         tie_word_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to tie input and output embeddings.
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not the model should return the last key/values attentions (not used by all models).
 
     Examples::
 
@@ -153,6 +155,7 @@ class ReformerConfig(PretrainedConfig):
         >>> configuration = model.config
     """
     model_type = "reformer"
+    keys_to_ignore_at_inference = ["past_buckets_states"]
 
     def __init__(
         self,
@@ -187,6 +190,7 @@ class ReformerConfig(PretrainedConfig):
         pad_token_id=0,
         vocab_size=320,
         tie_word_embeddings=False,
+        use_cache=True,
         **kwargs
     ):
         super().__init__(
@@ -225,3 +229,4 @@ class ReformerConfig(PretrainedConfig):
         self.axial_norm_std = axial_norm_std
         self.chunk_size_lm_head = chunk_size_lm_head
         self.attn_layers = attn_layers
+        self.use_cache = use_cache

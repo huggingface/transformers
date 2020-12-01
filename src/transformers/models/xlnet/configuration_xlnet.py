@@ -15,6 +15,8 @@
 # limitations under the License.
 """ XLNet configuration """
 
+import warnings
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -106,12 +108,18 @@ class XLNetConfig(PretrainedConfig):
             Used in the SQuAD evaluation script.
         end_n_top (:obj:`int`, `optional`, defaults to 5):
             Used in the SQuAD evaluation script.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the model should return the last pre-computed hidden states.
+        use_mems_eval (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not the model should make use of the recurrent memory mechanism in evaluation mode.
+        use_mems_train (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not the model should make use of the recurrent memory mechanism in train mode.
 
             .. note::
-                This flag behaves differently from with other models: it just controls the inference behavior, during
-                training the model always uses ``use_cache=True``.
+                For pretraining, it is recommended to set ``use_mems_train`` to :obj:`True`. For fine-tuning, it is
+                recommended to set ``use_mems_train`` to :obj:`False` as discussed `here
+                <https://github.com/zihangdai/xlnet/issues/41#issuecomment-505102587>`__. If ``use_mems_train`` is set
+                to :obj:`True`, one has to make sure that the train batches are correctly pre-processed, `e.g.`
+                :obj:`batch_1 = [[This line is], [This is the]]` and :obj:`batch_2 = [[ the first line], [ second
+                line]]` and that all batches are of equal size.
 
     Examples::
 
@@ -128,6 +136,7 @@ class XLNetConfig(PretrainedConfig):
     """
 
     model_type = "xlnet"
+    keys_to_ignore_at_inference = ["mems"]
 
     def __init__(
         self,
@@ -144,6 +153,8 @@ class XLNetConfig(PretrainedConfig):
         dropout=0.1,
         mem_len=512,
         reuse_len=None,
+        use_mems_eval=True,
+        use_mems_train=False,
         bi_data=False,
         clamp_len=-1,
         same_length=False,
@@ -195,6 +206,16 @@ class XLNetConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
+
+        if "use_cache" in kwargs:
+            warnings.warn(
+                "The `use_cache` argument is deprecated and will be removed in a future version, use `use_mems_eval` instead.",
+                FutureWarning,
+            )
+            use_mems_eval = kwargs["use_cache"]
+
+        self.use_mems_eval = use_mems_eval
+        self.use_mems_train = use_mems_train
 
     @property
     def max_position_embeddings(self):

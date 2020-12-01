@@ -812,7 +812,34 @@ class TFLongformerForMaskedLM:
         requires_tf(self)
 
 
+class TFLongformerForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
 class TFLongformerForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFLongformerForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFLongformerForTokenClassification:
     def __init__(self, *args, **kwargs):
         requires_tf(self)
 
@@ -970,6 +997,15 @@ class TFMobileBertPreTrainedModel:
         requires_tf(self)
 
 
+class TFMT5EncoderModel:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
 class TFMT5ForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_tf(self)
@@ -1113,6 +1149,15 @@ class TFRobertaPreTrainedModel:
 
 
 TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFT5EncoderModel:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
 
 
 class TFT5ForConditionalGeneration:

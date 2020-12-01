@@ -67,7 +67,8 @@ FAIRSEQ_LANGUAGE_CODES = [
 
 class MBartTokenizerFast(XLMRobertaTokenizerFast):
     """
-    Construct a "fast" MBART tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" MBART tokenizer (backed by HuggingFace's `tokenizers` library). Based on `BPE
+    <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models>`__.
 
     :class:`~transformers.MBartTokenizerFast` is a subclass of :class:`~transformers.XLMRobertaTokenizerFast` and adds
     a new :meth:`~transformers.MBartTokenizerFast.prepare_seq2seq_batch`.
@@ -185,7 +186,7 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
         **kwargs,
     ) -> BatchEncoding:
         if max_length is None:
-            max_length = self.max_len
+            max_length = self.model_max_length
         self.set_src_lang_special_tokens(src_lang)
         model_inputs: BatchEncoding = self(
             src_texts,

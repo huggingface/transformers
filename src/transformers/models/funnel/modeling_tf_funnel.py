@@ -14,7 +14,6 @@
 # limitations under the License.
 """ TF 2.0 Funnel model. """
 
-import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -45,10 +44,10 @@ from ...modeling_tf_utils import (
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
+    input_processing,
     keras_serializable,
     shape_list,
 )
-from ...tokenization_utils import BatchEncoding
 from ...utils import logging
 from .configuration_funnel import FunnelConfig
 
@@ -784,7 +783,7 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
 
     def call(
         self,
-        inputs,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         inputs_embeds=None,
@@ -792,57 +791,54 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
+        **kwargs,
     ):
-        if isinstance(inputs, (tuple, list)):
-            input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
-            inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
-            output_attentions = inputs[4] if len(inputs) > 4 else output_attentions
-            output_hidden_states = inputs[5] if len(inputs) > 5 else output_hidden_states
-            return_dict = inputs[6] if len(inputs) > 6 else return_dict
-            assert len(inputs) <= 7, "Too many inputs."
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            input_ids = inputs.get("input_ids")
-            attention_mask = inputs.get("attention_mask", attention_mask)
-            token_type_ids = inputs.get("token_type_ids", token_type_ids)
-            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            output_attentions = inputs.get("output_attentions", output_attentions)
-            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            return_dict = inputs.get("return_dict", return_dict)
-            assert len(inputs) <= 7, "Too many inputs."
-        else:
-            input_ids = inputs
-
-        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
-        return_dict = return_dict if return_dict is not None else self.return_dict
-
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = shape_list(input_ids)
-        elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        if attention_mask is None:
-            attention_mask = tf.fill(input_shape, 1)
-        if token_type_ids is None:
-            token_type_ids = tf.fill(input_shape, 0)
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embeddings(input_ids, training=training)
-
-        encoder_outputs = self.encoder(
-            inputs_embeds,
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            kwargs_call=kwargs,
+        )
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
+
+        if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif inputs["input_ids"] is not None:
+            input_shape = shape_list(inputs["input_ids"])
+        elif inputs["inputs_embeds"] is not None:
+            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        if inputs["attention_mask"] is None:
+            inputs["attention_mask"] = tf.fill(input_shape, 1)
+
+        if inputs["token_type_ids"] is None:
+            inputs["token_type_ids"] = tf.fill(input_shape, 0)
+
+        if inputs["inputs_embeds"] is None:
+            inputs["inputs_embeds"] = self.embeddings(inputs["input_ids"], training=inputs["training"])
+
+        encoder_outputs = self.encoder(
+            inputs["inputs_embeds"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=inputs["training"],
         )
 
         return encoder_outputs
@@ -877,7 +873,7 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
 
     def call(
         self,
-        inputs,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         inputs_embeds=None,
@@ -885,64 +881,61 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
+        **kwargs,
     ):
-        if isinstance(inputs, (tuple, list)):
-            input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
-            inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
-            output_attentions = inputs[4] if len(inputs) > 4 else output_attentions
-            output_hidden_states = inputs[5] if len(inputs) > 5 else output_hidden_states
-            return_dict = inputs[6] if len(inputs) > 6 else return_dict
-            assert len(inputs) <= 7, "Too many inputs."
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            input_ids = inputs.get("input_ids")
-            attention_mask = inputs.get("attention_mask", attention_mask)
-            token_type_ids = inputs.get("token_type_ids", token_type_ids)
-            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            output_attentions = inputs.get("output_attentions", output_attentions)
-            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            return_dict = inputs.get("return_dict", return_dict)
-            assert len(inputs) <= 7, "Too many inputs."
-        else:
-            input_ids = inputs
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
-        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
-        return_dict = return_dict if return_dict is not None else self.return_dict
-
-        if input_ids is not None and inputs_embeds is not None:
+        if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = shape_list(input_ids)
-        elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+        elif inputs["input_ids"] is not None:
+            input_shape = shape_list(inputs["input_ids"])
+        elif inputs["inputs_embeds"] is not None:
+            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        if attention_mask is None:
-            attention_mask = tf.fill(input_shape, 1)
-        if token_type_ids is None:
-            token_type_ids = tf.fill(input_shape, 0)
+        if inputs["attention_mask"] is None:
+            inputs["attention_mask"] = tf.fill(input_shape, 1)
 
-        if inputs_embeds is None:
-            inputs_embeds = self.embeddings(input_ids, training=training)
+        if inputs["token_type_ids"] is None:
+            inputs["token_type_ids"] = tf.fill(input_shape, 0)
+
+        if inputs["inputs_embeds"] is None:
+            inputs["inputs_embeds"] = self.embeddings(inputs["input_ids"], training=inputs["training"])
 
         encoder_outputs = self.encoder(
-            inputs_embeds,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
+            inputs["inputs_embeds"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
             output_attentions=output_attentions,
             output_hidden_states=True,
             return_dict=return_dict,
-            training=training,
+            training=inputs["training"],
         )
 
         decoder_outputs = self.decoder(
             final_hidden=encoder_outputs[0],
             first_block_hidden=encoder_outputs[1][self.block_sizes[0]],
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1155,8 +1148,42 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    def call(self, inputs, **kwargs):
-        return self.funnel(inputs, **kwargs)
+    def call(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False,
+        **kwargs,
+    ):
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.funnel.return_dict
+
+        return self.funnel(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
+        )
 
 
 @add_start_docstrings(
@@ -1175,13 +1202,46 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    def call(self, inputs, **kwargs):
-        return self.funnel(inputs, **kwargs)
+    def call(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False,
+        **kwargs,
+    ):
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+
+        return self.funnel(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
 
 
 @add_start_docstrings(
     """
-    Funnel model with a binary classification head on top as used during pre-training for identifying generated tokens.
+    Funnel model with a binary classification head on top as used during pretraining for identifying generated tokens.
     """,
     FUNNEL_START_DOCSTRING,
 )
@@ -1196,7 +1256,7 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
     @replace_return_docstrings(output_type=TFFunnelForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        inputs,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         inputs_embeds=None,
@@ -1220,23 +1280,28 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors= "tf")
             >>> logits = model(inputs).logits
         """
-        return_dict = return_dict if return_dict is not None else self.funnel.return_dict
-
-        if inputs is None and "input_ids" in kwargs and isinstance(kwargs["input_ids"], (dict, BatchEncoding)):
-            warnings.warn(
-                "Using `input_ids` as a dictionary keyword argument is deprecated. Please use `inputs` instead."
-            )
-            inputs = kwargs["input_ids"]
-
-        discriminator_hidden_states = self.funnel(
-            inputs,
-            attention_mask,
-            token_type_ids,
-            inputs_embeds,
-            output_attentions,
-            output_hidden_states,
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
+            kwargs_call=kwargs,
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.funnel.return_dict
+        discriminator_hidden_states = self.funnel(
+            inputs["input_ids"],
+            inputs["attention_mask"],
+            inputs["token_type_ids"],
+            inputs["inputs_embeds"],
+            inputs["output_attentions"],
+            inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
         logits = self.discriminator_predictions(discriminator_sequence_output)
@@ -1268,7 +1333,7 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
     )
     def call(
         self,
-        inputs=None,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         inputs_embeds=None,
@@ -1277,6 +1342,7 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
         return_dict=None,
         labels=None,
         training=False,
+        **kwargs,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1284,29 +1350,34 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
             config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
         """
-        return_dict = return_dict if return_dict is not None else self.funnel.return_dict
-        if isinstance(inputs, (tuple, list)):
-            labels = inputs[7] if len(inputs) > 7 else labels
-            if len(inputs) > 7:
-                inputs = inputs[:7]
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            labels = inputs.pop("labels", labels)
-
-        outputs = self.funnel(
-            inputs,
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            labels=labels,
             training=training,
+            kwargs_call=kwargs,
         )
-
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.funnel.return_dict
+        outputs = self.funnel(
+            inputs["input_ids"],
+            inputs["attention_mask"],
+            inputs["token_type_ids"],
+            inputs["inputs_embeds"],
+            inputs["output_attentions"],
+            inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
+        )
         sequence_output = outputs[0]
-        prediction_scores = self.lm_head(sequence_output, training=training)
+        prediction_scores = self.lm_head(sequence_output, training=inputs["training"])
 
-        loss = None if labels is None else self.compute_loss(labels, prediction_scores)
+        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], prediction_scores)
 
         if not return_dict:
             output = (prediction_scores,) + outputs[1:]
@@ -1344,7 +1415,7 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
     )
     def call(
         self,
-        inputs=None,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         inputs_embeds=None,
@@ -1353,6 +1424,7 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
         return_dict=None,
         labels=None,
         training=False,
+        **kwargs,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1360,30 +1432,36 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.funnel.return_dict
-        if isinstance(inputs, (tuple, list)):
-            labels = inputs[7] if len(inputs) > 7 else labels
-            if len(inputs) > 7:
-                inputs = inputs[:7]
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            labels = inputs.pop("labels", labels)
-
-        outputs = self.funnel(
-            inputs,
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            labels=labels,
             training=training,
+            kwargs_call=kwargs,
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.funnel.return_dict
+        outputs = self.funnel(
+            inputs["input_ids"],
+            inputs["attention_mask"],
+            inputs["token_type_ids"],
+            inputs["inputs_embeds"],
+            inputs["output_attentions"],
+            inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
         )
 
         last_hidden_state = outputs[0]
         pooled_output = last_hidden_state[:, 0]
-        logits = self.classifier(pooled_output, training=training)
+        logits = self.classifier(pooled_output, training=inputs["training"])
 
-        loss = None if labels is None else self.compute_loss(labels, logits)
+        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1430,7 +1508,7 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
     )
     def call(
         self,
-        inputs,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         inputs_embeds=None,
@@ -1439,6 +1517,7 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
         return_dict=None,
         labels=None,
         training=False,
+        **kwargs,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1446,43 +1525,38 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
             num_choices]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
             :obj:`input_ids` above)
         """
-        if isinstance(inputs, (tuple, list)):
-            input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
-            inputs_embeds = inputs[3] if len(inputs) > 3 else inputs_embeds
-            output_attentions = inputs[4] if len(inputs) > 4 else output_attentions
-            output_hidden_states = inputs[5] if len(inputs) > 5 else output_hidden_states
-            return_dict = inputs[6] if len(inputs) > 6 else return_dict
-            labels = inputs[7] if len(inputs) > 7 else labels
-            assert len(inputs) <= 8, "Too many inputs."
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            input_ids = inputs.get("input_ids")
-            attention_mask = inputs.get("attention_mask", attention_mask)
-            token_type_ids = inputs.get("token_type_ids", token_type_ids)
-            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            output_attentions = inputs.get("output_attentions", output_attentions)
-            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            return_dict = inputs.get("return_dict", return_dict)
-            labels = inputs.get("labels", labels)
-            assert len(inputs) <= 8, "Too many inputs."
-        else:
-            input_ids = inputs
-        return_dict = return_dict if return_dict is not None else self.funnel.return_dict
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            labels=labels,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.funnel.return_dict
 
-        if input_ids is not None:
-            num_choices = shape_list(input_ids)[1]
-            seq_length = shape_list(input_ids)[2]
+        if inputs["input_ids"] is not None:
+            num_choices = shape_list(inputs["input_ids"])[1]
+            seq_length = shape_list(inputs["input_ids"])[2]
         else:
-            num_choices = shape_list(inputs_embeds)[1]
-            seq_length = shape_list(inputs_embeds)[2]
+            num_choices = shape_list(inputs["inputs_embeds"])[1]
+            seq_length = shape_list(inputs["inputs_embeds"])[2]
 
-        flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
-        flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
-        flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
+        flat_input_ids = tf.reshape(inputs["input_ids"], (-1, seq_length)) if inputs["input_ids"] is not None else None
+        flat_attention_mask = (
+            tf.reshape(inputs["attention_mask"], (-1, seq_length)) if inputs["attention_mask"] is not None else None
+        )
+        flat_token_type_ids = (
+            tf.reshape(inputs["token_type_ids"], (-1, seq_length)) if inputs["token_type_ids"] is not None else None
+        )
         flat_inputs_embeds = (
-            tf.reshape(inputs_embeds, (-1, seq_length, shape_list(inputs_embeds)[3]))
-            if inputs_embeds is not None
+            tf.reshape(inputs["inputs_embeds"], (-1, seq_length, shape_list(inputs["inputs_embeds"])[3]))
+            if inputs["inputs_embeds"] is not None
             else None
         )
 
@@ -1491,18 +1565,18 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
             attention_mask=flat_attention_mask,
             token_type_ids=flat_token_type_ids,
             inputs_embeds=flat_inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
             return_dict=return_dict,
-            training=training,
+            training=inputs["training"],
         )
 
         last_hidden_state = outputs[0]
         pooled_output = last_hidden_state[:, 0]
-        logits = self.classifier(pooled_output, training=training)
+        logits = self.classifier(pooled_output, training=inputs["training"])
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
 
-        loss = None if labels is None else self.compute_loss(labels, reshaped_logits)
+        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], reshaped_logits)
 
         if not return_dict:
             output = (reshaped_logits,) + outputs[1:]
@@ -1543,7 +1617,7 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
     )
     def call(
         self,
-        inputs=None,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         inputs_embeds=None,
@@ -1552,37 +1626,44 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
         return_dict=None,
         labels=None,
         training=False,
+        **kwargs,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
             1]``.
         """
-        return_dict = return_dict if return_dict is not None else self.funnel.return_dict
-        if isinstance(inputs, (tuple, list)):
-            labels = inputs[7] if len(inputs) > 7 else labels
-            if len(inputs) > 7:
-                inputs = inputs[:7]
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            labels = inputs.pop("labels", labels)
-
-        outputs = self.funnel(
-            inputs,
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            labels=labels,
             training=training,
+            kwargs_call=kwargs,
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.funnel.return_dict
+        outputs = self.funnel(
+            inputs["input_ids"],
+            inputs["attention_mask"],
+            inputs["token_type_ids"],
+            inputs["inputs_embeds"],
+            inputs["output_attentions"],
+            inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
         )
 
         sequence_output = outputs[0]
 
-        sequence_output = self.dropout(sequence_output, training=training)
+        sequence_output = self.dropout(sequence_output, training=inputs["training"])
         logits = self.classifier(sequence_output)
 
-        loss = None if labels is None else self.compute_loss(labels, logits)
+        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1622,7 +1703,7 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
     )
     def call(
         self,
-        inputs=None,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         inputs_embeds=None,
@@ -1632,6 +1713,7 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
         start_positions=None,
         end_positions=None,
         training=False,
+        **kwargs,
     ):
         r"""
         start_positions (:obj:`tf.Tensor` of shape :obj:`(batch_size,)`, `optional`):
@@ -1643,25 +1725,30 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
             Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
         """
-        return_dict = return_dict if return_dict is not None else self.funnel.return_dict
-        if isinstance(inputs, (tuple, list)):
-            start_positions = inputs[7] if len(inputs) > 7 else start_positions
-            end_positions = inputs[8] if len(inputs) > 8 else end_positions
-            if len(inputs) > 7:
-                inputs = inputs[:7]
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            start_positions = inputs.pop("start_positions", start_positions)
-            end_positions = inputs.pop("end_positions", start_positions)
-
-        outputs = self.funnel(
-            inputs,
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            start_positions=start_positions,
+            end_positions=end_positions,
             training=training,
+            kwargs_call=kwargs,
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.funnel.return_dict
+        outputs = self.funnel(
+            inputs["input_ids"],
+            inputs["attention_mask"],
+            inputs["token_type_ids"],
+            inputs["inputs_embeds"],
+            inputs["output_attentions"],
+            inputs["output_hidden_states"],
+            return_dict=return_dict,
+            training=inputs["training"],
         )
 
         sequence_output = outputs[0]
@@ -1672,8 +1759,8 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
         end_logits = tf.squeeze(end_logits, axis=-1)
 
         loss = None
-        if start_positions is not None and end_positions is not None:
-            labels = {"start_position": start_positions, "end_position": end_positions}
+        if inputs["start_positions"] is not None and inputs["end_positions"] is not None:
+            labels = {"start_position": inputs["start_positions"], "end_position": inputs["end_positions"]}
             loss = self.compute_loss(labels, (start_logits, end_logits))
 
         if not return_dict:

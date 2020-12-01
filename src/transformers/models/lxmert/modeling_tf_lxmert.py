@@ -16,7 +16,6 @@
 # limitations under the License.
 """ TF 2.0 LXMERT model. """
 
-
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
@@ -30,8 +29,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, keras_serializable, shape_list
-from ...tokenization_utils_base import BatchEncoding
+from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, input_processing, keras_serializable, shape_list
 from ...utils import logging
 from .configuration_lxmert import LxmertConfig
 
@@ -716,7 +714,7 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
 
     def call(
         self,
-        inputs,
+        input_ids=None,
         visual_feats=None,
         visual_pos=None,
         attention_mask=None,
@@ -727,60 +725,55 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
+        **kwargs,
     ):
-        if isinstance(inputs, (tuple, list)):
-            input_ids = inputs[0]
-            visual_feats = inputs[1] if len(inputs) > 1 else visual_feats
-            visual_pos = inputs[2] if len(inputs) > 2 else visual_pos
-            attention_mask = inputs[3] if len(inputs) > 3 else attention_mask
-            visual_attention_mask = inputs[4] if len(inputs) > 4 else visual_attention_mask
-            token_type_ids = inputs[5] if len(inputs) > 5 else token_type_ids
-            inputs_embeds = inputs[6] if len(inputs) > 6 else inputs_embeds
-            output_attentions = inputs[7] if len(inputs) > 7 else output_attentions
-            output_hidden_states = inputs[8] if len(inputs) > 8 else output_hidden_states
-            return_dict = inputs[9] if len(inputs) > 9 else return_dict
-            assert len(inputs) <= 10, "Too many inputs."
-        elif isinstance(inputs, dict):
-            input_ids = inputs.get("input_ids")
-            visual_feats = inputs.get("visual_feats", visual_feats)
-            visual_pos = inputs.get("visual_pos", visual_pos)
-            attention_mask = inputs.get("attention_mask", attention_mask)
-            visual_attention_mask = inputs.get("visual_attention_mask", visual_attention_mask)
-            token_type_ids = inputs.get("token_type_ids", token_type_ids)
-            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            output_attentions = inputs.get("output_attentions", output_attentions)
-            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            return_dict = inputs.get("return_dict", return_dict)
-            assert len(inputs) <= 10, "Too many inputs."
-        else:
-            input_ids = inputs
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
+            visual_feats=visual_feats,
+            visual_pos=visual_pos,
+            attention_mask=attention_mask,
+            visual_attention_mask=visual_attention_mask,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        output_attentions = (
+            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
+        )
+        output_hidden_states = (
+            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
-        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
-        return_dict = return_dict if return_dict is not None else self.return_dict
-
-        if input_ids is not None and inputs_embeds is not None:
+        if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = shape_list(input_ids)
-        elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+        elif inputs["input_ids"] is not None:
+            input_shape = shape_list(inputs["input_ids"])
+        elif inputs["inputs_embeds"] is not None:
+            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
-        if visual_pos is None or visual_feats is None:
+
+        if inputs["visual_pos"] is None or inputs["visual_feats"] is None:
             raise ValueError("visual_feats and visual_pos cannot be `None` in LXMERT's `call` method.")
 
-        if attention_mask is None:
-            attention_mask = tf.fill(input_shape, 1)
-        if token_type_ids is None:
-            token_type_ids = tf.fill(input_shape, 0)
+        if inputs["attention_mask"] is None:
+            inputs["attention_mask"] = tf.fill(input_shape, 1)
+
+        if inputs["token_type_ids"] is None:
+            inputs["token_type_ids"] = tf.fill(input_shape, 0)
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-        extended_attention_mask = attention_mask[:, tf.newaxis, tf.newaxis, :]
+        extended_attention_mask = inputs["attention_mask"][:, tf.newaxis, tf.newaxis, :]
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
@@ -791,8 +784,8 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
         extended_attention_mask = tf.cast(extended_attention_mask, tf.float32)
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
-        if visual_attention_mask is not None:
-            extended_visual_attention_mask = visual_attention_mask[:, tf.newaxis, tf.newaxis, :]
+        if inputs["visual_attention_mask"] is not None:
+            extended_visual_attention_mask = inputs["visual_attention_mask"][:, tf.newaxis, tf.newaxis, :]
 
             extended_visual_attention_mask = tf.cast(extended_visual_attention_mask, tf.float32)
             extended_visual_attention_mask = (1.0 - extended_visual_attention_mask) * -10000.0
@@ -800,17 +793,19 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
             extended_visual_attention_mask = None
 
         # Positional Word Embeddings
-        embedding_output = self.embeddings([input_ids, token_type_ids, inputs_embeds], training=training)
+        embedding_output = self.embeddings(
+            [inputs["input_ids"], inputs["token_type_ids"], inputs["inputs_embeds"]], training=inputs["training"]
+        )
 
         # Run Lxmert encoder
         encoder_outputs = self.encoder(
             embedding_output,
             extended_attention_mask,
-            visual_feats,
-            visual_pos,
+            inputs["visual_feats"],
+            inputs["visual_pos"],
             extended_visual_attention_mask,
             output_attentions=output_attentions,
-            training=training,
+            training=inputs["training"],
         )
         visual_encoder_outputs, lang_encoder_outputs = encoder_outputs[:2]
         vision_hidden_states = visual_encoder_outputs[0]
@@ -977,8 +972,50 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
         output_type=TFLxmertModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    def call(self, inputs, *args, **kwargs):
-        outputs = self.lxmert(inputs, *args, **kwargs)
+    def call(
+        self,
+        input_ids=None,
+        visual_feats=None,
+        visual_pos=None,
+        attention_mask=None,
+        visual_attention_mask=None,
+        token_type_ids=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False,
+        **kwargs,
+    ):
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
+            visual_feats=visual_feats,
+            visual_pos=visual_pos,
+            attention_mask=attention_mask,
+            visual_attention_mask=visual_attention_mask,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        outputs = self.lxmert(
+            input_ids=inputs["input_ids"],
+            visual_feats=inputs["visual_feats"],
+            visual_pos=inputs["visual_pos"],
+            attention_mask=inputs["attention_mask"],
+            visual_attention_mask=inputs["visual_attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
+
         return outputs
 
 
@@ -1139,7 +1176,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
         self.num_qa_labels = config.num_qa_labels
         self.visual_loss_normalizer = config.visual_loss_normalizer
 
-        # Use of pre-training tasks
+        # Use of pretraining tasks
         self.task_mask_lm = config.task_mask_lm
         self.task_obj_predict = config.task_obj_predict
         self.task_matched = config.task_matched
@@ -1228,7 +1265,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
     @replace_return_docstrings(output_type=TFLxmertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        inputs=None,
+        input_ids=None,
         visual_feats=None,
         visual_pos=None,
         attention_mask=None,
@@ -1242,6 +1279,8 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        training=False,
+        **kwargs,
     ):
         r"""
         masked_lm_labels (``tf.Tensor`` of shape ``(batch_size, sequence_length)``, `optional`):
@@ -1263,31 +1302,38 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
 
         Returns:
         """
-        if isinstance(inputs, (tuple, list)):
-            masked_lm_labels = inputs[7] if len(inputs) > 7 else masked_lm_labels
-            obj_labels = inputs[8] if len(inputs) > 8 else obj_labels
-            matched_label = inputs[9] if len(inputs) > 9 else matched_label
-            ans = inputs[10] if len(inputs) > 10 else ans
-            if len(inputs) > 10:
-                inputs = inputs[:10]
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            masked_lm_labels = inputs.pop("masked_lm_labels", masked_lm_labels)
-            obj_labels = inputs.pop("obj_labels", obj_labels)
-            matched_label = inputs.pop("matched_label", matched_label)
-            ans = inputs.pop("ans", ans)
-        return_dict = return_dict if return_dict is not None else self.lxmert.return_dict
-
-        lxmert_output = self.lxmert(
-            inputs,
+        inputs = input_processing(
+            func=self.call,
+            input_ids=input_ids,
             visual_feats=visual_feats,
             visual_pos=visual_pos,
             attention_mask=attention_mask,
             visual_attention_mask=visual_attention_mask,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
-            output_hidden_states=output_hidden_states,
+            masked_lm_labels=masked_lm_labels,
+            obj_labels=obj_labels,
+            matched_label=matched_label,
+            ans=ans,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.lxmert.return_dict
+        lxmert_output = self.lxmert(
+            input_ids=inputs["input_ids"],
+            visual_feats=inputs["visual_feats"],
+            visual_pos=inputs["visual_pos"],
+            attention_mask=inputs["attention_mask"],
+            visual_attention_mask=inputs["visual_attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
         )
 
         lang_output, visual_output, pooled_output = (
@@ -1303,29 +1349,34 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
 
         total_loss = (
             None
-            if (masked_lm_labels is None and matched_label is None and obj_labels is None and ans is None)
+            if (
+                inputs["masked_lm_labels"] is None
+                and inputs["matched_label"] is None
+                and inputs["obj_labels"] is None
+                and inputs["ans"] is None
+            )
             else tf.constant(0.0)
         )
         losses = ()
-        if masked_lm_labels is not None and self.task_mask_lm:
+        if inputs["masked_lm_labels"] is not None and self.task_mask_lm:
             masked_lm_loss = self.loss_fcts["ce"](
-                tf.reshape(masked_lm_labels, [-1]),
+                tf.reshape(inputs["masked_lm_labels"], [-1]),
                 tf.reshape(lang_prediction_scores, [-1, self.config.vocab_size]),
             )
             total_loss += masked_lm_loss
             losses += (masked_lm_loss,)
-        if matched_label is not None and self.task_matched:
+        if inputs["matched_label"] is not None and self.task_matched:
             matched_loss = self.loss_fcts["ce"](
-                tf.reshape(matched_label, [-1]),
+                tf.reshape(inputs["matched_label"], [-1]),
                 tf.reshape(cross_relationship_score, [-1, 2]),
             )
             total_loss += matched_loss
             losses += (matched_loss,)
-        if obj_labels is not None and self.task_obj_predict:
+        if inputs["obj_labels"] is not None and self.task_obj_predict:
             total_visn_loss = 0.0
             visn_prediction_scores_dict = self.obj_predict_head(visual_output)
             for key, key_info in self.visual_losses.items():
-                label, mask_conf = obj_labels[key]
+                label, mask_conf = inputs["obj_labels"][key]
                 output_dim = key_info["num"]
                 loss_fct_name = key_info["loss"]
                 label_shape = key_info["shape"]
@@ -1343,7 +1394,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
                 total_visn_loss += visn_loss
                 losses += (visn_loss,)
             total_loss += total_visn_loss
-        if ans is not None and self.task_qa:
+        if inputs["ans"] is not None and self.task_qa:
             answer_loss = self.loss_fcts["ce"](
                 tf.reshape(ans, [-1]), tf.reshape(answer_score, [-1, self.num_qa_labels])
             )

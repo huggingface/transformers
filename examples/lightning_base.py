@@ -4,11 +4,9 @@ import os
 from pathlib import Path
 from typing import Any, Dict
 
-import packaging
 import pytorch_lightning as pl
 from pytorch_lightning.utilities import rank_zero_info
 
-import pkg_resources
 from transformers import (
     AdamW,
     AutoConfig,
@@ -30,21 +28,12 @@ from transformers.optimization import (
     get_linear_schedule_with_warmup,
     get_polynomial_decay_schedule_with_warmup,
 )
+from transformers.utils.versions import require_version_examples
 
 
 logger = logging.getLogger(__name__)
 
-
-def require_min_ver(pkg, min_ver):
-    got_ver = pkg_resources.get_distribution(pkg).version
-    if packaging.version.parse(got_ver) < packaging.version.parse(min_ver):
-        logger.warning(
-            f"{pkg}>={min_ver} is required for a normal functioning of this module, but found {pkg}=={got_ver}. "
-            "Try: pip install -r examples/requirements.txt"
-        )
-
-
-require_min_ver("pytorch_lightning", "1.0.4")
+require_version_examples("pytorch_lightning>=1.0.4")
 
 MODEL_MODES = {
     "base": AutoModel,
@@ -384,6 +373,8 @@ def generic_train(
         train_params["distributed_backend"] = "ddp"
 
     train_params["accumulate_grad_batches"] = args.accumulate_grad_batches
+    train_params["accelerator"] = extra_train_kwargs.get("accelerator", None)
+    train_params["profiler"] = extra_train_kwargs.get("profiler", None)
 
     trainer = pl.Trainer.from_argparse_args(
         args,

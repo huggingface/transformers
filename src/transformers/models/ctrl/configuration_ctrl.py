@@ -61,6 +61,9 @@ class CTRLConfig(PretrainedConfig):
             The epsilon to use in the layer normalization layers
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not the model should return the last key/values attentions (not used by all models).
+
 
     Examples::
 
@@ -77,6 +80,7 @@ class CTRLConfig(PretrainedConfig):
     """
 
     model_type = "ctrl"
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
@@ -97,6 +101,7 @@ class CTRLConfig(PretrainedConfig):
         summary_activation=None,
         summary_proj_to_labels=True,
         summary_first_dropout=0.1,
+        use_cache=True,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -118,6 +123,7 @@ class CTRLConfig(PretrainedConfig):
         self.summary_activation = summary_activation
         self.summary_first_dropout = summary_first_dropout
         self.summary_proj_to_labels = summary_proj_to_labels
+        self.use_cache = use_cache
 
     @property
     def max_position_embeddings(self):

@@ -231,7 +231,9 @@ Here is an example of question answering using a model and a tokenizer. The proc
     ...     input_ids = inputs["input_ids"].tolist()[0]
     ...
     ...     text_tokens = tokenizer.convert_ids_to_tokens(input_ids)
-    ...     answer_start_scores, answer_end_scores = model(**inputs)
+    ...     outputs = model(**inputs)
+    ...     answer_start_scores = outputs.start_logits
+    ...     answer_end_scores = outputs.end_logits
     ...
     ...     answer_start = torch.argmax(
     ...         answer_start_scores
@@ -273,7 +275,9 @@ Here is an example of question answering using a model and a tokenizer. The proc
     ...     input_ids = inputs["input_ids"].numpy()[0]
     ...
     ...     text_tokens = tokenizer.convert_ids_to_tokens(input_ids)
-    ...     answer_start_scores, answer_end_scores = model(inputs)
+    ...     outputs = model(inputs)
+    ...     answer_start_scores = outputs.start_logits
+    ...     answer_end_scores = outputs.end_logits
     ...
     ...     answer_start = tf.argmax(
     ...         answer_start_scores, axis=1
@@ -301,7 +305,7 @@ Language modeling is the task of fitting a model to a corpus, which can be domai
 transformer-based models are trained using a variant of language modeling, e.g. BERT with masked language modeling,
 GPT-2 with causal language modeling.
 
-Language modeling can be useful outside of pre-training as well, for example to shift the model distribution to be
+Language modeling can be useful outside of pretraining as well, for example to shift the model distribution to be
 domain-specific: using a language model trained over a very large corpus, and then fine-tuning it to a news dataset or
 on scientific papers e.g. `LysandreJik/arxiv-nlp <https://huggingface.co/lysandre/arxiv-nlp>`__.
 

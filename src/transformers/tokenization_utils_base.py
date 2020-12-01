@@ -53,6 +53,15 @@ if is_torch_available():
 if is_flax_available():
     import jax.numpy as jnp
 
+
+def _is_numpy(x):
+    return isinstance(x, np.ndarray)
+
+
+def _is_jax(x):
+    return isinstance(x, jnp.ndarray)
+
+
 if is_tokenizers_available():
     from tokenizers import AddedToken
     from tokenizers import Encoding as EncodingFast
@@ -705,16 +714,20 @@ class BatchEncoding(UserDict):
                     "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
                 )
             as_tensor = tf.constant
+            is_tensor = tf.is_tensor
         elif tensor_type == TensorType.PYTORCH:
             if not is_torch_available():
                 raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
             as_tensor = torch.tensor
+            is_tensor = torch.is_tensor
         elif tensor_type == TensorType.JAX:
             if not is_flax_available():
                 raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
             as_tensor = jnp.array
+            is_tensor = _is_jax
         else:
             as_tensor = np.asarray
+            is_tensor = _is_numpy
         # (mfuntowicz: This code is unreachable)
         # else:
         #     raise ImportError(
@@ -727,16 +740,17 @@ class BatchEncoding(UserDict):
                 if prepend_batch_axis:
                     value = [value]
 
-                tensor = as_tensor(value)
+                if not is_tensor(value):
+                    tensor = as_tensor(value)
 
-                # Removing this for now in favor of controlling the shape with `prepend_batch_axis`
-                # # at-least2d
-                # if tensor.ndim > 2:
-                #     tensor = tensor.squeeze(0)
-                # elif tensor.ndim < 2:
-                #     tensor = tensor[None, :]
+                    # Removing this for now in favor of controlling the shape with `prepend_batch_axis`
+                    # # at-least2d
+                    # if tensor.ndim > 2:
+                    #     tensor = tensor.squeeze(0)
+                    # elif tensor.ndim < 2:
+                    #     tensor = tensor[None, :]
 
-                self[key] = tensor
+                    self[key] = tensor
             except:  # noqa E722
                 if key == "overflowing_tokens":
                     raise ValueError(
@@ -1594,13 +1608,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         raise NotImplementedError()
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *init_inputs, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], *init_inputs, **kwargs):
         r"""
         Instantiate a :class:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase` (or a derived class) from
         a predefined tokenizer.
 
         Args:
-            pretrained_model_name_or_path (:obj:`str`):
+            pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
                 Can be either:
 
                 - A string, the `model id` of a predefined tokenizer hosted inside a model repo on huggingface.co.
@@ -1612,7 +1626,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 - (**Deprecated**, not applicable to all derived classes) A path or url to a single saved vocabulary
                   file (if and only if the tokenizer only requires a single vocabulary file like Bert or XLNet), e.g.,
                   ``./my_model_directory/vocab.txt``.
-            cache_dir (:obj:`str`, `optional`):
+            cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
                 Path to a directory in which a downloaded predefined tokenizer vocabulary files should be cached if the
                 standard cache should not be used.
             force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -1669,6 +1683,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         subfolder = kwargs.pop("subfolder", None)
 
         s3_models = list(cls.max_model_input_sizes.keys())
+        pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         vocab_files = {}
         init_configuration = {}
         if pretrained_model_name_or_path in s3_models:
@@ -1890,7 +1905,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         return tokenizer
 
     def save_pretrained(
-        self, save_directory: str, legacy_format: bool = True, filename_prefix: Optional[str] = None
+        self,
+        save_directory: Union[str, os.PathLike],
+        legacy_format: bool = True,
+        filename_prefix: Optional[str] = None,
     ) -> Tuple[str]:
         """
         Save the full tokenizer state.
@@ -1910,7 +1928,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
            modifying :obj:`tokenizer.do_lower_case` after creation).
 
         Args:
-            save_directory (:obj:`str`): The path to a directory where the tokenizer will be saved.
+            save_directory (:obj:`str` or :obj:`os.PathLike`): The path to a directory where the tokenizer will be saved.
             legacy_format (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether to save the tokenizer in legacy format (default), i.e. with tokenizer specific vocabulary and a
                 separate added_tokens files or in the unified JSON file format for the `tokenizers` library. It's only
@@ -1974,7 +1992,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
     def _save_pretrained(
         self,
-        save_directory: str,
+        save_directory: Union[str, os.PathLike],
         file_names: Tuple[str],
         legacy_format: bool = True,
         filename_prefix: Optional[str] = None,
@@ -2586,7 +2604,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
                 Instead of :obj:`List[int]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors),
                 see the note above for the return type.
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
+            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
 
