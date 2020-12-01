@@ -1,4 +1,3 @@
-
 # How to contribute to transformers?
 
 Everyone is welcome to contribute, and we value everybody's contribution. Code
