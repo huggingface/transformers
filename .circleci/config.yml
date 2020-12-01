@@ -11,12 +11,18 @@ commands:
       - run:
           name: docs-only changes skip check
           command: |
-            if git diff --name-only << pipeline.git.base_revision >>...<< pipeline.git.revision >> | egrep -qv '\.(md|rst)$'
+            # pipeline.git.base_revision is not always defined, so only proceed if all external vars are defined
+            if test -n "<< pipeline.git.base_revision >>" && test -n "<< pipeline.git.revision >>"
             then
-                echo "Non-docs were modified in this PR, proceeding normally"
+                if git diff --name-only << pipeline.git.base_revision >>...<< pipeline.git.revision >> | egrep -qv '\.(md|rst)$'
+                then
+                    echo "Non-docs were modified in this PR, proceeding normally"
+                else
+                    echo "Only docs were modified in this PR, quitting this job"
+                    circleci step halt
+                fi
             else
-                echo "Only docs were modified in this PR, quitting this job"
-                circleci step halt
+                echo "Can't perform skipping check w/o base_revision defined, continuing the job"
             fi
 
 # TPU REFERENCES
@@ -88,7 +94,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            # - skip-job-on-doc-only-changes
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-torch_and_tf-{{ checksum "setup.py" }}
@@ -115,7 +121,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            # - skip-job-on-doc-only-changes
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
@@ -142,7 +148,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            # - skip-job-on-doc-only-changes
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-tf-{{ checksum "setup.py" }}
@@ -169,7 +175,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            # - skip-job-on-doc-only-changes
+            - skip-job-on-doc-only-changes
             - restore_cache:
                 keys:
                     - v0.4-flax-{{ checksum "setup.py" }}
@@ -196,7 +202,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            # - skip-job-on-doc-only-changes
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
@@ -223,7 +229,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            # - skip-job-on-doc-only-changes
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-tf-{{ checksum "setup.py" }}
@@ -248,7 +254,7 @@ jobs:
             RUN_CUSTOM_TOKENIZERS: yes
         steps:
             - checkout
-            # - skip-job-on-doc-only-changes
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-custom_tokenizers-{{ checksum "setup.py" }}
@@ -276,7 +282,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            # - skip-job-on-doc-only-changes
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-torch_examples-{{ checksum "setup.py" }}
