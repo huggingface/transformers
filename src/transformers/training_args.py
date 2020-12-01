@@ -457,15 +457,24 @@ class TrainingArguments:
 
     @property
     @torch_required
-    def distributed_env(self):
+    def parallel_mode(self):
+        """
+        The current mode used for parallelism if multiple GPUs/TPU cores are available. One of:
+
+        - :obj:`ParallelMode.NO`: no parallelism (CPU or one GPU).
+        - :obj:`ParallelMode.NOT_DISTRIBUTED`: several GPUs in one single process (uses :obj:`torch.nn.DataParallel`).
+        - :obj:`ParallelMode.DISTRIBUTED`: several GPUs, each ahving its own process (uses
+          :obj:`torch.nn.DistributedDataParallel`).
+        - :obj:`ParallelMode.TPU`: several TPU cores.
+        """
         if is_torch_tpu_available():
-            return DistributedEnvironment.TPU
+            return ParallelMode.TPU
         elif self.local_rank != -1:
-            return DistributedEnvironment.DISTRIBUTED_PARALLEL
+            return ParallelMode.DISTRIBUTED
         elif self.n_gpu > 1:
-            return DistributedEnvironment.PARALLEL
+            return ParallelMode.NOT_DISTRIBUTED
         else:
-            return DistributedEnvironment.SINGLE
+            return ParallelMode.NO
 
     def to_dict(self):
         """
@@ -497,8 +506,8 @@ class TrainingArguments:
         return {k: v if type(v) in valid_types else str(v) for k, v in d.items()}
 
 
-class DistributedEnvironment(Enum):
-    SINGLE = "single"
-    PARALLEL = "parallel"
-    DISTRIBUTED_PARALLEL = "distributed_parallel"
+class ParallelMode(Enum):
+    NO = "no"
+    NOT_DISTRIBUTED = "not_distributed"
+    DISTRIBUTED = "distributed"
     TPU = "tpu"
