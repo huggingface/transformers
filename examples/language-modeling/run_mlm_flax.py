@@ -30,7 +30,7 @@ import sys
 from dataclasses import dataclass, field
 
 from flax.optim import Adam
-from typing import Optional
+from typing import Optional, List, Dict, Tuple
 
 from datasets import load_dataset
 from flax.training import common_utils
@@ -43,10 +43,9 @@ from transformers import (
     AutoConfig,
     FlaxBertForMaskedLM,
     AutoTokenizer,
-    DataCollatorForLanguageModeling,
     HfArgumentParser,
     TrainingArguments,
-    set_seed,
+    set_seed, PreTrainedTokenizerBase, TensorType,
 )
 
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_LM_MAPPING.keys())
@@ -146,50 +145,189 @@ class DataTrainingArguments:
                 assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
 
 
+# Adapted from transformers/data/data_collator.py
+# Letting here for now, let's discuss where it should live
+@dataclass
+class FlaxDataCollatorForLanguageModeling:
+    """
+    Data collator used for language modeling. Inputs are dynamically padded to the maximum length of a batch if they
+    are not all of the same length.
+
+    Args:
+        tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
+            The tokenizer used for encoding the data.
+        mlm (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to use masked language modeling. If set to :obj:`False`, the labels are the same as the
+            inputs with the padding tokens ignored (by setting them to -100). Otherwise, the labels are -100 for
+            non-masked tokens and the value to predict for the masked token.
+        mlm_probability (:obj:`float`, `optional`, defaults to 0.15):
+            The probability with which to (randomly) mask tokens in the input, when :obj:`mlm` is set to :obj:`True`.
+
+    .. note::
+
+        For best performance, this data collator should be used with a dataset having items that are dictionaries or
+        BatchEncoding, with the :obj:`"special_tokens_mask"` key, as returned by a
+        :class:`~transformers.PreTrainedTokenizer` or a :class:`~transformers.PreTrainedTokenizerFast` with the
+        argument :obj:`return_special_tokens_mask=True`.
+    """
+
+    tokenizer: PreTrainedTokenizerBase
+    mlm: bool = True
+    mlm_probability: float = 0.15
+
+    def __post_init__(self):
+        if self.mlm and self.tokenizer.mask_token is None:
+            raise ValueError(
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. "
+                "You should pass `mlm=False` to train on causal language modeling instead."
+            )
+
+    def __call__(self, examples: List[Dict[str, np.ndarray]], pad_to_multiple_of: int) -> Dict[str, np.ndarray]:
+        # Handle dict or lists with proper padding and conversion to tensor.
+        batch = self.tokenizer.pad(examples, pad_to_multiple_of=pad_to_multiple_of, return_tensors=TensorType.NUMPY)
+
+        # If special token mask has been preprocessed, pop it from the dict.
+        special_tokens_mask = batch.pop("special_tokens_mask", None)
+        if self.mlm:
+            batch["input_ids"], batch["labels"] = self.mask_tokens(
+                batch["input_ids"], special_tokens_mask=special_tokens_mask
+            )
+        else:
+            labels = batch["input_ids"].copy()
+            if self.tokenizer.pad_token_id is not None:
+                labels[labels == self.tokenizer.pad_token_id] = -100
+            batch["labels"] = labels
+        return batch
+
+    def mask_tokens(self, inputs: np.ndarray, special_tokens_mask: Optional[np.ndarray]) -> Tuple[jnp.ndarray, jnp.ndarray]:
+        """
+        Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
+        """
+        labels = inputs.copy()
+        # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
+        probability_matrix = np.full(labels.shape, self.mlm_probability)
+        special_tokens_mask = special_tokens_mask.astype('bool')
+
+        probability_matrix[special_tokens_mask] = 0.0
+        masked_indices = np.random.binomial(1, probability_matrix).astype("bool")
+        labels[~masked_indices] = -100  # We only compute loss on masked tokens
+
+        # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+        indices_replaced = np.random.binomial(1, np.full(labels.shape, 0.8)).astype("bool") & masked_indices
+        inputs[indices_replaced] = self.tokenizer.convert_tokens_to_ids(self.tokenizer.mask_token)
+
+        # 10% of the time, we replace masked input tokens with random word
+        indices_random = np.random.binomial(1, np.full(labels.shape, 0.5)).astype("bool")
+        indices_random &= (masked_indices & ~indices_replaced)
+
+        random_words = np.random.randint(self.tokenizer.vocab_size, size=labels.shape, dtype="i4")
+        inputs[indices_random] = random_words[indices_random]
+
+        # The rest of the time (10% of the time) we keep the masked input tokens unchanged
+        return inputs, labels
+
+
+def create_learning_rate_scheduler(
+        factors="constant * linear_warmup * rsqrt_decay",
+        base_learning_rate=0.5,
+        warmup_steps=1000,
+        decay_factor=0.5,
+        steps_per_decay=20000,
+        steps_per_cycle=100000):
+    """Creates learning rate schedule.
+    Interprets factors in the factors string which can consist of:
+    * constant: interpreted as the constant value,
+    * linear_warmup: interpreted as linear warmup until warmup_steps,
+    * rsqrt_decay: divide by square root of max(step, warmup_steps)
+    * rsqrt_normalized_decay: divide by square root of max(step/warmup_steps, 1)
+    * decay_every: Every k steps decay the learning rate by decay_factor.
+    * cosine_decay: Cyclic cosine decay, uses steps_per_cycle parameter.
+    Args:
+      factors: string, factors separated by "*" that defines the schedule.
+      base_learning_rate: float, the starting constant for the lr schedule.
+      warmup_steps: int, how many steps to warm up for in the warmup schedule.
+      decay_factor: float, the amount to decay the learning rate by.
+      steps_per_decay: int, how often to decay the learning rate.
+      steps_per_cycle: int, steps per cycle when using cosine decay.
+    Returns:
+      a function learning_rate(step): float -> {"learning_rate": float}, the
+      step-dependent lr.
+    """
+    factors = [n.strip() for n in factors.split("*")]
+
+    def step_fn(step):
+        """Step to learning rate function."""
+        ret = 1.0
+        for name in factors:
+            if name == "constant":
+                ret *= base_learning_rate
+            elif name == "linear_warmup":
+                ret *= jnp.minimum(1.0, step / warmup_steps)
+            elif name == "rsqrt_decay":
+                ret /= jnp.sqrt(jnp.maximum(step, warmup_steps))
+            elif name == "rsqrt_normalized_decay":
+                ret *= jnp.sqrt(warmup_steps)
+                ret /= jnp.sqrt(jnp.maximum(step, warmup_steps))
+            elif name == "decay_every":
+                ret *= (decay_factor**(step // steps_per_decay))
+            elif name == "cosine_decay":
+                progress = jnp.maximum(0.0,
+                                       (step - warmup_steps) / float(steps_per_cycle))
+                ret *= jnp.maximum(0.0,
+                                   0.5 * (1.0 + jnp.cos(jnp.pi * (progress % 1.0))))
+            else:
+                raise ValueError("Unknown factor %s." % name)
+        return jnp.asarray(ret, dtype=jnp.float32)
+
+    return step_fn
+
+
+def cross_entropy(logits, targets, weights=None, label_smoothing=0.0):
+    """Compute cross entropy and entropy for log probs and targets.
+    Args:
+     logits: [batch, length, num_classes] float array.
+     targets: categorical targets [batch, length] int array.
+     weights: None or array of shape [batch, length]
+     label_smoothing: label smoothing constant, used to determine the on and off values.
+    Returns:
+      Tuple of scalar loss and batch normalizing factor.
+    """
+    if logits.ndim != targets.ndim + 1:
+        raise ValueError("Incorrect shapes. Got shape %s logits and %s targets" %
+                         (str(logits.shape), str(targets.shape)))
+    vocab_size = logits.shape[-1]
+    confidence = 1.0 - label_smoothing
+    low_confidence = (1.0 - confidence) / (vocab_size - 1)
+    normalizing_constant = -(
+            confidence * jnp.log(confidence) + (vocab_size - 1) *
+            low_confidence * jnp.log(low_confidence + 1e-20))
+    soft_targets = common_utils.onehot(targets, vocab_size, on_value=confidence, off_value=low_confidence)
+
+    loss = -jnp.sum(soft_targets * log_softmax(logits), axis=-1)
+    loss = loss - normalizing_constant
+
+    normalizing_factor = np.prod(targets.shape)
+
+    if weights is not None:
+        loss = loss * weights
+        normalizing_factor = weights.sum()
+
+    return loss.sum(), normalizing_factor
+
+
 @jax.jit
 def training_step(optimizer, batch):
-    # def one_hot(labels, num_classes):
-    #     x = labels[..., None] == jnp.arange(num_classes)[None]
-    #     return x.astype(jnp.float32)
-    #
-    # def cross_entropy(logits, labels):
-    #     return -jnp.mean(jnp.sum(one_hot(labels, config.vocab_size) * logits, axis=-1), axis=-1)
-    #
-
-    def cross_entropy(logits, targets, label_smoothing=0.0):
-        """Compute cross entropy and entropy for log probs and targets.
-        Args:
-         logits: [batch, length, num_classes] float array.
-         targets: categorical targets [batch, length] int array.
-         label_smoothing: label smoothing constant, used to determine the on and off values.
-        Returns:
-          Tuple of scalar loss and batch normalizing factor.
-        """
-        if logits.ndim != targets.ndim + 1:
-            raise ValueError("Incorrect shapes. Got shape %s logits and %s targets" %
-                             (str(logits.shape), str(targets.shape)))
-        vocab_size = logits.shape[-1]
-        confidence = 1.0 - label_smoothing
-        low_confidence = (1.0 - confidence) / (vocab_size - 1)
-        normalizing_constant = -(
-                confidence * jnp.log(confidence) + (vocab_size - 1) *
-                low_confidence * jnp.log(low_confidence + 1e-20))
-        soft_targets = common_utils.onehot(targets, vocab_size, on_value=confidence, off_value=low_confidence)
-
-        loss = -jnp.sum(soft_targets * log_softmax(logits), axis=-1)
-        loss = loss - normalizing_constant
-
-        normalizing_factor = np.prod(targets.shape)
-        return loss.sum(), normalizing_factor
-
     def loss_fn(params):
         pooled, logits = model(batch["input_ids"], params=params)
-        loss, weight_sum = cross_entropy(logits, batch["labels"])
+        cross_entropy_mask = jnp.where(batch["labels"] == -100, 0.0, 1.0)
+        loss, weight_sum = cross_entropy(logits, batch["labels"], cross_entropy_mask)
         return loss / weight_sum
 
+    step = optimizer.state.step
+    lr = lr_scheduler_fn(step)
     grad_fn = jax.value_and_grad(loss_fn)
     loss, grad = grad_fn(optimizer.target)
-    optimizer = optimizer.apply_gradient(grad)
+    optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
 
     return loss, optimizer
 
@@ -231,6 +369,7 @@ if __name__ == "__main__":
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
+
     # Set the verbosity to info of the Transformers logger (on main process only):
     logger.info("Training/evaluation parameters %s", training_args)
 
@@ -304,6 +443,7 @@ if __name__ == "__main__":
         examples["text"] = [line for line in examples["text"] if len(line) > 0 and not line.isspace()]
         return tokenizer(
             examples["text"],
+            return_special_tokens_mask=True,
             padding=padding,
             truncation=True,
             max_length=data_args.max_seq_length
@@ -314,12 +454,12 @@ if __name__ == "__main__":
         batched=True,
         num_proc=data_args.preprocessing_num_workers,
         remove_columns=[text_column_name],
-        load_from_cache_file=not data_args.overwrite_cache,
+        load_from_cache_file=not data_args.overwrite_cache
     )
 
     # Data collator
     # This one will take care of randomly masking the tokens.
-    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=data_args.mlm_probability)
+    data_collator = FlaxDataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=data_args.mlm_probability)
 
     # Initialize our training
     rng = jax.random.PRNGKey(training_args.seed)
@@ -334,16 +474,30 @@ if __name__ == "__main__":
         weight_decay=training_args.weight_decay
     ).create(model.params)
 
-    epochs = tqdm(range(int(training_args.num_train_epochs)), desc=f"Training... (0/{int(training_args.num_train_epochs)})")
-    for epoch in epochs:
-        samples_idx = np.random.choice(len(tokenized_datasets["train"]), (training_args.train_batch_size, ))
-        samples = [tokenized_datasets["train"][idx.item()] for idx in samples_idx]
-        model_inputs = data_collator(samples)
+    # Create learning rate scheduler
+    lr_scheduler_fn = create_learning_rate_scheduler(base_learning_rate=training_args.learning_rate)
 
-        # Model forward
-        # TODO: Remove this conversion by replacing the collator
-        model_inputs = {var_name: tensor.numpy() for var_name, tensor in model_inputs.items()}
-        loss, optimizer = training_step(optimizer, model_inputs)
+    epochs = tqdm(range(int(training_args.num_train_epochs)), desc=f"Training...")
+    for epoch in epochs:
+        # Create sampling rng
+        rng, training_rng, eval_rng = jax.random.split(rng, 3)
+
+        # Generate an epoch by shuffling sampling indices from the train dataset
+        nb_training_samples = len(tokenized_datasets["train"])
+        training_samples_idx = jax.random.permutation(training_rng, jnp.arange(nb_training_samples))
+        training_sections_split = (nb_training_samples // training_args.train_batch_size) + 1
+
+        training_batch_idx = jnp.array_split(training_samples_idx, training_sections_split)
+
+        # Gather the indexes for creating the batch and do a training step
+        for batch_idx in tqdm(training_batch_idx, desc=f"Epoch {epoch + 1}"):
+            samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
+            model_inputs = data_collator(samples, pad_to_multiple_of=16)
+
+            # Model forward
+            # TODO: Remove this conversion by replacing the collator
+            # model_inputs = {var_name: tensor for var_name, tensor in model_inputs.items()}
+            loss, optimizer = training_step(optimizer, model_inputs.data)
 
         # Update progress bar
         epochs.desc = f"Training... ({epoch}/{int(training_args.num_train_epochs)}, Loss: {round(loss.item(), 4)})"
