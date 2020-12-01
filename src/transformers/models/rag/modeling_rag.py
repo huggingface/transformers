@@ -677,7 +677,9 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         ), "Either a configuration or an encoder and a generator has to be provided."
 
         if config is None:
-            config = RagConfig.from_encoder_generator_configs(question_encoder.config, generator.config, **kwargs)
+            config = RagConfig.from_question_encoder_generator_configs(
+                question_encoder.config, generator.config, **kwargs
+            )
         super().__init__(config)
 
         # instantiate model
@@ -1001,7 +1003,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
         ), "Either a configuration or an encoder and a generator has to be provided."
 
         if config is None:
-            config = RagConfig.from_encoder_generator_configs(question_encoder.config, generator.config, **kwargs)
+            config = RagConfig.from_question_encoder_generator_configs(
+                question_encoder.config, generator.config, **kwargs
+            )
 
         super().__init__(config)
 
