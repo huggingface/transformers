@@ -369,7 +369,13 @@ class AutoTokenizer:
             if tokenizer_class_fast and (use_fast or tokenizer_class_py is None):
                 return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
             else:
-                return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                if tokenizer_class_py is not None:
+                    return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                else:
+                    raise ValueError(
+                        "This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed "
+                        "in order to use this tokenizer."
+                    )
 
         raise ValueError(
             "Unrecognized configuration class {} to build an AutoTokenizer.\n"
