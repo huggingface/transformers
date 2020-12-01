@@ -72,6 +72,10 @@ except ImportError:
 
 try:
     import mlflow  # noqa: F401
+    from mlflow.utils.validation import MAX_BATCH_LOG_REQUEST_SIZE \
+        as MLFLOW_MAX_BATCH_LOG_REQUEST_SIZE
+    from mlflow.utils.validation import MAX_PARAM_VAL_LENGTH \
+        as MLFLOW_MAX_PARAM_VAL_LENGTH
 
     _has_mlflow = True
 except ImportError:
@@ -464,8 +468,6 @@ class MLflowCallback(TrainerCallback):
     A :class:`~transformers.TrainerCallback` that sends the logs to `MLflow <https://www.mlflow.org/>`__.
     """
 
-    MAX_LOG_SIZE = 100
-
     def __init__(self):
         assert _has_mlflow, "MLflowCallback requires mlflow to be installed. Run `pip install mlflow`."
         self._initialized = False
@@ -494,8 +496,8 @@ class MLflowCallback(TrainerCallback):
                 combined_dict = {**model_config, **combined_dict}
             # MLflow cannot log more than 100 values in one go, so we have to split it
             combined_dict_items = list(combined_dict.items())
-            for i in range(0, len(combined_dict_items), MLflowCallback.MAX_LOG_SIZE):
-                mlflow.log_params(dict(combined_dict_items[i : i + MLflowCallback.MAX_LOG_SIZE]))
+            for i in range(0, len(combined_dict_items), MLFLOW_MAX_BATCH_LOG_REQUEST_SIZE):
+                mlflow.log_params(dict(combined_dict_items[i : i + MLFLOW_MAX_BATCH_LOG_REQUEST_SIZE]))
         self._initialized = True
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
