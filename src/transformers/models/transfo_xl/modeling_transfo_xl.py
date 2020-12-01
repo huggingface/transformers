@@ -1188,7 +1188,7 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        print("&&&&&&&&&&&&&&&", input_ids)
+
         transformer_outputs = self.transformer(
             input_ids,
             mems=mems,
