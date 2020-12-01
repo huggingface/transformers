@@ -815,6 +815,10 @@ class ModelTesterMixin:
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             # Input ids should be clamped to the maximum size of the vocabulary
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+
+            # make sure that decoder_input_ids are resized as well
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
             # Check that adding and removing tokens has not modified the first part of the embedding matrix.

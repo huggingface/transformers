@@ -1363,6 +1363,9 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
     def get_output_embeddings(self):
         return self.lm_head
 
@@ -1371,6 +1374,19 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
     def get_decoder(self):
         return self.decoder
+
+    def _resize_token_embeddings(self, new_num_tokens):
+        old_input_embeddings = self.get_input_embeddings()
+        new_input_embeddings = self._get_resized_embeddings(old_input_embeddings, new_num_tokens)
+        self.set_input_embeddings(new_input_embeddings)
+
+        # if word embeddings are not tied, make sure that lm head is resized as well
+        if not self.config.tie_word_embeddings:
+            old_output_embeddings = self.get_output_embeddings()
+            new_output_embeddings = self._get_resized_embeddings(old_output_embeddings, new_num_tokens)
+            self.set_output_embeddings(new_output_embeddings)
+
+        return self.get_input_embeddings()
 
     @add_start_docstrings_to_model_forward(T5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
