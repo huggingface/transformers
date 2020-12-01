@@ -72,10 +72,8 @@ except ImportError:
 
 try:
     import mlflow  # noqa: F401
-    from mlflow.utils.validation import MAX_PARAMS_TAGS_PER_BATCH \
-        as MLFLOW_MAX_PARAMS_TAGS_PER_BATCH
-    from mlflow.utils.validation import MAX_PARAM_VAL_LENGTH \
-        as MLFLOW_MAX_PARAM_VAL_LENGTH
+    from mlflow.utils.validation import MAX_PARAMS_TAGS_PER_BATCH as MLFLOW_MAX_PARAMS_TAGS_PER_BATCH  # noqa: F401
+    from mlflow.utils.validation import MAX_PARAM_VAL_LENGTH as MLFLOW_MAX_PARAM_VAL_LENGTH  # noqa: F401
 
     _has_mlflow = True
 except ImportError:
@@ -503,7 +501,8 @@ class MLflowCallback(TrainerCallback):
                         '"%s" for key "%s" as a parameter. '
                         "MLflow's log_param() only accepts values no longer than"
                         "250 characters so we dropped this attribute.",
-                        value, name
+                        value,
+                        name,
                     )
                     del combined_dict[name]
             # MLflow cannot log more than 100 values in one go, so we have to split it
