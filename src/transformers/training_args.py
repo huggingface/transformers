@@ -189,6 +189,10 @@ class TrainingArguments:
         model_parallel (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If there are more than one devices, whether to use model parallelism to distribute the model's modules
             across devices or not.
+        ignore_skip_data (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
+            stage as in the previous training. If set to :obj:`True`, the training will begin faster (as that skipping
+            step can take a long time) but will not yield the same results as the interrupted training would have.
     """
 
     output_dir: str = field(
@@ -349,6 +353,12 @@ class TrainingArguments:
     )
     greater_is_better: Optional[bool] = field(
         default=None, metadata={"help": "Whether the `metric_for_best_model` should be maximized or not."}
+    )
+    ignore_data_skip: bool = field(
+        default=False,
+        metadata={
+            "help": "When resuming training, whether or not to skip the first epochs and batches to get to the same training data."
+        },
     )
 
     def __post_init__(self):
