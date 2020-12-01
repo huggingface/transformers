@@ -301,13 +301,10 @@ class TensorBoardCallback(TrainerCallback):
                     self.tb_writer.add_scalar(k, v, state.global_step)
                 else:
                     logger.warning(
-                        "Trainer is attempting to log a value of "
-                        '"%s" of type %s for key "%s" as a scalar. '
-                        "This invocation of Tensorboard's writer.add_scalar() "
-                        "is incorrect so we dropped this attribute.",
-                        v,
-                        type(v),
-                        k,
+                        f"Trainer is attempting to log a value of "
+                        f'"{v}" of type {type(v)} for key "{k}" as a scalar. '
+                        f"This invocation of Tensorboard's writer.add_scalar() "
+                        f"is incorrect so we dropped this attribute."
                     )
             self.tb_writer.flush()
 
@@ -497,12 +494,10 @@ class MLflowCallback(TrainerCallback):
                 # internally, all values are converted to str in MLflow
                 if len(str(value)) > MLFLOW_MAX_PARAM_VAL_LENGTH:
                     logger.warning(
-                        "Trainer is attempting to log a value of "
-                        '"%s" for key "%s" as a parameter. '
-                        "MLflow's log_param() only accepts values no longer than"
-                        "250 characters so we dropped this attribute.",
-                        value,
-                        name,
+                        f"Trainer is attempting to log a value of "
+                        f'"{value}" for key "{name}" as a parameter. '
+                        f"MLflow's log_param() only accepts values no longer than "
+                        f"250 characters so we dropped this attribute."
                     )
                     del combined_dict[name]
             # MLflow cannot log more than 100 values in one go, so we have to split it
@@ -524,13 +519,10 @@ class MLflowCallback(TrainerCallback):
                     mlflow.log_metric(k, v, step=state.global_step)
                 else:
                     logger.warning(
-                        "Trainer is attempting to log a value of "
-                        '"%s" of type %s for key "%s" as a metric. '
-                        "MLflow's log_metric() only accepts float and "
-                        "int types so we dropped this attribute.",
-                        v,
-                        type(v),
-                        k,
+                        f"Trainer is attempting to log a value of "
+                        f'"{v}" of type {type(v)} for key "{k}" as a metric. '
+                        f"MLflow's log_metric() only accepts float and "
+                        f"int types so we dropped this attribute."
                     )
 
     def on_train_end(self, args, state, control, **kwargs):
