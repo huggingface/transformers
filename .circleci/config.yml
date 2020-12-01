@@ -22,7 +22,7 @@ commands:
                     circleci step halt
                 fi
             else
-                echo "Can't perform skipping check w/o base_revision define, continue the job..."
+                echo "Can't perform skipping check w/o base_revision defined, continuing the job"
             fi
 
 # TPU REFERENCES
