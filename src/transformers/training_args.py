@@ -455,6 +455,18 @@ class TrainingArguments:
         """
         return self._setup_devices[1]
 
+    @property
+    @torch_required
+    def distributed_env(self):
+        if is_torch_tpu_available():
+            return DistributedEnvironment.TPU
+        elif self.local_rank != -1:
+            return DistributedEnvironment.DISTRIBUTED_PARALLEL
+        elif self.n_gpu > 1:
+            return DistributedEnvironment.PARALLEL
+        else:
+            return DistributedEnvironment.SINGLE
+
     def to_dict(self):
         """
         Serializes this instance while replace `Enum` by their values (for JSON serialization support).
@@ -483,3 +495,10 @@ class TrainingArguments:
             valid_types.append(torch.Tensor)
 
         return {k: v if type(v) in valid_types else str(v) for k, v in d.items()}
+
+
+class DistributedEnvironment(Enum):
+    SINGLE = "single"
+    PARALLEL = "parallel"
+    DISTRIBUTED_PARALLEL = "distributed_parallel"
+    TPU = "tpu"
