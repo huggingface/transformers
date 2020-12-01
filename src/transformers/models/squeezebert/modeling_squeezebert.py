@@ -328,28 +328,28 @@ class SqueezeBertEncoder(nn.Module):
         # [batch_size, sequence_length, hidden_size] --> [batch_size, hidden_size, sequence_length]
         hidden_states = hidden_states.permute(0, 2, 1)
 
-        all_hidden_states = (hidden_states,) if output_hidden_states else None
+        all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
         for layer in self.layers:
+
+            if output_hidden_states:
+                hidden_states = hidden_states.permute(0, 2, 1)
+                all_hidden_states += (hidden_states,)
+                hidden_states = hidden_states.permute(0, 2, 1)
+
             layer_output = layer.forward(hidden_states, attention_mask, output_attentions)
+
+            hidden_states = layer_output["feature_map"]
 
             if output_attentions:
                 all_attentions += (layer_output["attention_score"],)
-            if output_hidden_states:
-                all_hidden_states += (layer_output["feature_map"],)
-            hidden_states = layer_output["feature_map"]
-
-        # Transpose hidden states to be compatible with the standard format in Transformers.
-        if all_hidden_states:
-            old_all_hidden_states = all_hidden_states
-            all_hidden_states = ()
-            for hs in old_all_hidden_states:
-                # [batch_size, hidden_size, sequence_length] --> [batch_size, sequence_length, hidden_size]
-                all_hidden_states += (hs.permute(0, 2, 1),)
 
         # [batch_size, hidden_size, sequence_length] --> [batch_size, sequence_length, hidden_size]
         hidden_states = hidden_states.permute(0, 2, 1)
+
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
@@ -428,7 +428,7 @@ class SqueezeBertPreTrainedModel(PreTrainedModel):
 
     config_class = SqueezeBertConfig
     base_model_prefix = "transformer"
-    authorized_missing_keys = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -642,7 +642,7 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
 @add_start_docstrings("""SqueezeBERT Model with a `language modeling` head on top. """, SQUEEZEBERT_START_DOCSTRING)
 class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
 
-    authorized_missing_keys = [r"predictions.decoder.bias"]
+    _keys_to_ignore_on_load_missing = [r"predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)

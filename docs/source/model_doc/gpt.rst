@@ -14,7 +14,7 @@ The abstract from the paper is the following:
 *Natural language understanding comprises a wide range of diverse tasks such as textual entailment, question answering,
 semantic similarity assessment, and document classification. Although large unlabeled text corpora are abundant,
 labeled data for learning these specific tasks is scarce, making it challenging for discriminatively trained models to
-perform adequately. We demonstrate that large gains on these tasks can be realized by generative pre-training of a
+perform adequately. We demonstrate that large gains on these tasks can be realized by generative pretraining of a
 language model on a diverse corpus of unlabeled text, followed by discriminative fine-tuning on each specific task. In
 contrast to previous approaches, we make use of task-aware input transformations during fine-tuning to achieve
 effective transfer while requiring minimal changes to the model architecture. We demonstrate the effectiveness of our

@@ -667,9 +667,9 @@ class TransfoXLLMHeadModelOutput(ModelOutput):
 
     @property
     def logits(self):
-        # prediciton scores are the output of the adaptive softmax, see
+        # prediction scores are the output of the adaptive softmax, see
         # the file `modeling_transfo_xl_utilities`. Since the adaptive
-        # softmax returns the log softmax value, `self.prediciton_scores`
+        # softmax returns the log softmax value, `self.prediction_scores`
         # are strictly speaking not exactly `logits`, but behave the same
         # way logits do.
         return self.prediction_scores
@@ -886,7 +886,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
                 head_mask = head_mask.unsqueeze(1).unsqueeze(1).unsqueeze(1)
             head_mask = head_mask.to(
                 dtype=next(self.parameters()).dtype
-            )  # switch to fload if need + fp16 compatibility
+            )  # switch to float if need + fp16 compatibility
         else:
             head_mask = [None] * self.n_layer
 

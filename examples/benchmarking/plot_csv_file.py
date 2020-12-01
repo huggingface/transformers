@@ -25,7 +25,7 @@ class PlotArguments:
     )
     plot_along_batch: bool = field(
         default=False,
-        metadata={"help": "Whether to plot along batch size or sequence lengh. Defaults to sequence length."},
+        metadata={"help": "Whether to plot along batch size or sequence length. Defaults to sequence length."},
     )
     is_time: bool = field(
         default=False,

@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """TF general model utils."""
+
 import functools
+import inspect
 import os
 import re
 import warnings
@@ -27,8 +29,17 @@ from tensorflow.python.keras import backend as K
 from tensorflow.python.keras.saving import hdf5_format
 
 from .configuration_utils import PretrainedConfig
-from .file_utils import DUMMY_INPUTS, TF2_WEIGHTS_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_remote_url
+from .file_utils import (
+    DUMMY_INPUTS,
+    TF2_WEIGHTS_NAME,
+    WEIGHTS_NAME,
+    ModelOutput,
+    cached_path,
+    hf_bucket_url,
+    is_remote_url,
+)
 from .generation_tf_utils import TFGenerationMixin
+from .tokenization_utils_base import BatchEncoding
 from .utils import logging
 
 
@@ -236,6 +247,110 @@ class TFNextSentencePredictionLoss:
         return loss_fn(next_sentence_label, next_sentence_reduced_logits)
 
 
+def input_processing(func, input_ids, **kwargs):
+    signature = dict(inspect.signature(func).parameters)
+    signature.pop("kwargs", None)
+    parameter_names = list(signature.keys())
+    output = {}
+    allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict)
+
+    if "inputs" in kwargs["kwargs_call"]:
+        warnings.warn(
+            "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+            FutureWarning,
+        )
+
+        output["input_ids"] = kwargs["kwargs_call"].pop("inputs")
+
+    if "decoder_cached_states" in kwargs["kwargs_call"]:
+        warnings.warn(
+            "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+            FutureWarning,
+        )
+        output["past_key_values"] = kwargs["kwargs_call"].pop("decoder_cached_states")
+
+    if len(kwargs["kwargs_call"]) > 0:
+        raise ValueError(
+            f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
+        )
+
+    for k, v in kwargs.items():
+        if isinstance(v, allowed_types) or v is None:
+            output[k] = v
+        else:
+            raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
+
+    if isinstance(input_ids, (tuple, list)):
+        for i, input in enumerate(input_ids):
+            # EagerTensors don't allow to use the .name property so we check for a real Tensor
+            if type(input) == tf.Tensor:
+                # Tensor names have always the pattern name:device_id then we check only the
+                # name and not the device id
+                tensor_name = input.name.split(":")[0]
+
+                if tensor_name in parameter_names:
+                    output[tensor_name] = input
+                else:
+                    raise ValueError(
+                        f"The tensor named {input.name} does not belong to the authorized list of names {parameter_names}."
+                    )
+            elif isinstance(input, allowed_types) or input is None:
+                output[parameter_names[i]] = input
+            else:
+                raise ValueError(
+                    f"Data of type {type(input)} is not allowed only tf.Tensor is accepted for {parameter_names[i]}."
+                )
+    elif isinstance(input_ids, (dict, BatchEncoding)):
+        if "inputs" in input_ids:
+            warnings.warn(
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                FutureWarning,
+            )
+
+            output["input_ids"] = input_ids.pop("inputs")
+
+        if "decoder_cached_states" in input_ids:
+            warnings.warn(
+                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                FutureWarning,
+            )
+            output["past_key_values"] = input_ids.pop("decoder_cached_states")
+
+        for k, v in dict(input_ids).items():
+            if not isinstance(v, allowed_types):
+                raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
+            else:
+                output[k] = v
+    else:
+        if isinstance(input_ids, tf.Tensor) or input_ids is None:
+            output[parameter_names[0]] = input_ids
+        else:
+            raise ValueError(
+                f"Data of type {type(input_ids)} is not allowed only tf.Tensor is accepted for {parameter_names[0]}."
+            )
+
+    for name in parameter_names:
+        if name not in list(output.keys()) and name != "args":
+            output[name] = kwargs.pop(name, signature[name].default)
+
+    # When creating a SavedModel TF calls the method with LayerCall.__call__(args, **kwargs)
+    # So to respect the proper output we have to add this exception
+    if "args" in output:
+        if output["args"] is not None and type(output["args"]) == tf.Tensor:
+            tensor_name = output["args"].name.split(":")[0]
+            output[tensor_name] = output["args"]
+        else:
+            # `args` in this case is always the first parameter, then `input_ids`
+            output["input_ids"] = output["args"]
+
+        del output["args"]
+
+    if "kwargs" in output:
+        del output["kwargs"]
+
+    return output
+
+
 def load_tf_weights(model, resolved_archive_file):
     """
     Detect missing and unexpected layers and load the TF weights accordingly to their names and shapes.
@@ -343,15 +458,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
           :class:`~transformers.PretrainedConfig` to use as configuration class for this model architecture.
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.
-        - **authorized_missing_keys** (:obj:`List[str]`, `optional`) -- A list of re pattern of tensor names to ignore
-          from the model when loading the model weights (and avoid unnecessary warnings).
-        - **authorized_unexpected_keys** (:obj:`List[str]`, `optional`) -- A list of re pattern of tensor names to
-          ignore from the weights when loading the model weights (and avoid unnecessary warnings).
     """
     config_class = None
     base_model_prefix = ""
-    authorized_missing_keys = None
-    authorized_unexpected_keys = None
+    # a list of re pattern of tensor names to ignore from the model when loading the model weights
+    # (and avoid unnecessary warnings).
+    _keys_to_ignore_on_load_missing = None
+    # a list of re pattern of tensor names to ignore from the weights when loading the model weights
+    # (and avoid unnecessary warnings).
+    _keys_to_ignore_on_load_unexpected = None
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -385,6 +500,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             :obj:`tf.keras.layers.Layer`: A torch module mapping vocabulary to hidden states.
         """
         base_model = getattr(self, self.base_model_prefix, self)
+
         if base_model is not self:
             return base_model.get_input_embeddings()
         else:
@@ -742,12 +858,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
         model(model.dummy_inputs, training=False)  # Make sure restore ops are run
 
-        if cls.authorized_missing_keys is not None:
-            for pat in cls.authorized_missing_keys:
+        if cls._keys_to_ignore_on_load_missing is not None:
+            for pat in cls._keys_to_ignore_on_load_missing:
                 missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
 
-        if cls.authorized_unexpected_keys is not None:
-            for pat in cls.authorized_unexpected_keys:
+        if cls._keys_to_ignore_on_load_unexpected is not None:
+            for pat in cls._keys_to_ignore_on_load_unexpected:
                 unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
         if len(unexpected_keys) > 0:
@@ -1047,8 +1163,13 @@ def shape_list(tensor: tf.Tensor) -> List[int]:
     Returns:
         :obj:`List[int]`: The shape of the tensor as a list.
     """
-    static = tensor.shape.as_list()
     dynamic = tf.shape(tensor)
+
+    if tensor.shape == tf.TensorShape(None):
+        return dynamic.as_list()
+
+    static = tensor.shape.as_list()
+
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 

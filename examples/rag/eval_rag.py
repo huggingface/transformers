@@ -153,7 +153,7 @@ def get_args():
     parser.add_argument(
         "--index_name",
         default=None,
-        choices=["hf", "legacy"],
+        choices=["exact", "compressed", "legacy"],
         type=str,
         help="RAG model retriever type",
     )

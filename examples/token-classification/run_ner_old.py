@@ -291,7 +291,7 @@ def main():
         preds_list, _ = align_predictions(predictions, label_ids)
 
         output_test_results_file = os.path.join(training_args.output_dir, "test_results.txt")
-        if trainer.is_world_master():
+        if trainer.is_world_process_zero():
             with open(output_test_results_file, "w") as writer:
                 for key, value in metrics.items():
                     logger.info("  %s = %s", key, value)
@@ -299,7 +299,7 @@ def main():
 
         # Save predictions
         output_test_predictions_file = os.path.join(training_args.output_dir, "test_predictions.txt")
-        if trainer.is_world_master():
+        if trainer.is_world_process_zero():
             with open(output_test_predictions_file, "w") as writer:
                 with open(os.path.join(data_args.data_dir, "test.txt"), "r") as f:
                     token_classification_task.write_predictions_to_file(writer, f, preds_list)
