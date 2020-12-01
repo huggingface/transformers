@@ -72,8 +72,8 @@ except ImportError:
 
 try:
     import mlflow  # noqa: F401
-    from mlflow.utils.validation import MAX_BATCH_LOG_REQUEST_SIZE \
-        as MLFLOW_MAX_BATCH_LOG_REQUEST_SIZE
+    from mlflow.utils.validation import MAX_PARAMS_TAGS_PER_BATCH \
+        as MLFLOW_MAX_PARAMS_TAGS_PER_BATCH
     from mlflow.utils.validation import MAX_PARAM_VAL_LENGTH \
         as MLFLOW_MAX_PARAM_VAL_LENGTH
 
@@ -494,10 +494,22 @@ class MLflowCallback(TrainerCallback):
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config.to_dict()
                 combined_dict = {**model_config, **combined_dict}
+            # remove params that are too long for MLflow
+            for name, value in list(combined_dict.items()):
+                # internally, all values are converted to str in MLflow
+                if len(str(value)) > MLFLOW_MAX_PARAM_VAL_LENGTH:
+                    logger.warning(
+                        "Trainer is attempting to log a value of "
+                        '"%s" for key "%s" as a parameter. '
+                        "MLflow's log_param() only accepts values no longer than"
+                        "250 characters so we dropped this attribute.",
+                        value, name
+                    )
+                    del combined_dict[name]
             # MLflow cannot log more than 100 values in one go, so we have to split it
             combined_dict_items = list(combined_dict.items())
-            for i in range(0, len(combined_dict_items), MLFLOW_MAX_BATCH_LOG_REQUEST_SIZE):
-                mlflow.log_params(dict(combined_dict_items[i : i + MLFLOW_MAX_BATCH_LOG_REQUEST_SIZE]))
+            for i in range(0, len(combined_dict_items), MLFLOW_MAX_PARAMS_TAGS_PER_BATCH):
+                mlflow.log_params(dict(combined_dict_items[i : i + MLFLOW_MAX_PARAMS_TAGS_PER_BATCH]))
         self._initialized = True
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
