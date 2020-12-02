@@ -39,7 +39,7 @@ from .tokenization_utils_base import (
     PreTokenizedInput,
     TensorType,
     TextInput,
-    TruncationStrategy,
+    ExplicitEnum,
 )
 from .utils import logging
 
@@ -63,6 +63,16 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 PRETRAINED_INIT_CONFIGURATION = {
     # to be added
 }
+
+
+class TapasTruncationStrategy(ExplicitEnum):
+    """
+    Possible values for the ``truncation`` argument in :meth:`PreTrainedTokenizerBase.__call__`. Useful for
+    tab-completion in an IDE.
+    """
+
+    DROP_ROWS_TO_FIT = "drop_rows_to_fit"
+    DO_NOT_TRUNCATE = "do_not_truncate"
 
 
 TableValue = collections.namedtuple("TokenValue", ["token", "column_id", "row_id"])
@@ -424,7 +434,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         ] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         stride: int = 0,
         is_split_into_words: bool = False,
@@ -553,7 +563,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         answer_text: Optional[List[List[TextInput]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         stride: int = 0,
         is_split_into_words: bool = False,
@@ -568,16 +578,6 @@ class TapasTokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-
-        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            verbose=verbose,
-            **kwargs,
-        )
-
         if return_token_type_ids is not None and not add_special_tokens:
             raise ValueError(
                 "Asking to return token_type_ids while setting add_special_tokens to False "
@@ -606,9 +606,8 @@ class TapasTokenizer(PreTrainedTokenizer):
             answer_coordinates=answer_coordinates,
             answer_text=answer_text,
             add_special_tokens=add_special_tokens,
-            padding_strategy=padding_strategy,
-            truncation_strategy=truncation_strategy,
-            max_length=max_length,
+            padding=padding,
+            truncation=truncation,
             stride=stride,
             is_split_into_words=is_split_into_words,
             pad_to_multiple_of=pad_to_multiple_of,
@@ -633,9 +632,9 @@ class TapasTokenizer(PreTrainedTokenizer):
         ],
         answer_coordinates: Optional[List[List[Tuple]]] = None,
         answer_text: Optional[List[List[TextInput]]] = None,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TapasTruncationStrategy] = False,
         add_special_tokens: bool = True,
-        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
         is_split_into_words: bool = False,
@@ -650,7 +649,6 @@ class TapasTokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-
         table_tokens = self._tokenize_table(table)
 
         queries_tokens = []
@@ -660,28 +658,17 @@ class TapasTokenizer(PreTrainedTokenizer):
             queries_tokens.append(query_tokens)
             queries_ids.append(self.convert_tokens_to_ids(query_tokens))
 
-        num_rows = self._get_num_rows(table, self.drop_rows_to_fit)
-        num_columns = self._get_num_columns(table)
-
-        _, _, num_tokens = self._get_table_boundaries(table_tokens)
-
-        table_data = list(self._get_table_values(table_tokens, num_columns, num_rows, num_tokens))
-
-        table_ids = list(zip(*table_data))[0] if len(table_data) > 0 else list(zip(*table_data))
-        table_ids = self.convert_tokens_to_ids(list(table_ids))
-
         batch_outputs = self._batch_prepare_for_model(
-            table_ids,
-            queries_ids,
             table,
             queries,
-            table_data=table_data,
+            tokenized_table=table_tokens,
+            query_tokens=queries_tokens,
             queries_tokens=queries_tokens,
             answer_coordinates=answer_coordinates,
+            padding=padding,
+            truncation=truncation,
             answer_text=answer_text,
             add_special_tokens=add_special_tokens,
-            padding=padding_strategy.value,
-            truncation=truncation_strategy.value,
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
@@ -699,19 +686,19 @@ class TapasTokenizer(PreTrainedTokenizer):
 
     def _batch_prepare_for_model(
         self,
-        table_ids: List[int],
-        queries_ids: List[List[int]],
         raw_table: pd.DataFrame,
         raw_queries: Union[
             List[TextInput],
             List[PreTokenizedInput],
             List[EncodedInput],
         ],
+        tokenized_table=None, # TODO FILL THIS
+        queries_tokens=None, # TODO FILL THIS
         answer_coordinates: Optional[List[List[Tuple]]] = None,
         answer_text: Optional[List[List[TextInput]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         stride: int = 0,
         is_split_into_words: bool = False,
@@ -719,7 +706,6 @@ class TapasTokenizer(PreTrainedTokenizer):
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = True,
         return_attention_mask: Optional[bool] = True,
-        return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
         return_length: bool = False,
@@ -742,24 +728,12 @@ class TapasTokenizer(PreTrainedTokenizer):
         """
         batch_outputs = {}
 
-        if "table_data" in kwargs and "queries_tokens" in kwargs:
-            table_data = kwargs["table_data"]
-            queries_tokens = kwargs["queries_tokens"]
-        else:
-            table_data = None
-            queries_tokens = [None] * len(queries_ids)
-
-        for index, example in enumerate(zip(
-            queries_ids, raw_queries, queries_tokens, answer_coordinates, answer_text
-            )
-        ):
-            query_ids, raw_query, query_tokens, answer_coords, answer_txt = example
+        for index, example in enumerate(zip(raw_queries, queries_tokens, answer_coordinates, answer_text)):
+            raw_query, query_tokens, answer_coords, answer_txt = example
             outputs = self.prepare_for_model(
-                table_ids,
-                query_ids,
                 raw_table,
                 raw_query,
-                table_data=table_data,
+                tokenized_table=tokenized_table,
                 query_tokens=query_tokens,
                 answer_coordinates=answer_coords,
                 answer_text=answer_txt,
@@ -771,7 +745,6 @@ class TapasTokenizer(PreTrainedTokenizer):
                 pad_to_multiple_of=None,  # we pad in batch afterwards
                 return_attention_mask=False,  # we pad in batch afterwards
                 return_token_type_ids=return_token_type_ids,
-                return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,
                 return_length=return_length,
                 return_tensors=None,  # We convert the whole batch to tensors at the end
@@ -810,7 +783,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         ] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         stride: int = 0,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -844,7 +817,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         answer_text: Optional[List[TextInput]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         stride: int = 0,
         is_split_into_words: bool = False,
@@ -852,22 +825,12 @@ class TapasTokenizer(PreTrainedTokenizer):
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
         return_attention_mask: Optional[bool] = None,
-        return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            verbose=verbose,
-            **kwargs,
-        )
-
         if return_token_type_ids is not None and not add_special_tokens:
             raise ValueError(
                 "Asking to return token_type_ids while setting add_special_tokens to False "
@@ -894,8 +857,8 @@ class TapasTokenizer(PreTrainedTokenizer):
             answer_coordinates=answer_coordinates,
             answer_text=answer_text,
             add_special_tokens=add_special_tokens,
-            padding_strategy=padding_strategy,
-            truncation_strategy=truncation_strategy,
+            truncation=truncation,
+            padding=padding,
             max_length=max_length,
             stride=stride,
             is_split_into_words=is_split_into_words,
@@ -903,7 +866,6 @@ class TapasTokenizer(PreTrainedTokenizer):
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
             return_attention_mask=return_attention_mask,
-            return_overflowing_tokens=return_overflowing_tokens,
             return_special_tokens_mask=return_special_tokens_mask,
             return_offsets_mapping=return_offsets_mapping,
             return_length=return_length,
@@ -922,8 +884,8 @@ class TapasTokenizer(PreTrainedTokenizer):
         answer_coordinates: Optional[List[Tuple]] = None,
         answer_text: Optional[List[TextInput]] = None,
         add_special_tokens: bool = True,
-        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         stride: int = 0,
         is_split_into_words: bool = False,
@@ -931,7 +893,6 @@ class TapasTokenizer(PreTrainedTokenizer):
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = True,
         return_attention_mask: Optional[bool] = True,
-        return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
         return_length: bool = False,
@@ -948,29 +909,16 @@ class TapasTokenizer(PreTrainedTokenizer):
         table_tokens = self._tokenize_table(table)
         query_tokens = self.tokenize(query)
 
-        num_rows = self._get_num_rows(table, self.drop_rows_to_fit)
-        num_columns = self._get_num_columns(table)
-
-        _, _, num_tokens = self._get_table_boundaries(table_tokens)
-
-        table_data = list(self._get_table_values(table_tokens, num_columns, num_rows, num_tokens))
-
-        query_ids = self.convert_tokens_to_ids(query_tokens)
-        table_ids = list(zip(*table_data))[0] if len(table_data) > 0 else list(zip(*table_data))
-        table_ids = self.convert_tokens_to_ids(list(table_ids))
-
         return self.prepare_for_model(
-            table_ids,
-            query_ids,
             table,
             query,
-            table_data=table_data,
+            tokenized_table=table_tokens,
             query_tokens=query_tokens,
             answer_coordinates=answer_coordinates,
             answer_text=answer_text,
             add_special_tokens=add_special_tokens,
-            padding=padding_strategy.value,
-            truncation=truncation_strategy.value,
+            truncation=truncation, # TODO ENSURE THAT THE KWARGS ARE ALWAYS PLACES SIMILARLY
+            padding=padding,
             max_length=max_length,
             stride=stride,
             pad_to_multiple_of=pad_to_multiple_of,
@@ -978,7 +926,6 @@ class TapasTokenizer(PreTrainedTokenizer):
             prepend_batch_axis=True,
             return_attention_mask=return_attention_mask,
             return_token_type_ids=return_token_type_ids,
-            return_overflowing_tokens=return_overflowing_tokens,
             return_special_tokens_mask=return_special_tokens_mask,
             return_length=return_length,
             verbose=verbose,
@@ -986,19 +933,19 @@ class TapasTokenizer(PreTrainedTokenizer):
 
     def prepare_for_model(
         self,
-        table_ids: List[int],
-        query_ids: List[int],
         raw_table: pd.DataFrame,
         raw_query: Union[
             TextInput,
             PreTokenizedInput,
             EncodedInput,
         ],
+        tokenized_table=None, # TODO FILL THIS
+        query_tokens=None, # TODO FILL THIS
         answer_coordinates: Optional[List[Tuple]] = None,
         answer_text: Optional[List[TextInput]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = False,
+        truncation: Union[bool, str, TapasTruncationStrategy] = False,
         max_length: Optional[int] = None,
         stride: int = 0,
         is_split_into_words: bool = False,
@@ -1006,7 +953,6 @@ class TapasTokenizer(PreTrainedTokenizer):
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = True,
         return_attention_mask: Optional[bool] = True,
-        return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
         return_length: bool = False,
@@ -1014,16 +960,21 @@ class TapasTokenizer(PreTrainedTokenizer):
         prepend_batch_axis: bool = False,
         **kwargs
     ) -> BatchEncoding:
+        if isinstance(padding, bool):
+            if padding:
+                padding = PaddingStrategy.MAX_LENGTH
+            else:
+                padding = PaddingStrategy.DO_NOT_PAD
+        elif not isinstance(padding, PaddingStrategy):
+            padding = PaddingStrategy(padding)
 
-        # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
-        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            verbose=verbose,
-            **kwargs,
-        )
+        if isinstance(truncation, bool):
+            if truncation:
+                truncation = TapasTruncationStrategy.DROP_ROWS_TO_FIT
+            else:
+                truncation = TapasTruncationStrategy.DO_NOT_TRUNCATE
+        elif not isinstance(truncation, TapasTruncationStrategy):
+            padding = TapasTruncationStrategy(truncation)
 
         encoded_inputs = {}
 
@@ -1033,49 +984,39 @@ class TapasTokenizer(PreTrainedTokenizer):
             is_part_of_batch = True
             prev_answer_coordinates = kwargs["prev_answer_coordinates"]
             prev_answer_text = kwargs["prev_answer_text"]
-        
-        # This can be retrieved from the encoding step, which prevents recomputing.
-        # We still need to handle recomputing as `prepare_for_model` should be callable on raw IDs/table/query as well.
-        if (
-            "table_data" not in kwargs
-            or "query_tokens" not in kwargs
-            or (
-                ("table_data" in kwargs and kwargs["table_data"] is None)
-                and ("query_tokens" in kwargs and kwargs["query_tokens"] is None)
+
+        num_rows = self._get_num_rows(raw_table, self.drop_rows_to_fit)
+        num_columns = self._get_num_columns(raw_table)
+        _, _, num_tokens = self._get_table_boundaries(tokenized_table)
+
+        if truncation != TapasTruncationStrategy.DO_NOT_TRUNCATE and max_length:
+            num_rows, num_tokens = self.get_truncated_table_rows(  # TODO ADD A TEST FOR THIS
+                query_tokens,
+                tokenized_table,
+                num_rows,
+                num_columns,
+                max_length,
+                truncation_strategy=truncation,
             )
-        ):
-            table_tokens = self._tokenize_table(raw_table)
-            num_rows = self._get_num_rows(raw_table, self.drop_rows_to_fit)
-            num_columns = self._get_num_columns(raw_table)
-            _, _, num_tokens = self._get_table_boundaries(table_tokens)
-            table_data = list(self._get_table_values(table_tokens, num_columns, num_rows, num_tokens))
-            query_tokens = self.tokenize(raw_query)
-        else:
-            table_data = kwargs["table_data"]
-            query_tokens = kwargs["query_tokens"]
+        table_data = list(self._get_table_values(tokenized_table, num_columns, num_rows, num_tokens))
 
-        total_len = (
-            len(query_ids) + len(table_ids) + (self.num_special_tokens_to_add(pair=True) if add_special_tokens else 0)
-        )
+        query_ids = self.convert_tokens_to_ids(query_tokens)
+        table_ids = list(zip(*table_data))[0] if len(table_data) > 0 else list(zip(*table_data))
+        table_ids = self.convert_tokens_to_ids(list(table_ids))
 
-        overflowing_tokens = []
-        if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
-            query_ids, table_ids, overflowing_tokens = self.truncate_sequences(
-                query_ids,
-                pair_ids=table_ids,
-                num_tokens_to_remove=total_len - max_length,
-                truncation_strategy=truncation_strategy,
-                stride=stride,
-            )
-
-        if return_overflowing_tokens:
-            encoded_inputs["overflowing_tokens"] = overflowing_tokens
-            encoded_inputs["num_truncated_tokens"] = total_len - max_length
+        if "return_overflowing_tokens" in kwargs and kwargs["return_overflowing_tokens"]:
+            raise ValueError("TAPAS does not return overflowing tokens as it works on tables.")
 
         if add_special_tokens:
             input_ids = self.build_inputs_with_special_tokens(query_ids, table_ids)
         else:
             input_ids = query_ids + table_ids
+
+        if len(input_ids) > max_length:
+            raise ValueError(
+                "Could not encode the query and table header given the maximum length. Encoding the query and table"
+                f"header results in a length of {len(input_ids)} which is higher than the max_length of {max_length}"
+            )
 
         encoded_inputs["input_ids"] = input_ids
 
@@ -1156,11 +1097,11 @@ class TapasTokenizer(PreTrainedTokenizer):
             self.deprecation_warnings["sequence-length-is-longer-than-the-specified-maximum"] = True
 
         # Padding
-        if padding_strategy != PaddingStrategy.DO_NOT_PAD or return_attention_mask:
+        if padding != PaddingStrategy.DO_NOT_PAD or return_attention_mask:
             encoded_inputs = self.pad(
                 encoded_inputs,
                 max_length=max_length,
-                padding=padding_strategy.value,
+                padding=padding.value,
                 pad_to_multiple_of=pad_to_multiple_of,
                 return_attention_mask=return_attention_mask,
             )
@@ -1173,6 +1114,77 @@ class TapasTokenizer(PreTrainedTokenizer):
         )
 
         return batch_outputs
+
+    def get_truncated_table_rows(
+            self,
+            query_tokens, # TODO FILL THIS
+            tokenized_table, # TODO FILL THIS
+            num_rows, # TODO FILL THIS
+            num_columns, # TODO FILL THIS
+            max_length: int,
+            truncation_strategy: Union[str, TapasTruncationStrategy] = "drop_rows_to_fit",
+    ) -> Tuple[int, int]:
+        """
+        Truncates a sequence pair in-place following the strategy.
+
+        # TODO FILL DOCS
+
+        Args:
+            ids (:obj:`List[int]`):
+                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the ``tokenize``
+                and ``convert_tokens_to_ids`` methods.
+            pair_ids (:obj:`List[int]`, `optional`):
+                Tokenized input ids of the second sequence. Can be obtained from a string by chaining the ``tokenize``
+                and ``convert_tokens_to_ids`` methods.
+            num_tokens_to_remove (:obj:`int`, `optional`, defaults to 0):
+                Number of tokens to remove using the truncation strategy.
+            truncation_strategy (:obj:`str` or :class:`~transformers.tapas.TapasTruncationStrategy`, `optional`, defaults to :obj:`False`):
+                The strategy to follow for truncation. Can be:
+
+                * :obj:`'longest_first'`: Truncate to a maximum length specified with the argument :obj:`max_length` or
+                  to the maximum acceptable input length for the model if that argument is not provided. This will
+                  truncate token by token, removing a token from the longest sequence in the pair if a pair of
+                  sequences (or a batch of pairs) is provided.
+                * :obj:`'only_first'`: Truncate to a maximum length specified with the argument :obj:`max_length` or to
+                  the maximum acceptable input length for the model if that argument is not provided. This will only
+                  truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+                * :obj:`'only_second'`: Truncate to a maximum length specified with the argument :obj:`max_length` or
+                  to the maximum acceptable input length for the model if that argument is not provided. This will only
+                  truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
+                * :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
+                  greater than the model maximum admissible input size).
+            stride (:obj:`int`, `optional`, defaults to 0):
+                If set to a positive number, the overflowing tokens returned will contain some tokens from the main
+                sequence returned. The value of this argument defines the number of additional tokens.
+
+        Returns:
+            :obj:`Tuple[List[int], List[int], List[int]]`: The truncated ``ids``, the truncated ``pair_ids`` and the
+            list of overflowing tokens.
+        """
+        if not isinstance(truncation_strategy, TapasTruncationStrategy):
+            truncation_strategy = TapasTruncationStrategy(truncation_strategy)
+
+        if truncation_strategy == TapasTruncationStrategy.DROP_ROWS_TO_FIT:
+            while True:
+                num_tokens = self._get_max_num_tokens(
+                    query_tokens,
+                    tokenized_table,
+                    num_rows=num_rows,
+                    num_columns=num_columns,
+                    max_length=max_length
+                )
+
+                if num_tokens is not None:
+                    # We could fit the table.
+                    break
+
+                # Try to drop a row to fit the table.
+                num_rows -= 1
+
+                if num_rows < 1:
+                    break
+
+        return num_rows, num_tokens or 1
 
     def _tokenize_table(
         self,
@@ -1223,7 +1235,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         # Two extra spots of SEP and CLS.
         return len(question_tokens) + 2
 
-    def _get_token_budget(self, question_tokens):
+    def _get_token_budget(self, question_tokens, max_length=None):
         """
         Computes the number of tokens left for the table after tokenizing a question, taking into account the max
         sequence length of the model.
@@ -1233,7 +1245,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 List of question tokens. Returns: :obj:`int`: the number of tokens left for the table, given the model
                 max length.
         """
-        return self.model_max_length - self._question_encoding_cost(question_tokens)
+        return (max_length if max_length is not None else self.model_max_length) - self._question_encoding_cost(question_tokens)
 
     def _get_table_values(self, table, num_columns, num_rows, num_tokens) -> Generator[TableValue, None, None]:
         """Iterates over partial table and returns token, column and row indexes."""
@@ -1276,9 +1288,10 @@ class TapasTokenizer(PreTrainedTokenizer):
         tokenized_table,
         num_columns,
         num_rows,
+        max_length
     ):
         """Computes max number of tokens that can be squeezed into the budget."""
-        token_budget = self._get_token_budget(question_tokens)
+        token_budget = self._get_token_budget(question_tokens, max_length)
         _, _, max_num_tokens = self._get_table_boundaries(tokenized_table)
         if self.cell_trim_length >= 0 and max_num_tokens > self.cell_trim_length:
             max_num_tokens = self.cell_trim_length
