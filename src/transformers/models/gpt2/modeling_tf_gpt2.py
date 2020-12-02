@@ -992,9 +992,9 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
 
         if inputs["labels"] is not None:
             if input_ids is not None:
-                batch_size, sequence_length = inputs["input_ids"].shape[:2]
+                batch_size, sequence_length = shape_list(inputs["input_ids"])[:2]
             else:
-                batch_size, sequence_length = inputs["inputs_embeds"].shape[:2]
+                batch_size, sequence_length = shape_list(inputs["inputs_embeds"])[:2]
             assert (
                 self.config.pad_token_id is not None or batch_size == 1
             ), "Cannot handle batch sizes > 1 if no padding token is defined."
