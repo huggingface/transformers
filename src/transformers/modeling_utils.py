@@ -662,7 +662,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         if not isinstance(old_embeddings, nn.Embedding):
             raise TypeError(
-                f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}. You should either use a different resize function or make sure that `old_embeddings` are an instance of {nn.Embedding}."
+                f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}."
+                f"You should either use a different resize function or make sure that `old_embeddings` are an instance of {nn.Embedding}."
             )
 
         # Build new embeddings
@@ -713,7 +714,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         if not isinstance(old_lm_head, nn.Linear):
             raise TypeError(
-                f"Old language model is of type {type(old_lm_head)}, which is not an instance of {nn.Linear}. You should either use a different resize function or make sure that `old_embeddings` are an instance of {nn.Linear}."
+                f"Old language model is of type {type(old_lm_head)}, which is not an instance of {nn.Linear}."
+                f"You should either use a different resize function or make sure that `old_embeddings` are an instance of {nn.Linear}."
             )
 
         # Build new lm head
