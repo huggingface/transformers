@@ -51,6 +51,7 @@ if is_tf_available():
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         TF_MODEL_WITH_LM_HEAD_MAPPING,
+        TF_MODEL_MAPPING,
         TFAutoModel,
         TFAutoModelForCausalLM,
         TFAutoModelForMaskedLM,
@@ -108,7 +109,7 @@ def get_framework(model, targeted_task: Dict, revision: Optional[str] = None):
             else:
                 model = targeted_task["pt"]
         elif is_tf_available() and not is_torch_available():
-            if type(model) in MODEL_MAPPING:
+            if type(model) in TF_MODEL_MAPPING:
                 model = TFAutoModel.from_pretrained(model, revision=revision)
             else:
                 model = targeted_task["tf"]
@@ -119,7 +120,7 @@ def get_framework(model, targeted_task: Dict, revision: Optional[str] = None):
                 else:
                     model = targeted_task["pt"]
             except OSError:
-                if type(model) in MODEL_MAPPING:
+                if type(model) in TF_MODEL_MAPPING:
                     model = TFAutoModel.from_pretrained(model, revision=revision)
                 else:
                     model = targeted_task["tf"]
