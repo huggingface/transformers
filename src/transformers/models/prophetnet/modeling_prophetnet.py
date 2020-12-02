@@ -1703,6 +1703,9 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
     def get_input_embeddings(self):
         return self.prophetnet.word_embeddings
 
@@ -1900,6 +1903,9 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
 
     @add_start_docstrings_to_model_forward(PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ProphetNetDecoderLMOutput, config_class=_CONFIG_FOR_DOC)

@@ -128,6 +128,10 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
+    @unittest.skip("TODO: Decoder embeddings cannot be resized at the moment")
+    def test_resize_embeddings_untied(self):
+        pass
+
 
 @unittest.skipUnless(torch_device != "cpu", "3B test too slow on CPU.")
 @require_torch

@@ -1003,6 +1003,9 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
     def get_output_embeddings(self):
         return self.generator_lm_head
 
+    def set_output_embeddings(self, word_embeddings):
+        self.generator_lm_head = word_embeddings
+
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,

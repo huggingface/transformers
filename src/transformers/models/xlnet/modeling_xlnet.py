@@ -1312,6 +1312,9 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_loss
 
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_loss = new_embeddings
+
     def prepare_inputs_for_generation(self, input_ids, past=None, use_mems=None, **kwargs):
         # Add dummy token at the end (no attention on this one)
 

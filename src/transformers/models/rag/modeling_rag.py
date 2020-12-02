@@ -1459,6 +1459,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
     def get_output_embeddings(self):
         return self.rag.generator.get_output_embeddings()
 
+    def set_output_embeddings(self, new_embeddings):
+        return self.rag.generator.set_output_embeddings(new_embeddings)
+
     def shift_tokens_right(self, input_ids, start_token_id=None):
         """Shift input ids one token to the right, and pad with start_token_id"""
         if start_token_id is None:

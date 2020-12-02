@@ -299,6 +299,10 @@ class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
                 self.assertEqual(model_vocab_size, model.config.vocab_size)
                 self.assertEqual(model_embed.emb_layers[layer].weight.shape[0], cloned_embeddings[layer].shape[0])
 
+    def test_resize_embeddings_untied(self):
+        # transfo-xl requires special resize for lm-head
+        return
+
 
 @require_torch
 class TransfoXLModelLanguageGenerationTest(unittest.TestCase):
