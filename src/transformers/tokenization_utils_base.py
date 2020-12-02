@@ -3176,11 +3176,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     @staticmethod
     def clean_up_tokenization(out_string: str) -> str:
         """
-        clean up a list of simple english tokenization artifacts like spaces before punctuations and abbreviated forms.
+        Clean up a list of simple English tokenization artifacts like spaces before punctuations and abbreviated forms.
 
-        args: out_string (:obj:`str`): the text to clean up.
+        Args:
+            out_string (:obj:`str`): the text to clean up.
 
-        returns: :obj:`str`: the cleaned-up string.
+        Returns:
+            :obj:`str`: the cleaned-up string.
         """
         out_string = (
             out_string.replace(" .", ".")
