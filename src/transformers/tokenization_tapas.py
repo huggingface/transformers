@@ -228,8 +228,16 @@ class TapasTokenizer(PreTrainedTokenizer):
         strip_column_names: bool = False,
         update_answer_coordinates: bool = False,
         drop_rows_to_fit: bool = False,
+        model_max_length: int = 512,
+        additional_special_tokens: Optional[List[str]] = None,
         **kwargs
     ):
+        if additional_special_tokens is not None:
+            if empty_token not in additional_special_tokens:
+                additional_special_tokens.append(empty_token)
+        else:
+            additional_special_tokens = [empty_token]
+
         super().__init__(
             do_lower_case=do_lower_case,
             do_basic_tokenize=do_basic_tokenize,
@@ -239,6 +247,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             cls_token=cls_token,
             mask_token=mask_token,
+            empty_token=empty_token,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
             cell_trim_length=cell_trim_length,
@@ -247,7 +256,8 @@ class TapasTokenizer(PreTrainedTokenizer):
             strip_column_names=strip_column_names,
             update_answer_coordinates=update_answer_coordinates,
             drop_rows_to_fit=drop_rows_to_fit,
-            additional_special_tokens=[empty_token],
+            model_max_length=model_max_length,
+            additional_special_tokens=additional_special_tokens,
             **kwargs,
         )
 
@@ -337,23 +347,67 @@ class TapasTokenizer(PreTrainedTokenizer):
         return (vocab_file,)
 
     def create_attention_mask_from_sequences(self, query_ids: List[int], table_values: List[TableValue]) -> List[int]:
+        """
+        Creates the attention mask according to the query token IDs and a list of table values.
+
+        Args:
+            query_ids (:obj:`List[int]`): list of token IDs corresponding to the ID.
+            table_values (:obj:`List[TableValue]`): lift of table values, which are named tuples containing the
+                token value, the column ID and the row ID of said token.
+
+        Returns:
+            :obj:`List[int]`: List of ints containing the attention mask values.
+        """
         return [1] * (1 + len(query_ids) + 1 + len(table_values))
 
     def create_segment_token_type_ids_from_sequences(
         self, query_ids: List[int], table_values: List[TableValue]
     ) -> List[int]:
+        """
+        Creates the segment token type IDs according to the query token IDs and a list of table values.
+
+        Args:
+            query_ids (:obj:`List[int]`): list of token IDs corresponding to the ID.
+            table_values (:obj:`List[TableValue]`): lift of table values, which are named tuples containing the
+                token value, the column ID and the row ID of said token.
+
+        Returns:
+            :obj:`List[int]`: List of ints containing the segment token type IDs values.
+        """
         table_ids = list(zip(*table_values))[0] if table_values else []
         return [0] * (1 + len(query_ids) + 1) + [1] * len(table_ids)
 
     def create_column_token_type_ids_from_sequences(
         self, query_ids: List[int], table_values: List[TableValue]
     ) -> List[int]:
+        """
+        Creates the column token type IDs according to the query token IDs and a list of table values.
+
+        Args:
+            query_ids (:obj:`List[int]`): list of token IDs corresponding to the ID.
+            table_values (:obj:`List[TableValue]`): lift of table values, which are named tuples containing the
+                token value, the column ID and the row ID of said token.
+
+        Returns:
+            :obj:`List[int]`: List of ints containing the column token type IDs values.
+        """
         table_column_ids = list(zip(*table_values))[1] if table_values else []
         return [0] * (1 + len(query_ids) + 1) + list(table_column_ids)
 
     def create_row_token_type_ids_from_sequences(
         self, query_ids: List[int], table_values: List[TableValue]
     ) -> List[int]:
+        """
+        Creates the row token type IDs according to the query token IDs and a list of table values.
+
+        Args:
+            query_ids (:obj:`List[int]`): list of token IDs corresponding to the ID.
+            table_values (:obj:`List[TableValue]`): lift of table values, which are named tuples containing the
+                token value, the column ID and the row ID of said token.
+
+        Returns:
+            :obj:`List[int]`: List of ints containing the row token type IDs values.
+        """
         table_row_ids = list(zip(*table_values))[2] if table_values else []
         return [0] * (1 + len(query_ids) + 1) + list(table_row_ids)
 
@@ -608,6 +662,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             add_special_tokens=add_special_tokens,
             padding=padding,
             truncation=truncation,
+            max_length=max_length,
             stride=stride,
             is_split_into_words=is_split_into_words,
             pad_to_multiple_of=pad_to_multiple_of,
@@ -656,13 +711,11 @@ class TapasTokenizer(PreTrainedTokenizer):
         for query in queries:
             query_tokens = self.tokenize(query)
             queries_tokens.append(query_tokens)
-            queries_ids.append(self.convert_tokens_to_ids(query_tokens))
 
         batch_outputs = self._batch_prepare_for_model(
             table,
             queries,
             tokenized_table=table_tokens,
-            query_tokens=queries_tokens,
             queries_tokens=queries_tokens,
             answer_coordinates=answer_coordinates,
             padding=padding,
@@ -961,7 +1014,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         **kwargs
     ) -> BatchEncoding:
         if isinstance(padding, bool):
-            if padding:
+            if padding and (max_length is not None or pad_to_multiple_of is not None):
                 padding = PaddingStrategy.MAX_LENGTH
             else:
                 padding = PaddingStrategy.DO_NOT_PAD
@@ -1012,7 +1065,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         else:
             input_ids = query_ids + table_ids
 
-        if len(input_ids) > max_length:
+        if max_length is not None and len(input_ids) > max_length:
             raise ValueError(
                 "Could not encode the query and table header given the maximum length. Encoding the query and table"
                 f"header results in a length of {len(input_ids)} which is higher than the max_length of {max_length}"
