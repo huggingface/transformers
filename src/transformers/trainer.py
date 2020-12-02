@@ -241,11 +241,12 @@ class Trainer:
         self.hp_name = None
         if model is None and model_init is not None:
             model = self.call_model_init()
+
         # Model parallel
-        if not self.args.model_parallel:
-            self.model = model.to(args.device) if model is not None else None
-        else:
-            self.model = model if model is not None else None
+        if model is not None and not self.args.model_parallel:
+            model = model.to(args.device)
+
+        self.model = model
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
