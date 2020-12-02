@@ -3179,10 +3179,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         Clean up a list of simple English tokenization artifacts like spaces before punctuations and abbreviated forms.
 
         Args:
-            out_string (:obj:`str`): the text to clean up.
+            out_string (:obj:`str`): The text to clean up.
 
         Returns:
-            :obj:`str`: the cleaned-up string.
+            :obj:`str`: The cleaned-up string.
         """
         out_string = (
             out_string.replace(" .", ".")
