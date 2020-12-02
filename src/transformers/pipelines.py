@@ -69,6 +69,7 @@ if is_torch_available():
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        MODEL_MAPPING,
         AutoModel,
         AutoModelForCausalLM,
         AutoModelForMaskedLM,
@@ -82,11 +83,10 @@ if TYPE_CHECKING:
     from .modeling_tf_utils import TFPreTrainedModel
     from .modeling_utils import PreTrainedModel
 
-
 logger = logging.get_logger(__name__)
 
 
-def get_framework(model, revision: Optional[str] = None):
+def get_framework(model, targeted_task: Dict, revision: Optional[str] = None):
     """
     Select framework (TensorFlow or PyTorch) to use.
 
@@ -103,14 +103,26 @@ def get_framework(model, revision: Optional[str] = None):
         )
     if isinstance(model, str):
         if is_torch_available() and not is_tf_available():
-            model = AutoModel.from_pretrained(model, revision=revision)
+            if type(model) in MODEL_MAPPING:
+                model = AutoModel.from_pretrained(model, revision=revision)
+            else:
+                model = targeted_task["pt"]
         elif is_tf_available() and not is_torch_available():
-            model = TFAutoModel.from_pretrained(model, revision=revision)
+            if type(model) in MODEL_MAPPING:
+                model = TFAutoModel.from_pretrained(model, revision=revision)
+            else:
+                model = targeted_task["tf"]
         else:
             try:
-                model = AutoModel.from_pretrained(model, revision=revision)
+                if type(model) in MODEL_MAPPING:
+                    model = AutoModel.from_pretrained(model, revision=revision)
+                else:
+                    model = targeted_task["pt"]
             except OSError:
-                model = TFAutoModel.from_pretrained(model, revision=revision)
+                if type(model) in MODEL_MAPPING:
+                    model = TFAutoModel.from_pretrained(model, revision=revision)
+                else:
+                    model = targeted_task["tf"]
 
     framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
     return framework
@@ -2945,7 +2957,7 @@ def pipeline(
         # At that point framework might still be undetermined
         model = get_default_model(targeted_task, framework, task_options)
 
-    framework = framework or get_framework(model)
+    framework = framework or get_framework(model, targeted_task)
 
     task_class, model_class = targeted_task["impl"], targeted_task[framework]
 
