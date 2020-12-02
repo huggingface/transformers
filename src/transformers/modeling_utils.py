@@ -623,6 +623,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         old_embeddings = self.get_input_embeddings()
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
         self.set_input_embeddings(new_embeddings)
+
+        # if word embeddings are not tied, make sure that lm head is resized as well
+        if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
+            old_output_embeddings = self.get_output_embeddings()
+            new_output_embeddings = self._get_resized_embeddings(old_output_embeddings, new_num_tokens)
+            self.set_output_embeddings(new_output_embeddings)
+
         return self.get_input_embeddings()
 
     def _get_resized_embeddings(
