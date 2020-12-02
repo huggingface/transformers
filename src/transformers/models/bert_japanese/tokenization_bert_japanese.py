@@ -218,7 +218,7 @@ class MecabTokenizer:
                 Whether to apply unicode normalization to text before tokenization.
             **mecab_dic**: (`optional`) string (default "ipadic")
                 Name of dictionary to be used for MeCab initialization. If you are using a system-installed dictionary,
-                set thi option to `None` and modify `mecab_option`.
+                set this option to `None` and modify `mecab_option`.
             **mecab_option**: (`optional`) string
                 String passed to MeCab constructor.
         """
