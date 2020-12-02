@@ -20,6 +20,7 @@ Here is the full list of checkpoints on the hub that can be fine-tuned by this s
 https://huggingface.co/models?filter=masked-lm
 """
 # You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -271,10 +272,8 @@ def create_learning_rate_scheduler(
             elif name == "decay_every":
                 ret *= (decay_factor**(step // steps_per_decay))
             elif name == "cosine_decay":
-                progress = jnp.maximum(0.0,
-                                       (step - warmup_steps) / float(steps_per_cycle))
-                ret *= jnp.maximum(0.0,
-                                   0.5 * (1.0 + jnp.cos(jnp.pi * (progress % 1.0))))
+                progress = jnp.maximum(0.0, (step - warmup_steps) / float(steps_per_cycle))
+                ret *= jnp.maximum(0.0, 0.5 * (1.0 + jnp.cos(jnp.pi * (progress % 1.0))))
             else:
                 raise ValueError("Unknown factor %s." % name)
         return jnp.asarray(ret, dtype=jnp.float32)
@@ -299,8 +298,8 @@ def cross_entropy(logits, targets, weights=None, label_smoothing=0.0):
     confidence = 1.0 - label_smoothing
     low_confidence = (1.0 - confidence) / (vocab_size - 1)
     normalizing_constant = -(
-            confidence * jnp.log(confidence) + (vocab_size - 1) *
-            low_confidence * jnp.log(low_confidence + 1e-20))
+            confidence * jnp.log(confidence) + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
+    )
     soft_targets = common_utils.onehot(targets, vocab_size, on_value=confidence, off_value=low_confidence)
 
     loss = -jnp.sum(soft_targets * log_softmax(logits), axis=-1)
@@ -457,6 +456,8 @@ if __name__ == "__main__":
         load_from_cache_file=not data_args.overwrite_cache
     )
 
+    # summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
+
     # Data collator
     # This one will take care of randomly masking the tokens.
     data_collator = FlaxDataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=data_args.mlm_probability)
@@ -495,9 +496,11 @@ if __name__ == "__main__":
             model_inputs = data_collator(samples, pad_to_multiple_of=16)
 
             # Model forward
-            # TODO: Remove this conversion by replacing the collator
-            # model_inputs = {var_name: tensor for var_name, tensor in model_inputs.items()}
             loss, optimizer = training_step(optimizer, model_inputs.data)
 
         # Update progress bar
         epochs.desc = f"Training... ({epoch}/{int(training_args.num_train_epochs)}, Loss: {round(loss.item(), 4)})"
+
+        # Save metrics
+        # summary_writer.scalar("loss", loss, epoch)
+
