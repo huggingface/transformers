@@ -31,18 +31,22 @@ class PerformerAttentionConfig:
             random noise inherent in the FAVOR+ algorithm. If a :obj:`tuple`, should be of the form (:obj:`type`,
             :obj:`mem_tradeoff`), where :obj:`type` is either :obj:`'use_softmax_eval_only'` or
             :obj:`'use_softmax_eval_and_train'`, and :obj:`mem_tradeoff` is a :obj:`float` which determines how
-        use_kernel_stabilizer (:obj:`bool`, `optional`, defaults to False):
-            Whether to add a term in the kernel function for numerical stability. This turns out to increase computational
-            complexity by a surprising amount. Only used when :obj:`kernel_type` is :obj:`'exp'` or :obj:`'cosh'`.
-        use_random_features (:obj:`bool`, `optional`, defaults to True):
-            Whether to project the queries and keys using a Gaussian random feature matrix. This is necessary to mathematically
-            ensure that we generate an unbiased estimator of softmax attention, but requires additional computation and may not
-            always improve model performance.
+        kernel_epsilon (:obj:`float`, `optional`, defaults to 1e-4):
+            Stabilizer term added to the output of the kernel function to avoid dividing by very small numbers.
+        normalize_output (:obj:`bool`, `optional`, defaults to True):
+            Whether to ensure that the output vectors are convex combinations of the input vectors; that is, that the rows of
+            the implicit attention map sum to 1.
+        normalization_stabilizer (:obj:`float`, `optional`, defaults to 1e-6):
+            Stabilizer term used when normalizing the output to avoid dividing by very small numbers.
         use_orthogonal_features (:obj:`bool`, `optional`, defaults to True):
             Whether to use strictly orthogonal random features, as opposed to features drawn from a standard Gaussian
             distribution. Orthogonal features result in outputs that more closely approximate softmax attention, but at
             the cost of doing QR decomposition on the CPU every time the features are redrawn. Best combined with a
             reasonably large value of :obj:`feature_redraw_interval` (1-5k).
+        use_qkv_linear_layers (:obj:`bool`, `optional`, defaults to True):
+            Whether to transform the Q, K, and V inputs with a Linear layer before applying attention. Setting this
+            to False may be useful if you want to use PerformerAttention as one component of a more complex
+            attention mechanism.
         regularize_feature_norms (:obj:`bool`, `optional`, defaults to False):
             Whether to ensure that the random feature vectors have a norm of sqrt(`d`), where `d` is the dimensionality of
             each attention head.
@@ -51,7 +55,7 @@ class PerformerAttentionConfig:
             matrix is never redrawn. It is recommended to set this property to some value on the order of 1-5k while
             training in order to get the best model performance. When combined with :obj:`redraw_stochastically`, this parameter
             determines the expected value of the redraw interval, rather than the interval itself.
-        redraw_stochastically (:obj:`bool`, `optional`, defaults to True):
+        redraw_stochastically (:obj:`bool`, `optional`, defaults to False):
             If true, PerformerAttention will redraw its random features each forward pass with a probability equal to
             (1 / :obj:`feature_redraw_interval`), instead of deterministically redrawing once every N passes. This could be
             desirable in large models to ensure that the attention layers don't all redraw their features at the same time.
@@ -69,13 +73,16 @@ class PerformerAttentionConfig:
     # Default determined in PerformerAttention.__init__()
     short_sequence_behavior: Optional[Union[str, dict]] = None
     
-    use_kernel_stabilizer: bool = False
-    use_random_features: bool = True
+    kernel_epsilon: float = 1e-4
+    normalize_output: bool = True
+    normalization_stabilizer: float = 1e-6
+    
     use_orthogonal_features: bool = True
-    regularize_feature_norms: bool = False
+    use_qkv_linear_layers: bool = True
+    regularize_feature_norms: bool = True
     
     feature_redraw_interval: int = 1000
-    redraw_stochastically: bool = True
+    redraw_stochastically: bool = False
     redraw_verbose: bool = False
     
     # Optional here so the user doesn't have to set redundant parameters, but must be set by model before config is

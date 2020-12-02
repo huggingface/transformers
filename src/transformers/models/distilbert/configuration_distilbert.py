@@ -15,7 +15,7 @@
 """ DistilBERT model configuration """
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_performer_attention import PerformerAttentionConfig
+from ...configuration_performer_attention import PerformerAttentionConfig
 from ...utils import logging
 from typing import Union, Optional
 import copy
@@ -71,8 +71,8 @@ class DistilBertConfig(PretrainedConfig):
             The type of attention mechanism to use. Possibilities are :obj:`'softmax'` and :obj:`'performer'`, with the
             latter referring to the FAVOR+ algorithm put forward in the paper "Rethinking Attention with Performers".
         performer_attention_config (:obj:`str`, `optional`, defaults to :obj:`None`):
-            An instance of FavorAttentionConfig carrying options for the FavorAttention module. Only used when
-            :obj:`attention_type` = :obj:`'favor'`.
+            An instance of PerformerAttentionConfig carrying options for the PerformerAttention module. Only used when
+            :obj:`attention_type` = :obj:`'performer'`.
         activation (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.

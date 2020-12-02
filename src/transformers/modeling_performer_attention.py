@@ -11,29 +11,11 @@ from .modeling_utils import (
     prune_linear_layer
 )
 
-def cosh_kernel(x, h, use_stabilizer):
-    if use_stabilizer:
-        stabilizer = torch.max(h_of_x)# if not is_query else torch.max(h_of_x, axis=-1, keepdim=True).values
-    else:
-        stabilizer = 0.0
-    
-    f_1 = torch.exp(h + x - stabilizer)
-    f_2 = torch.exp(h - x - stabilizer)
-    return torch.cat((f_1, f_2), dim=-1)
-
-def exp_kernel(x, h, use_stabilizer):
-    if use_stabilizer:
-        stabilizer = torch.max(h_of_x)# if not is_query else torch.max(h_of_x, axis=-1, keepdim=True).values
-    else:
-        stabilizer = 0.0
-    
-    return torch.exp(h + x - stabilizer)
-
 KERNEL_CALLABLES = {
-    'cosh': cosh_kernel,
-    'elu': lambda x, h, use_stabilizer: F.elu(x) + 1,
-    'exp': exp_kernel, # Default
-    'relu': lambda x, h, use_stabilizer: F.relu(x) + 1e-3 # Adding epsilon prevents dividing by zero when we normalize
+    'cosh': lambda x, h: torch.cat((torch.exp(h + x), torch.exp(h - x)), dim=-1),
+    'exp': lambda x, h: torch.exp(h + x), # Default
+    'elu': lambda x: F.elu(x) + 1,
+    'relu': F.relu
 }
 
 SHORT_SEQUENCE_BEHAVIOR_CALLABLES = {
@@ -53,6 +35,10 @@ class PerformerAttention(nn.Module):
             
             # Just copy over all the parameters
             self.__dict__.update(config)
+        else:
+            # Make sure we have all the default values filled in
+            config = PerformerAttentionConfig(**kwargs)
+            kwargs = config.__dict__
         
         # kwargs take precedence over the default values that might be stored in the config object
         self.__dict__.update(kwargs)
@@ -83,10 +69,12 @@ class PerformerAttention(nn.Module):
         self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
         assert self.d_model % self.num_heads == 0
-
-        self.q_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
-        self.k_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
-        self.v_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
+        
+        if self.use_qkv_linear_layers:
+            self.q_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
+            self.k_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
+            self.v_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
+        
         self.out_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
 
         self.pruned_heads = set()
@@ -97,9 +85,11 @@ class PerformerAttention(nn.Module):
             return
         heads, index = find_pruneable_heads_and_indices(heads, self.num_heads, attention_head_size, self.pruned_heads)
         # Prune linear layers
-        self.q_lin = prune_linear_layer(self.q_lin, index)
-        self.k_lin = prune_linear_layer(self.k_lin, index)
-        self.v_lin = prune_linear_layer(self.v_lin, index)
+        if self.use_qkv_linear_layers:
+            self.q_lin = prune_linear_layer(self.q_lin, index)
+            self.k_lin = prune_linear_layer(self.k_lin, index)
+            self.v_lin = prune_linear_layer(self.v_lin, index)
+        
         self.out_lin = prune_linear_layer(self.out_lin, index, dim=1)
         # Update hyper params
         self.num_heads = self.num_heads - len(heads)
@@ -138,20 +128,22 @@ class PerformerAttention(nn.Module):
         def shape(x):
             """ separate heads """
             return x.view(bs, -1, self.num_heads, dim_per_head).transpose(1, 2)
-
-        q = shape(self.q_lin(query))  # (bs, num_heads, q_length, dim_per_head)
-        k = shape(self.k_lin(key))  # (bs, num_heads, k_length, dim_per_head)
-        v = shape(self.v_lin(value))  # (bs, num_heads, k_length, dim_per_head)
         
-        # Instead of dividing the product QK^T by sqrt(d), we divide Q and K separately by the 4th root of d
-        q = q / (dim ** 0.25)
-        k = k / (dim ** 0.25)
+        if self.use_qkv_linear_layers:
+            q = self.q_lin(query)
+            k = self.k_lin(key)
+            v = self.v_lin(value)
+        else:
+            q, k, v = query, key, value
+        
+        # (bs, num_heads, q_length, dim_per_head)
+        q, k, v = (shape(x) for x in (q, k, v))
         
         # If the sequence length is short enough that FAVOR+ would use considerably more time and/or memory than just
         # using softmax attention, use softmax. This works because FAVOR+ is an unbiased estimator of softmax attention.
         m = round(dim_per_head * np.log(dim_per_head)) # m is the number of random features
         if self.should_fallback_to_softmax(q_length, m, self.training):
-            scores = q @ k.transpose(-2, -1)
+            scores = q @ k.transpose(-2, -1) / (dim ** 0.5)
             
             if mask is not None:
                 mask = (mask == 0).view(mask_reshp).expand_as(scores)  # (bs, num_heads, q_length, k_length)
@@ -165,42 +157,78 @@ class PerformerAttention(nn.Module):
         if output_attentions:
             raise ValueError("PerformerAttention: Can't output attention maps when using FAVOR+ linear attention.")
         
-        # By multiplying Q' and K' by 1/sqrt(m), we ensure the final matrix product will contain a factor of 1/m. This means
-        # that each row of Q'K'^T can be interpreted as an average over the exp(omega^T * q) * exp(omega^T * k) terms.
-        epsilon = 1e-4
-        def phi(x, is_query, feature_matrix):
-            # The h(x) function, defined in Lemma 1 in Choromanski et al. pg. 4
-            h_of_x = -torch.sum(x ** 2, dim=-1, keepdim=True) / 2
-            
-            projected_x = x @ feature_matrix if feature_matrix is not None else x
-            kernel_output = self.kernel_fn(projected_x, h_of_x, self.use_kernel_stabilizer)
-            
-            return (kernel_output.shape[-1] ** -0.5) * (kernel_output + epsilon)
-        
-        if self.use_random_features:
-            self._redraw_features_if_needed(q.device)
-            
-            # Broadcast the feature matrix across the batch dimension
-            self.random_features.expand(q.shape[0], self.num_heads, m, dim_per_head)
-            W_t = self.random_features.transpose(-2, -1)
-        else:
-            W_t = None
+        self._redraw_features_if_needed(q.device)
         
         # Get the transformed values of Q and K
-        q_prime, k_prime = phi(q, True, W_t), phi(k, False, W_t)
+        q_prime, k_prime = self.get_projected_queries_and_keys(q, k)
+        return self.compute_attention_with_projected_queries_and_keys(q_prime, k_prime, v, mask, head_mask)
+    
+    # Turns Q into Q', K into K'
+    def get_projected_queries_and_keys(self, q, k):
+        # Broadcast the feature matrix across the batch dimension
+        new_shape = list(q.shape)
+        new_shape[-2] = self.random_features.shape[-2]
+        W_t = self.random_features.expand(new_shape).transpose(-2, -1)
         
-        # Now apply the padding mask to K'. Also applying it to Q' would be redundant.
+        # Instead of dividing the product QK^T by sqrt(d), we divide Q and K by the 4th root of d.
+        q = q / (self.d_model ** 0.25)
+        k = k / (self.d_model ** 0.25)
+        
+        projected_q = q @ W_t
+        projected_k = k @ W_t
+        
+        # Special logic for kernels that attempt to approximate softmax
+        if self.kernel_type in ('cosh', 'exp'):
+            # The h(x) function is defined in Lemma 1 in Choromanski et al. pg. 4 as exp(-||x||**2 / 2). For numerical
+            # stability we leverage the fact that exp(x)*exp(y) = exp(x + y) here and delay computing the exp().
+            h_of_q = -torch.sum(q ** 2, dim=-1, keepdim=True) / 2
+            h_of_k = -torch.sum(k ** 2, dim=-1, keepdim=True) / 2
+            
+            # Compute the numerical stabilizer that we subtract from the input to exp(). For some reason the original
+            # Jax implementation uses different types of stabilizers for queries vs. keys, and we follow that here.
+            ## This is a workaround for very slow performance of torch.max(dim=N) on PyTorch 1.4 and earlier;
+            ## see this GitHub discussion: https://github.com/pytorch/pytorch/issues/36900
+            q_indices = h_of_q.argmax(-1).unsqueeze(-1)
+            q_stabilizer = h_of_q.gather(-1, q_indices) # Note this is a (d_model, 1) matrix that gets broadcasted
+            #q_stabilizer = torch.max(h_of_q, axis=-1, keepdim=True).values
+            
+            # This is just a scalar
+            k_stabilizer = torch.max(h_of_k)
+            
+            q_kernel_output = self.kernel_fn(projected_q - q_stabilizer, h_of_q)
+            k_kernel_output = self.kernel_fn(projected_k - k_stabilizer, h_of_k)
+            
+            # By multiplying by 1/sqrt(m), we ensure the final matrix product will contain a factor of 1/m. This means
+            # each row of Q'K'^T can be interpreted as an average over the exp(omega^T * q) * exp(omega^T * k) terms.
+            normalizing_constant = (q_kernel_output.shape[-1] ** -0.5)
+            
+            q_prime = normalizing_constant * (q_kernel_output + self.kernel_epsilon)
+            k_prime = normalizing_constant * (k_kernel_output + self.kernel_epsilon)
+            return q_prime, k_prime
+        
+        # Generalized attention (ReLU, ELU...)
+        else:
+            return (self.kernel_fn(x) + self.kernel_epsilon for x in (projected_q, projected_k))
+    
+    def compute_attention_with_projected_queries_and_keys(self, q_prime, k_prime, v, mask = None, head_mask = None):
+        # Apply the padding mask to K'. Also applying it to Q' would be redundant.
         if mask is not None:
             k_prime *= mask.unsqueeze(1).unsqueeze(-1).expand_as(k_prime)
         
-        # Equivalent to multiplying K'^T by a ones vector
-        d = q_prime @ k_prime.sum(dim=-2).unsqueeze(-1)
-        d += 2 * epsilon * (torch.abs(d) <= epsilon) # Avoid dividing by very small numbers
-        
         k_prime_t = k_prime.transpose(-2, -1)
-        context = q_prime @ (k_prime_t @ v) / d
+        output = q_prime @ (k_prime_t @ v)
         
-        return self._finalize_attention_output(context, head_mask)
+        # Ensure that the output vectors are convex combinations of input vectors; that is,
+        # the implied attention scores sum to 1
+        if self.normalize_output:    
+            # Equivalent to multiplying K'^T by a ones vector
+            d = q_prime @ k_prime.sum(dim=-2).unsqueeze(-1)
+            
+            # Avoid dividing by very small numbers
+            d += 2 * self.normalization_stabilizer * (torch.abs(d) <= self.normalization_stabilizer)
+            output /= d
+        
+        return self._finalize_attention_output(output, head_mask)
     
     def _finalize_attention_output(self, context, head_mask=None, output_attentions=False):
         def unshape(x):

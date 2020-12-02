@@ -16,6 +16,10 @@
 """ BERT model configuration """
 
 from ...configuration_utils import PretrainedConfig
+from ...configuration_performer_attention import PerformerAttentionConfig
+from typing import Union, Optional
+
+from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
 
@@ -79,6 +83,12 @@ class BertConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
+        attention_type (:obj:`str`, `optional`, defaults to :obj:`'softmax'`):
+            The type of attention mechanism to use. Possibilities are :obj:`'softmax'` and :obj:`'performer'`, with the
+            latter referring to the FAVOR+ algorithm put forward in the paper "Rethinking Attention with Performers".
+        performer_attention_config (:obj:`str`, `optional`, defaults to :obj:`None`):
+            An instance of PerformerAttentionConfig carrying options for the PerformerAttention module. Only used when
+            :obj:`attention_type` = :obj:`'performer'`.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -117,6 +127,8 @@ class BertConfig(PretrainedConfig):
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
+        attention_type='softmax',
+        performer_attention_config: Optional[Union[dict, PerformerAttentionConfig]] = None,
         max_position_embeddings=512,
         type_vocab_size=2,
         initializer_range=0.02,
@@ -135,8 +147,23 @@ class BertConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.attention_type = attention_type
+        self.performer_attention_config = performer_attention_config
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.gradient_checkpointing = gradient_checkpointing
+        
+        if isinstance(self.performer_attention_config, dict):
+            self.performer_attention_config = PerformerAttentionConfig(**self.performer_attention_config)
+    
+    def to_dict(self):
+        output = super().to_dict()
+        
+        # Correct for the fact that PretrainedConfig doesn't call .__dict__ recursively on non-JSON primitives
+        performer_config = output['performer_attention_config']
+        if performer_config is not None:
+            output['performer_attention_config'] = copy.deepcopy(performer_config.__dict__)
+        
+        return output

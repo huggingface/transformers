@@ -14,6 +14,8 @@
 # limitations under the License.
 """ Funnel Transformer model configuration """
 
+from typing import List, Optional, Union
+from ...configuration_performer_attention import PerformerAttentionConfig
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -32,7 +34,6 @@ FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "funnel-transformer/xlarge": "https://huggingface.co/funnel-transformer/xlarge/resolve/main/config.json",
     "funnel-transformer/xlarge-base": "https://huggingface.co/funnel-transformer/xlarge-base/resolve/main/config.json",
 }
-
 
 class FunnelConfig(PretrainedConfig):
     r"""
@@ -93,6 +94,12 @@ class FunnelConfig(PretrainedConfig):
         attention_type (:obj:`str`, `optional`, defaults to :obj:`"relative_shift"`):
             Possible values are ``"relative_shift"`` or ``"factorized"``. The former is faster on CPU/GPU while the
             latter is faster on TPU.
+        use_performer_attention (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use the linear-time attention mechanism proposed in the paper "Rethinking Attention with
+            Performers."
+        performer_attention_config (:obj:`str`, `optional`, defaults to :obj:`None`):
+            An instance of PerformerAttentionConfig carrying options for the PerformerAttention module. Only used when
+            :obj:`attention_type` = :obj:`'performer'`.
         separate_cls (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to separate the cls token when applying pooling.
         truncate_seq (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -102,41 +109,42 @@ class FunnelConfig(PretrainedConfig):
             Whether or not to apply the pooling only to the query or to query, key and values for the attention layers.
     """
     model_type = "funnel"
-
+    
     def __init__(
         self,
-        vocab_size=30522,
-        block_sizes=[4, 4, 4],
-        block_repeats=None,
-        num_decoder_layers=2,
-        d_model=768,
-        n_head=12,
-        d_head=64,
-        d_inner=3072,
-        hidden_act="gelu_new",
-        hidden_dropout=0.1,
-        attention_dropout=0.1,
-        activation_dropout=0.0,
-        max_position_embeddings=512,
-        type_vocab_size=3,
-        initializer_range=0.1,
-        initializer_std=None,
-        layer_norm_eps=1e-9,
-        pooling_type="mean",
-        attention_type="relative_shift",
-        separate_cls=True,
-        truncate_seq=True,
-        pool_q_only=True,
+        vocab_size: int = 30522,
+        block_sizes: List[int] = [4, 4, 4],
+        block_repeats = None,
+        num_decoder_layers: int = 2,
+        d_model: int = 768,
+        n_head: int = 12,
+        d_head: int = 64,
+        d_inner: int = 3072,
+        hidden_act: str = "gelu_new",
+        hidden_dropout: float = 0.1,
+        attention_dropout: float = 0.1,
+        activation_dropout: float = 0.0,
+        max_position_embeddings: int = 512,
+        type_vocab_size: int = 3,
+        initializer_range: float = 0.1,
+        initializer_std: float = None,
+        layer_norm_eps: float = 1e-9,
+        pooling_type: str = "mean",
+        
+        attention_type: str = "relative_shift",
+        use_performer_attention: bool = False,
+        performer_attention_config: Optional[Union[dict, PerformerAttentionConfig]] = None,
+        
+        separate_cls: bool = True,
+        truncate_seq: bool = True,
+        pool_q_only: bool = True,
         **kwargs
     ):
         super().__init__(**kwargs)
-
+        
         self.vocab_size = vocab_size
         self.block_sizes = block_sizes
         self.block_repeats = [1] * len(block_sizes) if block_repeats is None else block_repeats
-        assert len(block_sizes) == len(
-            self.block_repeats
-        ), "`block_sizes` and `block_repeats` should have the same length."
         self.num_decoder_layers = num_decoder_layers
         self.d_model = d_model
         self.n_head = n_head
@@ -151,19 +159,36 @@ class FunnelConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_std = initializer_std
         self.layer_norm_eps = layer_norm_eps
-        assert pooling_type in [
-            "mean",
-            "max",
-        ], f"Got {pooling_type} for `pooling_type` but only 'mean' and 'max' are supported."
-        self.pooling_type = pooling_type
-        assert attention_type in [
-            "relative_shift",
-            "factorized",
-        ], f"Got {attention_type} for `attention_type` but only 'relative_shift' and 'factorized' are supported."
         self.attention_type = attention_type
         self.separate_cls = separate_cls
         self.truncate_seq = truncate_seq
         self.pool_q_only = pool_q_only
+        self.pooling_type = pooling_type
+        self.use_performer_attention = use_performer_attention
+        self.performer_attention_config = performer_attention_config
+        
+        if len(self.block_sizes) <= 0:
+            self.block_sizes.extend([4, 4, 4])
+        
+        if self.block_repeats is None:
+            self.block_repeats = [1] * len(self.block_sizes)
+        
+        assert len(self.block_sizes) == len(
+            self.block_repeats
+        ), "`block_sizes` and `block_repeats` should have the same length."
+        
+        assert self.pooling_type in [
+            "mean",
+            "max",
+        ], f"Got {self.pooling_type} for `pooling_type` but only 'mean' and 'max' are supported."
+        
+        assert self.attention_type in [
+            "relative_shift",
+            "factorized",
+        ], f"Got {self.attention_type} for `attention_type` but only 'relative_shift' and 'factorized' are supported."
+        
+        if self.use_performer_attention and self.attention_type != "factorized":
+            raise ValueError("Performer-style attention can only be used with `attention_type` == 'factorized'.")
 
     @property
     def hidden_size(self):
