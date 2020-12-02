@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-__version__ = "4.0.0-rc-1"
+__version__ = "4.1.0.dev0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -214,6 +214,7 @@ if is_sentencepiece_available():
     from .models.camembert import CamembertTokenizer
     from .models.marian import MarianTokenizer
     from .models.mbart import MBartTokenizer
+    from .models.mt5 import MT5Tokenizer
     from .models.pegasus import PegasusTokenizer
     from .models.reformer import ReformerTokenizer
     from .models.t5 import T5Tokenizer
@@ -240,6 +241,7 @@ if is_tokenizers_available():
     from .models.lxmert import LxmertTokenizerFast
     from .models.mbart import MBartTokenizerFast
     from .models.mobilebert import MobileBertTokenizerFast
+    from .models.mt5 import MT5TokenizerFast
     from .models.openai import OpenAIGPTTokenizerFast
     from .models.pegasus import PegasusTokenizerFast
     from .models.reformer import ReformerTokenizerFast
@@ -391,7 +393,13 @@ if is_torch_available():
         CamembertForTokenClassification,
         CamembertModel,
     )
-    from .models.ctrl import CTRL_PRETRAINED_MODEL_ARCHIVE_LIST, CTRLLMHeadModel, CTRLModel, CTRLPreTrainedModel
+    from .models.ctrl import (
+        CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        CTRLForSequenceClassification,
+        CTRLLMHeadModel,
+        CTRLModel,
+        CTRLPreTrainedModel,
+    )
     from .models.deberta import (
         DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         DebertaForSequenceClassification,
@@ -506,7 +514,7 @@ if is_torch_available():
         MobileBertPreTrainedModel,
         load_tf_weights_in_mobilebert,
     )
-    from .models.mt5 import MT5ForConditionalGeneration, MT5Model
+    from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
     from .models.openai import (
         OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         OpenAIGPTDoubleHeadsModel,
@@ -561,6 +569,7 @@ if is_torch_available():
     )
     from .models.t5 import (
         T5_PRETRAINED_MODEL_ARCHIVE_LIST,
+        T5EncoderModel,
         T5ForConditionalGeneration,
         T5Model,
         T5PreTrainedModel,
@@ -804,7 +813,7 @@ if is_tf_available():
         TFMobileBertModel,
         TFMobileBertPreTrainedModel,
     )
-    from .models.mt5 import TFMT5ForConditionalGeneration, TFMT5Model
+    from .models.mt5 import TFMT5EncoderModel, TFMT5ForConditionalGeneration, TFMT5Model
     from .models.openai import (
         TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFOpenAIGPTDoubleHeadsModel,
@@ -827,6 +836,7 @@ if is_tf_available():
     )
     from .models.t5 import (
         TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFT5EncoderModel,
         TFT5ForConditionalGeneration,
         TFT5Model,
         TFT5PreTrainedModel,

@@ -240,7 +240,9 @@ activations of the model.
            [ 0.08181786, -0.04179301]], dtype=float32)>,)
 
 The model can return more than just the final activations, which is why the output is a tuple. Here we only asked for
-the final activations, so we get a tuple with one element. .. note::
+the final activations, so we get a tuple with one element.
+
+.. note::
 
     All 🤗 Transformers models (PyTorch or TensorFlow) return the activations of the model *before* the final activation
     function (like SoftMax) since this final activation function is often fused with the loss.
