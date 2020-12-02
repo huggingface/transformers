@@ -146,7 +146,6 @@ class MPNetSelfAttention(nn.Module):
                 "heads (%d)" % (config.hidden_size, config.num_attention_heads)
             )
 
-        self.output_attentions = config.output_attentions
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
@@ -208,7 +207,7 @@ class MPNetSelfAttention(nn.Module):
 
         o = self.o(c)
 
-        outputs = (o, attention_probs) if self.output_attentions else (o,)
+        outputs = (o, attention_probs) if output_attentions else (o,)
         return outputs
 
 
@@ -219,14 +218,13 @@ class MPNetAttention(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        self.prune_heads = set()
+        self.pruned_heads = set()
 
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
-
         heads, index = find_pruneable_heads_and_indices(
-            heads, self.attn.num_attention_heads, self.attn.attention_head_size, self.prune_heads
+            heads, self.attn.num_attention_heads, self.attn.attention_head_size, self.pruned_heads
         )
 
         self.attn.q = prune_linear_layer(self.attn.q, index)
@@ -236,7 +234,7 @@ class MPNetAttention(nn.Module):
 
         self.attn.num_attention_heads = self.attn.num_attention_heads - len(heads)
         self.attn.all_head_size = self.attn.attention_head_size * self.attn.num_attention_heads
-        self.prune_heads = self.prune_heads.union(heads)
+        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -252,6 +250,7 @@ class MPNetAttention(nn.Module):
             attention_mask,
             head_mask,
             position_bias,
+            output_attentions=output_attentions,
         )
         attention_output = self.LayerNorm(self.dropout(self_outputs[0]) + hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -302,9 +301,16 @@ class MPNetLayer(nn.Module):
         attention_mask=None,
         head_mask=None,
         position_bias=None,
+        output_attentions=False,
         **kwargs,
     ):
-        self_attention_outputs = self.attention(hidden_states, attention_mask, head_mask, position_bias=position_bias)
+        self_attention_outputs = self.attention(
+            hidden_states,
+            attention_mask,
+            head_mask,
+            position_bias=position_bias,
+            output_attentions=output_attentions,
+        )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
@@ -319,8 +325,6 @@ class MPNetEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.n_heads = config.num_attention_heads
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
         self.layer = nn.ModuleList([MPNetLayer(config) for _ in range(config.num_hidden_layers)])
         self.relative_attention_bias = nn.Embedding(config.relative_attention_num_buckets, self.n_heads)
 
@@ -338,7 +342,7 @@ class MPNetEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         for i, layer_module in enumerate(self.layer):
-            if self.output_hidden_states:
+            if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
@@ -346,6 +350,7 @@ class MPNetEncoder(nn.Module):
                 attention_mask,
                 head_mask[i],
                 position_bias,
+                output_attentions=output_attentions,
                 **kwargs,
             )
             hidden_states = layer_outputs[0]
@@ -505,6 +510,10 @@ class MPNetModel(MPNetPreTrainedModel):
         self.embeddings.word_embeddings = value
 
     def _prune_heads(self, heads_to_prune):
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
+        """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
@@ -512,7 +521,7 @@ class MPNetModel(MPNetPreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="mpnet-base",
-        output_type=BaseModelOutput,
+        output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -533,13 +542,20 @@ class MPNetModel(MPNetPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        input_shape = input_ids.size()
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         if attention_mask is None:
-            attention_mask = torch.ones(input_shape, device=input_ids.device)
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            attention_mask, input_shape, input_ids.device
-        )
+            attention_mask = torch.ones(input_shape, device=device)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
 
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
         embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids, inputs_embeds=inputs_embeds)
@@ -606,6 +622,7 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
             config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
         """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.mpnet(
             input_ids,
@@ -980,7 +997,7 @@ class MPNetForQuestionAnswering(MPNetPreTrainedModel):
     )
     def forward(
         self,
-        input_ids,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
