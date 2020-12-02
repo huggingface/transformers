@@ -605,7 +605,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         Return:
             :obj:`torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
         """
-        #        base_model = getattr(self, self.base_model_prefix, self)  # get the base model if needed
         model_embeds = self._resize_token_embeddings(new_num_tokens)
         if new_num_tokens is None:
             return model_embeds

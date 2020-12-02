@@ -632,12 +632,6 @@ class AlbertModel(AlbertPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    #    def _resize_token_embeddings(self, new_num_tokens):
-    #        old_embeddings = self.embeddings.word_embeddings
-    #        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
-    #        self.embeddings.word_embeddings = new_embeddings
-    #        return self.embeddings.word_embeddings
-
     def _prune_heads(self, heads_to_prune):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} ALBERT has
