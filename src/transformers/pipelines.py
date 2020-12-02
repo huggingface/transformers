@@ -41,7 +41,6 @@ from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import PaddingStrategy
 from .utils import logging
 
-
 if is_tf_available():
     import tensorflow as tf
 
@@ -50,8 +49,8 @@ if is_tf_available():
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        TF_MODEL_WITH_LM_HEAD_MAPPING,
         TF_MODEL_MAPPING,
+        TF_MODEL_WITH_LM_HEAD_MAPPING,
         TFAutoModel,
         TFAutoModelForCausalLM,
         TFAutoModelForMaskedLM,
@@ -104,23 +103,23 @@ def get_framework(model, targeted_task: Dict, revision: Optional[str] = None):
         )
     if isinstance(model, str):
         if is_torch_available() and not is_tf_available():
-            if type(model) in MODEL_MAPPING:
+            if type(model) in MODEL_MAPPING or targeted_task["pt"] is None:
                 model = AutoModel.from_pretrained(model, revision=revision)
             else:
                 model = targeted_task["pt"]
         elif is_tf_available() and not is_torch_available():
-            if type(model) in TF_MODEL_MAPPING:
+            if type(model) in TF_MODEL_MAPPING or targeted_task["tf"] is None:
                 model = TFAutoModel.from_pretrained(model, revision=revision)
             else:
                 model = targeted_task["tf"]
         else:
             try:
-                if type(model) in MODEL_MAPPING:
+                if type(model) in MODEL_MAPPING or targeted_task["pt"] is None:
                     model = AutoModel.from_pretrained(model, revision=revision)
                 else:
                     model = targeted_task["pt"]
             except OSError:
-                if type(model) in TF_MODEL_MAPPING:
+                if type(model) in TF_MODEL_MAPPING or targeted_task["tf"] is None:
                     model = TFAutoModel.from_pretrained(model, revision=revision)
                 else:
                     model = targeted_task["tf"]
@@ -221,11 +220,11 @@ class PipelineDataFormat:
     SUPPORTED_FORMATS = ["json", "csv", "pipe"]
 
     def __init__(
-        self,
-        output_path: Optional[str],
-        input_path: Optional[str],
-        column: Optional[str],
-        overwrite: bool = False,
+            self,
+            output_path: Optional[str],
+            input_path: Optional[str],
+            column: Optional[str],
+            overwrite: bool = False,
     ):
         self.output_path = output_path
         self.input_path = input_path
@@ -278,11 +277,11 @@ class PipelineDataFormat:
 
     @staticmethod
     def from_str(
-        format: str,
-        output_path: Optional[str],
-        input_path: Optional[str],
-        column: Optional[str],
-        overwrite=False,
+            format: str,
+            output_path: Optional[str],
+            input_path: Optional[str],
+            column: Optional[str],
+            overwrite=False,
     ) -> "PipelineDataFormat":
         """
         Creates an instance of the right subclass of :class:`~transformers.pipelines.PipelineDataFormat` depending on
@@ -326,11 +325,11 @@ class CsvPipelineDataFormat(PipelineDataFormat):
     """
 
     def __init__(
-        self,
-        output_path: Optional[str],
-        input_path: Optional[str],
-        column: Optional[str],
-        overwrite=False,
+            self,
+            output_path: Optional[str],
+            input_path: Optional[str],
+            column: Optional[str],
+            overwrite=False,
     ):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
 
@@ -371,11 +370,11 @@ class JsonPipelineDataFormat(PipelineDataFormat):
     """
 
     def __init__(
-        self,
-        output_path: Optional[str],
-        input_path: Optional[str],
-        column: Optional[str],
-        overwrite=False,
+            self,
+            output_path: Optional[str],
+            input_path: Optional[str],
+            column: Optional[str],
+            overwrite=False,
     ):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
 
@@ -515,15 +514,15 @@ class Pipeline(_ScikitCompat):
     default_input_names = None
 
     def __init__(
-        self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        tokenizer: PreTrainedTokenizer,
-        modelcard: Optional[ModelCard] = None,
-        framework: Optional[str] = None,
-        task: str = "",
-        args_parser: ArgumentHandler = None,
-        device: int = -1,
-        binary_output: bool = False,
+            self,
+            model: Union["PreTrainedModel", "TFPreTrainedModel"],
+            tokenizer: PreTrainedTokenizer,
+            modelcard: Optional[ModelCard] = None,
+            framework: Optional[str] = None,
+            task: str = "",
+            args_parser: ArgumentHandler = None,
+            device: int = -1,
+            binary_output: bool = False,
     ):
 
         if framework is None:
@@ -714,14 +713,14 @@ class FeatureExtractionPipeline(Pipeline):
     """
 
     def __init__(
-        self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        tokenizer: PreTrainedTokenizer,
-        modelcard: Optional[ModelCard] = None,
-        framework: Optional[str] = None,
-        args_parser: ArgumentHandler = None,
-        device: int = -1,
-        task: str = "",
+            self,
+            model: Union["PreTrainedModel", "TFPreTrainedModel"],
+            tokenizer: PreTrainedTokenizer,
+            modelcard: Optional[ModelCard] = None,
+            framework: Optional[str] = None,
+            args_parser: ArgumentHandler = None,
+            device: int = -1,
+            task: str = "",
     ):
         super().__init__(
             model=model,
@@ -816,13 +815,13 @@ class TextGenerationPipeline(Pipeline):
         return inputs
 
     def __call__(
-        self,
-        text_inputs,
-        return_tensors=False,
-        return_text=True,
-        clean_up_tokenization_spaces=False,
-        prefix=None,
-        **generate_kwargs
+            self,
+            text_inputs,
+            return_tensors=False,
+            return_text=True,
+            clean_up_tokenization_spaces=False,
+            prefix=None,
+            **generate_kwargs
     ):
         """
         Complete the prompt(s) given as inputs.
@@ -890,7 +889,7 @@ class TextGenerationPipeline(Pipeline):
 
                 # Ensure that batch size = 1 (batch generation not allowed for now)
                 assert (
-                    input_ids is None or input_ids.shape[0] == 1
+                        input_ids is None or input_ids.shape[0] == 1
                 ), "Batch generation is currently not supported. See https://github.com/huggingface/transformers/issues/3021 for more information."
 
                 output_sequences = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
@@ -1070,7 +1069,7 @@ class ZeroShotClassificationPipeline(Pipeline):
         return -1
 
     def _parse_and_tokenize(
-        self, sequences, candidate_labels, hypothesis_template, padding=True, add_special_tokens=True, **kwargs
+            self, sequences, candidate_labels, hypothesis_template, padding=True, add_special_tokens=True, **kwargs
     ):
         """
         Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
@@ -1087,11 +1086,11 @@ class ZeroShotClassificationPipeline(Pipeline):
         return inputs
 
     def __call__(
-        self,
-        sequences: Union[str, List[str]],
-        candidate_labels,
-        hypothesis_template="This example is {}.",
-        multi_class=False,
+            self,
+            sequences: Union[str, List[str]],
+            candidate_labels,
+            hypothesis_template="This example is {}.",
+            multi_class=False,
     ):
         """
         Classify the sequence(s) given as inputs. See the :obj:`~transformers.ZeroShotClassificationPipeline`
@@ -1186,15 +1185,15 @@ class FillMaskPipeline(Pipeline):
     """
 
     def __init__(
-        self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        tokenizer: PreTrainedTokenizer,
-        modelcard: Optional[ModelCard] = None,
-        framework: Optional[str] = None,
-        args_parser: ArgumentHandler = None,
-        device: int = -1,
-        top_k=5,
-        task: str = "",
+            self,
+            model: Union["PreTrainedModel", "TFPreTrainedModel"],
+            tokenizer: PreTrainedTokenizer,
+            modelcard: Optional[ModelCard] = None,
+            framework: Optional[str] = None,
+            args_parser: ArgumentHandler = None,
+            device: int = -1,
+            top_k=5,
+            task: str = "",
     ):
         super().__init__(
             model=model,
@@ -1377,18 +1376,18 @@ class TokenClassificationPipeline(Pipeline):
     default_input_names = "sequences"
 
     def __init__(
-        self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        tokenizer: PreTrainedTokenizer,
-        modelcard: Optional[ModelCard] = None,
-        framework: Optional[str] = None,
-        args_parser: ArgumentHandler = TokenClassificationArgumentHandler(),
-        device: int = -1,
-        binary_output: bool = False,
-        ignore_labels=["O"],
-        task: str = "",
-        grouped_entities: bool = False,
-        ignore_subwords: bool = False,
+            self,
+            model: Union["PreTrainedModel", "TFPreTrainedModel"],
+            tokenizer: PreTrainedTokenizer,
+            modelcard: Optional[ModelCard] = None,
+            framework: Optional[str] = None,
+            args_parser: ArgumentHandler = TokenClassificationArgumentHandler(),
+            device: int = -1,
+            binary_output: bool = False,
+            ignore_labels=["O"],
+            task: str = "",
+            grouped_entities: bool = False,
+            ignore_subwords: bool = False,
     ):
         super().__init__(
             model=model,
@@ -1580,11 +1579,11 @@ class TokenClassificationPipeline(Pipeline):
             # The split is meant to account for the "B" and "I" suffixes
             # Shouldn't merge if both entities are B-type
             if (
-                (
-                    entity["entity"].split("-")[-1] == entity_group_disagg[-1]["entity"].split("-")[-1]
-                    and entity["entity"].split("-")[0] != "B"
-                )
-                and entity["index"] == entity_group_disagg[-1]["index"] + 1
+                    (
+                            entity["entity"].split("-")[-1] == entity_group_disagg[-1]["entity"].split("-")[-1]
+                            and entity["entity"].split("-")[0] != "B"
+                    )
+                    and entity["index"] == entity_group_disagg[-1]["index"] + 1
             ) or is_subword:
                 # Modify subword type to be previous_type
                 if is_subword:
@@ -1695,14 +1694,14 @@ class QuestionAnsweringPipeline(Pipeline):
     default_input_names = "question,context"
 
     def __init__(
-        self,
-        model: Union["PreTrainedModel", "TFPreTrainedModel"],
-        tokenizer: PreTrainedTokenizer,
-        modelcard: Optional[ModelCard] = None,
-        framework: Optional[str] = None,
-        device: int = -1,
-        task: str = "",
-        **kwargs
+            self,
+            model: Union["PreTrainedModel", "TFPreTrainedModel"],
+            tokenizer: PreTrainedTokenizer,
+            modelcard: Optional[ModelCard] = None,
+            framework: Optional[str] = None,
+            device: int = -1,
+            task: str = "",
+            **kwargs
     ):
         super().__init__(
             model=model,
@@ -1721,7 +1720,7 @@ class QuestionAnsweringPipeline(Pipeline):
 
     @staticmethod
     def create_sample(
-        question: Union[str, List[str]], context: Union[str, List[str]]
+            question: Union[str, List[str]], context: Union[str, List[str]]
     ) -> Union[SquadExample, List[SquadExample]]:
         """
         QuestionAnsweringPipeline leverages the :class:`~transformers.SquadExample` internally. This helper method
@@ -1937,7 +1936,7 @@ class QuestionAnsweringPipeline(Pipeline):
                             "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
                             "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
                             "answer": " ".join(
-                                example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
+                                example.doc_tokens[feature.token_to_orig_map[s]: feature.token_to_orig_map[e] + 1]
                             ),
                         }
                         for s, e, score in zip(starts, ends, scores)
@@ -1964,12 +1963,14 @@ class QuestionAnsweringPipeline(Pipeline):
                                 1
                             ],
                             "answer": example.context_text[
-                                enc.word_to_chars(enc.token_to_word(s), sequence_index=1 if question_first else 0)[
-                                    0
-                                ] : enc.word_to_chars(enc.token_to_word(e), sequence_index=1 if question_first else 0)[
-                                    1
-                                ]
-                            ],
+                                      enc.word_to_chars(enc.token_to_word(s),
+                                                        sequence_index=1 if question_first else 0)[
+                                          0
+                                      ]:enc.word_to_chars(enc.token_to_word(e),
+                                                          sequence_index=1 if question_first else 0)[
+                                          1
+                                      ]
+                                      ],
                         }
                         for s, e, score in zip(starts, ends, scores)
                     ]
@@ -2101,7 +2102,8 @@ class SummarizationPipeline(Pipeline):
         )
 
     def __call__(
-        self, *documents, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
+            self, *documents, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False,
+            **generate_kwargs
     ):
         r"""
         Summarize the text(s) given as inputs.
@@ -2134,7 +2136,7 @@ class SummarizationPipeline(Pipeline):
 
         if isinstance(documents[0], list):
             assert (
-                self.tokenizer.pad_token_id is not None
+                    self.tokenizer.pad_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
 
             documents = ([prefix + document for document in documents[0]],)
@@ -2221,7 +2223,7 @@ class TranslationPipeline(Pipeline):
         )
 
     def __call__(
-        self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
+            self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
         r"""
         Translate the text(s) given as inputs.
@@ -2252,7 +2254,7 @@ class TranslationPipeline(Pipeline):
 
         if isinstance(args[0], list):
             assert (
-                self.tokenizer.pad_token_id is not None
+                    self.tokenizer.pad_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
             args = ([prefix + text for text in args[0]],)
             padding = True
@@ -2332,7 +2334,7 @@ class Text2TextGenerationPipeline(Pipeline):
         )
 
     def __call__(
-        self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
+            self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
     ):
         r"""
         Generate the output text(s) using text(s) given as inputs.
@@ -2361,7 +2363,7 @@ class Text2TextGenerationPipeline(Pipeline):
 
         if isinstance(args[0], list):
             assert (
-                self.tokenizer.pad_token_id is not None
+                    self.tokenizer.pad_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id when using a batch input"
             padding = True
 
@@ -2558,10 +2560,10 @@ class ConversationalPipeline(Pipeline):
         self.min_length_for_response = min_length_for_response
 
     def __call__(
-        self,
-        conversations: Union[Conversation, List[Conversation]],
-        clean_up_tokenization_spaces=True,
-        **generate_kwargs
+            self,
+            conversations: Union[Conversation, List[Conversation]],
+            clean_up_tokenization_spaces=True,
+            **generate_kwargs
     ):
         r"""
         Generate responses for the conversation(s) given as inputs.
@@ -2596,7 +2598,7 @@ class ConversationalPipeline(Pipeline):
                         )
                     )
             assert (
-                self.tokenizer.pad_token_id is not None or self.tokenizer.eos_token_id is not None
+                    self.tokenizer.pad_token_id is not None or self.tokenizer.eos_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id or eos_token_id when using a batch input"
         else:
             raise ValueError("DialoguePipeline expects a Conversation or list of Conversations as an input")
@@ -2717,7 +2719,7 @@ class ConversationalPipeline(Pipeline):
                     if cutoff_eos_index == 0 or cutoff_eos_index == len(new_input) - 1:
                         break
                     else:
-                        new_input = new_input[cutoff_eos_index + 1 :]
+                        new_input = new_input[cutoff_eos_index + 1:]
             outputs.append(new_input)
         padded_outputs = self.tokenizer.pad(
             {"input_ids": outputs}, padding="longest", return_attention_mask=True, return_tensors=self.framework
@@ -2860,14 +2862,14 @@ def check_task(task: str) -> Tuple[Dict, Any]:
 
 
 def pipeline(
-    task: str,
-    model: Optional = None,
-    config: Optional[Union[str, PretrainedConfig]] = None,
-    tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
-    framework: Optional[str] = None,
-    revision: Optional[str] = None,
-    use_fast: bool = True,
-    **kwargs
+        task: str,
+        model: Optional = None,
+        config: Optional[Union[str, PretrainedConfig]] = None,
+        tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
+        framework: Optional[str] = None,
+        revision: Optional[str] = None,
+        use_fast: bool = True,
+        **kwargs
 ) -> Pipeline:
     """
     Utility factory method to build a :class:`~transformers.Pipeline`.
