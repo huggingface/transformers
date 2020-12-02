@@ -839,13 +839,17 @@ class ModelTesterMixin:
 
         original_config.tie_word_embeddings = False
 
-        # if model cannot untied emeddings -> leave test
+        # if model cannot untied embeddings -> leave test
         if original_config.tie_word_embeddings:
             return
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
             model = model_class(config).to(torch_device)
+
+            # if no output embeddings -> leave test
+            if model.get_output_embeddings() is None:
+                return
 
             model_embed = model.resize_token_embeddings(config.vocab_size)
             cloned_embeddings = model_embed.weight.clone()
@@ -855,6 +859,7 @@ class ModelTesterMixin:
             self.assertEqual(model.config.vocab_size, original_config.vocab_size + 10)
             # Check that it actually resizes the embeddings matrix
             self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            self.assertEqual(model.get_output_embeddings().weight.shape[0], cloned_embeddings.shape[0] + 10)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
