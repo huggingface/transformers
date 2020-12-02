@@ -279,7 +279,7 @@ class BeamSearchScorer(BeamScorer):
                 batch_beam_idx = batch_idx * self.num_beams + beam_id
                 final_score = final_beam_scores[batch_beam_idx].item()
                 final_tokens = input_ids[batch_beam_idx]
-                beam_hyp.add(final_tokens, final_score)
+                beam_hyp.add(final_tokens, final_score, has_eos=False)
 
         # select the best hypotheses
         sent_lengths = input_ids.new(batch_size * self.num_beam_hyps_to_keep)
@@ -327,11 +327,11 @@ class BeamHypotheses:
         """
         return len(self.beams)
 
-    def add(self, hyp: torch.LongTensor, sum_logprobs: float):
+    def add(self, hyp: torch.LongTensor, sum_logprobs: float, has_eos: bool = True):
         """
         Add a new hypothesis to the list.
         """
-        score = sum_logprobs / (hyp.shape[-1] ** self.length_penalty)
+        score = sum_logprobs / ((hyp.shape[-1] if has_eos else hyp.shape[-1] - 1) ** self.length_penalty)
         if len(self) < self.num_beams or score > self.worst_score:
             self.beams.append((score, hyp))
             if len(self) > self.num_beams:
