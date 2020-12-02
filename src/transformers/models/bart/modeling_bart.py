@@ -972,14 +972,15 @@ class BartForConditionalGeneration(PretrainedBartModel):
         self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
+        self.init_weights()
+
     def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        old_num_tokens = self.model.shared.num_embeddings
         new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        self.model.shared = new_embeddings
-        self._resize_final_logits_bias(new_num_tokens, old_num_tokens)
+        self._resize_final_logits_bias(new_num_tokens)
         return new_embeddings
 
-    def _resize_final_logits_bias(self, new_num_tokens: int, old_num_tokens: int) -> None:
+    def _resize_final_logits_bias(self, new_num_tokens: int) -> None:
+        old_num_tokens = self.final_logits_bias.shape[-1]
         if new_num_tokens <= old_num_tokens:
             new_bias = self.final_logits_bias[:, :new_num_tokens]
         else:
@@ -1055,7 +1056,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        lm_logits = F.linear(outputs[0], self.model.shared.weight, bias=self.final_logits_bias)
+        lm_logits = self.lm_head(outputs[0])
 
         masked_lm_loss = None
         if labels is not None:
