@@ -821,6 +821,14 @@ class ModelTesterMixin:
                 inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
+            if self.can_have_untied_word_embeddings:
+                # Check that resizing the token embeddings with untied embeddings works
+                model_embed = model.resize_token_embeddings(model_vocab_size + 10)
+                self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
+                # Check that it actually resizes the embeddings matrix
+                self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+                # Check that the model can still do a forward pass successfully (every parameter should be resized)
+
             # Check that adding and removing tokens has not modified the first part of the embedding matrix.
             models_equal = True
             for p1, p2 in zip(cloned_embeddings, model_embed.weight):
@@ -828,6 +836,35 @@ class ModelTesterMixin:
                     models_equal = False
 
             self.assertTrue(models_equal)
+
+    def test_resize_embeddings_untied(self):
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            return
+
+        original_config.tie_word_embeddings = False
+
+        # if model cannot untied emeddings -> leave test
+        if original_config.tie_word_embeddings:
+            return
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config).to(torch_device)
+
+            model_embed = model.resize_token_embeddings(config.vocab_size)
+            cloned_embeddings = model_embed.weight.clone()
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_embed = model.resize_token_embeddings(config.vocab_size + 10)
+            self.assertEqual(model.config.vocab_size, original_config.vocab_size + 10)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
 
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

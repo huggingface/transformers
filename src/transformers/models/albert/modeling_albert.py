@@ -632,11 +632,11 @@ class AlbertModel(AlbertPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
-    def _resize_token_embeddings(self, new_num_tokens):
-        old_embeddings = self.embeddings.word_embeddings
-        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
-        self.embeddings.word_embeddings = new_embeddings
-        return self.embeddings.word_embeddings
+    #    def _resize_token_embeddings(self, new_num_tokens):
+    #        old_embeddings = self.embeddings.word_embeddings
+    #        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+    #        self.embeddings.word_embeddings = new_embeddings
+    #        return self.embeddings.word_embeddings
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -747,6 +747,9 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.predictions.decoder
+
+    def set_output_embeddings(self, new_embeddings):
+        self.predictions.decoder = new_embeddings
 
     def get_input_embeddings(self):
         return self.albert.embeddings.word_embeddings
@@ -888,6 +891,9 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.predictions.decoder
+
+    def set_output_embeddings(self, new_embeddings):
+        self.predictions.decoder = new_embeddings
 
     def get_input_embeddings(self):
         return self.albert.embeddings.word_embeddings

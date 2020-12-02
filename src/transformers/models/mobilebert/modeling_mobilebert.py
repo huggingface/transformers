@@ -949,6 +949,9 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
+    def set_output_embeddings(self, new_embeddigs):
+        self.cls.predictions.decoder = new_embeddigs
+
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> torch.nn.Embedding:
         # resize dense output embedings at first
         self.cls.predictions.dense = self._get_resized_lm_head(
@@ -1053,6 +1056,9 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
+
+    def set_output_embeddings(self, new_embeddigs):
+        self.cls.predictions.decoder = new_embeddigs
 
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> torch.nn.Embedding:
         # resize dense output embedings at first
