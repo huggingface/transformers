@@ -661,8 +661,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             return old_embeddings
 
         # Build new embeddings
-        new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
-        new_embeddings.to(old_embeddings.weight.device)
+        new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim).to(self.device)
 
         # initialize all new embeddings (in particular added tokens)
         self._init_weights(new_embeddings)
