@@ -950,15 +950,10 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
         return self.cls.predictions.decoder
 
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> torch.nn.Embedding:
-        # resize dense output embedings
-        old_dense_embedding_dim, old_dense_num_tokens = self.cls.predictions.dense.weight.size()
-        new_dense_embeddings = nn.Linear(new_num_tokens, old_dense_embedding_dim, bias=False).to(self.device)
-        self._init_weights(new_dense_embeddings)
-        num_tokens_to_copy = min(old_dense_embedding_dim, old_dense_num_tokens)
-        new_dense_embeddings.weight.data[:, :num_tokens_to_copy] = self.cls.predictions.dense.weight.data[
-            :, :num_tokens_to_copy
-        ]
-        self.cls.predictions.dense = new_dense_embeddings
+        # resize dense output embedings at first
+        self.cls.predictions.dense = self._get_resized_lm_head(
+            self.cls.predictions.dense, new_num_tokens=new_num_tokens, transposed=True
+        )
 
         return super().resize_token_embeddings(new_num_tokens=new_num_tokens)
 
@@ -1060,16 +1055,10 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
         return self.cls.predictions.decoder
 
     def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> torch.nn.Embedding:
-        # resize dense output embedings
-        old_dense_embedding_dim, old_dense_num_tokens = self.cls.predictions.dense.weight.size()
-        new_dense_embeddings = nn.Linear(new_num_tokens, old_dense_embedding_dim, bias=False).to(self.device)
-        self._init_weights(new_dense_embeddings)
-        num_tokens_to_copy = min(old_dense_embedding_dim, old_dense_num_tokens)
-        new_dense_embeddings.weight.data[:, :num_tokens_to_copy] = self.cls.predictions.dense.weight.data[
-            :, :num_tokens_to_copy
-        ]
-        self.cls.predictions.dense = new_dense_embeddings
-
+        # resize dense output embedings at first
+        self.cls.predictions.dense = self._get_resized_lm_head(
+            self.cls.predictions.dense, new_num_tokens=new_num_tokens, transposed=True
+        )
         return super().resize_token_embeddings(new_num_tokens=new_num_tokens)
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))

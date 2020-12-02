@@ -678,7 +678,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         return new_embeddings
 
     def _get_resized_lm_head(
-        self, old_lm_head: torch.nn.Linear, new_num_tokens: Optional[int] = None
+        self, old_lm_head: torch.nn.Linear, new_num_tokens: Optional[int] = None, transposed: Optional[bool] = False
     ) -> torch.nn.Linear:
         """
         Build a resized Linear Module from a provided old Linear Module. Increasing the size will add newly initialized
@@ -686,13 +686,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         Args:
             old_lm_head (:obj:`torch.nn.Linear`):
-                Old embeddings to be resized.
+                Old lm head liner layer to be resized.
             new_num_tokens (:obj:`int`, `optional`):
                 New number of tokens in the linear matrix.
 
                 Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
                 vectors from the end. If not provided or :obj:`None`, just returns a pointer to the input tokens
                 :obj:`torch.nn.Linear`` module of the model without doing anything.
+            transposed (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether ``old_lm_head`` is transposed or not. If True ``old_lm_head.size()`` is ``lm_head_dim,
+                vocab_size`` else ``vocab_size, lm_head_dim``.
 
         Return:
             :obj:`torch.nn.Linear`: Pointer to the resized Linear Module or the old Linear Module if
@@ -701,7 +704,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         if new_num_tokens is None:
             return old_lm_head
 
-        old_num_tokens, old_lm_head_dim = old_lm_head.weight.size()
+        old_num_tokens, old_lm_head_dim = (
+            old_lm_head.weight.size() if not transposed else old_lm_head.weight.t().size()
+        )
+
         if old_num_tokens == new_num_tokens:
             return old_lm_head
 
@@ -711,14 +717,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             )
 
         # Build new lm head
-        new_lm_head = nn.Linear(old_lm_head_dim, new_num_tokens, bias=(old_lm_head.bias is not None)).to(self.device)
+        new_lm_head_shape = (old_lm_head_dim, new_num_tokens) if not transposed else (new_num_tokens, old_lm_head_dim)
+        has_new_lm_head_bias = old_lm_head.bias is not None
+        new_lm_head = nn.Linear(*new_lm_head_shape, bias=has_new_lm_head_bias).to(self.device)
 
         # initialize new lm head (in particular added tokens)
         self._init_weights(new_lm_head)
 
         # Copy old lm head weights to new lm head
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-        new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[:num_tokens_to_copy, :]
+
+        if not transposed:
+            new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[:num_tokens_to_copy, :]
+        else:
+            new_lm_head.weight.data[:, :num_tokens_to_copy] = old_lm_head.weight.data[:, :num_tokens_to_copy]
 
         return new_lm_head
 
