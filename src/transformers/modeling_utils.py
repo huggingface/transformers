@@ -626,9 +626,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         # if word embeddings are not tied, make sure that lm head is resized as well
         if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
-            old_output_embeddings = self.get_output_embeddings()
-            new_output_embeddings = self._get_resized_embeddings(old_output_embeddings, new_num_tokens)
-            self.set_output_embeddings(new_output_embeddings)
+            old_lm_head = self.get_output_embeddings()
+            new_lm_head = self._get_resized_lm_head(old_lm_head, new_num_tokens)
+            self.set_output_embeddings(new_lm_head)
 
         return self.get_input_embeddings()
 
@@ -660,6 +660,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         if old_num_tokens == new_num_tokens:
             return old_embeddings
 
+        if not isinstance(old_embeddings, nn.Embedding):
+            raise TypeError(
+                f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}. You should either use a different resize function or make sure that `old_embeddings` are an instance of {nn.Embedding}."
+            )
+
         # Build new embeddings
         new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim).to(self.device)
 
@@ -671,6 +676,51 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         new_embeddings.weight.data[:num_tokens_to_copy, :] = old_embeddings.weight.data[:num_tokens_to_copy, :]
 
         return new_embeddings
+
+    def _get_resized_lm_head(
+        self, old_lm_head: torch.nn.Linear, new_num_tokens: Optional[int] = None
+    ) -> torch.nn.Linear:
+        """
+        Build a resized Linear Module from a provided old Linear Module. Increasing the size will add newly initialized
+        vectors at the end. Reducing the size will remove vectors from the end
+
+        Args:
+            old_lm_head (:obj:`torch.nn.Linear`):
+                Old embeddings to be resized.
+            new_num_tokens (:obj:`int`, `optional`):
+                New number of tokens in the linear matrix.
+
+                Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
+                vectors from the end. If not provided or :obj:`None`, just returns a pointer to the input tokens
+                :obj:`torch.nn.Linear`` module of the model without doing anything.
+
+        Return:
+            :obj:`torch.nn.Linear`: Pointer to the resized Linear Module or the old Linear Module if
+            :obj:`new_num_tokens` is :obj:`None`
+        """
+        if new_num_tokens is None:
+            return old_lm_head
+
+        old_num_tokens, old_lm_head_dim = old_lm_head.weight.size()
+        if old_num_tokens == new_num_tokens:
+            return old_lm_head
+
+        if not isinstance(old_lm_head, nn.Linear):
+            raise TypeError(
+                f"Old language model is of type {type(old_lm_head)}, which is not an instance of {nn.Linear}. You should either use a different resize function or make sure that `old_embeddings` are an instance of {nn.Linear}."
+            )
+
+        # Build new lm head
+        new_lm_head = nn.Linear(old_lm_head_dim, new_num_tokens, bias=(old_lm_head.bias is not None)).to(self.device)
+
+        # initialize new lm head (in particular added tokens)
+        self._init_weights(new_lm_head)
+
+        # Copy old lm head weights to new lm head
+        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+        new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[:num_tokens_to_copy, :]
+
+        return new_lm_head
 
     def init_weights(self):
         """
