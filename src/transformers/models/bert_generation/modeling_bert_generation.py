@@ -422,6 +422,9 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head.decoder = new_embeddings
+
     @add_start_docstrings_to_model_forward(BERT_GENERATION_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(

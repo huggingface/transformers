@@ -713,7 +713,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         if not isinstance(old_lm_head, nn.Linear):
             raise TypeError(
-                f"Old language model is of type {type(old_lm_head)}, which is not an instance of {nn.Linear}."
+                f"Old language model head is of type {type(old_lm_head)}, which is not an instance of {nn.Linear}."
                 f"You should either use a different resize function or make sure that `old_embeddings` are an instance of {nn.Linear}."
             )
 
@@ -725,13 +725,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         # initialize new lm head (in particular added tokens)
         self._init_weights(new_lm_head)
 
-        # Copy old lm head weights to new lm head
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
 
+        # Copy old lm head weights to new lm head
         if not transposed:
             new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[:num_tokens_to_copy, :]
         else:
             new_lm_head.weight.data[:, :num_tokens_to_copy] = old_lm_head.weight.data[:, :num_tokens_to_copy]
+
+        # Copy bias weights to new lm head
+        if has_new_lm_head_bias:
+            new_lm_head.bias.data[:num_tokens_to_copy] = old_lm_head.bias.data[:num_tokens_to_copy]
 
         return new_lm_head
 
