@@ -72,6 +72,7 @@ from .configuration_auto import (
     MarianConfig,
     MBartConfig,
     MobileBertConfig,
+    MT5Config,
     OpenAIGPTConfig,
     PegasusConfig,
     ProphetNetConfig,
@@ -92,10 +93,12 @@ from .configuration_auto import (
 
 if is_sentencepiece_available():
     from ..albert.tokenization_albert import AlbertTokenizer
+    from ..barthez.tokenization_barthez import BarthezTokenizer
     from ..bert_generation.tokenization_bert_generation import BertGenerationTokenizer
     from ..camembert.tokenization_camembert import CamembertTokenizer
     from ..marian.tokenization_marian import MarianTokenizer
     from ..mbart.tokenization_mbart import MBartTokenizer
+    from ..mt5 import MT5Tokenizer
     from ..pegasus.tokenization_pegasus import PegasusTokenizer
     from ..reformer.tokenization_reformer import ReformerTokenizer
     from ..t5.tokenization_t5 import T5Tokenizer
@@ -104,10 +107,12 @@ if is_sentencepiece_available():
     from ..xlnet.tokenization_xlnet import XLNetTokenizer
 else:
     AlbertTokenizer = None
+    BarthezTokenizer = None
     BertGenerationTokenizer = None
     CamembertTokenizer = None
     MarianTokenizer = None
     MBartTokenizer = None
+    MT5Tokenizer = None
     PegasusTokenizer = None
     ReformerTokenizer = None
     T5Tokenizer = None
@@ -118,6 +123,7 @@ else:
 if is_tokenizers_available():
     from ..albert.tokenization_albert_fast import AlbertTokenizerFast
     from ..bart.tokenization_bart_fast import BartTokenizerFast
+    from ..barthez.tokenization_barthez_fast import BarthezTokenizerFast
     from ..bert.tokenization_bert_fast import BertTokenizerFast
     from ..camembert.tokenization_camembert_fast import CamembertTokenizerFast
     from ..distilbert.tokenization_distilbert_fast import DistilBertTokenizerFast
@@ -131,6 +137,7 @@ if is_tokenizers_available():
     from ..lxmert.tokenization_lxmert_fast import LxmertTokenizerFast
     from ..mbart.tokenization_mbart_fast import MBartTokenizerFast
     from ..mobilebert.tokenization_mobilebert_fast import MobileBertTokenizerFast
+    from ..mt5 import MT5TokenizerFast
     from ..openai.tokenization_openai_fast import OpenAIGPTTokenizerFast
     from ..pegasus.tokenization_pegasus_fast import PegasusTokenizerFast
     from ..reformer.tokenization_reformer_fast import ReformerTokenizerFast
@@ -143,6 +150,7 @@ if is_tokenizers_available():
 else:
     AlbertTokenizerFast = None
     BartTokenizerFast = None
+    BarthezTokenizerFast = None
     BertTokenizerFast = None
     CamembertTokenizerFast = None
     DistilBertTokenizerFast = None
@@ -156,6 +164,7 @@ else:
     LxmertTokenizerFast = None
     MBartTokenizerFast = None
     MobileBertTokenizerFast = None
+    MT5TokenizerFast = None
     OpenAIGPTTokenizerFast = None
     PegasusTokenizerFast = None
     ReformerTokenizerFast = None
@@ -173,6 +182,7 @@ TOKENIZER_MAPPING = OrderedDict(
     [
         (RetriBertConfig, (RetriBertTokenizer, RetriBertTokenizerFast)),
         (T5Config, (T5Tokenizer, T5TokenizerFast)),
+        (MT5Config, (MT5Tokenizer, MT5TokenizerFast)),
         (MobileBertConfig, (MobileBertTokenizer, MobileBertTokenizerFast)),
         (DistilBertConfig, (DistilBertTokenizer, DistilBertTokenizerFast)),
         (AlbertConfig, (AlbertTokenizer, AlbertTokenizerFast)),
@@ -183,10 +193,9 @@ TOKENIZER_MAPPING = OrderedDict(
         (MarianConfig, (MarianTokenizer, None)),
         (BlenderbotConfig, (BlenderbotSmallTokenizer, None)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
+        (BartConfig, (BarthezTokenizer, BarthezTokenizerFast)),
         (BartConfig, (BartTokenizer, BartTokenizerFast)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
-        (RobertaConfig, (BertweetTokenizer, None)),
-        (RobertaConfig, (PhobertTokenizer, None)),
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
         (ReformerConfig, (ReformerTokenizer, ReformerTokenizerFast)),
         (ElectraConfig, (ElectraTokenizer, ElectraTokenizerFast)),
@@ -195,7 +204,6 @@ TOKENIZER_MAPPING = OrderedDict(
         (LayoutLMConfig, (LayoutLMTokenizer, LayoutLMTokenizerFast)),
         (DPRConfig, (DPRQuestionEncoderTokenizer, DPRQuestionEncoderTokenizerFast)),
         (SqueezeBertConfig, (SqueezeBertTokenizer, SqueezeBertTokenizerFast)),
-        (BertConfig, (HerbertTokenizer, HerbertTokenizerFast)),
         (BertConfig, (BertTokenizer, BertTokenizerFast)),
         (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),
         (GPT2Config, (GPT2Tokenizer, GPT2TokenizerFast)),
@@ -213,11 +221,32 @@ TOKENIZER_MAPPING = OrderedDict(
     ]
 )
 
+# For tokenizers which are not directly mapped from a config
+NO_CONFIG_TOKENIZER = [
+    BertJapaneseTokenizer,
+    BertweetTokenizer,
+    HerbertTokenizer,
+    HerbertTokenizerFast,
+    PhobertTokenizer,
+]
+
+
 SLOW_TOKENIZER_MAPPING = {
     k: (v[0] if v[0] is not None else v[1])
     for k, v in TOKENIZER_MAPPING.items()
     if (v[0] is not None or v[1] is not None)
 }
+
+
+def tokenizer_class_from_name(class_name: str):
+    all_tokenizer_classes = (
+        [v[0] for v in TOKENIZER_MAPPING.values() if v[0] is not None]
+        + [v[1] for v in TOKENIZER_MAPPING.values() if v[1] is not None]
+        + NO_CONFIG_TOKENIZER
+    )
+    for c in all_tokenizer_classes:
+        if c.__name__ == class_name:
+            return c
 
 
 class AutoTokenizer:
@@ -247,7 +276,7 @@ class AutoTokenizer:
         List options
 
         Params:
-            pretrained_model_name_or_path (:obj:`str`):
+            pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
                 Can be either:
 
                     - A string, the `model id` of a predefined tokenizer hosted inside a model repo on huggingface.co.
@@ -263,7 +292,7 @@ class AutoTokenizer:
                 Will be passed along to the Tokenizer ``__init__()`` method.
             config (:class:`~transformers.PreTrainedConfig`, `optional`)
                 The configuration object used to dertermine the tokenizer class to instantiate.
-            cache_dir (:obj:`str`, `optional`):
+            cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
             force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -307,17 +336,17 @@ class AutoTokenizer:
         if not isinstance(config, PretrainedConfig):
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-        if "bert-base-japanese" in str(pretrained_model_name_or_path):
-            return BertJapaneseTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-
         use_fast = kwargs.pop("use_fast", True)
 
         if config.tokenizer_class is not None:
+            tokenizer_class = None
             if use_fast and not config.tokenizer_class.endswith("Fast"):
                 tokenizer_class_candidate = f"{config.tokenizer_class}Fast"
-            else:
+                tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
+            if tokenizer_class is None:
                 tokenizer_class_candidate = config.tokenizer_class
-            tokenizer_class = globals().get(tokenizer_class_candidate)
+                tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
+
             if tokenizer_class is None:
                 raise ValueError(
                     "Tokenizer class {} does not exist or is not currently imported.".format(tokenizer_class_candidate)
@@ -340,7 +369,13 @@ class AutoTokenizer:
             if tokenizer_class_fast and (use_fast or tokenizer_class_py is None):
                 return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
             else:
-                return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                if tokenizer_class_py is not None:
+                    return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                else:
+                    raise ValueError(
+                        "This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed "
+                        "in order to use this tokenizer."
+                    )
 
         raise ValueError(
             "Unrecognized configuration class {} to build an AutoTokenizer.\n"

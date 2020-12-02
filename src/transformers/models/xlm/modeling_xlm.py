@@ -399,7 +399,7 @@ XLM_INPUTS_DOCSTRING = r"""
     XLM_START_DOCSTRING,
 )
 class XLMModel(XLMPreTrainedModel):
-    authorized_missing_keys = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -687,6 +687,9 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.pred_layer.proj
+
+    def set_output_embeddings(self, new_embeddings):
+        self.pred_layer.proj = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
         mask_token_id = self.config.mask_token_id

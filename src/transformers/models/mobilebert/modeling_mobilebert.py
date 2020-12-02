@@ -641,7 +641,7 @@ class MobileBertLMPredictionHead(nn.Module):
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = hidden_states.matmul(torch.cat([self.decoder.weight.t(), self.dense.weight], dim=0))
-        hidden_states += self.bias
+        hidden_states += self.decoder.bias
         return hidden_states
 
 
@@ -677,7 +677,7 @@ class MobileBertPreTrainedModel(PreTrainedModel):
     pretrained_model_archive_map = MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST
     load_tf_weights = load_tf_weights_in_mobilebert
     base_model_prefix = "mobilebert"
-    authorized_missing_keys = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -933,7 +933,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    MobileBert Model with two heads on top as done during the pre-training: a `masked language modeling` head and a
+    MobileBert Model with two heads on top as done during the pretraining: a `masked language modeling` head and a
     `next sentence prediction (classification)` head.
     """,
     MOBILEBERT_START_DOCSTRING,
@@ -949,26 +949,16 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
-    def tie_weights(self):
-        """
-        Tie the weights between the input embeddings and the output embeddings. If the `torchscript` flag is set in the
-        configuration, can't handle parameter sharing so we are cloning the weights instead.
-        """
-        output_embeddings = self.get_output_embeddings()
-        input_embeddings = self.get_input_embeddings()
+    def set_output_embeddings(self, new_embeddigs):
+        self.cls.predictions.decoder = new_embeddigs
 
-        resized_dense = nn.Linear(
-            input_embeddings.num_embeddings, self.config.hidden_size - self.config.embedding_size, bias=False
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> torch.nn.Embedding:
+        # resize dense output embedings at first
+        self.cls.predictions.dense = self._get_resized_lm_head(
+            self.cls.predictions.dense, new_num_tokens=new_num_tokens, transposed=True
         )
-        kept_data = self.cls.predictions.dense.weight.data[
-            ..., : min(self.cls.predictions.dense.weight.data.shape[1], resized_dense.weight.data.shape[1])
-        ]
-        resized_dense.weight.data[..., : self.cls.predictions.dense.weight.data.shape[1]] = kept_data
-        self.cls.predictions.dense = resized_dense
-        self.cls.predictions.dense.to(self.device)
 
-        if output_embeddings is not None and self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
+        return super().resize_token_embeddings(new_num_tokens=new_num_tokens)
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=MobileBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -1054,7 +1044,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
 @add_start_docstrings("""MobileBert Model with a `language modeling` head on top. """, MOBILEBERT_START_DOCSTRING)
 class MobileBertForMaskedLM(MobileBertPreTrainedModel):
 
-    authorized_unexpected_keys = [r"pooler"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1067,26 +1057,15 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
-    def tie_weights(self):
-        """
-        Tie the weights between the input embeddings and the output embeddings. If the `torchscript` flag is set in the
-        configuration, can't handle parameter sharing so we are cloning the weights instead.
-        """
-        output_embeddings = self.get_output_embeddings()
-        input_embeddings = self.get_input_embeddings()
+    def set_output_embeddings(self, new_embeddigs):
+        self.cls.predictions.decoder = new_embeddigs
 
-        resized_dense = nn.Linear(
-            input_embeddings.num_embeddings, self.config.hidden_size - self.config.embedding_size, bias=False
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> torch.nn.Embedding:
+        # resize dense output embedings at first
+        self.cls.predictions.dense = self._get_resized_lm_head(
+            self.cls.predictions.dense, new_num_tokens=new_num_tokens, transposed=True
         )
-        kept_data = self.cls.predictions.dense.weight.data[
-            ..., : min(self.cls.predictions.dense.weight.data.shape[1], resized_dense.weight.data.shape[1])
-        ]
-        resized_dense.weight.data[..., : self.cls.predictions.dense.weight.data.shape[1]] = kept_data
-        self.cls.predictions.dense = resized_dense
-        self.cls.predictions.dense.to(self.device)
-
-        if output_embeddings is not None and self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
+        return super().resize_token_embeddings(new_num_tokens=new_num_tokens)
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1350,7 +1329,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
 )
 class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
 
-    authorized_unexpected_keys = [r"pooler"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1545,7 +1524,7 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
 )
 class MobileBertForTokenClassification(MobileBertPreTrainedModel):
 
-    authorized_unexpected_keys = [r"pooler"]
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
         super().__init__(config)

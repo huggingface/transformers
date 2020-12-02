@@ -244,12 +244,12 @@ class GenerationMixin:
 
         # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
         # all samplers can be found in `generation_utils_samplers.py`
+        if temperature is not None and temperature != 1.0:
+            warpers.append(TemperatureLogitsWarper(temperature))
         if top_k is not None and top_k != 0:
             warpers.append(TopKLogitsWarper(top_k=top_k, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
         if top_p is not None and top_p < 1.0:
             warpers.append(TopPLogitsWarper(top_p=top_p, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
-        if temperature is not None and temperature != 1.0:
-            warpers.append(TemperatureLogitsWarper(temperature))
         return warpers
 
     def _get_logits_processor(
@@ -462,7 +462,6 @@ class GenerationMixin:
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if input_ids is None:
             # init `input_ids` with bos_token_id

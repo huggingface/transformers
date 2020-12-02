@@ -99,20 +99,12 @@ class AutoTokenizerTest(unittest.TestCase):
 
         for mapping in mappings:
             mapping = tuple(mapping.items())
-            for index, (child_config, (child_model_py, child_model_fast)) in enumerate(mapping[1:]):
-                for parent_config, (parent_model_py, parent_model_fast) in mapping[: index + 1]:
+            for index, (child_config, _) in enumerate(mapping[1:]):
+                for parent_config, _ in mapping[: index + 1]:
                     with self.subTest(
                         msg="Testing if {} is child of {}".format(child_config.__name__, parent_config.__name__)
                     ):
                         self.assertFalse(issubclass(child_config, parent_config))
-
-                        # Check for Slow tokenizer implementation if provided
-                        if child_model_py and parent_model_py:
-                            self.assertFalse(issubclass(child_model_py, parent_model_py))
-
-                        # Check for Fast tokenizer implementation if provided
-                        if child_model_fast and parent_model_fast:
-                            self.assertFalse(issubclass(child_model_fast, parent_model_fast))
 
     @require_tokenizers
     def test_from_pretrained_use_fast_toggle(self):

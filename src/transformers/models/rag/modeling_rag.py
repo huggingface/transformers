@@ -216,7 +216,7 @@ class RagPreTrainedModel(PreTrainedModel):
     """
     config_class = RagConfig
     base_model_prefix = "rag"
-    authorized_missing_keys = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     @classmethod
     def from_pretrained_question_encoder_generator(
@@ -556,7 +556,9 @@ class RagModel(RagPreTrainedModel):
         if encoder_outputs is None:
 
             if has_to_retrieve:
-                question_enc_outputs = self.question_encoder(input_ids, attention_mask=attention_mask)
+                question_enc_outputs = self.question_encoder(
+                    input_ids, attention_mask=attention_mask, return_dict=True
+                )
                 question_encoder_last_hidden_state = question_enc_outputs[0]  # hidden states of question encoder
 
                 retriever_outputs = self.retriever(
@@ -616,6 +618,7 @@ class RagModel(RagPreTrainedModel):
             decoder_attention_mask=decoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
+            return_dict=True,
         )
 
         if not has_to_retrieve:
@@ -674,7 +677,9 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         ), "Either a configuration or an encoder and a generator has to be provided."
 
         if config is None:
-            config = RagConfig.from_encoder_generator_configs(question_encoder.config, generator.config, **kwargs)
+            config = RagConfig.from_question_encoder_generator_configs(
+                question_encoder.config, generator.config, **kwargs
+            )
         super().__init__(config)
 
         # instantiate model
@@ -998,7 +1003,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
         ), "Either a configuration or an encoder and a generator has to be provided."
 
         if config is None:
-            config = RagConfig.from_encoder_generator_configs(question_encoder.config, generator.config, **kwargs)
+            config = RagConfig.from_question_encoder_generator_configs(
+                question_encoder.config, generator.config, **kwargs
+            )
 
         super().__init__(config)
 
@@ -1451,6 +1458,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.rag.generator.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        return self.rag.generator.set_output_embeddings(new_embeddings)
 
     def shift_tokens_right(self, input_ids, start_token_id=None):
         """Shift input ids one token to the right, and pad with start_token_id"""

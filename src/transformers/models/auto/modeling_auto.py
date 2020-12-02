@@ -60,7 +60,7 @@ from ..camembert.modeling_camembert import (
     CamembertForTokenClassification,
     CamembertModel,
 )
-from ..ctrl.modeling_ctrl import CTRLLMHeadModel, CTRLModel
+from ..ctrl.modeling_ctrl import CTRLForSequenceClassification, CTRLLMHeadModel, CTRLModel
 from ..deberta.modeling_deberta import DebertaForSequenceClassification, DebertaModel
 from ..distilbert.modeling_distilbert import (
     DistilBertForMaskedLM,
@@ -157,7 +157,7 @@ from ..squeezebert.modeling_squeezebert import (
     SqueezeBertModel,
 )
 from ..t5.modeling_t5 import T5ForConditionalGeneration, T5Model
-from ..transfo_xl.modeling_transfo_xl import TransfoXLLMHeadModel, TransfoXLModel
+from ..transfo_xl.modeling_transfo_xl import TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
 from ..xlm.modeling_xlm import (
     XLMForMultipleChoice,
     XLMForQuestionAnsweringSimple,
@@ -415,6 +415,8 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (GPT2Config, GPT2ForSequenceClassification),
         (OpenAIGPTConfig, OpenAIGPTForSequenceClassification),
         (ReformerConfig, ReformerForSequenceClassification),
+        (CTRLConfig, CTRLForSequenceClassification),
+        (TransfoXLConfig, TransfoXLForSequenceClassification),
     ]
 )
 
@@ -502,7 +504,7 @@ AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
         deactivated). To train the model, you should first set it back in training mode with ``model.train()``
 
         Args:
-            pretrained_model_name_or_path:
+            pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
                 Can be either:
 
                     - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
@@ -533,7 +535,7 @@ AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
                 weights. In this case though, you should check if using
                 :func:`~transformers.PreTrainedModel.save_pretrained` and
                 :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
-            cache_dir (:obj:`str`, `optional`):
+            cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
             from_tf (:obj:`bool`, `optional`, defaults to :obj:`False`):

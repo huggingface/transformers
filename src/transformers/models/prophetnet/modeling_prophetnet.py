@@ -20,7 +20,6 @@ import warnings
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
@@ -157,18 +156,21 @@ def softmax(hidden_state, dim, onnx_trace=False):
         return F.softmax(hidden_state, dim=dim, dtype=torch.float32)
 
 
-def ngram_attention_bias(sequence_length, ngram, device, dtype):
+@torch.jit.script
+def ngram_attention_bias(sequence_length: int, ngram: int, device: torch.device, dtype: torch.dtype):
     """
     This function computes the bias for the predict stream
     """
-    bias_array = np.ones((ngram, sequence_length, 2 * sequence_length), dtype=np.float) * np.float("-inf")
-
+    bias = torch.ones((ngram, sequence_length, 2 * sequence_length)) * float("-inf")
     # create bias
     for stream_idx in range(ngram):
         for i in range(sequence_length):
-            bias_array[stream_idx, i, sequence_length + i] = 0
-            bias_array[stream_idx, i, : max(i - stream_idx, 0) + 1] = 0
-    bias = torch.from_numpy(bias_array)
+            bias[stream_idx, i, sequence_length + i] = 0
+
+    for stream_idx in range(ngram):
+        for i in range(sequence_length):
+            bias[stream_idx, i, : max(i - stream_idx, 0) + 1] = 0
+
     return bias
 
 
@@ -698,6 +700,14 @@ class ProphetNetSelfAttention(nn.Module):
         if attention_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights + attention_mask
 
+        # need two reshapes to keep gradient at attention weights
+        attn_weights_reshaped = attn_weights.view(
+            batch_size, self.num_attn_heads, sequence_length, key_sequence_length
+        )
+        attn_weights = attn_weights_reshaped.view(
+            batch_size * self.num_attn_heads, sequence_length, key_sequence_length
+        )
+
         attn_weights = F.softmax(attn_weights, dim=-1)
         attn_probs = F.dropout(
             attn_weights,
@@ -715,9 +725,8 @@ class ProphetNetSelfAttention(nn.Module):
 
         attn_output = self.out_proj(attn_output)
 
-        attn_weights = attn_weights.view(batch_size, self.num_attn_heads, sequence_length, key_sequence_length)
         attn_output = F.dropout(attn_output, p=self.dropout, training=self.training)
-        return attn_output, attn_weights
+        return attn_output, attn_weights_reshaped
 
 
 class ProhpetNetFeedForward(nn.Module):
@@ -1224,7 +1233,9 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
 
         for encoder_layer in self.layers:
             if output_hidden_states:
-                encoder_hidden_states = encoder_hidden_states + (hidden_states.transpose(0, 1),)
+                hidden_states = hidden_states.transpose(0, 1)
+                encoder_hidden_states = encoder_hidden_states + (hidden_states,)
+                hidden_states = hidden_states.transpose(0, 1)
             hidden_states, attn_probs = encoder_layer(hidden_states, attention_mask=extended_attention_mask)
             if output_attentions:
                 all_attentions = all_attentions + (attn_probs,)
@@ -1416,6 +1427,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
+                # grad cannot be kept because tensor is sliced
                 all_main_stream_hidden_states += (hidden_states[:sequence_length].transpose(0, 1),)
                 if self.config.ngram > 0:
                     all_ngram_stream_hidden_states += (hidden_states[sequence_length:].transpose(0, 1),)
@@ -1696,6 +1708,9 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
     def get_input_embeddings(self):
         return self.prophetnet.word_embeddings
 
@@ -1893,6 +1908,9 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
 
     @add_start_docstrings_to_model_forward(PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ProphetNetDecoderLMOutput, config_class=_CONFIG_FOR_DOC)
