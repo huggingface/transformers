@@ -118,7 +118,7 @@ BART_INPUTS_DOCSTRING = r"""
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Provide for translation and summarization training. By default, the model will create this tensor by
             shifting the :obj:`input_ids` to the right, following the paper.
-        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
+        decoder_attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
 
@@ -133,9 +133,9 @@ BART_INPUTS_DOCSTRING = r"""
         past_key_values (:obj:`Tuple[Dict[str: tf.Tensor]]` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
 
-            If :obj:`past_key_values` are used, the user can optionally input only the last ``decoder_input_ids``
+            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
-            instead of all ``decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
+            instead of all :obj:`decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
         use_cache (:obj:`bool`, `optional`):
             If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
             decoding (see :obj:`past_key_values`).
@@ -152,7 +152,9 @@ BART_INPUTS_DOCSTRING = r"""
 
 def invert_mask(attention_mask):
     """Turns 1->0, 0->1, False->True, True-> False"""
-    assert attention_mask.dim() == 2
+    assert (
+        attention_mask.dim() == 2
+    ), f"The mask {attention_mask} should have two dimensions, but found {len(attention_mask.dim())} dimensions."
     return attention_mask.eq(0)
 
 
@@ -950,22 +952,25 @@ class BartModel(PretrainedBartModel):
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
 
-    def get_output_embeddings(self):
-        return _make_linear_from_emb(self.shared)  # make it on the fly
-
 
 @add_start_docstrings(
     "The BART Model with a language modeling head. Can be used for summarization.", BART_START_DOCSTRING
 )
 class BartForConditionalGeneration(PretrainedBartModel):
     base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [r"final_logits_bias", r"encoder\.version", r"decoder\.version"]
+    _keys_to_ignore_on_load_missing = [
+        r"final_logits_bias",
+        r"encoder\.version",
+        r"decoder\.version",
+        r"lm_head\.weight",
+    ]
 
     def __init__(self, config: BartConfig):
         super().__init__(config)
         base_model = BartModel(config)
         self.model = base_model
         self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
+        self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
     def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
         old_num_tokens = self.model.shared.num_embeddings
@@ -981,6 +986,12 @@ class BartForConditionalGeneration(PretrainedBartModel):
             extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
             new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
         self.register_buffer("final_logits_bias", new_bias)
+
+    def get_encoder(self):
+        return self.model.encoder
+
+    def get_output_embeddings(self):
+        return self.lm_head
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1102,12 +1113,6 @@ class BartForConditionalGeneration(PretrainedBartModel):
             }
             reordered_past.append(layer_past_new)
         return reordered_past
-
-    def get_encoder(self):
-        return self.model.encoder
-
-    def get_output_embeddings(self):
-        return _make_linear_from_emb(self.model.shared)  # make it on the fly
 
 
 @add_start_docstrings(
