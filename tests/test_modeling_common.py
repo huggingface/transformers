@@ -821,14 +821,6 @@ class ModelTesterMixin:
                 inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if self.can_have_untied_word_embeddings:
-                # Check that resizing the token embeddings with untied embeddings works
-                model_embed = model.resize_token_embeddings(model_vocab_size + 10)
-                self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
-                # Check that it actually resizes the embeddings matrix
-                self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
-                # Check that the model can still do a forward pass successfully (every parameter should be resized)
-
             # Check that adding and removing tokens has not modified the first part of the embedding matrix.
             models_equal = True
             for p1, p2 in zip(cloned_embeddings, model_embed.weight):
