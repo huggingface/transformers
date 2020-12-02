@@ -368,55 +368,22 @@ class TapasModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
-    # @slow
-    # def test_lm_outputs_same_as_reference_model(self):
-    #     """Write something that could help someone fixing this here."""
-    #     checkpoint_path = "XXX/bart-large"
-    #     model = self.big_model
-    #     tokenizer = AutoTokenizer.from_pretrained(
-    #         checkpoint_path
-    #     )  # same with AutoTokenizer (see tokenization_auto.py). This is not mandatory
-    #     # MODIFY THIS DEPENDING ON YOUR MODELS RELEVANT TASK.
-    #     batch = tokenizer(["I went to the <mask> yesterday"]).to(torch_device)
-    #     desired_mask_result = tokenizer.decode("store")  # update this
-    #     logits = model(**batch).logits
-    #     masked_index = (batch.input_ids == self.tokenizer.mask_token_id).nonzero()
-    #     assert model.num_parameters() == 175e9  # a joke
-    #     mask_entry_logits = logits[0, masked_index.item(), :]
-    #     probs = mask_entry_logits.softmax(dim=0)
-    #     _, predictions = probs.topk(1)
-    #     self.assertEqual(tokenizer.decode(predictions), desired_mask_result)
 
-    # @cached_property
-    # def big_model(self):
-    #     """Cached property means this code will only be executed once."""
-    #     checkpoint_path = "XXX/bart-large"
-    #     model = AutoModelForMaskedLM.from_pretrained(checkpoint_path).to(
-    #         torch_device
-    #     )  # test whether AutoModel can determine your model_class from checkpoint name
-    #     if torch_device == "cuda":
-    #         model.half()
+class TapasModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference_masked_lm(self):
+        model = TapasForQuestionAnswering.from_pretrained("google/tapas-xxx")
 
-    # optional: do more testing! This will save you time later!
-    # @slow
-    # def test_that_XXX_can_be_used_in_a_pipeline(self):
-    #     """We can use self.big_model here without calling __init__ again."""
-    #     pass
+        input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        output = model(input_ids)[0]
+        expected_shape = torch.Size((1, 11, 50265))
+        self.assertEqual(output.shape, expected_shape)
+        # compare the actual values for a slice.
+        expected_slice = torch.tensor(
+            [[[33.8802, -4.3103, 22.7761], [4.6539, -2.8098, 13.6253], [1.8228, -3.6898, 8.8600]]]
+        )
 
-    # def test_XXX_loss_doesnt_change_if_you_add_padding(self):
-    #     pass
-
-    # def test_XXX_bad_args(self):
-    #     pass
-
-    # def test_XXX_backward_pass_reduces_loss(self):
-    #     """Test loss/gradients same as reference implementation, for example."""
-    #     pass
-
-    # @require_torch_and_cuda
-    # def test_large_inputs_in_fp16_dont_cause_overflow(self):
-    #     pass
-
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
 
 # Below: tests for Tapas utilities, based on segmented_tensor_test.py of the original implementation.
 # These test the operations on segmented tensors.
