@@ -574,6 +574,10 @@ class ReformerTesterMixin:
         # reformer cannot keep gradients in attentions or hidden states
         return
 
+    def test_resize_embeddings_untied(self):
+        # reformer cannot resize embeddings that easily
+        return
+
 
 @require_torch
 class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, ModelTesterMixin, unittest.TestCase):
