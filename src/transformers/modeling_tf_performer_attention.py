@@ -1,9 +1,8 @@
-from torch import nn
 from typing import Optional, Union
 import logging
 import numpy as np
-import torch
-import torch.nn.functional as F
+import tensorflow as tf
+
 
 from .configuration_performer_attention import PerformerAttentionConfig
 from .modeling_utils import (
@@ -12,10 +11,10 @@ from .modeling_utils import (
 )
 
 KERNEL_CALLABLES = {
-    'cosh': lambda x, h: torch.cat((torch.exp(h + x), torch.exp(h - x)), dim=-1),
-    'exp': lambda x, h: torch.exp(h + x), # Default
-    'elu': lambda x: F.elu(x) + 1,
-    'relu': F.relu
+    'cosh': lambda x, h: tf.concat((tf.exp(h + x), tf.exp(h - x)), dim=-1),
+    'exp': lambda x, h: tf.exp(h + x),  # Default
+    'elu': lambda x: tf.nn.elu(x) + 1,
+    'relu': tf.nn.relu
 }
 
 SHORT_SEQUENCE_BEHAVIOR_CALLABLES = {
@@ -24,7 +23,8 @@ SHORT_SEQUENCE_BEHAVIOR_CALLABLES = {
     'never_use_softmax': lambda L, M, training: False
 }
 
-class PerformerAttention(nn.Module):
+
+class TFPerformerAttention(tf.keras.layers.Layer):
     def __init__(self, config: Optional[Union[dict, PerformerAttentionConfig]] = None, **kwargs):
         super().__init__()
         
@@ -46,7 +46,7 @@ class PerformerAttention(nn.Module):
         if self.num_heads is None or self.d_model is None:
             raise ValueError("PerformerAttention: num_heads and d_model must be non-None")
         
-        self.dropout = nn.Dropout(p=self.attention_dropout)
+        self.dropout = tf.keras.layers.Dropout(rate=self.attention_dropout)
         self.calls_since_last_redraw = 0
         self.random_features = None
         
@@ -71,11 +71,11 @@ class PerformerAttention(nn.Module):
         assert self.d_model % self.num_heads == 0
         
         if self.use_qkv_linear_layers:
-            self.q_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
-            self.k_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
-            self.v_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
+            self.q_lin = tf.keras.layers.Dense(units=self.d_model)
+            self.k_lin = tf.keras.layers.Dense(units=self.d_model)
+            self.v_lin = tf.keras.layers.Dense(units=self.d_model)
         
-        self.out_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
+        self.out_lin = tf.keras.layers.Dense(units=self.d_model)
 
         self.pruned_heads = set()
 
@@ -97,15 +97,14 @@ class PerformerAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
     
     def redraw_features_now(self):
-        device = self.random_features.device
-        self._generate_feature_matrix(device)
+        self._generate_feature_matrix()
         
         if self.training and self.redraw_verbose:
             logging.info(f"PerformerAttention: Just redrew random features.")
         
         self.calls_since_last_redraw = 0
 
-    def forward(self, query, key, value, mask=None, head_mask=None, output_attentions=False):
+    def call(self, query, key, value, mask=None, head_mask=None, output_attentions=False):
         """
         Parameters:
             query: torch.tensor(bs, seq_length, dim)
@@ -114,7 +113,7 @@ class PerformerAttention(nn.Module):
             mask: torch.tensor(bs, seq_length)
 
         Returns:
-            weights: torch.tensor(bs, num_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
+            weights: tf.tensor(bs, num_heads, seq_length, seq_length) Attention weights context: tf.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
         bs, q_length, dim = query.size()
@@ -127,7 +126,8 @@ class PerformerAttention(nn.Module):
 
         def shape(x):
             """ separate heads """
-            return x.view(bs, -1, self.num_heads, dim_per_head).transpose(1, 2)
+            new_shape = tf.concat((x.shape[:-1], tf.constant([self.num_heads, dim_per_head])), axis=0)
+            return tf.transpose(tf.reshape(x, new_shape), perm=[0, 2, 1, 3])
         
         if self.use_qkv_linear_layers:
             q = self.q_lin(query)
@@ -141,23 +141,23 @@ class PerformerAttention(nn.Module):
         
         # If the sequence length is short enough that FAVOR+ would use considerably more time and/or memory than just
         # using softmax attention, use softmax. This works because FAVOR+ is an unbiased estimator of softmax attention.
-        m = round(dim_per_head * np.log(dim_per_head)) # m is the number of random features
+        m = round(dim_per_head * np.log(dim_per_head))  # m is the number of random features
         if self.should_fallback_to_softmax(q_length, m, self.training):
-            scores = q @ k.transpose(-2, -1) / (dim ** 0.5)
+            scores = q @ tf.linalg.matrix_transpose(k) / (dim ** 0.5)
             
             if mask is not None:
-                mask = (mask == 0).view(mask_reshp).expand_as(scores)  # (bs, num_heads, q_length, k_length)
-                scores.masked_fill_(mask, -float("inf"))  # (bs, num_heads, q_length, k_length)
+                mask = tf.reshape((mask == 0), mask_reshp)  # .expand_as(scores)  # (bs, num_heads, q_length, k_length)
+                scores -= 1e9 * tf.cast(mask, q.dtype)  # (bs, num_heads, q_length, k_length)
             
-            attn_map = nn.Softmax(dim=-1)(scores)
+            attn_map = tf.nn.softmax(scores, dim=-1)
             attn_map = self.dropout(attn_map)  # (bs, num_heads, q_length, k_length)
             return self._finalize_attention_output(attn_map @ v, head_mask, attn_map)
         
         # When we're using FAVOR+ we can't output the attention matrix
         if output_attentions:
-            raise ValueError("PerformerAttention: Can't output attention maps when using FAVOR+ linear attention.")
+            raise ValueError("TFPerformerAttention: Can't output attention maps when using FAVOR+ linear attention.")
         
-        self._redraw_features_if_needed(q.device)
+        self._redraw_features_if_needed()
         
         # Get the transformed values of Q and K
         q_prime, k_prime = self.get_projected_queries_and_keys(q, k)
@@ -166,9 +166,9 @@ class PerformerAttention(nn.Module):
     # Turns Q into Q', K into K'
     def get_projected_queries_and_keys(self, q, k):
         # Broadcast the feature matrix across the batch dimension
-        new_shape = list(q.shape)
-        new_shape[-2] = self.random_features.shape[-2]
-        W_t = self.random_features.expand(new_shape).transpose(-2, -1)
+        # new_shape = list(q.shape)
+        # new_shape[-2] = self.random_features.shape[-2]
+        W_t = tf.linalg.matrix_transpose(self.random_features)  # .expand(new_shape)
         
         # Instead of dividing the product QK^T by sqrt(d), we divide Q and K by the 4th root of d.
         q = q / (self.d_model ** 0.25)
@@ -181,19 +181,15 @@ class PerformerAttention(nn.Module):
         if self.kernel_type in ('cosh', 'exp'):
             # The h(x) function is defined in Lemma 1 in Choromanski et al. pg. 4 as exp(-||x||**2 / 2). For numerical
             # stability we leverage the fact that exp(x)*exp(y) = exp(x + y) here and delay computing the exp().
-            h_of_q = -torch.sum(q ** 2, dim=-1, keepdim=True) / 2
-            h_of_k = -torch.sum(k ** 2, dim=-1, keepdim=True) / 2
+            h_of_q = -tf.reduce_sum(q ** 2, dim=-1, keepdim=True) / 2
+            h_of_k = -tf.reduce_sum(k ** 2, dim=-1, keepdim=True) / 2
             
             # Compute the numerical stabilizer that we subtract from the input to exp(). For some reason the original
             # Jax implementation uses different types of stabilizers for queries vs. keys, and we follow that here.
-            ## This is a workaround for very slow performance of torch.max(dim=N) on PyTorch 1.4 and earlier;
-            ## see this GitHub discussion: https://github.com/pytorch/pytorch/issues/36900
-            q_indices = h_of_q.argmax(-1).unsqueeze(-1)
-            q_stabilizer = h_of_q.gather(-1, q_indices) # Note this is a (d_model, 1) matrix that gets broadcasted
-            #q_stabilizer = torch.max(h_of_q, axis=-1, keepdim=True).values
+            q_stabilizer = tf.math.reduce_max(h_of_q, axis=-1, keepdims=True)
             
             # This is just a scalar
-            k_stabilizer = torch.max(h_of_k)
+            k_stabilizer = tf.math.reduce_max(h_of_k)
             
             q_kernel_output = self.kernel_fn(projected_q - q_stabilizer, h_of_q)
             k_kernel_output = self.kernel_fn(projected_k - k_stabilizer, h_of_k)
@@ -213,19 +209,19 @@ class PerformerAttention(nn.Module):
     def compute_attention_with_projected_queries_and_keys(self, q_prime, k_prime, v, mask = None, head_mask = None):
         # Apply the padding mask to K'. Also applying it to Q' would be redundant.
         if mask is not None:
-            k_prime *= mask.unsqueeze(1).unsqueeze(-1).expand_as(k_prime)
+            k_prime *= tf.expand_dims(tf.expand_dims(mask, 1), -1)#.expand_as(k_prime)
         
-        k_prime_t = k_prime.transpose(-2, -1)
+        k_prime_t = tf.linalg.matrix_transpose(k_prime)
         output = q_prime @ (k_prime_t @ v)
         
         # Ensure that the output vectors are convex combinations of input vectors; that is,
         # the implied attention scores sum to 1
         if self.normalize_output:    
             # Equivalent to multiplying K'^T by a ones vector
-            d = q_prime @ k_prime.sum(dim=-2).unsqueeze(-1)
+            d = q_prime @ tf.expand_dims(tf.math.reduce_sum(k_prime), -1)
             
             # Avoid dividing by very small numbers
-            d += 2 * self.normalization_stabilizer * (torch.abs(d) <= self.normalization_stabilizer)
+            d += 2 * self.normalization_stabilizer * (tf.abs(d) <= self.normalization_stabilizer)
             output /= d
         
         return self._finalize_attention_output(output, head_mask)
@@ -233,7 +229,9 @@ class PerformerAttention(nn.Module):
     def _finalize_attention_output(self, context, head_mask=None, att_map_to_output=None):
         def unshape(x):
             """ group heads """
-            return x.transpose(1, 2).contiguous().view(x.shape[0], -1, x.shape[1] * x.shape[-1])
+            x = tf.transpose(context, perm=[0, 2, 1, 3])  # [...seq_len, num_heads, dim_per_head]
+            new_last_dim = tf.constant(x.shape[-2] * x.shape[-1])  # Multiply num_heads * dim_per_head
+            return tf.reshape(x, tf.concat((x.shape[:-2], new_last_dim), axis=0))
         
         # Mask heads if we want to
         if head_mask is not None:
@@ -247,18 +245,20 @@ class PerformerAttention(nn.Module):
         else:
             return context,
 
-    def _generate_feature_matrix(self, device):
+    def _generate_feature_matrix(self):
         dim_per_head = self.d_model // self.num_heads
         num_rows = round(dim_per_head * np.log(dim_per_head))
         
         if not self.use_orthogonal_features:
-            return torch.randn(num_rows, dim_per_head, device=device)
+            return tf.random.normal((num_rows, dim_per_head))
         
         def get_square_block(size):
-            unstructured_block = torch.randn(size, size, device='cpu')
-            q, r = torch.qr(unstructured_block, some = True)
-            return q.t()
-        
+            with tf.device('/CPU:0'):
+                unstructured_block = tf.random.normal((size, size))
+                orthog, r = tf.linalg.qr(unstructured_block)
+
+            return orthog.t()
+
         num_full_blocks = num_rows // dim_per_head
         block_list = [get_square_block(dim_per_head) for _ in range(num_full_blocks)]
         
@@ -267,7 +267,7 @@ class PerformerAttention(nn.Module):
             q = get_square_block(dim_per_head)
             block_list.append(q[:remaining_rows])
         
-        final_matrix = torch.cat(block_list)
+        final_matrix = tf.concat(block_list)
         
         # This option yields SMREG
         if self.regularize_feature_norms:
@@ -275,16 +275,15 @@ class PerformerAttention(nn.Module):
         else:
             # Hack to make the matrix columns have the norm we would expect them to have if they were sampled straight
             # from a Gaussian, instead of being all norm 1 since they went through QR decomposition
-            multiplier = torch.randn(num_rows, dim_per_head, device='cpu').norm(dim = 1)
-            final_matrix = torch.diag(multiplier) @ final_matrix
-        
-        random_features = final_matrix.to(device)
-        self.random_features = random_features
+            multiplier = tf.random.normal((num_rows, dim_per_head)).norm(dim = 1)
+            final_matrix = tf.linalg.diag(multiplier) @ final_matrix
+
+        self.random_features = final_matrix
     
-    def _redraw_features_if_needed(self, device):
+    def _redraw_features_if_needed(self):
         # We haven't created the projection matrix yet, let's create it
         if self.random_features is None:
-            self._generate_feature_matrix(device)
+            self._generate_feature_matrix()
         
         elif self.feature_redraw_interval is not None:
             if self.redraw_stochastically:
