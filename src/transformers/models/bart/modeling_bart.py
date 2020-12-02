@@ -268,8 +268,8 @@ class EncoderLayer(nn.Module):
         residual = x
         if self.normalize_before:
             x = self.self_attn_layer_norm(x)
-        x, attn_weights = self.self_attn(
-            query=x, key=x, key_padding_mask=encoder_padding_mask, output_attentions=output_attentions
+        x, attn_weights, _ = self.self_attn(
+            query=x, key_padding_mask=encoder_padding_mask, output_attentions=output_attentions
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
         x = residual + x
@@ -357,16 +357,11 @@ class BartEncoder(nn.Module):
         x = self.layernorm_embedding(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
 
-        # B x T x C -> T x B x C
-        x = x.transpose(0, 1)
-
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         for encoder_layer in self.layers:
             if output_hidden_states:
-                x = x.transpose(0, 1)  # T x B x C -> B x T x C
                 encoder_states = encoder_states + (x,)
-                x = x.transpose(0, 1)  # B x T x C -> T x B x C
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
@@ -379,9 +374,6 @@ class BartEncoder(nn.Module):
 
         if self.layer_norm:
             x = self.layer_norm(x)
-
-        # T x B x C -> B x T x C
-        x = x.transpose(0, 1)
 
         if output_hidden_states:
             encoder_states = encoder_states + (x,)
@@ -400,6 +392,7 @@ class DecoderLayer(nn.Module):
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
+            is_decoder=True,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -411,7 +404,7 @@ class DecoderLayer(nn.Module):
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
-            encoder_decoder_attention=True,
+            is_decoder=True,
         )
         self.encoder_attn_layer_norm = LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
@@ -423,22 +416,20 @@ class DecoderLayer(nn.Module):
         x,
         encoder_hidden_states,
         encoder_attn_mask=None,
-        layer_state=None,
+        past_key_value=None,
         causal_mask=None,
         decoder_padding_mask=None,
         output_attentions=False,
     ):
         residual = x
-        if layer_state is None:
-            layer_state = {}
         if self.normalize_before:
             x = self.self_attn_layer_norm(x)
         # Self Attention
 
-        x, self_attn_weights = self.self_attn(
+        self_attn_past_key_value = past_key_value[0] if past_key_value is not None else None
+        x, self_attn_weights, self_attn_present_key_value = self.self_attn(
             query=x,
-            key=x,
-            layer_state=layer_state,  # adds keys to layer state
+            past_key_value=self_attn_past_key_value,
             key_padding_mask=decoder_padding_mask,
             attn_mask=causal_mask,
             output_attentions=output_attentions,
@@ -450,14 +441,15 @@ class DecoderLayer(nn.Module):
 
         # Cross-Attention Block
         residual = x
-        assert self.encoder_attn.cache_key != self.self_attn.cache_key
         if self.normalize_before:
             x = self.encoder_attn_layer_norm(x)
-        x, cross_attn_weights = self.encoder_attn(
+
+        cross_attn_past_key_value = past_key_value[1] if past_key_value is not None else None
+        x, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
             query=x,
-            key=encoder_hidden_states,
+            key_value_states=encoder_hidden_states,
             key_padding_mask=encoder_attn_mask,
-            layer_state=layer_state,  # mutates layer state
+            past_key_value=cross_attn_past_key_value,
             output_attentions=output_attentions,
         )
         x = F.dropout(x, p=self.dropout, training=self.training)
@@ -476,12 +468,15 @@ class DecoderLayer(nn.Module):
         x = residual + x
         if not self.normalize_before:
             x = self.final_layer_norm(x)
+
+        present_key_value = (self_attn_present_key_value, cross_attn_present_key_value)
+
         return (
             x,
             self_attn_weights,
-            layer_state,
+            present_key_value,
             cross_attn_weights,
-        )  # layer_state = cache for decoding
+        )  # past_key_value = cache for decoding
 
 
 class BartDecoder(nn.Module):
@@ -574,39 +569,33 @@ class BartDecoder(nn.Module):
 
         x = F.dropout(x, p=self.dropout, training=self.training)
 
-        # Convert to Bart output format: (BS, seq_len, model_dim) ->  (seq_len, BS, model_dim)
-        x = x.transpose(0, 1)
-        encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
-
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
         all_cross_attentions = () if output_attentions else None
-        next_decoder_cache: List[Dict] = []
+        next_decoder_cache = () if use_cache else None
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
-                x = x.transpose(0, 1)
                 all_hidden_states += (x,)
-                x = x.transpose(0, 1)
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.layerdrop):
                 continue
 
-            layer_state = past_key_values[idx] if past_key_values is not None else None
+            past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            x, layer_self_attn, layer_past, layer_cross_attn = decoder_layer(
+            x, layer_self_attn, present_key_value, layer_cross_attn = decoder_layer(
                 x,
                 encoder_hidden_states,
                 encoder_attn_mask=encoder_padding_mask,
                 decoder_padding_mask=decoder_padding_mask,
-                layer_state=layer_state,
+                past_key_value=past_key_value,
                 causal_mask=decoder_causal_mask,
                 output_attentions=output_attentions,
             )
 
             if use_cache:
-                next_decoder_cache.append(layer_past.copy())
+                next_decoder_cache += (present_key_value,)
 
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
@@ -614,16 +603,10 @@ class BartDecoder(nn.Module):
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
-            x = x.transpose(0, 1)
             all_hidden_states += (x,)
-            x = x.transpose(0, 1)
 
         if self.layer_norm:  # if config.add_final_layer_norm (mBART)
             x = self.layer_norm(x)
-
-        # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
-        x = x.transpose(0, 1)
-        encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
         next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
@@ -639,13 +622,6 @@ class BartDecoder(nn.Module):
         )
 
 
-def _reorder_buffer(attn_cache: Dict, new_order) -> Dict:
-    for k, input_buffer_k in attn_cache.items():
-        if input_buffer_k is not None:
-            attn_cache[k] = input_buffer_k.index_select(0, new_order)
-    return attn_cache
-
-
 class Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -655,7 +631,7 @@ class Attention(nn.Module):
         num_heads,
         dropout=0.0,
         bias=True,
-        encoder_decoder_attention=False,  # otherwise self_attention
+        is_decoder=False,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -665,61 +641,66 @@ class Attention(nn.Module):
         assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
         self.scaling = self.head_dim ** -0.5
 
-        self.encoder_decoder_attention = encoder_decoder_attention
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.cache_key = "encoder_decoder" if self.encoder_decoder_attention else "self"
+        self.is_decoder = is_decoder
 
     def _shape(self, tensor, seq_len, bsz):
-        return tensor.contiguous().view(seq_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
+        return (
+            tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .reshape(bsz * self.num_heads, seq_len, self.head_dim)
+        )
 
     def forward(
         self,
         query,
-        key: Tensor,
+        key_value_states: Optional[Tensor] = None,
         key_padding_mask: Optional[Tensor] = None,
-        layer_state: Optional[Dict[str, Tensor]] = None,
+        past_key_value: Optional[Tuple[Tensor]] = None,
         attn_mask: Optional[Tensor] = None,
         output_attentions=False,
     ) -> Tuple[Tensor, Optional[Tensor]]:
-        """Input shape: Time(SeqLen) x Batch x Channel"""
-        static_kv: bool = self.encoder_decoder_attention
-        tgt_len, bsz, embed_dim = query.size()
-        # get here for encoder decoder cause of static_kv
-        if layer_state is not None:  # reuse k,v and encoder_padding_mask
-            saved_state = layer_state.get(self.cache_key, {})
-            if "prev_key" in saved_state and static_kv:
-                # previous time steps are cached - no need to recompute key and value if they are static
-                key = None
-        else:
-            # this branch is hit by encoder
-            saved_state = None
+        """Input shape: Batch x Time x Channel"""
 
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        # for the decoder
+        is_cross_attention = key_value_states is not None
+        bsz, tgt_len, embed_dim = query.size()
+
+        # get query proj
         q = self.q_proj(query) * self.scaling
-        if static_kv and key is None:  # cross-attention with cache
-            k = v = None
-        elif static_kv and key is not None:  # cross-attention no prev_key found in cache
-            k = self.k_proj(key)
-            v = self.v_proj(key)
-        else:  # self-attention
+
+        # get key, value proj
+        if is_cross_attention and past_key_value is not None:
+            # reuse k,v, cross_attentions
+            k = past_key_value[0]
+            v = past_key_value[1]
+        elif is_cross_attention:
+            # cross_attentions
+            k = self.k_proj(key_value_states)
+            v = self.v_proj(key_value_states)
+        elif past_key_value is not None:
+            # reuse k, v, self_attention
+            prev_k = past_key_value[0]
+            prev_v = past_key_value[1]
+            k = torch.cat([prev_k, self.k_proj(query)], dim=1)
+            v = torch.cat([prev_v, self.v_proj(query)], dim=1)
+        else:
+            # self_attention
             k = self.k_proj(query)
             v = self.v_proj(query)
 
+        # bsz must be first for reorder_cache
+        if self.is_decoder:
+            past_key_value = (k, v)
+
+        # reshape q,k,v
         q = self._shape(q, tgt_len, bsz)
-        if k is not None:
-            k = self._shape(k, -1, bsz)
-        if v is not None:
-            v = self._shape(v, -1, bsz)
-
-        if saved_state:
-            k, v = self._concat_saved_state(k, v, saved_state, static_kv, bsz)
-
-        # Update cache
-        if isinstance(layer_state, dict):
-            cached_shape = (bsz, self.num_heads, -1, self.head_dim)  # bsz must be first for reorder_cache
-            layer_state[self.cache_key] = dict(prev_key=k.view(*cached_shape), prev_value=v.view(*cached_shape))
+        k = self._shape(k, -1, bsz)
+        v = self._shape(v, -1, bsz)
 
         src_len = k.size(1)
         assert key_padding_mask is None or key_padding_mask.shape == (bsz, src_len)
@@ -752,18 +733,15 @@ class Attention(nn.Module):
         assert v is not None
         attn_output = torch.bmm(attn_probs, v)
         assert attn_output.size() == (bsz * self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
+        attn_output = (
+            attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
+            .transpose(1, 2)
+            .reshape(bsz, tgt_len, embed_dim)
+        )
+
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights_reshaped
-
-    def _concat_saved_state(self, k, v, saved_state, static_kv, bsz) -> Tuple[Tensor]:
-        # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
-        prev_K = saved_state["prev_key"].view(bsz * self.num_heads, -1, self.head_dim)
-        prev_V = saved_state["prev_value"].view(bsz * self.num_heads, -1, self.head_dim)
-        new_K = prev_K if static_kv else torch.cat([prev_K, k], dim=1)
-        new_V = prev_V if static_kv else torch.cat([prev_V, v], dim=1)
-        return new_K, new_V
+        return attn_output, attn_weights_reshaped, past_key_value
 
 
 class BartClassificationHead(nn.Module):
@@ -916,7 +894,7 @@ class BartModel(PretrainedBartModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             decoder_input_ids,
             encoder_outputs[0],
@@ -1056,7 +1034,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        lm_logits = self.lm_head(outputs[0])
+        lm_logits = self.lm_head(outputs[0]) + self.final_logits_bias
 
         masked_lm_loss = None
         if labels is not None:
@@ -1106,13 +1084,12 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
-        reordered_past = []
+        def _reorder_buffer(cache: Tuple[Tensor], new_order) -> Dict:
+            return tuple(past_state.index_select(0, new_order) for past_state in cache)
+
+        reordered_past = ()
         for layer_past in past:
-            # get the correct batch idx from decoder layer's batch dim for cross and self-attn
-            layer_past_new = {
-                attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
-            }
-            reordered_past.append(layer_past_new)
+            reordered_past += (tuple(_reorder_buffer(cache, beam_idx) for cache in layer_past),)
         return reordered_past
 
 
