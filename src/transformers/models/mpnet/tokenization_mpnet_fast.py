@@ -68,9 +68,9 @@ class MPNetTokenizerFast(PreTrainedTokenizerFast):
                 When building a sequence using special tokens, this is not the token that is used for the beginning of
                 sequence. The token used is the :obj:`cls_token`.
         eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
-            The end of sequence token. 
+            The end of sequence token.
 
-            .. note:: 
+            .. note::
 
                 When building a sequence using special tokens, this is not the token that is used for the end of
                 sequence. The token used is the :obj:`sep_token`.

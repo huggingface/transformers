@@ -5,24 +5,24 @@ Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The MPNet model was proposed in `MPNet: Masked and Permuted Pre-training for Language Understanding
-<https://arxiv.org/abs/2004.09297>`__ by Kaitao Song, Xu Tan, Tao Qin, Jianfeng Lu, Tie-Yan Liu. 
+<https://arxiv.org/abs/2004.09297>`__ by Kaitao Song, Xu Tan, Tao Qin, Jianfeng Lu, Tie-Yan Liu.
 
-MPNet adopts a novel pre-training method, named masked and permuted language modeling, to inherit the advantages of masked 
-language modeling and permuted language modeling for natural language understanding.
+MPNet adopts a novel pre-training method, named masked and permuted language modeling, to inherit the advantages of
+masked language modeling and permuted language modeling for natural language understanding.
 
 The abstract from the paper is the following:
 
-*BERT adopts masked language modeling (MLM) for pre-training and is one of the most successful pre-training models. 
-Since BERT neglects dependency among predicted tokens, XLNet introduces permuted language modeling (PLM) for pre-training 
-to address this problem. However, XLNet does not leverage the full position information of a sentence and thus suffers 
-from position discrepancy between pre-training and fine-tuning. In this paper, we propose MPNet, a novel pre-training 
-method that inherits the advantages of BERT and XLNet and avoids their limitations. MPNet leverages the dependency 
-among predicted tokens through permuted language modeling (vs. MLM in BERT), and takes auxiliary position information 
-as input to make the model see a full sentence and thus reducing the position discrepancy (vs. PLM in XLNet). 
-We pre-train MPNet on a large-scale dataset (over 160GB text corpora) and fine-tune on a variety of down-streaming tasks 
-(GLUE, SQuAD, etc). Experimental results show that MPNet outperforms MLM and PLM by a large margin, and achieves better 
-results on these tasks compared with previous state-of-the-art pre-trained methods (e.g., BERT, XLNet, RoBERTa) under 
-the same model setting.*
+*BERT adopts masked language modeling (MLM) for pre-training and is one of the most successful pre-training models.
+Since BERT neglects dependency among predicted tokens, XLNet introduces permuted language modeling (PLM) for
+pre-training to address this problem. However, XLNet does not leverage the full position information of a sentence and
+thus suffers from position discrepancy between pre-training and fine-tuning. In this paper, we propose MPNet, a novel
+pre-training method that inherits the advantages of BERT and XLNet and avoids their limitations. MPNet leverages the
+dependency among predicted tokens through permuted language modeling (vs. MLM in BERT), and takes auxiliary position
+information as input to make the model see a full sentence and thus reducing the position discrepancy (vs. PLM in
+XLNet). We pre-train MPNet on a large-scale dataset (over 160GB text corpora) and fine-tune on a variety of
+down-streaming tasks (GLUE, SQuAD, etc). Experimental results show that MPNet outperforms MLM and PLM by a large
+margin, and achieves better results on these tasks compared with previous state-of-the-art pre-trained methods (e.g.,
+BERT, XLNet, RoBERTa) under the same model setting.*
 
 Tips:
 

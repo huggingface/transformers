@@ -83,17 +83,17 @@ class MPNetTokenizer(PreTrainedTokenizer):
         bos_token (:obj:`string`, `optional`, defaults to :obj:`"<s>"`):
             The beginning of sequence token that was used during pre-training. Can be used a sequence classifier token.
 
-            .. note:: 
+            .. note::
 
-                When building a sequence using special tokens, this is not the token that is used for the
-                beginning of sequence. The token used is the :obj:`cls_token`.
+                When building a sequence using special tokens, this is not the token that is used for the beginning of
+                sequence. The token used is the :obj:`cls_token`.
         eos_token (:obj:`string`, `optional`, defaults to :obj:`"</s>"`):
-            The end of sequence token. 
+            The end of sequence token.
 
-            .. note:: 
+            .. note::
 
-                When building a sequence using special tokens, this is not the token
-                that is used for the end of sequence. The token used is the :obj:`sep_token`.
+                When building a sequence using special tokens, this is not the token that is used for the end of
+                sequence. The token used is the :obj:`sep_token`.
         sep_token (:obj:`string`, `optional`, defaults to :obj:`"</s>"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
