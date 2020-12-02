@@ -12,14 +12,14 @@ commands:
           name: docs-only changes skip check
           command: |
             # pipeline.git.base_revision is not always defined, so only proceed if all external vars are defined
-            if test -n "<< pipeline.git.base_revision >>" && test -n "<< pipeline.git.revision >>"
+            if test -n "<< pipeline.git.base_revision >>" && test -n "<< pipeline.git.revision >>" && test -n "$(git diff --name-only << pipeline.git.base_revision >>...<< pipeline.git.revision >>)"
             then
                 if git diff --name-only << pipeline.git.base_revision >>...<< pipeline.git.revision >> | egrep -qv '\.(md|rst)$'
                 then
                     echo "Non-docs were modified in this PR, proceeding normally"
                 else
                     echo "Only docs were modified in this PR, quitting this job"
-                    #circleci step halt
+                    circleci step halt
                 fi
             else
                 echo "Can't perform skipping check w/o base_revision defined, continuing the job"
