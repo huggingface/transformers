@@ -578,6 +578,7 @@ if is_torch_available():
     from .models.transfo_xl import (
         TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
         AdaptiveEmbedding,
+        TransfoXLForSequenceClassification,
         TransfoXLLMHeadModel,
         TransfoXLModel,
         TransfoXLPreTrainedModel,
