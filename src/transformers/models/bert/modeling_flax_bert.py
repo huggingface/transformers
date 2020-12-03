@@ -22,6 +22,8 @@ import jax
 import jax.numpy as jnp
 from functools import partial
 
+from jax.random import PRNGKey
+
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_utils import FlaxPreTrainedModel, gelu
 from ...utils import logging
@@ -155,6 +157,7 @@ class FlaxBertEmbeddings(nn.Module):
     hidden_size: int
     type_vocab_size: int
     max_length: int
+    dropout_rate: float = 0.
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
@@ -176,13 +179,14 @@ class FlaxBertEmbeddings(nn.Module):
 
         # Layer Norm
         layer_norm = FlaxBertLayerNorm(name="layer_norm", dtype=self.dtype)(summed_emb)
-
-        return layer_norm
+        embeddings = nn.Dropout(rate=self.dropout_rate)(layer_norm)
+        return embeddings
 
 
 class FlaxBertAttention(nn.Module):
     num_heads: int
     head_size: int
+    dropout_rate: float = 0.0
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
@@ -191,7 +195,7 @@ class FlaxBertAttention(nn.Module):
         # FLAX expects: attention_mask.shape == (*batch_sizes, 1, 1, kv_length) such that it is broadcastable
         # with attn_weights.shape == (*batch_sizes, num_heads, q_length, kv_length)
         attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
-        self_att = nn.attention.SelfAttention(num_heads=self.num_heads, qkv_features=self.head_size, name="self", dtype=self.dtype)(
+        self_att = nn.attention.SelfAttention(num_heads=self.num_heads, qkv_features=self.head_size, dropout_rate=self.dropout_rate, name="self", dtype=self.dtype)(
             hidden_state, attention_mask
         )
 
@@ -211,11 +215,13 @@ class FlaxBertIntermediate(nn.Module):
 
 
 class FlaxBertOutput(nn.Module):
+    dropout_rate: float = 0.0
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
     def __call__(self, intermediate_output, attention_output):
         hidden_state = nn.Dense(attention_output.shape[-1], name="dense", dtype=self.dtype)(intermediate_output)
+        hidden_state = nn.Dropout(rate=self.dropout_rate)(hidden_state)
         hidden_state = FlaxBertLayerNorm(name="layer_norm", dtype=self.dtype)(hidden_state + attention_output)
         return hidden_state
 
@@ -472,7 +478,7 @@ class FlaxBertModel(FlaxPreTrainedModel):
         super().__init__(config, module, state, seed)
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    def __call__(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None):
+    def __call__(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, params: dict = None, dropout_rng: PRNGKey = None):
         input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
             input_ids,
             attention_mask,
@@ -480,12 +486,18 @@ class FlaxBertModel(FlaxPreTrainedModel):
             position_ids
         )
 
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
         return self.module.apply(
-            {"params": self.params},
+            {"params": params or self.params},
             jnp.array(input_ids, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(token_type_ids, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
+            rngs=rngs
         )
 
     def _check_inputs(self, input_ids, attention_mask, token_type_ids, position_ids):
@@ -524,7 +536,7 @@ class FlaxBertForMaskedLM(FlaxBertModel):
             **kwargs
         )
 
-    def __call__(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, params=None):
+    def __call__(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, params: dict = None, dropout_rng: PRNGKey = None):
         input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
             input_ids,
             attention_mask,
@@ -532,13 +544,18 @@ class FlaxBertForMaskedLM(FlaxBertModel):
             position_ids
         )
 
-        params = params or self.params
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
         pooled, logits = self.module.apply(
-            {"params": params},
+            {"params": params or self.params},
             jnp.array(input_ids, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(token_type_ids, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
+            rngs=rngs
         )
 
         return logits, pooled

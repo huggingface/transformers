@@ -19,6 +19,7 @@ import numpy as np
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_utils import FlaxPreTrainedModel, gelu
@@ -156,6 +157,7 @@ class FlaxRobertaEmbeddings(nn.Module):
     hidden_size: int
     type_vocab_size: int
     max_length: int
+    dropout_rate: float = 0.
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
@@ -177,14 +179,15 @@ class FlaxRobertaEmbeddings(nn.Module):
 
         # Layer Norm
         layer_norm = FlaxRobertaLayerNorm(name="layer_norm", dtype=self.dtype)(summed_emb)
-
-        return layer_norm
+        embeddings = nn.Dropout(rate=self.dropout_rate)(layer_norm)
+        return embeddings
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertAttention with Bert->Roberta
 class FlaxRobertaAttention(nn.Module):
     num_heads: int
     head_size: int
+    dropout_rate: float = 0.0
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
@@ -193,7 +196,7 @@ class FlaxRobertaAttention(nn.Module):
         # FLAX expects: attention_mask.shape == (*batch_sizes, 1, 1, kv_length) such that it is broadcastable
         # with attn_weights.shape == (*batch_sizes, num_heads, q_length, kv_length)
         attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
-        self_att = nn.attention.SelfAttention(num_heads=self.num_heads, qkv_features=self.head_size, name="self", dtype=self.dtype)(
+        self_att = nn.attention.SelfAttention(num_heads=self.num_heads, qkv_features=self.head_size, dropout_rate=self.dropout_rate, name="self", dtype=self.dtype)(
             hidden_state, attention_mask
         )
 
@@ -215,11 +218,13 @@ class FlaxRobertaIntermediate(nn.Module):
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertOutput with Bert->Roberta
 class FlaxRobertaOutput(nn.Module):
+    dropout_rate: float = 0.0
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
     def __call__(self, intermediate_output, attention_output):
         hidden_state = nn.Dense(attention_output.shape[-1], name="dense", dtype=self.dtype)(intermediate_output)
+        hidden_state = nn.Dropout(rate=self.dropout_rate)(hidden_state)
         hidden_state = FlaxRobertaLayerNorm(name="layer_norm", dtype=self.dtype)(hidden_state + attention_output)
         return hidden_state
 
@@ -423,7 +428,7 @@ class FlaxRobertaModel(FlaxPreTrainedModel):
         super().__init__(config, module, state, seed)
 
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    def __call__(self, input_ids, token_type_ids=None, attention_mask=None, position_ids=None):
+    def __call__(self, input_ids, token_type_ids=None, attention_mask=None, position_ids=None,  params: dict = None, dropout_rng: PRNGKey = None):
         if token_type_ids is None:
             token_type_ids = jnp.ones_like(input_ids)
 
@@ -435,10 +440,16 @@ class FlaxRobertaModel(FlaxPreTrainedModel):
         if attention_mask is None:
             attention_mask = jnp.ones_like(input_ids)
 
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
         return self.model.apply(
-            {"params": self.params},
+            {"params": params or self.params},
             jnp.array(input_ids, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(token_type_ids, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
+            rngs=rngs
         )

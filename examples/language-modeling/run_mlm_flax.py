@@ -368,14 +368,16 @@ def cross_entropy(logits, targets, weights=None, label_smoothing=0.0):
     return loss.sum(), normalizing_factor
 
 
-def training_step(optimizer, batch):
+def training_step(optimizer, batch, dropout_rng):
+    dropout_rng, new_dropout_rng = jax.random.split(dropout_rng)
+
     def loss_fn(params):
         targets = batch.pop("labels")
 
         # Hide away tokens which doesn't participate in the optimization
         token_mask = jnp.where(targets > 0, 1.0, 0.)
 
-        pooled, logits = model(**batch, params=params)
+        pooled, logits = model(**batch, params=params, dropout_rng=dropout_rng)
         loss, weight_sum = cross_entropy(logits, targets, token_mask)
         return loss / weight_sum
 
@@ -386,7 +388,7 @@ def training_step(optimizer, batch):
     grad = jax.lax.pmean(grad, "batch")
     optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
 
-    return loss, optimizer
+    return loss, optimizer, new_dropout_rng
 
 
 def eval_step(params, batch):
@@ -548,8 +550,9 @@ if __name__ == "__main__":
 
     # Initialize our training
     rng = jax.random.PRNGKey(training_args.seed)
-
     rng, init_rng = jax.random.split(rng)
+    dropout_rngs = jax.random.split(rng, jax.local_device_count())
+
     model = FlaxBertForMaskedLM.from_pretrained(
         "bert-base-cased",
         dtype=jnp.bfloat16 if training_args.fp16 else jnp.float32
@@ -596,7 +599,7 @@ if __name__ == "__main__":
 
             # Model forward
             model_inputs = common_utils.shard(model_inputs.data)
-            loss, optimizer = p_training_step(optimizer, model_inputs)
+            loss, optimizer, dropout_rngs = p_training_step(optimizer, model_inputs, dropout_rngs)
 
         # ======================== Evaluating ==============================
         nb_eval_samples = len(tokenized_datasets["test"])
