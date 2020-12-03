@@ -310,7 +310,13 @@ class BartEncoder(PretrainedBartModel):
         self.init_weights()
 
     def forward(
-        self, input_ids=None, attention_mask=None, inputs_embeds=None, output_attentions=None, output_hidden_states=None, return_dict=None
+        self,
+        input_ids=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         """
         Args:
@@ -574,15 +580,23 @@ class BartDecoder(PretrainedBartModel):
 
         # create mask
         attn_mask = _make_causal_mask(input_ids.size(), past_key_values_length=past_key_values_length).to(self.device)
-        import ipdb; ipdb.set_trace()
-        attn_mask = attn_mask + _expand_mask(decoder_padding_mask, x.shape[:2], x.dtype, past_key_values_length=past_key_values_length)
+        import ipdb
+
+        ipdb.set_trace()
+        attn_mask = attn_mask + _expand_mask(
+            decoder_padding_mask, x.shape[:2], x.dtype, past_key_values_length=past_key_values_length
+        )
         print(f"Dec attn mask {attn_mask.shape}")
 
         # check attention mask and invert
         if encoder_hidden_states is not None:
             if encoder_padding_mask is None:
-                encoder_padding_mask = torch.ones(encoder_hidden_states.shape[:2], dtype=torch.long, device=self.device)
-            encoder_padding_mask = _expand_mask(encoder_padding_mask, encoder_hidden_states.shape[:2], x.dtype, src_len=input_ids.shape[-1])
+                encoder_padding_mask = torch.ones(
+                    encoder_hidden_states.shape[:2], dtype=torch.long, device=self.device
+                )
+            encoder_padding_mask = _expand_mask(
+                encoder_padding_mask, encoder_hidden_states.shape[:2], x.dtype, src_len=input_ids.shape[-1]
+            )
             print(f"Cross attn mask {encoder_padding_mask.shape}")
 
         if self.do_blenderbot_90_layernorm:
@@ -728,20 +742,29 @@ class Attention(nn.Module):
 
         src_len = k.size(1)
         attn_weights = torch.bmm(q, k.transpose(1, 2))
-        assert attn_weights.size() == (bsz * self.num_heads, tgt_len, src_len), f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+        assert attn_weights.size() == (
+            bsz * self.num_heads,
+            tgt_len,
+            src_len,
+        ), f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
 
-        assert attn_mask.size() == (bsz, 1, tgt_len, src_len), f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attn_mask.size()}"
+        assert attn_mask.size() == (
+            bsz,
+            1,
+            tgt_len,
+            src_len,
+        ), f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attn_mask.size()}"
         attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attn_mask
         attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         # Note: deleted workaround to get around fork/join parallelism not supporting Optional types. on 2020/10/15
 
-#        assert key_padding_mask is None or key_padding_mask.shape == (bsz, src_len)
-#        if key_padding_mask is not None:  # don't attend to padding symbols
-#            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-#            reshaped = key_padding_mask.unsqueeze(1).unsqueeze(2)
-#            attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
-#            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+        #        assert key_padding_mask is None or key_padding_mask.shape == (bsz, src_len)
+        #        if key_padding_mask is not None:  # don't attend to padding symbols
+        #            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+        #            reshaped = key_padding_mask.unsqueeze(1).unsqueeze(2)
+        #            attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
+        #            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = F.softmax(attn_weights, dim=-1)
 

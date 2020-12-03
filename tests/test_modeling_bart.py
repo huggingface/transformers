@@ -48,10 +48,8 @@ if is_torch_available():
         PegasusConfig,
         pipeline,
     )
-    from transformers.models.bart.modeling_bart import (
+    from transformers.models.bart.modeling_bart import (  # _prepare_bart_decoder_inputs,; invert_mask,
         SinusoidalPositionalEmbedding,
-#        _prepare_bart_decoder_inputs,
-#        invert_mask,
         shift_tokens_right,
     )
 PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
