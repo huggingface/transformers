@@ -213,6 +213,7 @@ default_cache_path = os.path.join(hf_cache_home, "transformers")
 # Onetime move from the old location to the new one if no ENV variable has been set.
 if (
     os.path.isdir(old_default_cache_path)
+    and not os.path.isdir(default_cache_path)
     and "PYTORCH_PRETRAINED_BERT_CACHE" not in os.environ
     and "PYTORCH_TRANSFORMERS_CACHE" not in os.environ
     and "TRANSFORMERS_CACHE" not in os.environ
