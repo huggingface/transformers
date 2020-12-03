@@ -43,8 +43,7 @@ hub <https://huggingface.co>`__ where they are uploaded directly by `users <http
 
 Current number of checkpoints: |checkpoints|
 
-.. |checkpoints| image::
-https://img.shields.io/endpoint?url=https://huggingface.co/api/shields/models&color=brightgreen
+.. |checkpoints| image:: https://img.shields.io/endpoint?url=https://huggingface.co/api/shields/models&color=brightgreen
 
 Contents
 -----------------------------------------------------------------------------------------------------------------------
