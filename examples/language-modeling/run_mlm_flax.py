@@ -35,6 +35,7 @@ from typing import Optional, List, Dict, Tuple
 
 from datasets import load_dataset
 from flax.training import common_utils
+from flax.training.common_utils import get_metrics, stack_forest
 from jax.nn import log_softmax
 from tqdm import tqdm
 
@@ -281,6 +282,40 @@ def create_learning_rate_scheduler(
     return step_fn
 
 
+def compute_metrics(logits, labels, weights, label_smoothing=0.0):
+    """Compute summary metrics."""
+    loss, normalizer = cross_entropy(logits, labels, weights, label_smoothing)
+    acc, _ = accuracy(logits, labels, weights)
+    metrics = {
+        "loss": loss,
+        "accuracy": acc,
+        "normalizer": normalizer
+    }
+    # TODO: Re-enable when using jax.pmap
+    # metrics = jax.lax.psum(metrics, axis_name="batch")
+    return metrics
+
+
+def accuracy(logits, targets, weights=None):
+    """Compute weighted accuracy for log probs and targets.
+    Args:
+     logits: [batch, length, num_classes] float array.
+     targets: categorical targets [batch, length] int array.
+     weights: None or array of shape [batch, length]
+    Returns:
+      Tuple of scalar loss and batch normalizing factor.
+    """
+    if logits.ndim != targets.ndim + 1:
+        raise ValueError(
+            "Incorrect shapes. Got shape %s logits and %s targets" % (str(logits.shape), str(targets.shape))
+        )
+
+    loss = jnp.equal(jnp.argmax(logits, axis=-1), targets)
+    loss *= weights
+
+    return loss.sum(), weights.sum()
+
+
 def cross_entropy(logits, targets, weights=None, label_smoothing=0.0):
     """Compute cross entropy and entropy for log probs and targets.
     Args:
@@ -292,24 +327,26 @@ def cross_entropy(logits, targets, weights=None, label_smoothing=0.0):
       Tuple of scalar loss and batch normalizing factor.
     """
     if logits.ndim != targets.ndim + 1:
-        raise ValueError("Incorrect shapes. Got shape %s logits and %s targets" %
-                         (str(logits.shape), str(targets.shape)))
+        raise ValueError(
+            "Incorrect shapes. Got shape %s logits and %s targets" % (str(logits.shape), str(targets.shape))
+        )
+
     vocab_size = logits.shape[-1]
     confidence = 1.0 - label_smoothing
     low_confidence = (1.0 - confidence) / (vocab_size - 1)
     normalizing_constant = -(
-            confidence * jnp.log(confidence) + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
+        confidence * jnp.log(confidence) + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
     )
     soft_targets = common_utils.onehot(targets, vocab_size, on_value=confidence, off_value=low_confidence)
 
     loss = -jnp.sum(soft_targets * log_softmax(logits), axis=-1)
     loss = loss - normalizing_constant
 
-    normalizing_factor = np.prod(targets.shape)
-
     if weights is not None:
         loss = loss * weights
         normalizing_factor = weights.sum()
+    else:
+        normalizing_factor = np.prod(targets.shape)
 
     return loss.sum(), normalizing_factor
 
@@ -317,9 +354,13 @@ def cross_entropy(logits, targets, weights=None, label_smoothing=0.0):
 @jax.jit
 def training_step(optimizer, batch):
     def loss_fn(params):
-        pooled, logits = model(batch["input_ids"], params=params)
-        cross_entropy_mask = jnp.where(batch["labels"] == -100, 0.0, 1.0)
-        loss, weight_sum = cross_entropy(logits, batch["labels"], cross_entropy_mask)
+        targets = batch.pop("labels")
+
+        # Hide away tokens which doesn't participate in the optimization
+        token_mask = jnp.where(targets > 0, 1.0, 0.)
+
+        pooled, logits = model(**batch, params=params)
+        loss, weight_sum = cross_entropy(logits, targets, token_mask)
         return loss / weight_sum
 
     step = optimizer.state.step
@@ -329,6 +370,20 @@ def training_step(optimizer, batch):
     optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
 
     return loss, optimizer
+
+
+@jax.jit
+def eval_step(batch, params):
+    """
+    Calculate evaluation metrics on a batch.
+    """
+    targets = batch.pop("labels")
+
+    # Hide away tokens which doesn't participate in the optimization
+    token_mask = jnp.where(targets > 0, 1.0, 0.0)
+    _, logits = model(**batch, params=params)
+
+    return compute_metrics(logits, targets, token_mask)
 
 
 if __name__ == "__main__":
@@ -478,28 +533,57 @@ if __name__ == "__main__":
     # Create learning rate scheduler
     lr_scheduler_fn = create_learning_rate_scheduler(base_learning_rate=training_args.learning_rate)
 
-    epochs = tqdm(range(int(training_args.num_train_epochs)), desc=f"Training...")
+    # Store some constant
+    nb_epochs = int(training_args.num_train_epochs)
+    batch_size = int(training_args.train_batch_size)
+
+    epochs = tqdm(range(nb_epochs), desc=f"Epoch ... (1/{nb_epochs})")
     for epoch in epochs:
+
+        # ======================== Training ================================
         # Create sampling rng
         rng, training_rng, eval_rng = jax.random.split(rng, 3)
 
         # Generate an epoch by shuffling sampling indices from the train dataset
         nb_training_samples = len(tokenized_datasets["train"])
         training_samples_idx = jax.random.permutation(training_rng, jnp.arange(nb_training_samples))
-        training_sections_split = (nb_training_samples // training_args.train_batch_size) + 1
+        training_sections_split = (nb_training_samples // batch_size) + 1
 
         training_batch_idx = jnp.array_split(training_samples_idx, training_sections_split)
 
         # Gather the indexes for creating the batch and do a training step
-        for batch_idx in tqdm(training_batch_idx, desc=f"Epoch {epoch + 1}"):
+        for batch_idx in tqdm(training_batch_idx, desc=f"Training..."):
             samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples, pad_to_multiple_of=16)
 
             # Model forward
             loss, optimizer = training_step(optimizer, model_inputs.data)
 
+        # ======================== Evaluating ==============================
+        nb_eval_samples = len(tokenized_datasets["test"])
+        eval_samples_idx = jnp.arange(nb_eval_samples)
+        eval_sections_split = (nb_eval_samples // batch_size) + 1
+        eval_batch_idx = jnp.array_split(eval_samples_idx, eval_sections_split)
+        eval_metrics = []
+
+        for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...")):
+            samples = [tokenized_datasets["test"][int(idx)] for idx in batch_idx]
+            model_inputs = data_collator(samples, pad_to_multiple_of=16)
+
+            # Model forward
+            metrics = eval_step(model_inputs.data, optimizer.target)
+            eval_metrics.append(metrics)
+
+        # TODO: Re-enable when using jax.pmap
+        # eval_metrics = get_metrics(eval_metrics)
+        eval_metrics_np = jax.device_get(eval_metrics)
+        eval_metrics_np = stack_forest(eval_metrics_np)
+        eval_metrics_np = jax.tree_map(jnp.sum, eval_metrics_np)
+        eval_normalizer = eval_metrics_np.pop("normalizer")
+        eval_summary = jax.tree_map(lambda x: x / eval_normalizer, eval_metrics_np)
+
         # Update progress bar
-        epochs.desc = f"Training... ({epoch}/{int(training_args.num_train_epochs)}, Loss: {round(loss.item(), 4)})"
+        epochs.desc = f"Epoch... ({epoch + 1}/{nb_epochs} | Loss: {eval_summary['loss']}, Acc: {eval_summary['accuracy']})"
 
         # Save metrics
         # summary_writer.scalar("loss", loss, epoch)
