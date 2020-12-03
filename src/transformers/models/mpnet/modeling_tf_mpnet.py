@@ -946,6 +946,9 @@ class TFMPNetClassificationHead(tf.keras.layers.Layer):
     MPNET_START_DOCSTRING,
 )
 class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassificationLoss):
+
+    _keys_to_ignore_on_load_missing = [r"pooler"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -1159,6 +1162,9 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
     MPNET_START_DOCSTRING,
 )
 class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificationLoss):
+
+    _keys_to_ignore_on_load_missing = [r"pooler"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
