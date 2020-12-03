@@ -446,7 +446,9 @@ class TFMPNetEncoder(tf.keras.layers.Layer):
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
 
         return TFBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions
         )
 
     # Copied from transformers.modeling_tf_t5.TFT5Attention
@@ -797,7 +799,7 @@ class TFMPNetLMHead(tf.keras.layers.Layer):
     """MPNet head for masked and permuted language modeling"""
 
     def __init__(self, config, input_embeddings, **kwargs):
-        super().__init__(kwargs)
+        super().__init__(**kwargs)
 
         self.vocab_size = config.vocab_size
         self.dense = tf.keras.layers.Dense(
