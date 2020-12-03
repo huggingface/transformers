@@ -66,6 +66,19 @@ python -c "from transformers import pipeline; print(pipeline('sentiment-analysis
 
 to check 🤗 Transformers is properly installed.
 
+
+## With conda
+
+Since Transformers version v4.0.0, we now have a conda channel: `huggingface`.
+
+🤗 Transformers can be installed using conda as follows:
+
+```shell script
+conda install -c huggingface transformers
+```
+
+TensorFlow, PyTorch or Flax should be installed from their respective conda channels. 
+
 ## Caching models
 
 This library provides pretrained models that will be downloaded and cached locally. Unless you specify a location with
