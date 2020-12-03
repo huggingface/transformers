@@ -796,22 +796,25 @@ class BartDecoder(PretrainedBartModel):
 
         x = self.embed_tokens(input_ids) * self.embed_scale
 
-        # create decoder_padding_mask if provided
-        if decoder_padding_mask is None:
-            decoder_padding_mask = input_ids.ne(self.config.pad_token_id).to(torch.long)
-            # never mask leading token, even if it is pad
-            if input_ids.shape[-1] > 1:
-                decoder_padding_mask[:, 0] = decoder_padding_mask[:, 1]
-
-        # create mask
+        # create causal mask
         attn_mask = _make_causal_mask(input_ids.size(), x.dtype, past_key_values_length=past_key_values_length).to(
             self.device
         )
-        attn_mask = attn_mask + _expand_mask(
-            decoder_padding_mask, x.dtype, past_key_values_length=past_key_values_length
-        )
 
-        # check attention mask and invert
+        # create decoder_padding_mask if not provided and needed
+        # TODO(PVP) - this is very inconsistent with other models, but
+        if decoder_padding_mask is None and input_ids.shape[-1] > 1 and (self.config.pad_token_id in input_ids).any():
+            # should be kept for backwards compatibility
+            decoder_padding_mask = input_ids.ne(self.config.pad_token_id).to(torch.long)
+            # never mask leading token, even if it is pad
+            decoder_padding_mask[:, 0] = decoder_padding_mask[:, 1]
+
+        if decoder_padding_mask is not None:
+            attn_mask = attn_mask + _expand_mask(
+                decoder_padding_mask, x.dtype, past_key_values_length=past_key_values_length
+            )
+
+        # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_padding_mask is not None:
             encoder_padding_mask = _expand_mask(encoder_padding_mask, x.dtype, tgt_len=input_ids.shape[-1])
 
