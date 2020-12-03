@@ -48,10 +48,7 @@ if is_torch_available():
         PegasusConfig,
         pipeline,
     )
-    from transformers.models.bart.modeling_bart import (  # _prepare_bart_decoder_inputs,; invert_mask,
-        SinusoidalPositionalEmbedding,
-        shift_tokens_right,
-    )
+    from transformers.models.bart.modeling_bart import SinusoidalPositionalEmbedding, shift_tokens_right
 PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
 
 
@@ -195,23 +192,25 @@ class BARTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         config.use_cache = False
         inputs_dict["input_ids"][:, -2:] = config.pad_token_id
-        decoder_input_ids, decoder_attn_mask, causal_mask = _prepare_bart_decoder_inputs(
-            config, inputs_dict["input_ids"]
-        )
-        model = BartModel(config).to(torch_device).eval()
 
+        model = BartModel(config).to(torch_device).eval()
         decoder_features_with_created_mask = model(**inputs_dict)[0]
+
+        decoder_input_ids = shift_tokens_right(inputs_dict["input_ids"], config.pad_token_id)
+        decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
+        decoder_attention_mask[:, 0] = decoder_attention_mask[:, 1]
+
         decoder_features_with_passed_mask = model(
-            decoder_attention_mask=invert_mask(decoder_attn_mask), decoder_input_ids=decoder_input_ids, **inputs_dict
+            decoder_attention_mask=decoder_attention_mask, decoder_input_ids=decoder_input_ids, **inputs_dict
         )[0]
         assert_tensors_close(decoder_features_with_passed_mask, decoder_features_with_created_mask)
-        useless_mask = torch.zeros_like(decoder_attn_mask)
+        useless_mask = torch.zeros_like(decoder_attention_mask)
         decoder_features = model(decoder_attention_mask=useless_mask, **inputs_dict)[0]
         self.assertTrue(isinstance(decoder_features, torch.Tensor))  # no hidden states or attentions
         self.assertEqual(
             decoder_features.size(), (self.model_tester.batch_size, self.model_tester.seq_length, config.d_model)
         )
-        if decoder_attn_mask.min().item() < -1e3:  # some tokens were masked
+        if decoder_attention_mask.min().item() == 0:  # some tokens were masked
             self.assertFalse((decoder_features_with_created_mask == decoder_features).all().item())
 
         # Test different encoder attention masks
@@ -415,20 +414,6 @@ class BartHeadTests(unittest.TestCase):
         config, *_ = self._get_config_and_data()
         model = BartForConditionalGeneration(config).eval().to(torch_device)
         model(**model.dummy_inputs)
-
-    def test_prepare_bart_decoder_inputs(self):
-        config, *_ = self._get_config_and_data()
-        input_ids = _long_tensor(([4, 4, 2]))
-        decoder_input_ids = _long_tensor([[26388, 2, config.pad_token_id]])
-        ignore = float("-inf")
-        decoder_input_ids, decoder_attn_mask, causal_mask = _prepare_bart_decoder_inputs(
-            config, input_ids, decoder_input_ids
-        )
-        expected_causal_mask = torch.tensor(
-            [[0, ignore, ignore], [0, 0, ignore], [0, 0, 0]]  # never attend to the final token, because its pad
-        ).to(input_ids.device)
-        self.assertEqual(decoder_attn_mask.size(), decoder_input_ids.size())
-        self.assertTrue(torch.eq(expected_causal_mask, causal_mask).all())
 
     def test_resize_tokens_embeddings_more(self):
         config, input_ids, _ = self._get_config_and_data()
