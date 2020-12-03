@@ -61,8 +61,456 @@ BART_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # This list is incomplete. See all BART models at https://huggingface.co/models?filter=bart
 
 
-BART_START_DOCSTRING = r"""
+def _make_linear_from_emb(emb):
+    vocab_size, emb_size = emb.weight.shape
+    lin_layer = nn.Linear(vocab_size, emb_size, bias=False)
+    lin_layer.weight.data = emb.weight.data
+    return lin_layer
 
+
+def shift_tokens_right(input_ids, pad_token_id):
+    """Shift input ids one token to the right, and wrap the last non pad token (usually <eos>)."""
+    prev_output_tokens = input_ids.clone()
+    index_of_eos = (input_ids.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
+    prev_output_tokens[:, 0] = input_ids.gather(1, index_of_eos).squeeze()
+    prev_output_tokens[:, 1:] = input_ids[:, :-1]
+    return prev_output_tokens
+
+
+def _make_causal_mask(input_ids_shape, dtype, past_key_values_length=0):
+    bsz, tgt_len = input_ids_shape
+    tmp = torch.zeros(tgt_len, tgt_len, dtype=torch.long)
+    tmp = tmp.float().fill_(float("-inf")).type_as(tmp)
+    mask = torch.arange(tmp.size(-1))
+    tmp.masked_fill_(mask < (mask + 1).view(tmp.size(-1), 1), 0)
+    tmp = tmp.to(dtype)
+
+    if past_key_values_length > 0:
+        tmp = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype), tmp], dim=-1)
+    return tmp[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
+
+
+def _expand_mask(mask, dtype, tgt_len=None, past_key_values_length=0):
+    bsz, src_len = mask.size()
+    tgt_len = tgt_len if tgt_len is not None else src_len
+
+    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+
+    if past_key_values_length > 0:
+        expanded_mask = torch.cat(
+            [
+                torch.ones(bsz, 1, tgt_len, past_key_values_length, device=expanded_mask.device, dtype=dtype),
+                expanded_mask,
+            ],
+            dim=-1,
+        )
+
+    inverted_mask = 1.0 - expanded_mask
+
+    return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
+
+
+def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
+    if torch.cuda.is_available():
+        try:
+            from apex.normalization import FusedLayerNorm
+
+            return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
+        except ImportError:
+            pass
+    return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
+
+
+class LearnedPositionalEmbedding(nn.Embedding):
+    """
+    This module learns positional embeddings up to a fixed maximum size. Padding ids are ignored by either offsetting
+    based on padding_idx or by setting padding_idx to None and ensuring that the appropriate position ids are passed to
+    the forward function.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, offset):
+        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # and adjust num_embeddings appropriately. Other models dont have this hack
+        self.offset = offset
+        assert padding_idx is not None
+        num_embeddings += offset
+        super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
+
+    def forward(self, input_ids_shape, past_key_values_length=0):
+        """Input is expected to be of size [bsz x seqlen]."""
+        bsz, seq_len = input_ids_shape[:2]
+        positions = torch.arange(
+            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+        )
+        return super().forward(positions + self.offset)
+
+
+class SinusoidalPositionalEmbedding(nn.Embedding):
+    """This module produces sinusoidal positional embeddings of any length."""
+
+    def __init__(self, num_positions, embedding_dim, padding_idx=None):
+        super().__init__(num_positions, embedding_dim)
+        self.weight = self._init_weight(self.weight)
+
+    @staticmethod
+    def _init_weight(out: nn.Parameter):
+        """
+        Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
+        the 2nd half of the vector. [dim // 2:]
+        """
+        n_pos, dim = out.shape
+        position_enc = np.array(
+            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
+        )
+        out.requires_grad = False  # set early to avoid an error in pytorch-1.8+
+        sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
+        out[:, 0:sentinel] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
+        out[:, sentinel:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
+        out.detach_()
+        return out
+
+    @torch.no_grad()
+    def forward(self, input_ids_shape, past_key_values_length=0):
+        """Input is expected to be of size [bsz x seqlen]."""
+        bsz, seq_len = input_ids_shape[:2]
+        positions = torch.arange(
+            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+        )
+        return super().forward(positions)
+
+
+class BartAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(
+        self,
+        embed_dim,
+        num_heads,
+        dropout=0.0,
+        is_decoder=False,
+        bias=True,
+    ):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.dropout = dropout
+        self.head_dim = embed_dim // num_heads
+        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
+        self.scaling = self.head_dim ** -0.5
+        self.is_decoder = is_decoder
+
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+
+    def _shape(self, tensor, seq_len, bsz):
+        return (
+            tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
+            .transpose(1, 2)
+            .reshape(bsz * self.num_heads, seq_len, self.head_dim)
+        )
+
+    def forward(
+        self,
+        query,
+        key_value_states: Optional[Tensor] = None,
+        key_padding_mask: Optional[Tensor] = None,
+        past_key_value: Optional[Tuple[Tensor]] = None,
+        attn_mask: Optional[Tensor] = None,
+        output_attentions=False,
+    ) -> Tuple[Tensor, Optional[Tensor]]:
+        """Input shape: Batch x Time x Channel"""
+
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        # for the decoder
+        is_cross_attention = key_value_states is not None
+        bsz, tgt_len, embed_dim = query.size()
+
+        # get query proj
+        q = self.q_proj(query) * self.scaling
+
+        # get key, value proj
+        if is_cross_attention and past_key_value is not None:
+            # reuse k,v, cross_attentions
+            k = past_key_value[0]
+            v = past_key_value[1]
+        elif is_cross_attention:
+            # cross_attentions
+            k = self.k_proj(key_value_states)
+            v = self.v_proj(key_value_states)
+        elif past_key_value is not None:
+            # reuse k, v, self_attention
+            prev_k = past_key_value[0]
+            prev_v = past_key_value[1]
+            k = torch.cat([prev_k, self.k_proj(query)], dim=1)
+            v = torch.cat([prev_v, self.v_proj(query)], dim=1)
+        else:
+            # self_attention
+            k = self.k_proj(query)
+            v = self.v_proj(query)
+
+        # bsz must be first for reorder_cache
+        if self.is_decoder:
+            past_key_value = (k, v)
+
+        # reshape q,k,v
+        q = self._shape(q, tgt_len, bsz)
+        k = self._shape(k, -1, bsz)
+        v = self._shape(v, -1, bsz)
+
+        src_len = k.size(1)
+        attn_weights = torch.bmm(q, k.transpose(1, 2))
+        assert attn_weights.size() == (
+            bsz * self.num_heads,
+            tgt_len,
+            src_len,
+        ), f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+
+        if attn_mask is not None:
+            assert attn_mask.size() == (
+                bsz,
+                1,
+                tgt_len,
+                src_len,
+            ), f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attn_mask.size()}"
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attn_mask
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+
+        attn_weights = F.softmax(attn_weights, dim=-1)
+
+        if output_attentions:
+            # make sure that attn_weights are included in graph
+            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
+        else:
+            attn_weights_reshaped = None
+
+        attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
+
+        assert v is not None
+        attn_output = torch.bmm(attn_probs, v)
+        assert attn_output.size() == (bsz * self.num_heads, tgt_len, self.head_dim)
+        attn_output = (
+            attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
+            .transpose(1, 2)
+            .reshape(bsz, tgt_len, embed_dim)
+        )
+
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights_reshaped, past_key_value
+
+
+class EncoderLayer(nn.Module):
+    def __init__(self, config: BartConfig):
+        super().__init__()
+        self.embed_dim = config.d_model
+        self.self_attn = BartAttention(
+            embed_dim=self.embed_dim,
+            num_heads=config.encoder_attention_heads,
+            dropout=config.attention_dropout,
+        )
+        self.normalize_before = config.normalize_before
+        self.self_attn_layer_norm = LayerNorm(self.embed_dim)
+        self.dropout = config.dropout
+        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_dropout = config.activation_dropout
+        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
+        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
+        self.final_layer_norm = LayerNorm(self.embed_dim)
+
+    def forward(self, x, encoder_padding_mask, output_attentions=False):
+        """
+        Args:
+            x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
+            encoder_padding_mask (ByteTensor): binary ByteTensor of shape
+                `(batch, src_len)` where padding elements are indicated by ``1``.
+            for t_tgt, t_src is excluded (or masked out), =0 means it is
+            included in attention
+
+        Returns:
+            encoded output of shape `(seq_len, batch, embed_dim)`
+        """
+        residual = x
+        if self.normalize_before:
+            x = self.self_attn_layer_norm(x)
+        x, attn_weights, _ = self.self_attn(
+            query=x, attn_mask=encoder_padding_mask, output_attentions=output_attentions
+        )
+        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = residual + x
+        if not self.normalize_before:
+            x = self.self_attn_layer_norm(x)
+
+        residual = x
+        if self.normalize_before:
+            x = self.final_layer_norm(x)
+        x = self.activation_fn(self.fc1(x))
+        x = F.dropout(x, p=self.activation_dropout, training=self.training)
+        x = self.fc2(x)
+        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = residual + x
+        if not self.normalize_before:
+            x = self.final_layer_norm(x)
+        if torch.isinf(x).any() or torch.isnan(x).any():
+            clamp_value = torch.finfo(x.dtype).max - 1000
+            x = torch.clamp(x, min=-clamp_value, max=clamp_value)
+        return x, attn_weights
+
+
+class DecoderLayer(nn.Module):
+    def __init__(self, config: BartConfig):
+        super().__init__()
+        self.embed_dim = config.d_model
+
+        self.self_attn = BartAttention(
+            embed_dim=self.embed_dim,
+            num_heads=config.decoder_attention_heads,
+            dropout=config.attention_dropout,
+            is_decoder=True,
+        )
+        self.dropout = config.dropout
+        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_dropout = config.activation_dropout
+        self.normalize_before = config.normalize_before
+
+        self.self_attn_layer_norm = LayerNorm(self.embed_dim)
+        self.encoder_attn = BartAttention(
+            self.embed_dim,
+            config.decoder_attention_heads,
+            dropout=config.attention_dropout,
+            is_decoder=True,
+        )
+        self.encoder_attn_layer_norm = LayerNorm(self.embed_dim)
+        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
+        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
+        self.final_layer_norm = LayerNorm(self.embed_dim)
+
+    def forward(
+        self,
+        x,
+        encoder_hidden_states,
+        encoder_attn_mask=None,
+        past_key_value=None,
+        attn_mask=None,
+        output_attentions=False,
+    ):
+        residual = x
+        if self.normalize_before:
+            x = self.self_attn_layer_norm(x)
+        # Self Attention
+
+        self_attn_past_key_value = past_key_value[0] if past_key_value is not None else None
+        x, self_attn_weights, self_attn_present_key_value = self.self_attn(
+            query=x,
+            past_key_value=self_attn_past_key_value,
+            attn_mask=attn_mask,
+            output_attentions=output_attentions,
+        )
+        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = residual + x
+        if not self.normalize_before:
+            x = self.self_attn_layer_norm(x)
+
+        # Cross-Attention Block
+        cross_attn_present_key_value = None
+        cross_attn_weights = None
+        if encoder_hidden_states is not None:
+            residual = x
+            if self.normalize_before:
+                x = self.encoder_attn_layer_norm(x)
+
+            cross_attn_past_key_value = past_key_value[1] if past_key_value is not None else None
+            x, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
+                query=x,
+                key_value_states=encoder_hidden_states,
+                attn_mask=encoder_attn_mask,
+                past_key_value=cross_attn_past_key_value,
+                output_attentions=output_attentions,
+            )
+            x = F.dropout(x, p=self.dropout, training=self.training)
+            x = residual + x
+            if not self.normalize_before:
+                x = self.encoder_attn_layer_norm(x)
+
+        # Fully Connected
+        residual = x
+        if self.normalize_before:
+            x = self.final_layer_norm(x)
+        x = self.activation_fn(self.fc1(x))
+        x = F.dropout(x, p=self.activation_dropout, training=self.training)
+        x = self.fc2(x)
+        x = F.dropout(x, p=self.dropout, training=self.training)
+        x = residual + x
+        if not self.normalize_before:
+            x = self.final_layer_norm(x)
+
+        present_key_value = (self_attn_present_key_value, cross_attn_present_key_value)
+
+        return (
+            x,
+            self_attn_weights,
+            present_key_value,
+            cross_attn_weights,
+        )  # past_key_value = cache for decoding
+
+
+class BartClassificationHead(nn.Module):
+    """Head for sentence-level classification tasks."""
+
+    # This can trivially be shared with RobertaClassificationHead
+
+    def __init__(
+        self,
+        input_dim,
+        inner_dim,
+        num_classes,
+        pooler_dropout,
+    ):
+        super().__init__()
+        self.dense = nn.Linear(input_dim, inner_dim)
+        self.dropout = nn.Dropout(p=pooler_dropout)
+        self.out_proj = nn.Linear(inner_dim, num_classes)
+
+    def forward(self, x):
+        x = self.dropout(x)
+        x = self.dense(x)
+        x = torch.tanh(x)
+        x = self.dropout(x)
+        x = self.out_proj(x)
+        return x
+
+
+class PretrainedBartModel(PreTrainedModel):
+    config_class = BartConfig
+    base_model_prefix = "model"
+
+    def _init_weights(self, module):
+        std = self.config.init_std
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, SinusoidalPositionalEmbedding):
+            pass
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+    @property
+    def dummy_inputs(self):
+        pad_token = self.config.pad_token_id
+        input_ids = torch.tensor([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token]], device=self.device)
+        dummy_inputs = {
+            "attention_mask": input_ids.ne(pad_token),
+            "input_ids": input_ids,
+        }
+        return dummy_inputs
+
+
+BART_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
@@ -76,7 +524,6 @@ BART_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
             weights.
-
 """
 
 BART_GENERATION_EXAMPLE = r"""
@@ -94,7 +541,6 @@ BART_GENERATION_EXAMPLE = r"""
         >>> # Generate Summary
         >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
         >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
-
 """
 
 BART_INPUTS_DOCSTRING = r"""
@@ -148,139 +594,6 @@ BART_INPUTS_DOCSTRING = r"""
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
-
-
-class PretrainedBartModel(PreTrainedModel):
-    config_class = BartConfig
-    base_model_prefix = "model"
-
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, SinusoidalPositionalEmbedding):
-            pass
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
-    @property
-    def dummy_inputs(self):
-        pad_token = self.config.pad_token_id
-        input_ids = torch.tensor([[0, 6, 10, 4, 2], [0, 8, 12, 2, pad_token]], device=self.device)
-        dummy_inputs = {
-            "attention_mask": input_ids.ne(pad_token),
-            "input_ids": input_ids,
-        }
-        return dummy_inputs
-
-
-def _make_linear_from_emb(emb):
-    vocab_size, emb_size = emb.weight.shape
-    lin_layer = nn.Linear(vocab_size, emb_size, bias=False)
-    lin_layer.weight.data = emb.weight.data
-    return lin_layer
-
-
-def shift_tokens_right(input_ids, pad_token_id):
-    """Shift input ids one token to the right, and wrap the last non pad token (usually <eos>)."""
-    prev_output_tokens = input_ids.clone()
-    index_of_eos = (input_ids.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
-    prev_output_tokens[:, 0] = input_ids.gather(1, index_of_eos).squeeze()
-    prev_output_tokens[:, 1:] = input_ids[:, :-1]
-    return prev_output_tokens
-
-
-def _make_causal_mask(input_ids_shape, dtype, past_key_values_length=0):
-    bsz, tgt_len = input_ids_shape
-    tmp = torch.zeros(tgt_len, tgt_len, dtype=torch.long)
-    tmp = tmp.float().fill_(float("-inf")).type_as(tmp)
-    mask = torch.arange(tmp.size(-1))
-    tmp.masked_fill_(mask < (mask + 1).view(tmp.size(-1), 1), 0)
-    tmp = tmp.to(dtype)
-
-    if past_key_values_length > 0:
-        tmp = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype), tmp], dim=-1)
-    return tmp[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
-
-
-def _expand_mask(mask, dtype, tgt_len=None, past_key_values_length=0):
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
-
-    if past_key_values_length > 0:
-        expanded_mask = torch.cat(
-            [
-                torch.ones(bsz, 1, tgt_len, past_key_values_length, device=expanded_mask.device, dtype=dtype),
-                expanded_mask,
-            ],
-            dim=-1,
-        )
-
-    inverted_mask = 1.0 - expanded_mask
-
-    return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
-
-
-# Helper Modules
-
-
-class EncoderLayer(nn.Module):
-    def __init__(self, config: BartConfig):
-        super().__init__()
-        self.embed_dim = config.d_model
-        self.self_attn = Attention(self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout)
-        self.normalize_before = config.normalize_before
-        self.self_attn_layer_norm = LayerNorm(self.embed_dim)
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
-        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = LayerNorm(self.embed_dim)
-
-    def forward(self, x, encoder_padding_mask, output_attentions=False):
-        """
-        Args:
-            x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
-            encoder_padding_mask (ByteTensor): binary ByteTensor of shape
-                `(batch, src_len)` where padding elements are indicated by ``1``.
-            for t_tgt, t_src is excluded (or masked out), =0 means it is
-            included in attention
-
-        Returns:
-            encoded output of shape `(seq_len, batch, embed_dim)`
-        """
-        residual = x
-        if self.normalize_before:
-            x = self.self_attn_layer_norm(x)
-        x, attn_weights, _ = self.self_attn(
-            query=x, attn_mask=encoder_padding_mask, output_attentions=output_attentions
-        )
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        x = residual + x
-        if not self.normalize_before:
-            x = self.self_attn_layer_norm(x)
-
-        residual = x
-        if self.normalize_before:
-            x = self.final_layer_norm(x)
-        x = self.activation_fn(self.fc1(x))
-        x = F.dropout(x, p=self.activation_dropout, training=self.training)
-        x = self.fc2(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        x = residual + x
-        if not self.normalize_before:
-            x = self.final_layer_norm(x)
-        if torch.isinf(x).any() or torch.isnan(x).any():
-            clamp_value = torch.finfo(x.dtype).max - 1000
-            x = torch.clamp(x, min=-clamp_value, max=clamp_value)
-        return x, attn_weights
 
 
 class BartEncoder(PretrainedBartModel):
@@ -403,103 +716,6 @@ class BartEncoder(PretrainedBartModel):
         if not return_dict:
             return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
         return BaseModelOutput(last_hidden_state=x, hidden_states=encoder_states, attentions=all_attentions)
-
-
-class DecoderLayer(nn.Module):
-    def __init__(self, config: BartConfig):
-        super().__init__()
-        self.embed_dim = config.d_model
-
-        self.self_attn = Attention(
-            embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
-        )
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
-        self.normalize_before = config.normalize_before
-
-        self.self_attn_layer_norm = LayerNorm(self.embed_dim)
-        self.encoder_attn = Attention(
-            self.embed_dim,
-            config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
-        )
-        self.encoder_attn_layer_norm = LayerNorm(self.embed_dim)
-        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = LayerNorm(self.embed_dim)
-
-    def forward(
-        self,
-        x,
-        encoder_hidden_states,
-        encoder_attn_mask=None,
-        past_key_value=None,
-        attn_mask=None,
-        output_attentions=False,
-    ):
-        residual = x
-        if self.normalize_before:
-            x = self.self_attn_layer_norm(x)
-        # Self Attention
-
-        self_attn_past_key_value = past_key_value[0] if past_key_value is not None else None
-        x, self_attn_weights, self_attn_present_key_value = self.self_attn(
-            query=x,
-            past_key_value=self_attn_past_key_value,
-            attn_mask=attn_mask,
-            output_attentions=output_attentions,
-        )
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        x = residual + x
-        if not self.normalize_before:
-            x = self.self_attn_layer_norm(x)
-
-        # Cross-Attention Block
-        cross_attn_present_key_value = None
-        cross_attn_weights = None
-        if encoder_hidden_states is not None:
-            residual = x
-            if self.normalize_before:
-                x = self.encoder_attn_layer_norm(x)
-
-            cross_attn_past_key_value = past_key_value[1] if past_key_value is not None else None
-            x, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
-                query=x,
-                key_value_states=encoder_hidden_states,
-                attn_mask=encoder_attn_mask,
-                past_key_value=cross_attn_past_key_value,
-                output_attentions=output_attentions,
-            )
-            x = F.dropout(x, p=self.dropout, training=self.training)
-            x = residual + x
-            if not self.normalize_before:
-                x = self.encoder_attn_layer_norm(x)
-
-        # Fully Connected
-        residual = x
-        if self.normalize_before:
-            x = self.final_layer_norm(x)
-        x = self.activation_fn(self.fc1(x))
-        x = F.dropout(x, p=self.activation_dropout, training=self.training)
-        x = self.fc2(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        x = residual + x
-        if not self.normalize_before:
-            x = self.final_layer_norm(x)
-
-        present_key_value = (self_attn_present_key_value, cross_attn_present_key_value)
-
-        return (
-            x,
-            self_attn_weights,
-            present_key_value,
-            cross_attn_weights,
-        )  # past_key_value = cache for decoding
 
 
 class BartDecoder(PretrainedBartModel):
@@ -658,195 +874,6 @@ class BartDecoder(PretrainedBartModel):
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
         )
-
-
-class Attention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(
-        self,
-        embed_dim,
-        num_heads,
-        dropout=0.0,
-        bias=True,
-        is_decoder=False,
-    ):
-        super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
-        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
-        self.scaling = self.head_dim ** -0.5
-
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.is_decoder = is_decoder
-
-    def _shape(self, tensor, seq_len, bsz):
-        return (
-            tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
-            .transpose(1, 2)
-            .reshape(bsz * self.num_heads, seq_len, self.head_dim)
-        )
-
-    def forward(
-        self,
-        query,
-        key_value_states: Optional[Tensor] = None,
-        key_padding_mask: Optional[Tensor] = None,
-        past_key_value: Optional[Tuple[Tensor]] = None,
-        attn_mask: Optional[Tensor] = None,
-        output_attentions=False,
-    ) -> Tuple[Tensor, Optional[Tensor]]:
-        """Input shape: Batch x Time x Channel"""
-
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = query.size()
-
-        # get query proj
-        q = self.q_proj(query) * self.scaling
-
-        # get key, value proj
-        if is_cross_attention and past_key_value is not None:
-            # reuse k,v, cross_attentions
-            k = past_key_value[0]
-            v = past_key_value[1]
-        elif is_cross_attention:
-            # cross_attentions
-            k = self.k_proj(key_value_states)
-            v = self.v_proj(key_value_states)
-        elif past_key_value is not None:
-            # reuse k, v, self_attention
-            prev_k = past_key_value[0]
-            prev_v = past_key_value[1]
-            k = torch.cat([prev_k, self.k_proj(query)], dim=1)
-            v = torch.cat([prev_v, self.v_proj(query)], dim=1)
-        else:
-            # self_attention
-            k = self.k_proj(query)
-            v = self.v_proj(query)
-
-        # bsz must be first for reorder_cache
-        if self.is_decoder:
-            past_key_value = (k, v)
-
-        # reshape q,k,v
-        q = self._shape(q, tgt_len, bsz)
-        k = self._shape(k, -1, bsz)
-        v = self._shape(v, -1, bsz)
-
-        src_len = k.size(1)
-        attn_weights = torch.bmm(q, k.transpose(1, 2))
-        assert attn_weights.size() == (
-            bsz * self.num_heads,
-            tgt_len,
-            src_len,
-        ), f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
-
-        if attn_mask is not None:
-            assert attn_mask.size() == (
-                bsz,
-                1,
-                tgt_len,
-                src_len,
-            ), f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attn_mask.size()}"
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attn_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        attn_weights = F.softmax(attn_weights, dim=-1)
-
-        if output_attentions:
-            # make sure that attn_weights are included in graph
-            attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
-        else:
-            attn_weights_reshaped = None
-
-        attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        assert v is not None
-        attn_output = torch.bmm(attn_probs, v)
-        assert attn_output.size() == (bsz * self.num_heads, tgt_len, self.head_dim)
-        attn_output = (
-            attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
-            .transpose(1, 2)
-            .reshape(bsz, tgt_len, embed_dim)
-        )
-
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights_reshaped, past_key_value
-
-
-class BartClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    # This can trivially be shared with RobertaClassificationHead
-
-    def __init__(
-        self,
-        input_dim,
-        inner_dim,
-        num_classes,
-        pooler_dropout,
-    ):
-        super().__init__()
-        self.dense = nn.Linear(input_dim, inner_dim)
-        self.dropout = nn.Dropout(p=pooler_dropout)
-        self.out_proj = nn.Linear(inner_dim, num_classes)
-
-    def forward(self, x):
-        x = self.dropout(x)
-        x = self.dense(x)
-        x = torch.tanh(x)
-        x = self.dropout(x)
-        x = self.out_proj(x)
-        return x
-
-
-class LearnedPositionalEmbedding(nn.Embedding):
-    """
-    This module learns positional embeddings up to a fixed maximum size. Padding ids are ignored by either offsetting
-    based on padding_idx or by setting padding_idx to None and ensuring that the appropriate position ids are passed to
-    the forward function.
-    """
-
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, offset):
-        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models dont have this hack
-        self.offset = offset
-        assert padding_idx is not None
-        num_embeddings += offset
-        super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
-
-    def forward(self, input_ids_shape, past_key_values_length=0):
-        """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = input_ids_shape[:2]
-        positions = torch.arange(
-            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
-        )
-        return super().forward(positions + self.offset)
-
-
-def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
-    if torch.cuda.is_available():
-        try:
-            from apex.normalization import FusedLayerNorm
-
-            return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
-        except ImportError:
-            pass
-    return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
-
-
-# Public API
-def _get_shape(t):
-    return getattr(t, "shape", None)
 
 
 @add_start_docstrings(
@@ -1319,37 +1346,3 @@ class BartForQuestionAnswering(PretrainedBartModel):
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
-
-
-class SinusoidalPositionalEmbedding(nn.Embedding):
-    """This module produces sinusoidal positional embeddings of any length."""
-
-    def __init__(self, num_positions, embedding_dim, padding_idx=None):
-        super().__init__(num_positions, embedding_dim)
-        self.weight = self._init_weight(self.weight)
-
-    @staticmethod
-    def _init_weight(out: nn.Parameter):
-        """
-        Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
-        the 2nd half of the vector. [dim // 2:]
-        """
-        n_pos, dim = out.shape
-        position_enc = np.array(
-            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
-        )
-        out.requires_grad = False  # set early to avoid an error in pytorch-1.8+
-        sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
-        out[:, 0:sentinel] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
-        out[:, sentinel:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
-        out.detach_()
-        return out
-
-    @torch.no_grad()
-    def forward(self, input_ids_shape, past_key_values_length=0):
-        """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = input_ids_shape[:2]
-        positions = torch.arange(
-            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
-        )
-        return super().forward(positions)
