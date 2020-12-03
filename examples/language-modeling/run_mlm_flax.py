@@ -521,7 +521,7 @@ if __name__ == "__main__":
     rng = jax.random.PRNGKey(training_args.seed)
 
     rng, init_rng = jax.random.split(rng)
-    model = FlaxBertForMaskedLM.from_pretrained("bert-base-cased")
+    model = FlaxBertForMaskedLM.from_pretrained("bert-base-cased", dtype=jnp.float32)
     model.init(init_rng, (training_args.train_batch_size, model.config.max_length))
 
     # Setup optimizer
