@@ -357,159 +357,6 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
                 self.assertEqual([e[0] for e in expected_results], tokens["offset_mapping"])
 
-    def test_tapas_integration_test(self):
-        data = {
-            "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
-            "Age": ["56", "45", "59"],
-            "Number of movies": ["87", "53", "69"],
-            "Date of birth": ["18 december 1963", "11 november 1974", "6 may 1961"],
-        }
-        queries = [
-            "When was Brad Pitt born?",
-            "Which actor appeared in the least number of movies?",
-            "What is the average number of movies?",
-        ]
-        table = pd.DataFrame.from_dict(data)
-
-        # TODO: Should update this in the future
-        tokenizer = TapasTokenizer.from_pretrained("lysandre/tapas-temporary-repo", model_max_length=512)
-
-        expected_results = {
-            "input_ids": [
-                101,
-                2043,
-                2001,
-                8226,
-                15091,
-                2141,
-                1029,
-                102,
-                5889,
-                2287,
-                2193,
-                1997,
-                5691,
-                3058,
-                1997,
-                4182,
-                8226,
-                15091,
-                5179,
-                6584,
-                2324,
-                2285,
-                3699,
-                14720,
-                4487,
-                6178,
-                9488,
-                3429,
-                5187,
-                2340,
-                2281,
-                3326,
-                2577,
-                18856,
-                7828,
-                3240,
-                5354,
-                6353,
-                1020,
-                2089,
-                3777,
-            ],
-            "attention_mask": [
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-                1,
-            ],
-            "token_type_ids": [
-                [0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0],
-                [1, 1, 0, 0, 0, 0, 0],
-                [1, 2, 0, 0, 0, 0, 0],
-                [1, 3, 0, 0, 0, 0, 0],
-                [1, 3, 0, 0, 0, 0, 0],
-                [1, 3, 0, 0, 0, 0, 0],
-                [1, 4, 0, 0, 0, 0, 0],
-                [1, 4, 0, 0, 0, 0, 0],
-                [1, 4, 0, 0, 0, 0, 0],
-                [1, 1, 1, 0, 0, 0, 0],
-                [1, 1, 1, 0, 0, 0, 0],
-                [1, 2, 1, 0, 2, 2, 0],
-                [1, 3, 1, 0, 3, 1, 0],
-                [1, 4, 1, 0, 2, 2, 0],
-                [1, 4, 1, 0, 2, 2, 0],
-                [1, 4, 1, 0, 2, 2, 0],
-                [1, 1, 2, 0, 0, 0, 0],
-                [1, 1, 2, 0, 0, 0, 0],
-                [1, 1, 2, 0, 0, 0, 0],
-                [1, 1, 2, 0, 0, 0, 0],
-                [1, 2, 2, 0, 1, 3, 0],
-                [1, 3, 2, 0, 1, 3, 0],
-                [1, 4, 2, 0, 3, 1, 0],
-                [1, 4, 2, 0, 3, 1, 0],
-                [1, 4, 2, 0, 3, 1, 0],
-                [1, 1, 3, 0, 0, 0, 0],
-                [1, 1, 3, 0, 0, 0, 0],
-                [1, 1, 3, 0, 0, 0, 0],
-                [1, 1, 3, 0, 0, 0, 0],
-                [1, 2, 3, 0, 3, 1, 0],
-                [1, 3, 3, 0, 2, 2, 0],
-                [1, 4, 3, 0, 1, 3, 0],
-                [1, 4, 3, 0, 1, 3, 0],
-                [1, 4, 3, 0, 1, 3, 0],
-            ],
-        }
-
-        new_encoded_inputs = tokenizer.encode_plus(table=table, query=queries[0])
-
-        self.assertDictEqual(dict(new_encoded_inputs), expected_results)
-
     def test_add_special_tokens(self):
         tokenizers: List[TapasTokenizer] = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
@@ -1155,6 +1002,190 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_pretokenized_inputs(self):
         pass
 
+    # TODO SET TO SLOW
+    def test_tapas_truncation_integration_test(self):
+        data = {
+            "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
+            "Age": ["56", "45", "59"],
+            "Number of movies": ["87", "53", "69"],
+            "Date of birth": ["18 december 1963", "11 november 1974", "6 may 1961"],
+        }
+        queries = [
+            "When was Brad Pitt born?",
+            "Which actor appeared in the least number of movies?",
+            "What is the average number of movies?",
+        ]
+        table = pd.DataFrame.from_dict(data)
+
+        # TODO: Should update this in the future
+        tokenizer = TapasTokenizer.from_pretrained("lysandre/tapas-temporary-repo", model_max_length=512)
+
+        for i in range(12):
+            # The table cannot even encode the headers, so raise an error
+            with self.assertRaises(ValueError):
+                tokenizer.encode(table=table, query=queries[0], max_length=i, truncation="drop_rows_to_fit")
+
+        for i in range(12, 512):
+            new_encoded_inputs = tokenizer.encode(table=table, query=queries[0], max_length=i, truncation="drop_rows_to_fit")
+
+            # Ensure that the input IDs are less than the max length defined.
+            self.assertLessEqual(len(new_encoded_inputs), i)
+
+    # TODO SET TO SLOW
+    def test_tapas_integration_test(self):
+        data = {
+            "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
+            "Age": ["56", "45", "59"],
+            "Number of movies": ["87", "53", "69"],
+            "Date of birth": ["18 december 1963", "11 november 1974", "6 may 1961"],
+        }
+        queries = [
+            "When was Brad Pitt born?",
+            "Which actor appeared in the least number of movies?",
+            "What is the average number of movies?",
+        ]
+        table = pd.DataFrame.from_dict(data)
+
+        # TODO: Should update this in the future
+        tokenizer = TapasTokenizer.from_pretrained("lysandre/tapas-temporary-repo", model_max_length=512)
+
+        expected_results = {
+            "input_ids": [
+                101,
+                2043,
+                2001,
+                8226,
+                15091,
+                2141,
+                1029,
+                102,
+                5889,
+                2287,
+                2193,
+                1997,
+                5691,
+                3058,
+                1997,
+                4182,
+                8226,
+                15091,
+                5179,
+                6584,
+                2324,
+                2285,
+                3699,
+                14720,
+                4487,
+                6178,
+                9488,
+                3429,
+                5187,
+                2340,
+                2281,
+                3326,
+                2577,
+                18856,
+                7828,
+                3240,
+                5354,
+                6353,
+                1020,
+                2089,
+                3777,
+            ],
+            "attention_mask": [
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+            ],
+            "token_type_ids": [
+                [0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0],
+                [1, 1, 0, 0, 0, 0, 0],
+                [1, 2, 0, 0, 0, 0, 0],
+                [1, 3, 0, 0, 0, 0, 0],
+                [1, 3, 0, 0, 0, 0, 0],
+                [1, 3, 0, 0, 0, 0, 0],
+                [1, 4, 0, 0, 0, 0, 0],
+                [1, 4, 0, 0, 0, 0, 0],
+                [1, 4, 0, 0, 0, 0, 0],
+                [1, 1, 1, 0, 0, 0, 0],
+                [1, 1, 1, 0, 0, 0, 0],
+                [1, 2, 1, 0, 2, 2, 0],
+                [1, 3, 1, 0, 3, 1, 0],
+                [1, 4, 1, 0, 2, 2, 0],
+                [1, 4, 1, 0, 2, 2, 0],
+                [1, 4, 1, 0, 2, 2, 0],
+                [1, 1, 2, 0, 0, 0, 0],
+                [1, 1, 2, 0, 0, 0, 0],
+                [1, 1, 2, 0, 0, 0, 0],
+                [1, 1, 2, 0, 0, 0, 0],
+                [1, 2, 2, 0, 1, 3, 0],
+                [1, 3, 2, 0, 1, 3, 0],
+                [1, 4, 2, 0, 3, 1, 0],
+                [1, 4, 2, 0, 3, 1, 0],
+                [1, 4, 2, 0, 3, 1, 0],
+                [1, 1, 3, 0, 0, 0, 0],
+                [1, 1, 3, 0, 0, 0, 0],
+                [1, 1, 3, 0, 0, 0, 0],
+                [1, 1, 3, 0, 0, 0, 0],
+                [1, 2, 3, 0, 3, 1, 0],
+                [1, 3, 3, 0, 2, 2, 0],
+                [1, 4, 3, 0, 1, 3, 0],
+                [1, 4, 3, 0, 1, 3, 0],
+                [1, 4, 3, 0, 1, 3, 0],
+            ],
+        }
+
+        new_encoded_inputs = tokenizer.encode_plus(table=table, query=queries[0])
+
+        self.assertDictEqual(dict(new_encoded_inputs), expected_results)
+
+    # TODO SET TO SLOW
     def test_full_tokenizer(self):
         data = [
             ["Pos", "No", "Driver", "Team", "Laps", "Time/Retired", "Grid", "Points"],

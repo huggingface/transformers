@@ -47,7 +47,7 @@ Tips:
   of the table). According to the authors, this usually results in a slightly better performance, and allows you to
   encode longer sequences without running out of embeddings. This is reflected in the ``reset_position_index_per_cell`` 
   parameter of :class:`~transformers.TapasConfig`, which is set to ``True`` by default. 
-  There are both pre-trained models in the `model hub`_ with absolute and relative position embeddings. Note that it's
+  There are both pre-trained models in the `model hub <https://huggingface.co/models>`_ with absolute and relative position embeddings. Note that it's
   usually advised to pad the inputs on the right rather than the left.
 - TAPAS is based on BERT, so ``TAPAS-base`` for example corresponds to a ``BERT-base`` architecture. Of course, TAPAS-large 
   will result in the best performance (the results reported in the paper are from TAPAS-large). Metrics of the various 
