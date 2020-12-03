@@ -50,8 +50,8 @@ if is_torch_available():
     )
     from transformers.models.bart.modeling_bart import (
         SinusoidalPositionalEmbedding,
-        _prepare_bart_decoder_inputs,
-        invert_mask,
+#        _prepare_bart_decoder_inputs,
+#        invert_mask,
         shift_tokens_right,
     )
 PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
@@ -113,6 +113,34 @@ class ModelTester:
         inputs_dict["decoder_attention_mask"] = inputs_dict["attention_mask"]
         inputs_dict["use_cache"] = False
         return config, inputs_dict
+
+    def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
+        model = BartModel(config=config).get_decoder().to(torch_device).eval()
+        input_ids = inputs_dict["input_ids"]
+
+        # first forward pass
+        outputs = model(input_ids, use_cache=True)
+
+        output, past_key_values = outputs.to_tuple()
+
+        # create hypothetical multiple next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+
+        # append to next input_ids and
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+
+        output_from_no_past = model(next_input_ids)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+
+        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
 
 def prepare_bart_inputs_dict(
@@ -203,6 +231,10 @@ class BARTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
+
+    def test_decoder_model_past_with_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
     @unittest.skip("Passing inputs_embeds not implemented for Bart.")
     def test_inputs_embeds(self):
