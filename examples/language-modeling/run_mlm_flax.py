@@ -623,5 +623,6 @@ if __name__ == "__main__":
 
         # Save metrics
         if has_tensorboard and jax.host_id() == 0:
-            summary_writer.scalar("loss", loss, epoch)
+            for name, value in eval_summary.items():
+                summary_writer.scalar(name, value, epoch)
 
