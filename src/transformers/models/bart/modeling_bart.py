@@ -209,8 +209,10 @@ def _make_causal_mask(input_ids_shape, past_key_values_length=0):
 def _expand_mask(mask, input_shape, dtype, src_len=None, past_key_values_length=0):
     bsz, tgt_len = input_shape
     # src_len != tgt_len for encoder_attention_mask
-    src_len = src_len if src_len is not None else tgt_len
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, src_len, tgt_len + past_key_values_length)
+    if src_len is not None:
+        expanded_mask = mask[:, None, None, :].expand(bsz, 1, src_len, tgt_len)
+    else:
+        expanded_mask = mask[:, None, :, None].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
     return expanded_mask.to(dtype).masked_fill(expanded_mask.ne(1), torch.finfo(dtype).min)
 
 
@@ -368,7 +370,6 @@ class BartEncoder(PretrainedBartModel):
 
         # expand attention_mask
         attention_mask = _expand_mask(attention_mask, input_shape, inputs_embeds.dtype)
-        print(f"Enc attn mask {attention_mask.shape}")
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -580,13 +581,10 @@ class BartDecoder(PretrainedBartModel):
 
         # create mask
         attn_mask = _make_causal_mask(input_ids.size(), past_key_values_length=past_key_values_length).to(self.device)
-        import ipdb
 
-        ipdb.set_trace()
         attn_mask = attn_mask + _expand_mask(
             decoder_padding_mask, x.shape[:2], x.dtype, past_key_values_length=past_key_values_length
         )
-        print(f"Dec attn mask {attn_mask.shape}")
 
         # check attention mask and invert
         if encoder_hidden_states is not None:
@@ -597,7 +595,6 @@ class BartDecoder(PretrainedBartModel):
             encoder_padding_mask = _expand_mask(
                 encoder_padding_mask, encoder_hidden_states.shape[:2], x.dtype, src_len=input_ids.shape[-1]
             )
-            print(f"Cross attn mask {encoder_padding_mask.shape}")
 
         if self.do_blenderbot_90_layernorm:
             x = self.layernorm_embedding(x)
