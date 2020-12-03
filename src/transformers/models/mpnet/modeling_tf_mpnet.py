@@ -446,9 +446,7 @@ class TFMPNetEncoder(tf.keras.layers.Layer):
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
 
         return TFBaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
 
     # Copied from transformers.modeling_tf_t5.TFT5Attention
