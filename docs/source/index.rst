@@ -37,6 +37,14 @@ Choose the right framework for every part of a model's lifetime:
 
 Experimental support for Flax with a few models right now, expected to grow in the coming months.
 
+`All the model checkpoints <https://huggingface.co/models>`__ are seamlessly integrated from the huggingface.co `model
+hub <https://huggingface.co>`__ where they are uploaded directly by `users <https://huggingface.co/users>`__ and
+`organizations <https://huggingface.co/organizations>`__.
+
+Current number of checkpoints: |checkpoints|
+
+.. |checkpoints| image:: https://img.shields.io/endpoint?url=https://huggingface.co/api/shields/models&color=brightgreen
+
 Contents
 -----------------------------------------------------------------------------------------------------------------------
 
@@ -168,8 +176,6 @@ and conversion utilities for the following models:
 34. :doc:`XLNet <model_doc/xlnet>` (from Google/CMU) released with the paper `​XLNet: Generalized Autoregressive
     Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`__ by Zhilin Yang*, Zihang Dai*, Yiming
     Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
-35. `Other community models <https://huggingface.co/models>`__, contributed by the `community
-    <https://huggingface.co/users>`__.
 
 
 .. _bigtable:
