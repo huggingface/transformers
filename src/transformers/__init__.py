@@ -903,9 +903,9 @@ else:
     from .utils.dummy_flax_objects import *
 
 
-if not is_tf_available() and not is_torch_available():
+if not is_tf_available() and not is_torch_available() and not is_flax_available():
     logger.warning(
-        "Neither PyTorch nor TensorFlow >= 2.0 have been found. "
+        "None of PyTorch, TensorFlow >= 2.0, or Flax have been found. "
         "Models won't be available and only tokenizers, configuration "
         "and file/data utilities can be used."
     )
