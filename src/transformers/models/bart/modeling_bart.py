@@ -194,26 +194,37 @@ def shift_tokens_right(input_ids, pad_token_id):
     return prev_output_tokens
 
 
-def _make_causal_mask(input_ids_shape, past_key_values_length=0):
+def _make_causal_mask(input_ids_shape, dtype, past_key_values_length=0):
     bsz, tgt_len = input_ids_shape
     tmp = torch.zeros(tgt_len, tgt_len, dtype=torch.long)
     tmp = tmp.float().fill_(float("-inf")).type_as(tmp)
     mask = torch.arange(tmp.size(-1))
     tmp.masked_fill_(mask < (mask + 1).view(tmp.size(-1), 1), 0)
+    tmp = tmp.to(dtype)
 
     if past_key_values_length > 0:
-        tmp = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=torch.long), tmp], dim=-1)
+        tmp = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype), tmp], dim=-1)
     return tmp[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-def _expand_mask(mask, input_shape, dtype, src_len=None, past_key_values_length=0):
-    bsz, tgt_len = input_shape
-    # src_len != tgt_len for encoder_attention_mask
-    if src_len is not None:
-        expanded_mask = mask[:, None, None, :].expand(bsz, 1, src_len, tgt_len)
-    else:
-        expanded_mask = mask[:, None, :, None].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
-    return expanded_mask.to(dtype).masked_fill(expanded_mask.ne(1), torch.finfo(dtype).min)
+def _expand_mask(mask, dtype, tgt_len=None, past_key_values_length=0):
+    bsz, src_len = mask.size()
+    tgt_len = tgt_len if tgt_len is not None else src_len
+
+    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+
+    if past_key_values_length > 0:
+        expanded_mask = torch.cat(
+            [
+                torch.ones(bsz, 1, tgt_len, past_key_values_length, device=expanded_mask.device, dtype=dtype),
+                expanded_mask,
+            ],
+            dim=-1,
+        )
+
+    inverted_mask = 1.0 - expanded_mask
+
+    return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
 # Helper Modules
@@ -364,12 +375,9 @@ class BartEncoder(PretrainedBartModel):
         x = self.layernorm_embedding(x)
         x = F.dropout(x, p=self.dropout, training=self.training)
 
-        # create attn_mask
-        if attention_mask is None:
-            attention_mask = torch.ones(input_shape, dtype=torch.long, device=self.device)
-
         # expand attention_mask
-        attention_mask = _expand_mask(attention_mask, input_shape, inputs_embeds.dtype)
+        if attention_mask is not None:
+            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -564,13 +572,6 @@ class BartDecoder(PretrainedBartModel):
                 - attentions
         """
 
-        # create decoder_padding_mask if provided
-        if decoder_padding_mask is None:
-            decoder_padding_mask = input_ids.ne(self.config.pad_token_id).to(torch.long)
-            # never mask leading token, even if it is pad
-            if input_ids.shape[-1] > 1:
-                decoder_padding_mask[:, 0] = decoder_padding_mask[:, 1]
-
         # past_key_values_length
         past_key_values_length = past_key_values[0][0][0].shape[1] if past_key_values is not None else 0
 
@@ -579,22 +580,24 @@ class BartDecoder(PretrainedBartModel):
 
         x = self.embed_tokens(input_ids) * self.embed_scale
 
-        # create mask
-        attn_mask = _make_causal_mask(input_ids.size(), past_key_values_length=past_key_values_length).to(self.device)
+        # create decoder_padding_mask if provided
+        if decoder_padding_mask is None:
+            decoder_padding_mask = input_ids.ne(self.config.pad_token_id).to(torch.long)
+            # never mask leading token, even if it is pad
+            if input_ids.shape[-1] > 1:
+                decoder_padding_mask[:, 0] = decoder_padding_mask[:, 1]
 
+        # create mask
+        attn_mask = _make_causal_mask(input_ids.size(), x.dtype, past_key_values_length=past_key_values_length).to(
+            self.device
+        )
         attn_mask = attn_mask + _expand_mask(
-            decoder_padding_mask, x.shape[:2], x.dtype, past_key_values_length=past_key_values_length
+            decoder_padding_mask, x.dtype, past_key_values_length=past_key_values_length
         )
 
         # check attention mask and invert
-        if encoder_hidden_states is not None:
-            if encoder_padding_mask is None:
-                encoder_padding_mask = torch.ones(
-                    encoder_hidden_states.shape[:2], dtype=torch.long, device=self.device
-                )
-            encoder_padding_mask = _expand_mask(
-                encoder_padding_mask, encoder_hidden_states.shape[:2], x.dtype, src_len=input_ids.shape[-1]
-            )
+        if encoder_hidden_states is not None and encoder_padding_mask is not None:
+            encoder_padding_mask = _expand_mask(encoder_padding_mask, x.dtype, tgt_len=input_ids.shape[-1])
 
         if self.do_blenderbot_90_layernorm:
             x = self.layernorm_embedding(x)
@@ -745,23 +748,15 @@ class Attention(nn.Module):
             src_len,
         ), f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
 
-        assert attn_mask.size() == (
-            bsz,
-            1,
-            tgt_len,
-            src_len,
-        ), f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attn_mask.size()}"
-        attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attn_mask
-        attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        # Note: deleted workaround to get around fork/join parallelism not supporting Optional types. on 2020/10/15
-
-        #        assert key_padding_mask is None or key_padding_mask.shape == (bsz, src_len)
-        #        if key_padding_mask is not None:  # don't attend to padding symbols
-        #            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-        #            reshaped = key_padding_mask.unsqueeze(1).unsqueeze(2)
-        #            attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
-        #            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
+        if attn_mask is not None:
+            assert attn_mask.size() == (
+                bsz,
+                1,
+                tgt_len,
+                src_len,
+            ), f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attn_mask.size()}"
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attn_mask
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = F.softmax(attn_weights, dim=-1)
 
@@ -904,7 +899,7 @@ class BartModel(PretrainedBartModel):
     ):
 
         if decoder_input_ids is None:
-            use_cache = False
+            decoder_input_ids = shift_tokens_right(input_ids, self.config.pad_token_id)
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -912,14 +907,6 @@ class BartModel(PretrainedBartModel):
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if not use_cache:
-            if decoder_input_ids is not None:
-                decoder_input_ids = shift_tokens_right(input_ids, self.config.pad_token_id)
-        else:
-            decoder_attention_mask = None
-
-        assert decoder_input_ids is not None
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -1054,7 +1041,6 @@ class BartForConditionalGeneration(PretrainedBartModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
-            use_cache = False
             if decoder_input_ids is None:
                 decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id)
 
