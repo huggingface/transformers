@@ -7,7 +7,6 @@ tags:
 - fill-mask
 - pytorch
 - roberta
-- lm-head
 - masked-lm
 license: MIT
 ---
