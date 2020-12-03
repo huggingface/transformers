@@ -3,7 +3,6 @@ language: da
 tags:
 - bert
 - masked-lm
-- lm-head
 license: cc-by-4.0
 datasets:
 - common_crawl
