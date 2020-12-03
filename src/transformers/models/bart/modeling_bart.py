@@ -824,10 +824,12 @@ class LearnedPositionalEmbedding(nn.Embedding):
         num_embeddings += offset
         super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
 
-    def forward(self, input_ids_shape, past_length=0):
+    def forward(self, input_ids_shape, past_key_values_length=0):
         """Input is expected to be of size [bsz x seqlen]."""
         bsz, seq_len = input_ids_shape[:2]
-        positions = torch.arange(past_length, past_length + seq_len, dtype=torch.long, device=self.weight.device)
+        positions = torch.arange(
+            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+        )
         return super().forward(positions + self.offset)
 
 
@@ -1344,8 +1346,10 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         return out
 
     @torch.no_grad()
-    def forward(self, input_ids_shape, past_length=0):
+    def forward(self, input_ids_shape, past_key_values_length=0):
         """Input is expected to be of size [bsz x seqlen]."""
         bsz, seq_len = input_ids_shape[:2]
-        positions = torch.arange(past_length, past_length + seq_len, dtype=torch.long, device=self.weight.device)
+        positions = torch.arange(
+            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+        )
         return super().forward(positions)

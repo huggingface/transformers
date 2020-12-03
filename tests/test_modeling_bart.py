@@ -631,13 +631,12 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
     ]
 
     def test_positional_emb_cache_logic(self):
-        pad = 1
-        input_ids = torch.tensor([[4, 10]], dtype=torch.long, device=torch_device)
-        emb1 = SinusoidalPositionalEmbedding(num_positions=32, embedding_dim=6, padding_idx=pad).to(torch_device)
-        no_cache = emb1(input_ids, use_cache=False)
-        yes_cache = emb1(input_ids, use_cache=True)
-        self.assertEqual((1, 1, 6), yes_cache.shape)  # extra dim to allow broadcasting, feel free to delete!
-        self.assertListEqual(no_cache[-1].tolist(), yes_cache[0][0].tolist())
+        emb1 = SinusoidalPositionalEmbedding(num_positions=32, embedding_dim=6, padding_idx=1).to(torch_device)
+        no_cache = emb1((4, 10), past_key_values_length=0)
+        yes_cache = emb1((4, 10), past_key_values_length=2)
+
+        self.assertTrue(no_cache.shape == yes_cache.shape == (10, 6))
+        self.assertListEqual(no_cache[2:].tolist(), yes_cache[:-2].tolist())
 
     def test_odd_embed_dim(self):
         # odd embedding_dim is allowed
@@ -653,15 +652,6 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
         for i, (expected_weight, actual_weight) in enumerate(zip(self.desired_weights, weights)):
             for j in range(5):
                 self.assertAlmostEqual(expected_weight[j], actual_weight[j], places=3)
-
-        # test that forward pass is just a lookup, there is no ignore padding logic
-        input_ids = torch.tensor([[4, 10, pad, pad, pad]], dtype=torch.long, device=torch_device)
-        no_cache_pad_zero = emb1(input_ids)
-        self.assertTrue(
-            torch.allclose(
-                torch.tensor(self.desired_weights, device=torch_device), no_cache_pad_zero[:3, :5], atol=1e-3
-            )
-        )
 
     def test_child_config_equivalence(self):
         """Test that configs associated with children of BartForConditionalGeneration are identical."""
