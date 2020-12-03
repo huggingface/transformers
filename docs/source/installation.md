@@ -77,7 +77,7 @@ Since Transformers version v4.0.0, we now have a conda channel: `huggingface`.
 conda install -c huggingface transformers
 ```
 
-TensorFlow, PyTorch or Flax should be installed from their respective conda channels. 
+Follow the installation pages of TensorFlow, PyTorch or Flax to see how to install them with conda. 
 
 ## Caching models
 
