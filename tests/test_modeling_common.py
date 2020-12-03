@@ -1156,7 +1156,6 @@ class ModelTesterMixin:
 
             model.parallelize()
 
-
             parallel_output = model(**cast_to_device(inputs_dict, "cuda:0"))
 
             for value, parallel_value in zip(output, parallel_output):
