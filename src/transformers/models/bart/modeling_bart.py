@@ -803,7 +803,7 @@ class BartDecoder(PretrainedBartModel):
 
         # create decoder_padding_mask if not provided and needed
         # TODO(PVP) - this is very inconsistent with other models, but
-        if decoder_padding_mask is None and input_ids.shape[-1] > 1 and (self.config.pad_token_id in input_ids).any():
+        if decoder_padding_mask is None and input_ids.shape[-1] > 1 and self.config.pad_token_id in input_ids:
             # should be kept for backwards compatibility
             decoder_padding_mask = input_ids.ne(self.config.pad_token_id).to(torch.long)
             # never mask leading token, even if it is pad
