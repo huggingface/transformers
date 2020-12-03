@@ -170,7 +170,7 @@ and conversion utilities for the following models:
     Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
 35. `All the model checkpoints <https://huggingface.co/models>`__ are seamlessly integrated from the huggingface.co
     `model hub <https://huggingface.co>`__ where they are uploaded directly by `users <https://huggingface.co/users>`__
-    and `organizations <https://huggingface.co/organizations>`__. Current number of checkpoints: !`c
+    and `organizations <https://huggingface.co/organizations>`__. Current number of checkpoints: !`
     <https://img.shields.io/endpoint?url=https://huggingface.co/api/shields/models&color=brightgreen>`__
 
 
