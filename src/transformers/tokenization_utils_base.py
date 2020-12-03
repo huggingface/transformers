@@ -3047,9 +3047,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 encoded_inputs["input_ids"] = [self.pad_token_id] * difference + encoded_inputs["input_ids"]
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
-        else:
-            if return_attention_mask:
-                encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"])
+        elif return_attention_mask and "attention_mask" not in encoded_inputs:
+            encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"])
 
         return encoded_inputs
 
