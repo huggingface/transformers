@@ -30,6 +30,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 
+from flax import jax_utils
 from flax.optim import Adam
 from typing import Optional, List, Dict, Tuple
 
@@ -308,8 +309,7 @@ def compute_metrics(logits, labels, weights, label_smoothing=0.0):
         "accuracy": acc,
         "normalizer": normalizer
     }
-    # TODO: Re-enable when using jax.pmap
-    # metrics = jax.lax.psum(metrics, axis_name="batch")
+    metrics = jax.lax.psum(metrics, axis_name="batch")
     return metrics
 
 
@@ -368,7 +368,6 @@ def cross_entropy(logits, targets, weights=None, label_smoothing=0.0):
     return loss.sum(), normalizing_factor
 
 
-@jax.jit
 def training_step(optimizer, batch):
     def loss_fn(params):
         targets = batch.pop("labels")
@@ -384,13 +383,13 @@ def training_step(optimizer, batch):
     lr = lr_scheduler_fn(step)
     grad_fn = jax.value_and_grad(loss_fn)
     loss, grad = grad_fn(optimizer.target)
+    grad = jax.lax.pmean(grad, "batch")
     optimizer = optimizer.apply_gradient(grad, learning_rate=lr)
 
     return loss, optimizer
 
 
-@jax.jit
-def eval_step(batch, params):
+def eval_step(params, batch):
     """
     Calculate evaluation metrics on a batch.
     """
@@ -552,6 +551,13 @@ if __name__ == "__main__":
     # Create learning rate scheduler
     lr_scheduler_fn = create_learning_rate_scheduler(base_learning_rate=training_args.learning_rate)
 
+    # Create parallel version of the training and evaluation steps
+    p_training_step = jax.pmap(training_step, "batch", donate_argnums=(0,))
+    p_eval_step = jax.pmap(eval_step, "batch", donate_argnums=(0,))
+
+    # Replicate the optimizer on each device
+    optimizer = jax_utils.replicate(optimizer)
+
     # Store some constant
     nb_epochs = int(training_args.num_train_epochs)
     batch_size = int(training_args.train_batch_size)
@@ -576,12 +582,13 @@ if __name__ == "__main__":
             model_inputs = data_collator(samples, pad_to_multiple_of=16)
 
             # Model forward
-            loss, optimizer = training_step(optimizer, model_inputs.data)
+            model_inputs = common_utils.shard(model_inputs.data)
+            loss, optimizer = p_training_step(optimizer, model_inputs)
 
         # ======================== Evaluating ==============================
         nb_eval_samples = len(tokenized_datasets["test"])
         eval_samples_idx = jnp.arange(nb_eval_samples)
-        eval_sections_split = (nb_eval_samples // batch_size) + 1
+        eval_sections_split = (nb_eval_samples // training_args.eval_batch_size) + 1
         eval_batch_idx = jnp.array_split(eval_samples_idx, eval_sections_split)
         eval_metrics = []
 
@@ -590,13 +597,11 @@ if __name__ == "__main__":
             model_inputs = data_collator(samples, pad_to_multiple_of=16)
 
             # Model forward
-            metrics = eval_step(model_inputs.data, optimizer.target)
+            model_inputs = common_utils.shard(model_inputs.data)
+            metrics = p_eval_step(optimizer.target, model_inputs)
             eval_metrics.append(metrics)
 
-        # TODO: Re-enable when using jax.pmap
-        # eval_metrics = get_metrics(eval_metrics)
-        eval_metrics_np = jax.device_get(eval_metrics)
-        eval_metrics_np = stack_forest(eval_metrics_np)
+        eval_metrics_np = get_metrics(eval_metrics)
         eval_metrics_np = jax.tree_map(jnp.sum, eval_metrics_np)
         eval_normalizer = eval_metrics_np.pop("normalizer")
         eval_summary = jax.tree_map(lambda x: x / eval_normalizer, eval_metrics_np)
