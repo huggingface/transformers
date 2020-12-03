@@ -168,8 +168,10 @@ and conversion utilities for the following models:
 34. :doc:`XLNet <model_doc/xlnet>` (from Google/CMU) released with the paper `​XLNet: Generalized Autoregressive
     Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`__ by Zhilin Yang*, Zihang Dai*, Yiming
     Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
-35. `Other community models <https://huggingface.co/models>`__, contributed by the `community
-    <https://huggingface.co/users>`__.
+35. `All the model checkpoints <https://huggingface.co/models>`__ are seamlessly integrated from the huggingface.co
+    `model hub <https://huggingface.co>`__ where they are uploaded directly by `users <https://huggingface.co/users>`__
+    and `organizations <https://huggingface.co/organizations>`__. Current number of checkpoints: !`c
+    <https://img.shields.io/endpoint?url=https://huggingface.co/api/shields/models&color=brightgreen>`__
 
 
 .. _bigtable:
