@@ -1141,22 +1141,22 @@ class ModelTesterMixin:
         for model_class in self.all_parallelizable_model_classes:
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
 
-            model = model_class(config)
-            output = model(**inputs_dict)
-
-            model.parallelize()
-
-            def cast_to_gpu(dictionary):
+            def cast_to_device(dictionary, device):
                 output = {}
                 for k, v in dictionary.items():
                     if isinstance(v, torch.Tensor):
-                        output[k] = v.to("cuda:0")
+                        output[k] = v.to(device)
                     else:
                         output[k] = v
 
                 return output
 
-            parallel_output = model(**cast_to_gpu(inputs_dict))
+            model = model_class(config)
+            output = model(**cast_to_device(inputs_dict, "cpu"))
+
+            model.parallelize()
+
+            parallel_output = model(**cast_to_device(inputs_dict, "cuda:0"))
 
             for value, parallel_value in zip(output, parallel_output):
                 if isinstance(value, torch.Tensor):
