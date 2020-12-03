@@ -48,7 +48,24 @@ from transformers import (
     HfArgumentParser,
     TrainingArguments,
     set_seed, PreTrainedTokenizerBase, TensorType,
+    is_tensorboard_available
 )
+
+# Cache the result
+has_tensorboard = is_tensorboard_available()
+if has_tensorboard:
+    try:
+        from flax.metrics.tensorboard import SummaryWriter
+    except ImportError as ie:
+        has_tensorboard = False
+        print(f"Unable to display metrics through TensorBoard because some package are not installed: {ie}")
+
+else:
+    print(
+        "Unable to display metrics through TensorBoard because the package is not installed: "
+        "Please run pip install tensorboard to enable."
+    )
+
 
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
@@ -511,7 +528,9 @@ if __name__ == "__main__":
         load_from_cache_file=not data_args.overwrite_cache
     )
 
-    # summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
+    # Enable tensorboard only on the master node
+    if has_tensorboard and jax.host_id() == 0:
+        summary_writer = SummaryWriter(log_dir=Path(training_args.output_dir).joinpath("logs").as_posix())
 
     # Data collator
     # This one will take care of randomly masking the tokens.
@@ -586,5 +605,6 @@ if __name__ == "__main__":
         epochs.desc = f"Epoch... ({epoch + 1}/{nb_epochs} | Loss: {eval_summary['loss']}, Acc: {eval_summary['accuracy']})"
 
         # Save metrics
-        # summary_writer.scalar("loss", loss, epoch)
+        if has_tensorboard and jax.host_id() == 0:
+            summary_writer.scalar("loss", loss, epoch)
 
