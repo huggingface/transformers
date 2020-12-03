@@ -402,6 +402,17 @@ def eval_step(params, batch):
     return compute_metrics(logits, targets, token_mask)
 
 
+def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
+    nb_samples = len(samples_idx)
+    samples_to_remove = nb_samples % batch_size
+
+    if samples_to_remove != 0:
+        samples_idx = samples_idx[:-samples_to_remove]
+    sections_split = (nb_samples // batch_size)
+    batch_idx = jnp.split(samples_idx, sections_split)
+    return batch_idx
+
+
 if __name__ == "__main__":
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
@@ -561,6 +572,7 @@ if __name__ == "__main__":
     # Store some constant
     nb_epochs = int(training_args.num_train_epochs)
     batch_size = int(training_args.train_batch_size)
+    eval_batch_size = int(training_args.eval_batch_size)
 
     epochs = tqdm(range(nb_epochs), desc=f"Epoch ... (1/{nb_epochs})")
     for epoch in epochs:
@@ -572,9 +584,7 @@ if __name__ == "__main__":
         # Generate an epoch by shuffling sampling indices from the train dataset
         nb_training_samples = len(tokenized_datasets["train"])
         training_samples_idx = jax.random.permutation(training_rng, jnp.arange(nb_training_samples))
-        training_sections_split = (nb_training_samples // batch_size) + 1
-
-        training_batch_idx = jnp.array_split(training_samples_idx, training_sections_split)
+        training_batch_idx = generate_batch_splits(training_samples_idx, batch_size)
 
         # Gather the indexes for creating the batch and do a training step
         for batch_idx in tqdm(training_batch_idx, desc=f"Training..."):
@@ -588,10 +598,9 @@ if __name__ == "__main__":
         # ======================== Evaluating ==============================
         nb_eval_samples = len(tokenized_datasets["test"])
         eval_samples_idx = jnp.arange(nb_eval_samples)
-        eval_sections_split = (nb_eval_samples // training_args.eval_batch_size) + 1
-        eval_batch_idx = jnp.array_split(eval_samples_idx, eval_sections_split)
-        eval_metrics = []
+        eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
 
+        eval_metrics = []
         for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...")):
             samples = [tokenized_datasets["test"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples, pad_to_multiple_of=16)
