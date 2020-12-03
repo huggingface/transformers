@@ -33,6 +33,7 @@ from ...file_utils import (
 )
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
+    TFBaseModelOutputWithPooling,
     TFMaskedLMOutput,
     TFMultipleChoiceModelOutput,
     TFQuestionAnsweringModelOutput,
@@ -212,6 +213,27 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
         logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
 
         return tf.reshape(logits, [batch_size, length, self.vocab_size])
+
+
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler
+class TFMPNetPooler(tf.keras.layers.Layer):
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+
+        self.dense = tf.keras.layers.Dense(
+            config.hidden_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            activation="tanh",
+            name="dense",
+        )
+
+    def call(self, hidden_states):
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+
+        return pooled_output
 
 
 class TFMPNetSelfAttention(tf.keras.layers.Layer):
@@ -424,7 +446,9 @@ class TFMPNetEncoder(tf.keras.layers.Layer):
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
 
         return TFBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions
         )
 
     # Copied from transformers.modeling_tf_t5.TFT5Attention
@@ -489,6 +513,7 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
         self.return_dict = config.use_return_dict
 
         self.encoder = TFMPNetEncoder(config, name="encoder")
+        self.pooler = TFMPNetPooler(config, name="pooler")
         # The embeddings must be the last declaration in order to follow the weights order
         self.embeddings = TFMPNetEmbeddings(config, name="embeddings")
 
@@ -605,12 +630,17 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
         )
 
         sequence_output = encoder_outputs[0]
+        pooled_output = self.pooler(sequence_output)
 
         if not return_dict:
-            return (sequence_output,) + encoder_outputs[1:]
+            return (
+                sequence_output,
+                pooled_output,
+            ) + encoder_outputs[1:]
 
-        return TFBaseModelOutput(
+        return TFBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -1035,7 +1065,7 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
     )
     def call(
         self,
-        inputs_ids=None,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -1150,7 +1180,7 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
     )
     def call(
         self,
-        inputs_ids=None,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -1185,7 +1215,7 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
         )
         return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mpnet.return_dict
         outputs = self.mpnet(
-            inputs["input_ids"],
+            input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             token_type_ids=inputs["token_type_ids"],
             position_ids=inputs["position_ids"],
@@ -1197,12 +1227,14 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
             training=inputs["training"],
         )
         sequence_output = outputs[0]
-        sequence_output = self.dropout(sequence_output, training=training)
+
+        sequence_output = self.dropout(sequence_output, training=inputs["training"])
         logits = self.classifier(sequence_output)
-        loss = None if labels is None else self.compute_loss(labels, logits)
+
+        loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
@@ -1242,7 +1274,7 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
     )
     def call(
         self,
-        inputs_ids=None,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -1296,6 +1328,7 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
             training=inputs["training"],
         )
         sequence_output = outputs[0]
+
         logits = self.qa_outputs(sequence_output)
         start_logits, end_logits = tf.split(logits, 2, axis=-1)
         start_logits = tf.squeeze(start_logits, axis=-1)
@@ -1303,8 +1336,8 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
         loss = None
 
         if inputs["start_positions"] is not None and inputs["end_positions"] is not None:
-            labels = {"start_position": start_positions}
-            labels["end_position"] = end_positions
+            labels = {"start_position": inputs["start_positions"]}
+            labels["end_position"] = inputs["end_positions"]
             loss = self.compute_loss(labels, (start_logits, end_logits))
 
         if not return_dict:
