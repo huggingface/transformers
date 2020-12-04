@@ -18,7 +18,10 @@
 from .configuration_utils import PretrainedConfig
 
 
-TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP = {"tapas-base": "", "tapas-large": ""}  # to be added  # to be added
+TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP = {"nielsr/tapas-base-finetuned-sqa": "https://huggingface.co/nielsr/tapas-base-finetuned-sqa/blob/main/config.json", 
+                                       "nielsr/tapas-base-finetuned-wtq": "https://huggingface.co/nielsr/tapas-base-finetuned-wtq/blob/main/config.json",
+                                       "nielsr/tapas-base-finetuned-wikisql-supervised": "https://huggingface.co/nielsr/tapas-base-finetuned-wikisql-supervised/blob/main/config.json",
+                                       "nielsr/tapas-base-finetuned-tabfact": "https://huggingface.co/nielsr/tapas-base-finetuned-tabfact/blob/main/config.json"}  
 
 
 class TapasConfig(PretrainedConfig):
@@ -161,7 +164,6 @@ class TapasConfig(PretrainedConfig):
         init_cell_selection_weights_to_zero=False,
         reset_position_index_per_cell=True,
         disable_per_token_loss=False,
-        span_prediction="none",
         **kwargs
     ):
 
@@ -205,4 +207,3 @@ class TapasConfig(PretrainedConfig):
         self.init_cell_selection_weights_to_zero = init_cell_selection_weights_to_zero
         self.reset_position_index_per_cell = reset_position_index_per_cell
         self.disable_per_token_loss = disable_per_token_loss
-        self.span_prediction = span_prediction

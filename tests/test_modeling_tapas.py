@@ -16,6 +16,8 @@
 
 import unittest
 
+import copy
+
 import numpy as np
 
 from transformers import is_torch_available
@@ -87,7 +89,7 @@ class TapasModelTester:
         use_gumbel_for_cells=False,
         use_gumbel_for_agg=False,
         average_approximation_function="ratio",
-        cell_select_pref=0.5,
+        cell_selection_preference=0.5,
         answer_loss_cutoff=100,
         max_num_rows=64,
         max_num_columns=32,
@@ -95,7 +97,7 @@ class TapasModelTester:
         select_one_column=True,
         allow_empty_column_selection=False,
         init_cell_selection_weights_to_zero=False,
-        reset_position_index_per_cell=False,
+        reset_position_index_per_cell=True,
         disable_per_token_loss=False,
         scope=None,
     ):
@@ -131,7 +133,7 @@ class TapasModelTester:
         self.use_gumbel_for_cells = use_gumbel_for_cells
         self.use_gumbel_for_agg = use_gumbel_for_agg
         self.average_approximation_function = average_approximation_function
-        self.cell_select_pref = cell_select_pref
+        self.cell_selection_preference = cell_selection_preference
         self.answer_loss_cutoff = answer_loss_cutoff
         self.max_num_rows = max_num_rows
         self.max_num_columns = max_num_columns
@@ -161,14 +163,15 @@ class TapasModelTester:
         answer = None
         numeric_values = None
         numeric_values_scale = None
+        float_answer = None
         aggregation_labels = None
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             label_ids = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-            answer = floats_tensor([self.batch_size])
             numeric_values = floats_tensor([self.batch_size, self.seq_length])
             numeric_values_scale = floats_tensor([self.batch_size, self.seq_length])
+            float_answer = floats_tensor([self.batch_size])
             aggregation_labels = ids_tensor([self.batch_size], self.num_aggregation_labels)
 
         config = TapasConfig(
@@ -196,7 +199,7 @@ class TapasModelTester:
             use_gumbel_for_cells=self.use_gumbel_for_cells,
             use_gumbel_for_agg=self.use_gumbel_for_agg,
             average_approximation_function=self.average_approximation_function,
-            cell_select_pref=self.cell_select_pref,
+            cell_selection_preference=self.cell_selection_preference,
             answer_loss_cutoff=self.answer_loss_cutoff,
             max_num_rows=self.max_num_rows,
             max_num_columns=self.max_num_columns,
@@ -217,9 +220,9 @@ class TapasModelTester:
             sequence_labels,
             token_labels,
             label_ids,
-            answer,
             numeric_values,
             numeric_values_scale,
+            float_answer,
             aggregation_labels,
         )
 
@@ -232,9 +235,9 @@ class TapasModelTester:
         sequence_labels,
         token_labels,
         label_ids,
-        answer,
         numeric_values,
         numeric_values_scale,
+        float_answer,
         aggregation_labels,
     ):
         model = TapasModel(config=config)
@@ -255,9 +258,9 @@ class TapasModelTester:
     #     sequence_labels,
     #     token_labels,
     #     label_ids,
-    #     answer,
     #     numeric_values,
     #     numeric_values_scale,
+    #     float_answer,
     #     aggregation_labels,
     # ):
     #     model = TapasForMaskedLM(config=config)
@@ -275,14 +278,40 @@ class TapasModelTester:
         sequence_labels,
         token_labels,
         label_ids,
-        answer,
         numeric_values,
         numeric_values_scale,
+        float_answer,
         aggregation_labels,
     ):
-        # TapasForQuestionAnswering can be used in 3 main ways of being used, but for inference
-        # they all require the same inputs
+        # inference: without aggregation head (SQA). 
+        sqa_config = copy.copy(config)
+        sqa_config.num_aggregation_labels = 0
+        sqa_config.use_answer_as_supervision = False
+        model = TapasForQuestionAnswering(config=sqa_config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids=input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length))
+        
+        # inference: with aggregation head (WTQ, WikiSQL-supervised)
         model = TapasForQuestionAnswering(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids=input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.logits_aggregation.shape, (self.batch_size, self.num_aggregation_labels))
+        
+        # training: can happen in 3 main ways
+        # case 1: conversational (SQA)
+        model = TapasForQuestionAnswering(config=sqa_config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -291,6 +320,40 @@ class TapasModelTester:
             token_type_ids=token_type_ids,
             label_ids=label_ids,
         )
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length))
+
+        # case 2: weak supervision for aggregation (WTQ)
+        model = TapasForQuestionAnswering(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids=input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            label_ids=label_ids,
+            numeric_values=numeric_values,
+            numeric_values_scale=numeric_values_scale,
+            float_answer=float_answer,
+        )
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.logits_aggregation.shape, (self.batch_size, self.num_aggregation_labels))
+
+        # case 3: strong supervision for aggregation (WikiSQL-supervised)
+        wikisql_config = copy.copy(config)
+        wikisql_config.use_answer_as_supervision = False
+        model = TapasForQuestionAnswering(config=wikisql_config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            label_ids=label_ids,
+            aggregation_labels=aggregation_labels,
+        )
+        self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.logits_aggregation.shape, (self.batch_size, self.num_aggregation_labels))
 
@@ -303,9 +366,9 @@ class TapasModelTester:
         sequence_labels,
         token_labels,
         label_ids,
-        answer,
         numeric_values,
         numeric_values_scale,
+        float_answer,
         aggregation_labels,
     ):
         config.num_labels = self.num_labels
@@ -325,9 +388,9 @@ class TapasModelTester:
             sequence_labels,
             token_labels,
             label_ids,
-            answer,
             numeric_values,
             numeric_values_scale,
+            float_answer,
             aggregation_labels,
         ) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
