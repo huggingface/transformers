@@ -1,0 +1,34 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+
+[packages]
+tensorboard = "*"
+scikit-learn = "*"
+seqeval = "*"
+psutil = "*"
+sacrebleu = "*"
+rouge-score = "*"
+tensorflow-datasets = "*"
+pytorch-lightning = "==1.0.4"
+matplotlib = "*"
+git-python = "==1.0.3"
+faiss-cpu = "*"
+streamlit = "*"
+elasticsearch = "*"
+nltk = "*"
+pandas = "*"
+datasets = ">=1.1.3"
+fire = "*"
+pytest = "*"
+conllu = "*"
+sentencepiece = "!=0.1.92"
+protobuf = "*"
+transformers = "==4.0.0"
+comet-ml = "==3.2.7"
+
+[requires]
+python_version = "3.8"
