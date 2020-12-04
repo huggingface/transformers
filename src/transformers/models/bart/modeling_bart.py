@@ -359,7 +359,7 @@ class EncoderLayer(nn.Module):
         if not self.normalize_before:
             hidden_states = self.final_layer_norm(hidden_states)
         if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
-            clamp_value = torch.finfo(hidden_states.dtype).mahidden_states - 1000
+            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, mahidden_states=clamp_value)
         return hidden_states, attn_weights
 
