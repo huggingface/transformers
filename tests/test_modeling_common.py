@@ -386,9 +386,7 @@ class ModelTesterMixin:
 
             try:
                 if model.config.is_encoder_decoder:
-                    inputs[
-                        "use_cache"
-                    ] = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
+                    model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
                     input_ids = inputs["input_ids"]
                     attention_mask = inputs["attention_mask"]
                     decoder_input_ids = inputs["decoder_input_ids"]
