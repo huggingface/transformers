@@ -386,7 +386,6 @@ class ModelTesterMixin:
 
             try:
                 if model.config.is_encoder_decoder:
-                    model.config.use_cache = False  # TODO: this should be deleted after bug #7474 is solved
                     input_ids = inputs["input_ids"]
                     attention_mask = inputs["attention_mask"]
                     decoder_input_ids = inputs["decoder_input_ids"]
