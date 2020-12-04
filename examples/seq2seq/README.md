@@ -213,6 +213,11 @@ To see all the possible command line options, run:
 python finetune_trainer.py --help
 ```
 
+For multi-gpu training use `torch.distributed.launch`, e.g. with 2 gpus:
+```bash
+python -m torch.distributed.launch --nproc_per_node=2  finetune_trainer.py ...
+```
+
 **At the moment, `Seq2SeqTrainer` does not support *with teacher* distillation.**
 
 All `Seq2SeqTrainer`-based fine-tuning scripts are included in the `builtin_trainer` directory.
