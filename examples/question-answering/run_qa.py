@@ -26,13 +26,14 @@ from typing import Optional
 from datasets import load_dataset, load_metric
 
 import transformers
+from trainer_qa import QuestionAnsweringTrainer
 from transformers import (
     AutoConfig,
     AutoModelForQuestionAnswering,
     AutoTokenizer,
     DataCollatorWithPadding,
+    EvalPrediction,
     HfArgumentParser,
-    Trainer,
     TrainingArguments,
     default_data_collator,
     set_seed,
@@ -170,8 +171,8 @@ def main():
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO if is_main_process(training_args.local_rank) else logging.WARN,
     )
+    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
 
     # Log on each process the small summary:
     logger.warning(
@@ -379,14 +380,48 @@ def main():
     # Data collator
     data_collator = default_data_collator if data_args.pad_to_max_length else DataCollatorWithPadding(tokenizer)
 
+    # Post-processing:
+    def post_processing_function(examples, features, predictions):
+        # Post-processing: we match the start logits and end logits to answers in the original context.
+        predictions = postprocess_predictions(
+            examples=examples,
+            features=features,
+            predictions=predictions,
+            version_2_with_negative=data_args.version_2_with_negative,
+            n_best_size=data_args.n_best_size,
+            max_answer_length=data_args.max_answer_length,
+            null_score_diff_threshold=data_args.null_score_diff_threshold,
+            output_dir=training_args.output_dir,
+            is_world_process_zero=trainer.is_world_process_zero(),
+        )
+        # Format the result to the format the metric expects.
+        if data_args.version_2_with_negative:
+            formatted_predictions = [
+                {"id": k, "prediction_text": v, "no_answer_probability": 0.0} for k, v in predictions.items()
+            ]
+        else:
+            formatted_predictions = [{"id": k, "prediction_text": v} for k, v in predictions.items()]
+        references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in datasets["validation"]]
+        return EvalPrediction(predictions=formatted_predictions, label_ids=references)
+
+    # TODO: Once the fix lands in a Datasets release, remove the _local here and the squad_v2_local folder.
+    current_dir = os.path.sep.join(os.path.join(__file__).split(os.path.sep)[:-1])
+    metric = load_metric(os.path.join(current_dir, "squad_v2_local") if data_args.version_2_with_negative else "squad")
+
+    def compute_metrics(p: EvalPrediction):
+        return metric.compute(predictions=p.predictions, references=p.label_ids)
+
     # Initialize our Trainer
-    trainer = Trainer(
+    trainer = QuestionAnsweringTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
-        eval_dataset=None,  # validation_dataset if training_args.do_eval else None,
+        eval_dataset=validation_dataset if training_args.do_eval else None,
+        eval_examples=datasets["validation"] if training_args.do_eval else None,
         tokenizer=tokenizer,
         data_collator=data_collator,
+        post_process_function=post_processing_function,
+        compute_metrics=compute_metrics,
     )
 
     # Training
@@ -408,35 +443,16 @@ def main():
             os.path.join(current_dir, "squad_v2_local") if data_args.version_2_with_negative else "squad"
         )
 
-        results = trainer.predict(validation_dataset)
-        # Trainer removes some columns that the model does not expect, so we put them back.
-        validation_dataset.set_format(
-            type=validation_dataset.format["type"], columns=list(validation_dataset.features.keys())
-        )
+        results = trainer.evaluate()
 
-        # Post-processing: we match the start logits and end logits to answers in the original context.
-        predictions = postprocess_predictions(
-            examples=datasets["validation"],
-            features=validation_dataset,
-            predictions=results.predictions,
-            version_2_with_negative=data_args.version_2_with_negative,
-            n_best_size=data_args.n_best_size,
-            max_answer_length=data_args.max_answer_length,
-            null_score_diff_threshold=data_args.null_score_diff_threshold,
-            output_dir=training_args.output_dir,
-            is_world_process_zero=trainer.is_world_process_zero(),
-        )
-        # Format the result to the format the metric expects.
-        if data_args.version_2_with_negative:
-            formatted_predictions = [
-                {"id": k, "prediction_text": v, "no_answer_probability": 0.0} for k, v in predictions.items()
-            ]
-        else:
-            formatted_predictions = [{"id": k, "prediction_text": v} for k, v in predictions.items()]
-        references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in datasets["validation"]]
-        results = metric.compute(predictions=formatted_predictions, references=references)
+        output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
+        if trainer.is_world_process_zero():
+            with open(output_eval_file, "w") as writer:
+                logger.info("***** Eval results *****")
+                for key, value in results.items():
+                    logger.info(f"  {key} = {value}")
+                    writer.write(f"{key} = {value}\n")
 
-    logger.info("Results: {}".format(results))
     return results
 
 
