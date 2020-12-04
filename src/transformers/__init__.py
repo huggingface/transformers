@@ -191,7 +191,7 @@ from .tokenization_rag import RagTokenizer
 from .tokenization_retribert import RetriBertTokenizer
 from .tokenization_roberta import RobertaTokenizer
 from .tokenization_squeezebert import SqueezeBertTokenizer
-from .tokenization_tapas import TapasTokenizer
+from .tokenization_tapas import TapasTokenizer, TapasTruncationStrategy
 from .tokenization_transfo_xl import TransfoXLCorpus, TransfoXLTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import (
