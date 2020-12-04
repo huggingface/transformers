@@ -270,7 +270,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         if self.normalize_before:
             x = self.final_layer_norm(x)
         x = self.activation_fn(self.fc1(x))
-        x = tf.nn.dropout(x, rate=self.activation_dropout if training else 0)
+        x = tf.nn.dropout(x, rate=self.self.activation_dropout if training else 0)
         x = self.fc2(x)
         x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
@@ -938,6 +938,7 @@ class TFBartModel(TFPretrainedBartModel):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
@@ -951,19 +952,17 @@ class TFBartModel(TFPretrainedBartModel):
             training=training,
             kwargs_call=kwargs,
         )
-        use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.config.use_cache
-        if inputs["decoder_input_ids"] is None:  # Classification
-            use_cache = False
-        output_attentions = (
-            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
-        )
-        output_hidden_states = (
+
+        if inputs["decoder_input_ids"] is None:
+            inputs["use_cache"] = False
+
+        inputs["output_hidden_states"] = (
             inputs["output_hidden_states"]
             if inputs["output_hidden_states"] is not None
             else self.config.output_hidden_states
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.return_dict
-        if not use_cache:
+
+        if not inputs["use_cache"]:
             inputs["decoder_input_ids"], decoder_padding_mask, causal_mask = self._prepare_bart_decoder_inputs(
                 inputs["input_ids"],
                 decoder_input_ids=inputs["decoder_input_ids"],
@@ -972,25 +971,24 @@ class TFBartModel(TFPretrainedBartModel):
             )
         else:
             decoder_padding_mask, causal_mask = None, None
-
         if inputs["encoder_outputs"] is None:
             inputs["encoder_outputs"] = self.encoder(
                 input_ids=inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                output_attentions=inputs["output_attentions"],
+                output_hidden_states=inputs["output_hidden_states"],
+                return_dict=inputs["return_dict"],
                 training=inputs["training"],
             )
         # If the user passed a tuple for encoder_outputs, we wrap it in a TFBaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(inputs["encoder_outputs"], TFBaseModelOutput):
+        elif inputs["return_dict"] and not isinstance(inputs["encoder_outputs"], TFBaseModelOutput):
             inputs["encoder_outputs"] = TFBaseModelOutput(
                 last_hidden_state=inputs["encoder_outputs"][0],
                 hidden_states=inputs["encoder_outputs"][1] if len(inputs["encoder_outputs"]) > 1 else None,
                 attentions=inputs["encoder_outputs"][2] if len(inputs["encoder_outputs"]) > 2 else None,
             )
         # If the user passed a TFBaseModelOutput for encoder_outputs, we wrap it in a tuple when return_dict=False
-        elif not return_dict and not isinstance(inputs["encoder_outputs"], tuple):
+        elif not inputs["return_dict"] and not isinstance(inputs["encoder_outputs"], tuple):
             inputs["encoder_outputs"] = inputs["encoder_outputs"].to_tuple()
 
         decoder_outputs = self.decoder(
@@ -1000,14 +998,14 @@ class TFBartModel(TFPretrainedBartModel):
             decoder_padding_mask,
             decoder_causal_mask=causal_mask,
             decoder_cached_states=inputs["past_key_values"],
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            use_cache=inputs["use_cache"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return decoder_outputs + inputs["encoder_outputs"]
 
         return TFSeq2SeqModelOutput(
@@ -1090,6 +1088,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
@@ -1104,10 +1103,9 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.return_dict
-        use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.config.use_cache
+
         if inputs["labels"] is not None:
-            use_cache = False
+            inputs["use_cache"] = False
             if inputs["decoder_input_ids"] is None:
                 inputs["decoder_input_ids"] = self._shift_right(inputs["labels"])
 
@@ -1118,19 +1116,18 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             encoder_outputs=inputs["encoder_outputs"],
             decoder_attention_mask=inputs["decoder_attention_mask"],
             past_key_values=inputs["past_key_values"],
-            use_cache=use_cache,
+            use_cache=inputs["use_cache"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
         )
         lm_logits = self.model.shared(outputs[0], mode="linear")
         lm_logits = lm_logits + self.final_logits_bias
         masked_lm_loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], lm_logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (lm_logits,) + outputs[1:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
-
         return TFSeq2SeqLMOutput(
             loss=masked_lm_loss,
             logits=lm_logits,
