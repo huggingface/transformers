@@ -588,8 +588,7 @@ if __name__ == "__main__":
         rng, training_rng, eval_rng = jax.random.split(rng, 3)
 
         # Generate an epoch by shuffling sampling indices from the train dataset
-        # nb_training_samples = len(tokenized_datasets["train"])
-        nb_training_samples = batch_size
+        nb_training_samples = len(tokenized_datasets["train"])
         training_samples_idx = jax.random.permutation(training_rng, jnp.arange(nb_training_samples))
         training_batch_idx = generate_batch_splits(training_samples_idx, batch_size)
 
