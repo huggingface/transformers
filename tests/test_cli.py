@@ -26,8 +26,6 @@ class CLITest(unittest.TestCase):
         # test transformers-cli env
         import transformers.commands.transformers_cli
 
-        assert 0 == 1
-
         with CaptureStd() as cs:
             transformers.commands.transformers_cli.main()
         assert "Python version" in cs.out
