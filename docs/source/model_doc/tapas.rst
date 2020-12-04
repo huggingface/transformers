@@ -47,11 +47,11 @@ Tips:
   of the table). According to the authors, this usually results in a slightly better performance, and allows you to
   encode longer sequences without running out of embeddings. This is reflected in the ``reset_position_index_per_cell`` 
   parameter of :class:`~transformers.TapasConfig`, which is set to ``True`` by default. 
-  There are both pre-trained models in the `model hub <https://huggingface.co/models>`_ with absolute and relative position embeddings. Note that it's
-  usually advised to pad the inputs on the right rather than the left.
+  There are both pre-trained models in the `model hub <https://huggingface.co/models?search=tapas>`_ with absolute and relative 
+  position embeddings. Note that it's usually advised to pad the inputs on the right rather than the left.
 - TAPAS is based on BERT, so ``TAPAS-base`` for example corresponds to a ``BERT-base`` architecture. Of course, TAPAS-large 
   will result in the best performance (the results reported in the paper are from TAPAS-large). Metrics of the various 
-  sized models are shown on the `original Github repository`_. 
+  sized models are shown on the `original Github repository <https://github.com/google-research/tapas>`_. 
 - TAPAS has checkpoints fine-tuned on SQA, which are capable of answering questions related to a table in a
   conversational set-up. This means that you can ask follow-up questions such as "what is his age?" related to the
   previous question. Note that the forward pass of TAPAS is a bit different in case of a conversational set-up: in that
@@ -60,8 +60,6 @@ Tips:
 - TAPAS is similar to BERT and therefore relies on the masked language modeling (MLM) objective. It is therefore
   efficient at predicting masked tokens and at NLU in general, but is not optimal for text generation. Models trained
   with a causal language modeling (CLM) objective are better in that regard.
-
-.. _original Github repository: https://github.com/google-research/tapas
 
 
 Usage: fine-tuning
