@@ -247,7 +247,81 @@ class TFNextSentencePredictionLoss:
         return loss_fn(next_sentence_label, next_sentence_reduced_logits)
 
 
-def input_processing(func, input_ids, **kwargs):
+def booleans_processing(config, **kwargs):
+    """
+    Process the input booleans of each model in order to be sure they are compliant with the execution mode (eager or
+    graph)
+
+    Args:
+        config (:class:`~transformers.PretrainedConfig`):
+            The config of the running model.
+        **kwargs:
+            The boolean parameters
+
+    Returns:
+        A dictionary with the proper values for each boolean
+    """
+    final_booleans = {}
+
+    if tf.executing_eagerly():
+        final_booleans["output_attentions"] = (
+            kwargs["output_attentions"] if kwargs["output_attentions"] is not None else config.output_attentions
+        )
+        final_booleans["output_hidden_states"] = (
+            kwargs["output_hidden_states"]
+            if kwargs["output_hidden_states"] is not None
+            else config.output_hidden_states
+        )
+
+        if "return_dict" in kwargs:
+            final_booleans["return_dict"] = (
+                kwargs["return_dict"] if kwargs["return_dict"] is not None else config.return_dict
+            )
+
+        if "use_cache" in kwargs:
+            final_booleans["use_cache"] = kwargs["use_cache"] if kwargs["use_cache"] is not None else config.use_cache
+    else:
+        if (
+            kwargs["output_attentions"] is not None
+            or kwargs["output_hidden_states"] is not None
+            or ("use_cache" in kwargs and kwargs["use_cache"] is not None)
+        ):
+            logger.warning(
+                "The parameters `output_attentions`, `output_hidden_states` and `use_cache` cannot be updated when calling a model."
+                "They have to be set to True/False in the config object (i.e.: `config=XConfig.from_pretrained('name', output_attentions=True)`)."
+            )
+
+        final_booleans["output_attentions"] = config.output_attentions
+        final_booleans["output_hidden_states"] = config.output_hidden_states
+
+        if "return_dict" in kwargs:
+            if kwargs["return_dict"] is not None:
+                logger.warning(
+                    "The parameter `return_dict` cannot be set in graph mode and will always be set to `True`."
+                )
+            final_booleans["return_dict"] = True
+
+        if "use_cache" in kwargs:
+            final_booleans["use_cache"] = config.use_cache
+
+    return final_booleans
+
+
+def input_processing(func, config, input_ids, **kwargs):
+    """
+    Process the input of each TensorFlow model including the booleans.
+
+    Args:
+        func (:obj:`callable`):
+            The callable function of the TensorFlow model.
+        config (:class:`~transformers.PretrainedConfig`):
+            The config of the running model.
+        **kwargs:
+            The inputs of the model.
+
+    Returns:
+        Two lists, one for the missing layers, and another one for the unexpected layers.
+    """
     signature = dict(inspect.signature(func).parameters)
     signature.pop("kwargs", None)
     parameter_names = list(signature.keys())
@@ -317,10 +391,15 @@ def input_processing(func, input_ids, **kwargs):
             output["past_key_values"] = input_ids.pop("decoder_cached_states")
 
         for k, v in dict(input_ids).items():
-            if not isinstance(v, allowed_types):
-                raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
-            else:
+            if isinstance(v, allowed_types) or v is None:
                 output[k] = v
+            elif k not in parameter_names and "args" not in parameter_names:
+                logger.warn(
+                    f"The parameter {k} does not belongs to the parameter list {parameter_names} and will be ignored."
+                )
+                continue
+            else:
+                raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
     else:
         if isinstance(input_ids, tf.Tensor) or input_ids is None:
             output[parameter_names[0]] = input_ids
@@ -347,6 +426,19 @@ def input_processing(func, input_ids, **kwargs):
 
     if "kwargs" in output:
         del output["kwargs"]
+
+    boolean_dict = {
+        k: v
+        for k, v in output.items()
+        if k in ["return_dict", "output_attentions", "output_hidden_states", "use_cache"]
+    }
+
+    output.update(
+        booleans_processing(
+            config=config,
+            **boolean_dict,
+        )
+    )
 
     return output
 
