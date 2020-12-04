@@ -113,7 +113,12 @@ class DataTrainingArguments:
         default=False, metadata={"help": "If true, some of the examples do not have an answer."}
     )
     null_score_diff_threshold: float = field(
-        default=0.0, metadata={"help": "If `null_score - best_non_null` is greater than the threshold predict null."}
+        default=0.0,
+        metadata={
+            "help": "The threshold used to select the null answer: if the best answer has a score that is less than "
+            "the score of the null answer minus this threshold, the null answer is selected for this example. "
+            "Only useful when `version_2_with_negative=True`."
+        },
     )
     doc_stride: int = field(
         default=128,
