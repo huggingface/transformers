@@ -157,7 +157,7 @@ from ..squeezebert.modeling_squeezebert import (
     SqueezeBertModel,
 )
 from ..t5.modeling_t5 import T5ForConditionalGeneration, T5Model
-from ..transfo_xl.modeling_transfo_xl import TransfoXLLMHeadModel, TransfoXLModel
+from ..transfo_xl.modeling_transfo_xl import TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
 from ..xlm.modeling_xlm import (
     XLMForMultipleChoice,
     XLMForQuestionAnsweringSimple,
@@ -416,6 +416,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (OpenAIGPTConfig, OpenAIGPTForSequenceClassification),
         (ReformerConfig, ReformerForSequenceClassification),
         (CTRLConfig, CTRLForSequenceClassification),
+        (TransfoXLConfig, TransfoXLForSequenceClassification),
     ]
 )
 

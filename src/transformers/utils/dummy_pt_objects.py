@@ -1785,6 +1785,15 @@ class AdaptiveEmbedding:
         requires_pytorch(self)
 
 
+class TransfoXLForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class TransfoXLLMHeadModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)

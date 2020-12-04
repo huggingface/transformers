@@ -688,6 +688,9 @@ class XLMWithLMHeadModel(XLMPreTrainedModel):
     def get_output_embeddings(self):
         return self.pred_layer.proj
 
+    def set_output_embeddings(self, new_embeddings):
+        self.pred_layer.proj = new_embeddings
+
     def prepare_inputs_for_generation(self, input_ids, **kwargs):
         mask_token_id = self.config.mask_token_id
         lang_id = self.config.lang_id
