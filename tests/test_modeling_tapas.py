@@ -31,10 +31,22 @@ if is_torch_available():
     from transformers import (
         TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
         TapasConfig,
-        TapasForMaskedLM,
+        #TapasForMaskedLM,
         TapasForQuestionAnswering,
         TapasForSequenceClassification,
         TapasModel,
+    )
+
+    from transformers.modeling_tapas import (
+        IndexMap,
+        ProductIndexMap,
+        gather,
+        flatten,
+        range_index_map,
+        reduce_sum, 
+        reduce_mean,
+        reduce_max,
+        reduce_min,
     )
 
 
@@ -85,7 +97,6 @@ class TapasModelTester:
         init_cell_selection_weights_to_zero=False,
         reset_position_index_per_cell=False,
         disable_per_token_loss=False,
-        span_prediction="none",
         scope=None,
     ):
         self.parent = parent
@@ -130,7 +141,6 @@ class TapasModelTester:
         self.init_cell_selection_weights_to_zero = init_cell_selection_weights_to_zero
         self.reset_position_index_per_cell = reset_position_index_per_cell
         self.disable_per_token_loss = disable_per_token_loss
-        self.span_prediction = span_prediction
         self.scope = scope
 
     def prepare_config_and_inputs(self):
@@ -196,7 +206,6 @@ class TapasModelTester:
             init_cell_selection_weights_to_zero=self.init_cell_selection_weights_to_zero,
             reset_position_index_per_cell=self.reset_position_index_per_cell,
             disable_per_token_loss=self.disable_per_token_loss,
-            span_prediction=self.span_prediction,
             return_dict=True,
         )
 
@@ -237,25 +246,25 @@ class TapasModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
-    def create_and_check_for_masked_lm(
-        self,
-        config,
-        input_ids,
-        input_mask,
-        token_type_ids,
-        sequence_labels,
-        token_labels,
-        label_ids,
-        answer,
-        numeric_values,
-        numeric_values_scale,
-        aggregation_labels,
-    ):
-        model = TapasForMaskedLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+    # def create_and_check_for_masked_lm(
+    #     self,
+    #     config,
+    #     input_ids,
+    #     input_mask,
+    #     token_type_ids,
+    #     sequence_labels,
+    #     token_labels,
+    #     label_ids,
+    #     answer,
+    #     numeric_values,
+    #     numeric_values_scale,
+    #     aggregation_labels,
+    # ):
+    #     model = TapasForMaskedLM(config=config)
+    #     model.to(torch_device)
+    #     model.eval()
+    #     result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+    #     self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_for_question_answering(
         self,
@@ -333,7 +342,7 @@ class TapasModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TapasModel,
-            TapasForMaskedLM,
+            #TapasForMaskedLM,
             TapasForQuestionAnswering,
             TapasForSequenceClassification,
         )
@@ -369,23 +378,170 @@ class TapasModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
 
+def prepare_tapas_inputs_for_inference():
+    # Here we've prepared the following table-question pair to test TAPAS inference on:
+    # data = {'Footballer': ["Lionel Messi", "Cristiano Ronaldo"], 
+    #         'Age': ["33", "35"],
+    # }
+    # queries = "Which footballer is 33 years old?"
+    # table = pd.DataFrame.from_dict(data) 
+    
+    input_ids = torch.tensor([[101, 2029, 4362, 2003, 3943, 2086, 2214, 1029, 102, 4362,
+          2287, 14377, 6752, 2072, 3943, 13675, 2923, 15668, 8923,  2080, 3486]])
+    attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+    token_type_ids = torch.tensor([[[0, 0, 0, 0, 0, 0, 0],
+                                    [0, 0, 0, 0, 0, 0, 0],
+                                    [0, 0, 0, 0, 0, 0, 0],
+                                    [0, 0, 0, 0, 0, 0, 0],
+                                    [0, 0, 0, 0, 0, 0, 0],
+                                    [0, 0, 0, 0, 0, 0, 0],
+                                    [0, 0, 0, 0, 0, 0, 0],
+                                    [0, 0, 0, 0, 0, 0, 0],
+                                    [0, 0, 0, 0, 0, 0, 0],
+                                    [1, 1, 0, 0, 0, 0, 0],
+                                    [1, 2, 0, 0, 0, 0, 0],
+                                    [1, 1, 1, 0, 0, 0, 0],
+                                    [1, 1, 1, 0, 0, 0, 0],
+                                    [1, 1, 1, 0, 0, 0, 0],
+                                    [1, 2, 1, 0, 1, 2, 1],
+                                    [1, 1, 2, 0, 0, 0, 0],
+                                    [1, 1, 2, 0, 0, 0, 0],
+                                    [1, 1, 2, 0, 0, 0, 0],
+                                    [1, 1, 2, 0, 0, 0, 0],
+                                    [1, 1, 2, 0, 0, 0, 0],
+                                    [1, 2, 2, 0, 2, 1, 2]]])
+    return {
+        "input_ids": input_ids,
+        "attention_mask": attention_mask,
+        "token_type_ids": token_type_ids
+    }
+    
+
+@require_torch
 class TapasModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference_masked_lm(self):
-        model = TapasForQuestionAnswering.from_pretrained("google/tapas-xxx")
+    def test_inference_no_head(self):
+        # ideally we want to test this with the weights of tapas_inter_masklm_base_reset,
+        # but since it's not straightforward to do this with the TF 1 implementation, we test it with 
+        # the weights of the WTQ base model (i.e. tapas_wtq_wikisql_sqa_inter_masklm_base_reset)
+        model = TapasModel.from_pretrained("google/tapas-base-finetuned-wtq")
 
-        input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        output = model(input_ids)[0]
-        expected_shape = torch.Size((1, 11, 50265))
-        self.assertEqual(output.shape, expected_shape)
-        # compare the actual values for a slice.
+        inputs = prepare_tapas_inputs_for_inference()
+        outputs = model(**inputs)
+        # test the sequence output
         expected_slice = torch.tensor(
-            [[[33.8802, -4.3103, 22.7761], [4.6539, -2.8098, 13.6253], [1.8228, -3.6898, 8.8600]]]
+            [[[-0.141581565, -0.599805772, 0.747186482], 
+            [-0.143664181, -0.602008104, 0.749218345],
+            [-0.15169853, -0.603363097, 0.741370678]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.sequence_output[:, :3, :3], expected_slice, atol=1e-4))
+        
+        # test the pooled output
+        expected_slice = torch.tensor(
+            [[0.987518311, -0.970520139, -0.994303405]]
+        )
+
+        self.assertTrue(torch.allclose(outputs.pooled_output[:, :3], expected_slice, atol=1e-4))
+  
+    
+    @unittest.skip(reason="Model not available yet")
+    def test_inference_masked_lm(self):
+        pass
+
+    # TapasForQuestionAnswering has 3 possible ways of being fine-tuned:
+    # - conversational set-up (SQA)
+    # - weak supervision for aggregation (WTQ, WikiSQL)
+    # - strong supervision for aggregation (WikiSQL-supervised)
+    # We test all of them:
+    @slow
+    def test_inference_question_answering_head_conversational(self):
+        # note that google/tapas-base-finetuned-sqa should correspond to tapas_sqa_inter_masklm_base_reset
+        model = TapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-sqa")
+
+        inputs = prepare_tapas_inputs_for_inference()
+        outputs = model(**inputs)
+        # test the logits
+        logits = outputs.logits
+        expected_shape = torch.Size((1, 21))
+        self.assertEqual(logits.shape, expected_shape)
+        expected_tensor = torch.tensor([[-9997.22461, -9997.22461, -9997.22461, -9997.22461, -9997.22461,
+                            -9997.22461, -9997.22461, -9997.22461, -9997.22461, -16.2628059, 
+                            -10004.082, 15.4330549, 15.4330549, 15.4330549, -9990.42,
+                            -16.3270779, -16.3270779, -16.3270779, -16.3270779, -16.3270779, -10004.8506]]) # ok
+
+        self.assertTrue(torch.allclose(logits, expected_tensor, atol=1e-4))
+
+    @slow
+    def test_inference_question_answering_head_weak_supervision(self):
+        # note that google/tapas-base-finetuned-wtq should correspond to tapas_wtq_wikisql_sqa_inter_masklm_base_reset
+        model = TapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wtq")
+
+        inputs = prepare_tapas_inputs_for_inference()
+        outputs = model(**inputs)
+        # test the logits
+        logits = outputs.logits
+        expected_shape = torch.Size((1, 21))
+        self.assertEqual(logits.shape, expected_shape)
+        expected_slice = torch.tensor([[-10096.3633, -10096.3633, -10096.3633, -10096.3633, -10096.3633,
+                            -10096.3633, -10096.3633, -10096.3633, -10096.3633, -180.192322,
+                            -10080.2305, 157.994827, 157.994827, 157.994827, -10031.3721,
+                            -142.52597, -142.52597, -142.52597, -142.52597, -142.52597, -10065.7256]])  # ok 
+
+        self.assertTrue(torch.allclose(logits, expected_slice, atol=1e-4))
+
+        # test the aggregation logits
+        logits_aggregation = outputs.logits_aggregation
+        expected_shape = torch.Size((1, 4))
+        self.assertEqual(logits_aggregation.shape, expected_shape)
+        expected_tensor = torch.tensor([[18.8111877 -9.91616917 -6.3120923 -2.97642279]]) # ok
+
+        self.assertTrue(torch.allclose(logits_aggregation, expected_tensor, atol=1e-4))
+
+    @slow
+    def test_inference_question_answering_head_strong_supervision(self):
+        # note that google/tapas-base-finetuned-wikisql-supervised should correspond to tapas_wikisql_sqa_inter_masklm_base_reset
+        model = TapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wikisql-supervised")
+
+        inputs = prepare_tapas_inputs_for_inference()
+        outputs = model(**inputs)
+        # test the logits
+        logits = outputs.logits
+        expected_shape = torch.Size((1, 21))
+        self.assertEqual(logits.shape, expected_shape)
+        expected_tensor = torch.tensor([[-10011.1084, -10011.1084, -10011.1084, -10011.1084, -10011.1084, 
+                            -10011.1084, -10011.1084, -10011.1084, -10011.1084, -18.6185989, 
+                            -10008.7969, 17.6355762, 17.6355762, 17.6355762, -10002.4404, 
+                            -18.7111301, -18.7111301, -18.7111301, -18.7111301, -18.7111301, -10007.0977]]) # ok
+
+        self.assertTrue(torch.allclose(logits, expected_tensor, atol=1e-4))
+
+        # test the aggregation logits
+        logits_aggregation = outputs.logits_aggregation
+        expected_shape = torch.Size((1, 4))
+        self.assertEqual(logits_aggregation.shape, expected_shape)
+        expected_tensor = torch.tensor([[16.5659733, -3.06624889, -2.34152961, -0.970244825]]) # ok, PyTorch model outputs [[16.5679, -3.0668, -2.3442, -0.9674]]
+
+        self.assertTrue(torch.allclose(logits_aggregation, expected_tensor, atol=1e-4))
+    
+    @slow
+    def test_inference_classification_head(self):
+        # note that google/tapas-base-finetuned-tabfact should correspond to tapas_tabfact_inter_masklm_base_reset
+        model = TapasForSequenceClassification.from_pretrained("google/tapas-base-finetuned-tabfact")
+
+        inputs = prepare_tapas_inputs_for_inference()
+        outputs = model(**inputs)
+
+        # test the classification logits
+        logits = outputs.logits
+        expected_shape = torch.Size((1, 2))
+        self.assertEqual(logits.shape, expected_shape)
+        expected_tensor = torch.tensor([[0.795137286 9.5572]]) # ok. Note that the PyTorch model outputs [[0.8057, 9.5281]]
+
+        self.assertTrue(torch.allclose(outputs.logits, expected_tensor, atol=1e-4))
 
 # Below: tests for Tapas utilities, based on segmented_tensor_test.py of the original implementation.
+# URL: https://github.com/google-research/tapas/blob/master/tapas/models/segmented_tensor_test.py
 # These test the operations on segmented tensors.
 class TapasUtilitiesTest(unittest.TestCase):
     def _prepare_tables(self):
@@ -407,7 +563,7 @@ class TapasUtilitiesTest(unittest.TestCase):
                 [[1.0, 2.0, 3.0], [2.0, 0.0, 1.0], [1.0, 3.0, 4.0]],
             ]
         )
-        row_index = utils.IndexMap(
+        row_index = IndexMap(
             indices=torch.tensor(
                 [
                     [[0, 0, 0], [1, 1, 1], [2, 2, 2]],
@@ -417,7 +573,7 @@ class TapasUtilitiesTest(unittest.TestCase):
             num_segments=3,
             batch_dims=1,
         )
-        col_index = utils.IndexMap(
+        col_index = IndexMap(
             indices=torch.tensor(
                 [
                     [[0, 0, 1], [0, 0, 1], [0, 0, 1]],
@@ -431,7 +587,7 @@ class TapasUtilitiesTest(unittest.TestCase):
 
     def test_product_index(self):
         _, row_index, col_index = self._prepare_tables()
-        cell_index = utils.ProductIndexMap(row_index, col_index)
+        cell_index = ProductIndexMap(row_index, col_index)
         row_index_proj = cell_index.project_outer(cell_index)
         col_index_proj = cell_index.project_inner(cell_index)
 
@@ -466,12 +622,12 @@ class TapasUtilitiesTest(unittest.TestCase):
 
     def test_flatten(self):
         _, row_index, col_index = self._prepare_tables()
-        row_index_flat = utils.flatten(row_index)
-        col_index_flat = utils.flatten(col_index)
+        row_index_flat = flatten(row_index)
+        col_index_flat = flatten(col_index)
 
         shape = [3, 4, 5]
-        batched_index = utils.IndexMap(indices=torch.zeros(shape).type(torch.LongTensor), num_segments=1, batch_dims=3)
-        batched_index_flat = utils.flatten(batched_index)
+        batched_index = IndexMap(indices=torch.zeros(shape).type(torch.LongTensor), num_segments=1, batch_dims=3)
+        batched_index_flat = flatten(batched_index)
 
         # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(
@@ -486,7 +642,7 @@ class TapasUtilitiesTest(unittest.TestCase):
     def test_range_index_map(self):
         batch_shape = [3, 4]
         num_segments = 5
-        index = utils.range_index_map(batch_shape, num_segments)
+        index = range_index_map(batch_shape, num_segments)
 
         self.assertEqual(num_segments, index.num_segments)
         self.assertEqual(2, index.batch_dims)
@@ -500,10 +656,10 @@ class TapasUtilitiesTest(unittest.TestCase):
 
     def test_reduce_sum(self):
         values, row_index, col_index = self._prepare_tables()
-        cell_index = utils.ProductIndexMap(row_index, col_index)
-        row_sum, _ = utils.reduce_sum(values, row_index)
-        col_sum, _ = utils.reduce_sum(values, col_index)
-        cell_sum, _ = utils.reduce_sum(values, cell_index)
+        cell_index = ProductIndexMap(row_index, col_index)
+        row_sum, _ = reduce_sum(values, row_index)
+        col_sum, _ = reduce_sum(values, col_index)
+        cell_sum, _ = reduce_sum(values, cell_index)
 
         # We use np.testing.assert_allclose rather than Tensorflow's assertAllClose
         np.testing.assert_allclose(row_sum.numpy(), [[6.0, 3.0, 8.0], [6.0, 3.0, 8.0]])
@@ -515,10 +671,10 @@ class TapasUtilitiesTest(unittest.TestCase):
 
     def test_reduce_mean(self):
         values, row_index, col_index = self._prepare_tables()
-        cell_index = utils.ProductIndexMap(row_index, col_index)
-        row_mean, _ = utils.reduce_mean(values, row_index)
-        col_mean, _ = utils.reduce_mean(values, col_index)
-        cell_mean, _ = utils.reduce_mean(values, cell_index)
+        cell_index = ProductIndexMap(row_index, col_index)
+        row_mean, _ = reduce_mean(values, row_index)
+        col_mean, _ = reduce_mean(values, col_index)
+        cell_mean, _ = reduce_mean(values, cell_index)
 
         # We use np.testing.assert_allclose rather than Tensorflow's assertAllClose
         np.testing.assert_allclose(
@@ -535,16 +691,16 @@ class TapasUtilitiesTest(unittest.TestCase):
 
     def test_reduce_max(self):
         values = torch.as_tensor([2.0, 1.0, 0.0, 3.0])
-        index = utils.IndexMap(indices=torch.as_tensor([0, 1, 0, 1]), num_segments=2)
-        maximum, _ = utils.reduce_max(values, index)
+        index = IndexMap(indices=torch.as_tensor([0, 1, 0, 1]), num_segments=2)
+        maximum, _ = reduce_max(values, index)
 
         # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(maximum.numpy(), [2, 3])
 
     def test_reduce_sum_vectorized(self):
         values = torch.as_tensor([[1.0, 2.0, 3.0], [2.0, 3.0, 4.0], [3.0, 4.0, 5.0]])
-        index = utils.IndexMap(indices=torch.as_tensor([0, 0, 1]), num_segments=2, batch_dims=0)
-        sums, new_index = utils.reduce_sum(values, index)
+        index = IndexMap(indices=torch.as_tensor([0, 0, 1]), num_segments=2, batch_dims=0)
+        sums, new_index = reduce_sum(values, index)
 
         # We use np.testing.assert_allclose rather than Tensorflow's assertAllClose
         np.testing.assert_allclose(sums.numpy(), [[3.0, 5.0, 7.0], [3.0, 4.0, 5.0]])
@@ -555,13 +711,13 @@ class TapasUtilitiesTest(unittest.TestCase):
 
     def test_gather(self):
         values, row_index, col_index = self._prepare_tables()
-        cell_index = utils.ProductIndexMap(row_index, col_index)
+        cell_index = ProductIndexMap(row_index, col_index)
 
         # Compute sums and then gather. The result should have the same shape as
         # the original table and each element should contain the sum the values in
         # its cell.
-        sums, _ = utils.reduce_sum(values, cell_index)
-        cell_sum = utils.gather(sums, cell_index)
+        sums, _ = reduce_sum(values, cell_index)
+        cell_sum = gather(sums, cell_index)
         assert cell_sum.size() == values.size()
 
         # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
@@ -572,8 +728,8 @@ class TapasUtilitiesTest(unittest.TestCase):
 
     def test_gather_vectorized(self):
         values = torch.as_tensor([[[1, 2], [3, 4]], [[5, 6], [7, 8]]])
-        index = utils.IndexMap(indices=torch.as_tensor([[0, 1], [1, 0]]), num_segments=2, batch_dims=1)
-        result = utils.gather(values, index)
+        index = IndexMap(indices=torch.as_tensor([[0, 1], [1, 0]]), num_segments=2, batch_dims=1)
+        result = gather(values, index)
 
         # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual
         np.testing.assert_array_equal(result.numpy(), [[[1, 2], [3, 4]], [[7, 8], [5, 6]]])
