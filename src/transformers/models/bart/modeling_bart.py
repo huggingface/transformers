@@ -61,14 +61,7 @@ BART_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # This list is incomplete. See all BART models at https://huggingface.co/models?filter=bart
 
 
-def _make_linear_from_emb(emb):
-    vocab_size, emb_size = emb.weight.shape
-    lin_layer = nn.Linear(vocab_size, emb_size, bias=False)
-    lin_layer.weight.data = emb.weight.data
-    return lin_layer
-
-
-def shift_tokens_right(input_ids, pad_token_id):
+def shift_tokens_right(input_ids: Tensor, pad_token_id: int):
     """Shift input ids one token to the right, and wrap the last non pad token (usually <eos>)."""
     prev_output_tokens = input_ids.clone()
     index_of_eos = (input_ids.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
@@ -77,7 +70,7 @@ def shift_tokens_right(input_ids, pad_token_id):
     return prev_output_tokens
 
 
-def _make_causal_mask(input_ids_shape, dtype, past_key_values_length=0):
+def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
     bsz, tgt_len = input_ids_shape
     mask = torch.zeros(tgt_len, tgt_len, dtype=torch.long)
     mask = mask.float().fill_(float("-inf")).type_as(mask)
@@ -90,7 +83,7 @@ def _make_causal_mask(input_ids_shape, dtype, past_key_values_length=0):
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-def _expand_mask(mask, dtype, tgt_len=None, past_key_values_length=0):
+def _expand_mask(mask: Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
     bsz, src_len = mask.size()
     tgt_len = tgt_len if tgt_len is not None else src_len
 
@@ -110,7 +103,7 @@ def _expand_mask(mask, dtype, tgt_len=None, past_key_values_length=0):
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
-def LayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
+def LayerNorm(normalized_shape: torch.Shape, eps=1e-5, elementwise_affine=True):
     if torch.cuda.is_available():
         try:
             from apex.normalization import FusedLayerNorm
@@ -128,16 +121,16 @@ class LearnedPositionalEmbedding(nn.Embedding):
     the forward function.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, offset):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, offset: int):
         # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models dont have this hack
         self.offset = offset
-        assert padding_idx is not None
+        assert padding_idx is not None, "`padding_idx` should not be None, but of type int"
         num_embeddings += offset
         super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
 
-    def forward(self, input_ids_shape, past_key_values_length=0):
-        """Input is expected to be of size [bsz x seqlen]."""
+    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
+        """`input_ids_shape` is expected to be [bsz x seqlen]."""
         bsz, seq_len = input_ids_shape[:2]
         positions = torch.arange(
             past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
@@ -148,7 +141,7 @@ class LearnedPositionalEmbedding(nn.Embedding):
 class SinusoidalPositionalEmbedding(nn.Embedding):
     """This module produces sinusoidal positional embeddings of any length."""
 
-    def __init__(self, num_positions, embedding_dim, padding_idx=None):
+    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__(num_positions, embedding_dim)
         self.weight = self._init_weight(self.weight)
 
@@ -170,8 +163,8 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         return out
 
     @torch.no_grad()
-    def forward(self, input_ids_shape, past_key_values_length=0):
-        """Input is expected to be of size [bsz x seqlen]."""
+    def forward(self, input_ids_shape, past_key_values_length: int = 0):
+        """`input_ids_shape` is expected to be [bsz x seqlen]."""
         bsz, seq_len = input_ids_shape[:2]
         positions = torch.arange(
             past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
@@ -184,11 +177,11 @@ class BartAttention(nn.Module):
 
     def __init__(
         self,
-        embed_dim,
-        num_heads,
-        dropout=0.0,
-        is_decoder=False,
-        bias=True,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.0,
+        is_decoder: bool = False,
+        bias: bool = True,
     ):
         super().__init__()
         self.embed_dim = embed_dim
