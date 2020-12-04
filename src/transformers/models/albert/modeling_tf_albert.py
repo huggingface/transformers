@@ -484,9 +484,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
-        self.return_dict = config.use_return_dict
+        self.config = config
 
         self.embeddings = TFAlbertEmbeddings(config, name="embeddings")
         self.encoder = TFAlbertTransformer(config, name="encoder")
@@ -530,6 +528,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -542,14 +541,6 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
             training=training,
             kwargs_call=kwargs,
         )
-
-        output_attentions = (
-            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        )
-        output_hidden_states = (
-            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
-        )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -603,16 +594,16 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
             embedding_output,
             extended_attention_mask,
             inputs["head_mask"],
-            output_attentions,
-            output_hidden_states,
-            return_dict,
+            inputs["output_attentions"],
+            inputs["output_hidden_states"],
+            inputs["return_dict"],
             training=inputs["training"],
         )
 
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output[:, 0])
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return (
                 sequence_output,
                 pooled_output,
@@ -778,6 +769,7 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -862,6 +854,7 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
 
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -875,7 +868,6 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
             kwargs_call=kwargs,
         )
 
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.albert.return_dict
         outputs = self.albert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -892,7 +884,7 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
         prediction_scores = self.predictions(sequence_output)
         sop_scores = self.sop_classifier(pooled_output, training=inputs["training"])
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return (prediction_scores, sop_scores) + outputs[2:]
 
         return TFAlbertForPreTrainingOutput(
@@ -964,6 +956,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -977,8 +970,6 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
             training=training,
             kwargs_call=kwargs,
         )
-
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.albert.return_dict
         outputs = self.albert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -995,8 +986,9 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
         prediction_scores = self.predictions(sequence_output, training=inputs["training"])
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], prediction_scores)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (prediction_scores,) + outputs[2:]
+
             return ((loss,) + output) if loss is not None else output
 
         return TFMaskedLMOutput(
@@ -1055,6 +1047,7 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1068,7 +1061,6 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.albert.return_dict
         outputs = self.albert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1086,8 +1078,9 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
         logits = self.classifier(pooled_output)
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
+
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
@@ -1148,6 +1141,7 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1161,7 +1155,6 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.albert.return_dict
         outputs = self.albert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1179,8 +1172,9 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
         logits = self.classifier(sequence_output)
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
+
             return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
@@ -1246,6 +1240,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1260,7 +1255,6 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.albert.return_dict
         outputs = self.albert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1285,8 +1279,9 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
             labels["end_position"] = inputs["end_positions"]
             loss = self.compute_loss(labels, (start_logits, end_logits))
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (start_logits, end_logits) + outputs[2:]
+
             return ((loss,) + output) if loss is not None else output
 
         return TFQuestionAnsweringModelOutput(
@@ -1355,6 +1350,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1368,7 +1364,6 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.albert.return_dict
 
         if inputs["input_ids"] is not None:
             num_choices = shape_list(inputs["input_ids"])[1]
@@ -1400,7 +1395,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
             flat_inputs_embeds,
             inputs["output_attentions"],
             inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
 
@@ -1412,7 +1407,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], reshaped_logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
