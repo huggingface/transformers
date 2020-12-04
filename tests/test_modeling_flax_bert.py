@@ -24,6 +24,10 @@ if is_torch_available():
 @require_flax
 @require_torch
 class FlaxBertModelTest(unittest.TestCase):
+    def assert_almost_equals(self, a: ndarray, b: ndarray, tol: float):
+        diff = (a - b).sum()
+        self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol})")
+
     def test_from_pytorch(self):
         with torch.no_grad():
             with self.subTest("bert-base-cased"):
@@ -40,7 +44,7 @@ class FlaxBertModelTest(unittest.TestCase):
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
 
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 5e-4)
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 5e-3)
 
     def assert_almost_equals(self, a: ndarray, b: ndarray, tol: float):
         diff = (a - b).sum()
@@ -69,3 +73,4 @@ def test_multiple_sentences(jit):
 
     assert tokens.shape == (3, 7, 768)
     assert pooled.shape == (3, 768)
+

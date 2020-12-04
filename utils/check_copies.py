@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import argparse
+import collections
 import glob
 import importlib
 import os

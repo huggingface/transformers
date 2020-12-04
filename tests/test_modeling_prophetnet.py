@@ -417,7 +417,7 @@ class ProphetNetModelTester:
                 decoder_attention_mask=decoder_attention_mask,
                 labels=lm_labels,
             )
-        self.parent.assertTrue(torch.allclose(result.loss, torch.tensor(128.2925, device=torch_device), atol=1e-3))
+        self.parent.assertTrue(torch.allclose(result.loss, torch.tensor(4.5819, device=torch_device), atol=1e-3))
 
         expected_logit_slice = torch.tensor(
             [-0.1565, 0.0418, 0.1207, 0.0030, 0.0665, 0.0467, 0.0412], device=torch_device
@@ -1011,6 +1011,32 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
 
+    def test_retain_grad_hidden_states_attentions(self):
+        # decoder cannot keep gradients
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+        output = outputs[0]
+
+        encoder_hidden_states = outputs.encoder_hidden_states[0]
+        encoder_attentions = outputs.encoder_attentions[0]
+        encoder_hidden_states.retain_grad()
+        encoder_attentions.retain_grad()
+
+        output.flatten()[0].backward(retain_graph=True)
+
+        self.assertIsNotNone(encoder_hidden_states.grad)
+        self.assertIsNotNone(encoder_attentions.grad)
+
 
 @require_torch
 class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -1036,6 +1062,10 @@ class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMix
     def test_decoder_model_attn_mask_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
+
+    def test_retain_grad_hidden_states_attentions(self):
+        # decoder cannot keep gradients
+        return
 
 
 @require_torch

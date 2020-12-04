@@ -695,6 +695,14 @@ class ProphetNetSelfAttention(nn.Module):
         if attention_mask is not None:  # don't attend to padding symbols
             attn_weights = attn_weights + attention_mask
 
+        # need two reshapes to keep gradient at attention weights
+        attn_weights_reshaped = attn_weights.view(
+            batch_size, self.num_attn_heads, sequence_length, key_sequence_length
+        )
+        attn_weights = attn_weights_reshaped.view(
+            batch_size * self.num_attn_heads, sequence_length, key_sequence_length
+        )
+
         attn_weights = F.softmax(attn_weights, dim=-1)
         attn_probs = F.dropout(
             attn_weights,
@@ -712,9 +720,8 @@ class ProphetNetSelfAttention(nn.Module):
 
         attn_output = self.out_proj(attn_output)
 
-        attn_weights = attn_weights.view(batch_size, self.num_attn_heads, sequence_length, key_sequence_length)
         attn_output = F.dropout(attn_output, p=self.dropout, training=self.training)
-        return attn_output, attn_weights
+        return attn_output, attn_weights_reshaped
 
 
 class ProhpetNetFeedForward(nn.Module):
@@ -1221,7 +1228,9 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
 
         for encoder_layer in self.layers:
             if output_hidden_states:
-                encoder_hidden_states = encoder_hidden_states + (hidden_states.transpose(0, 1),)
+                hidden_states = hidden_states.transpose(0, 1)
+                encoder_hidden_states = encoder_hidden_states + (hidden_states,)
+                hidden_states = hidden_states.transpose(0, 1)
             hidden_states, attn_probs = encoder_layer(hidden_states, attention_mask=extended_attention_mask)
             if output_attentions:
                 all_attentions = all_attentions + (attn_probs,)
@@ -1413,6 +1422,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
+                # grad cannot be kept because tensor is sliced
                 all_main_stream_hidden_states += (hidden_states[:sequence_length].transpose(0, 1),)
                 if self.config.ngram > 0:
                     all_ngram_stream_hidden_states += (hidden_states[sequence_length:].transpose(0, 1),)
@@ -1693,6 +1703,9 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
     def get_input_embeddings(self):
         return self.prophetnet.word_embeddings
 
@@ -1793,8 +1806,8 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
                 encoder_attentions=outputs.encoder_attentions,
             )
 
-    def _compute_loss(self, logits, labels):
-        expend_targets = labels.new_zeros(self.config.ngram, labels.size(0), labels.size(1)).fill_(self.padding_idx)
+    def _compute_loss(self, logits, labels, ignore_index=-100):
+        expend_targets = labels.new_zeros(self.config.ngram, labels.size(0), labels.size(1)).fill_(ignore_index)
 
         for i in range(self.config.ngram):
             if i > 0 and self.disable_ngram_loss:
@@ -1807,13 +1820,13 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
             dtype=torch.float32,
         )
 
-        loss = F.nll_loss(lprobs, expend_targets.view(-1), reduction="sum")
+        loss = F.nll_loss(lprobs, expend_targets.view(-1), reduction="mean")
 
         if self.config.eps > 0.0:
             smooth_loss = -lprobs.sum(dim=-1, keepdim=True)
-            non_pad_mask = expend_targets.ne(self.padding_idx).view(-1)
-            smooth_loss = smooth_loss[non_pad_mask]
-            smooth_loss = smooth_loss.sum()
+            non_masked_tokens = expend_targets.ne(ignore_index).view(-1)
+            smooth_loss = smooth_loss[non_masked_tokens]
+            smooth_loss = smooth_loss.mean()
 
             eps_i = self.config.eps / lprobs.size(-1)
             loss = (1.0 - self.config.eps) * loss + eps_i * smooth_loss
@@ -1890,6 +1903,9 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
 
     @add_start_docstrings_to_model_forward(PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ProphetNetDecoderLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -2010,8 +2026,8 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
                 cross_attentions=outputs.cross_attentions,
             )
 
-    def _compute_loss(self, logits, labels):
-        expend_targets = labels.new_zeros(self.config.ngram, labels.size(0), labels.size(1)).fill_(self.padding_idx)
+    def _compute_loss(self, logits, labels, ignore_index=-100):
+        expend_targets = labels.new_zeros(self.config.ngram, labels.size(0), labels.size(1)).fill_(ignore_index)
 
         for i in range(self.config.ngram):
             if i > 0 and self.disable_ngram_loss:
@@ -2024,13 +2040,13 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
             dtype=torch.float32,
         )
 
-        loss = F.nll_loss(lprobs, expend_targets.view(-1), reduction="sum")
+        loss = F.nll_loss(lprobs, expend_targets.view(-1), reduction="mean")
 
         if self.config.eps > 0.0:
             smooth_loss = -lprobs.sum(dim=-1, keepdim=True)
-            non_pad_mask = expend_targets.ne(self.padding_idx).view(-1)
-            smooth_loss = smooth_loss[non_pad_mask]
-            smooth_loss = smooth_loss.sum()
+            non_masked_tokens = expend_targets.ne(ignore_index).view(-1)
+            smooth_loss = smooth_loss[non_masked_tokens]
+            smooth_loss = smooth_loss.mean()
 
             eps_i = self.config.eps / lprobs.size(-1)
             loss = (1.0 - self.config.eps) * loss + eps_i * smooth_loss

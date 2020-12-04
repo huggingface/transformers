@@ -4,6 +4,11 @@ language: fr
 datasets: wikipedia
 
 license: apache-2.0
+
+widget:
+- text: "Paris est la [MASK] de la France."
+- text: "Paris est la capitale de la [MASK]."
+- text: "L'élection américaine a eu [MASK] en novembre 2020."
 ---
 
 # bert-base-fr-cased
@@ -23,6 +28,8 @@ tokenizer = AutoTokenizer.from_pretrained("Geotrend/bert-base-fr-cased")
 model = AutoModel.from_pretrained("Geotrend/bert-base-fr-cased")
 
 ```
+
+To generate other smaller versions of multilingual transformers please visit [our Github repo](https://github.com/Geotrend-research/smaller-transformers).
 
 ### How to cite
 

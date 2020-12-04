@@ -208,6 +208,10 @@ class BARTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip("TODO: Decoder embeddings cannot be resized at the moment")
+    def test_resize_embeddings_untied(self):
+        pass
+
     @require_sentencepiece
     @require_tokenizers
     def test_tiny_model(self):

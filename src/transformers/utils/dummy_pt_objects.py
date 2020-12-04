@@ -634,6 +634,15 @@ class CamembertModel:
 CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class CTRLForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class CTRLLMHeadModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -1361,6 +1370,15 @@ def load_tf_weights_in_mobilebert(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_mobilebert)
 
 
+class MT5EncoderModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class MT5ForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -1719,6 +1737,15 @@ class SqueezeBertPreTrainedModel:
 T5_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class T5EncoderModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class T5ForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -1755,6 +1782,15 @@ TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 class AdaptiveEmbedding:
     def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class TransfoXLForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
         requires_pytorch(self)
 
 

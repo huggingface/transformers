@@ -15,7 +15,7 @@
 """ PyTorch mT5 model. """
 
 from ...utils import logging
-from ..t5.modeling_t5 import T5ForConditionalGeneration, T5Model
+from ..t5.modeling_t5 import T5EncoderModel, T5ForConditionalGeneration, T5Model
 from .configuration_mt5 import MT5Config
 
 
@@ -73,11 +73,7 @@ class MT5ForConditionalGeneration(T5ForConditionalGeneration):
     config_class = MT5Config
     _keys_to_ignore_on_load_missing = [
         r"encoder\.embed_tokens\.weight",
-        r"decoder\.embed_tokens\.weight",
-        r"lm_head\.weight",
-        r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
     ]
     _keys_to_ignore_on_save = [
         r"encoder\.embed_tokens\.weight",
-        r"decoder\.embed_tokens\.weight",
     ]
