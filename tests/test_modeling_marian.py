@@ -28,7 +28,7 @@ if is_torch_available():
     import torch
 
     from transformers import AutoModelWithLMHead, MarianMTModel
-    from transformers.models.bart.modeling_bart import _shift_tokens_right
+    from transformers.models.bart.modeling_bart import shift_tokens_right
     from transformers.models.marian.convert_marian_to_pytorch import (
         ORG_NAME,
         convert_hf_name_to_opus_name,
@@ -163,7 +163,7 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
             "labels",
         }
         self.assertSetEqual(desired_keys, set(model_inputs.keys()))
-        model_inputs["decoder_input_ids"] = _shift_tokens_right(model_inputs.labels, self.tokenizer.pad_token_id)
+        model_inputs["decoder_input_ids"] = shift_tokens_right(model_inputs.labels, self.tokenizer.pad_token_id)
         model_inputs["return_dict"] = True
         model_inputs["use_cache"] = False
         with torch.no_grad():

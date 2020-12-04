@@ -49,7 +49,7 @@ if is_torch_available():
         PegasusConfig,
         pipeline,
     )
-    from transformers.models.bart.modeling_bart import SinusoidalPositionalEmbedding, _shift_tokens_right
+    from transformers.models.bart.modeling_bart import SinusoidalPositionalEmbedding, shift_tokens_right
 PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
 
 
@@ -197,7 +197,7 @@ class BARTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         model = BartModel(config).to(torch_device).eval()
         decoder_features_with_created_mask = model(**inputs_dict)[0]
 
-        decoder_input_ids = _shift_tokens_right(inputs_dict["input_ids"], config.pad_token_id)
+        decoder_input_ids = shift_tokens_right(inputs_dict["input_ids"], config.pad_token_id)
         decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
         decoder_attention_mask[:, 0] = decoder_attention_mask[:, 1]
 
@@ -405,7 +405,7 @@ class BartHeadTests(unittest.TestCase):
 
     def test_shift_tokens_right(self):
         input_ids = torch.Tensor([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]]).long()
-        shifted = _shift_tokens_right(input_ids, 1)
+        shifted = shift_tokens_right(input_ids, 1)
         n_pad_before = input_ids.eq(1).float().sum()
         n_pad_after = shifted.eq(1).float().sum()
         self.assertEqual(shifted.shape, input_ids.shape)

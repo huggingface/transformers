@@ -68,7 +68,7 @@ def _make_linear_from_emb(emb):
     return lin_layer
 
 
-def _shift_tokens_right(input_ids, pad_token_id):
+def shift_tokens_right(input_ids, pad_token_id):
     """Shift input ids one token to the right, and wrap the last non pad token (usually <eos>)."""
     prev_output_tokens = input_ids.clone()
     index_of_eos = (input_ids.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
@@ -969,7 +969,7 @@ class BartModel(PretrainedBartModel):
         # for backward compatibility
         # -> is this used for backward compatibility
         if decoder_input_ids is None and decoder_inputs_embeds is None:
-            decoder_input_ids = _shift_tokens_right(input_ids, self.config.pad_token_id)
+            decoder_input_ids = shift_tokens_right(input_ids, self.config.pad_token_id)
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1116,7 +1116,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
 
         if labels is not None:
             if decoder_input_ids is None:
-                decoder_input_ids = _shift_tokens_right(labels, self.config.pad_token_id)
+                decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id)
 
         outputs = self.model(
             input_ids,
