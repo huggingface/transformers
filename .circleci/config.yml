@@ -20,7 +20,8 @@ commands:
                     echo "Non-docs were modified in this PR, proceeding normally"
                 else
                     echo "Only docs were modified in this PR, quitting this job"
-                    circleci step halt
+                    # disable skipping for now, as circleCI's base_revision is inconsistent leading to invalid ranges
+                    # circleci step halt
                 fi
             else
                 echo "Can't perform skipping check w/o base_revision defined, continuing the job"
