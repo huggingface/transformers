@@ -280,6 +280,8 @@ class TapasModelTester:
         numeric_values_scale,
         aggregation_labels,
     ):
+        # TapasForQuestionAnswering can be used in 3 main ways of being used, but for inference
+        # they all require the same inputs
         model = TapasForQuestionAnswering(config=config)
         model.to(torch_device)
         model.eval()
@@ -288,10 +290,6 @@ class TapasModelTester:
             attention_mask=input_mask,
             token_type_ids=token_type_ids,
             label_ids=label_ids,
-            answer=answer,
-            numeric_values=numeric_values,
-            numeric_values_scale=numeric_values_scale,
-            aggregation_labels=aggregation_labels,
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.logits_aggregation.shape, (self.batch_size, self.num_aggregation_labels))
@@ -365,9 +363,9 @@ class TapasModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_masked_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
+    # def test_for_masked_lm(self):
+    #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
+    #     self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -415,7 +413,7 @@ def prepare_tapas_inputs_for_inference():
         "attention_mask": attention_mask,
         "token_type_ids": token_type_ids
     }
-    
+
 
 @require_torch
 class TapasModelIntegrationTest(unittest.TestCase):

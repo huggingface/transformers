@@ -56,8 +56,9 @@ _CONFIG_FOR_DOC = "TapasConfig"
 _TOKENIZER_FOR_DOC = "TapasTokenizer"
 
 TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "tapas-base",
-    "tapas-large",
+    "nielsr/tapas-base-finetuned-sqa",
+    "nielsr/tapas-base-finetuned-wtq",
+    "nielsr/tapas-base-finetuned-wikisql-supervised",
     # See all TAPAS models at https://huggingface.co/models?filter=tapas
 ]
 

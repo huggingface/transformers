@@ -51,17 +51,23 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        # to be added
+        "nielsr/tapas-base-finetuned-sqa": "https://huggingface.co/bert-large-uncased/resolve/main/vocab.txt",
+        "nielsr/tapas-base-finetuned-wtq": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
+        "nielsr/tapas-base-finetuned-wikisql-supervised": "https://huggingface.co/bert-large-uncased/resolve/main/vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    # to be added
+    "nielsr/tapas-base-finetuned-sqa": 1024,
+    "nielsr/tapas-base-finetuned-wtq": 1024,
+    "nielsr/tapas-base-finetuned-wikisql-supervised": 1024,
 }
 
 
 PRETRAINED_INIT_CONFIGURATION = {
-    # to be added
+    "nielsr/tapas-base-finetuned-sqa": {"do_lower_case": True},
+    "nielsr/tapas-base-finetuned-wtq": {"do_lower_case": True},
+    "nielsr/tapas-base-finetuned-wikisql-supervised": {"do_lower_case": True},
 }
 
 
