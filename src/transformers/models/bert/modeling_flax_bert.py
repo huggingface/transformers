@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Dict
+from typing import Callable, Dict, Tuple
 
 import numpy as np
 
@@ -161,7 +161,7 @@ class FlaxBertEmbeddings(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
-    def __call__(self, input_ids, token_type_ids, position_ids, attention_mask):
+    def __call__(self, input_ids, token_type_ids, position_ids, attention_mask, deterministic: bool = True):
 
         # Embed
         w_emb = FlaxBertEmbedding(self.vocab_size, self.hidden_size, name="word_embeddings", dtype=self.dtype)(
@@ -179,7 +179,7 @@ class FlaxBertEmbeddings(nn.Module):
 
         # Layer Norm
         layer_norm = FlaxBertLayerNorm(name="layer_norm", dtype=self.dtype)(summed_emb)
-        embeddings = nn.Dropout(rate=self.dropout_rate)(layer_norm)
+        embeddings = nn.Dropout(rate=self.dropout_rate)(layer_norm, deterministic=deterministic)
         return embeddings
 
 
@@ -190,12 +190,12 @@ class FlaxBertAttention(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
-    def __call__(self, hidden_state, attention_mask):
+    def __call__(self, hidden_state, attention_mask, deterministic: bool = True):
         # Attention mask comes in as attention_mask.shape == (*batch_sizes, kv_length)
         # FLAX expects: attention_mask.shape == (*batch_sizes, 1, 1, kv_length) such that it is broadcastable
         # with attn_weights.shape == (*batch_sizes, num_heads, q_length, kv_length)
         attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
-        self_att = nn.attention.SelfAttention(num_heads=self.num_heads, qkv_features=self.head_size, dropout_rate=self.dropout_rate, name="self", dtype=self.dtype)(
+        self_att = nn.attention.SelfAttention(num_heads=self.num_heads, qkv_features=self.head_size, dropout_rate=self.dropout_rate,  deterministic=deterministic, name="self", dtype=self.dtype)(
             hidden_state, attention_mask
         )
 
@@ -219,9 +219,9 @@ class FlaxBertOutput(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
-    def __call__(self, intermediate_output, attention_output):
+    def __call__(self, intermediate_output, attention_output, deterministic: bool = True):
         hidden_state = nn.Dense(attention_output.shape[-1], name="dense", dtype=self.dtype)(intermediate_output)
-        hidden_state = nn.Dropout(rate=self.dropout_rate)(hidden_state)
+        hidden_state = nn.Dropout(rate=self.dropout_rate)(hidden_state, deterministic=deterministic)
         hidden_state = FlaxBertLayerNorm(name="layer_norm", dtype=self.dtype)(hidden_state + attention_output)
         return hidden_state
 
@@ -230,13 +230,14 @@ class FlaxBertLayer(nn.Module):
     num_heads: int
     head_size: int
     intermediate_size: int
+    dropout_rate: float = 0.0
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
-    def __call__(self, hidden_state, attention_mask):
-        attention = FlaxBertAttention(self.num_heads, self.head_size, name="attention", dtype=self.dtype)(hidden_state, attention_mask)
+    def __call__(self, hidden_state, attention_mask, deterministic: bool = True):
+        attention = FlaxBertAttention(self.num_heads, self.head_size, dropout_rate=self.dropout_rate, name="attention", dtype=self.dtype)(hidden_state, attention_mask, deterministic=deterministic)
         intermediate = FlaxBertIntermediate(self.intermediate_size, name="intermediate", dtype=self.dtype)(attention)
-        output = FlaxBertOutput(name="output", dtype=self.dtype)(intermediate, attention)
+        output = FlaxBertOutput(dropout_rate=self.dropout_rate, name="output",  dtype=self.dtype)(intermediate, attention, deterministic=deterministic)
 
         return output
 
@@ -250,10 +251,11 @@ class FlaxBertLayerCollection(nn.Module):
     num_heads: int
     head_size: int
     intermediate_size: int
+    dropout_rate: float = 0.0
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
-    def __call__(self, inputs, attention_mask):
+    def __call__(self, inputs, attention_mask, deterministic: bool = True):
         assert self.num_layers > 0, f"num_layers should be >= 1, got ({self.num_layers})"
 
         # Initialize input / output
@@ -261,8 +263,8 @@ class FlaxBertLayerCollection(nn.Module):
 
         # Forward over all encoders
         for i in range(self.num_layers):
-            layer = FlaxBertLayer(self.num_heads, self.head_size, self.intermediate_size, name=f"{i}", dtype=self.dtype)
-            input_i = layer(input_i, attention_mask)
+            layer = FlaxBertLayer(self.num_heads, self.head_size, self.intermediate_size, dropout_rate=self.dropout_rate, name=f"{i}", dtype=self.dtype)
+            input_i = layer(input_i, attention_mask, deterministic=deterministic)
         return input_i
 
 
@@ -271,13 +273,14 @@ class FlaxBertEncoder(nn.Module):
     num_heads: int
     head_size: int
     intermediate_size: int
+    dropout_rate: float = 0.0
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
-    def __call__(self, hidden_state, attention_mask):
+    def __call__(self, hidden_state, attention_mask, deterministic: bool = True):
         layer = FlaxBertLayerCollection(
-            self.num_layers, self.num_heads, self.head_size, self.intermediate_size, name="layer", dtype=self.dtype
-        )(hidden_state, attention_mask)
+            self.num_layers, self.num_heads, self.head_size, self.intermediate_size, dropout_rate=self.dropout_rate, name="layer", dtype=self.dtype
+        )(hidden_state, attention_mask, deterministic=deterministic)
         return layer
 
 
@@ -288,7 +291,7 @@ class FlaxBertPooler(nn.Module):
     def __call__(self, hidden_state):
         cls_token = hidden_state[:, 0]
         out = nn.Dense(hidden_state.shape[-1], name="dense", dtype=self.dtype)(cls_token)
-        return jax.lax.tanh(out)
+        return nn.tanh(out)
 
 
 class FlaxBertModule(nn.Module):
@@ -300,20 +303,21 @@ class FlaxBertModule(nn.Module):
     num_heads: int
     head_size: int
     intermediate_size: int
+    dropout_rate: float
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
-    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids):
+    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True):
 
         # Embedding
         embeddings = FlaxBertEmbeddings(
-            self.vocab_size, self.hidden_size, self.type_vocab_size, self.max_length, name="embeddings", dtype=self.dtype
-        )(input_ids, token_type_ids, position_ids, attention_mask)
+            self.vocab_size, self.hidden_size, self.type_vocab_size, self.max_length, dropout_rate=self.dropout_rate, name="embeddings", dtype=self.dtype
+        )(input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic)
 
         # N stacked encoding layers
         encoder = FlaxBertEncoder(
-            self.num_encoder_layers, self.num_heads, self.head_size, self.intermediate_size, name="encoder", dtype=self.dtype
-        )(embeddings, attention_mask)
+            self.num_encoder_layers, self.num_heads, self.head_size, self.intermediate_size, dropout_rate=self.dropout_rate, name="encoder", dtype=self.dtype
+        )(embeddings, attention_mask, deterministic=deterministic)
 
         pooled = FlaxBertPooler(name="pooler", dtype=self.dtype)(encoder)
         return encoder, pooled
@@ -354,10 +358,11 @@ class FlaxBertOnlyMLMHead(nn.Module):
     num_encoder_layers: int
     type_vocab_size: int
     max_length: int
+    dropout_rate: float = 0.0
     dtype: jnp.dtype = jnp.float32
 
     @nn.compact
-    def __call__(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, labels=None):
+    def __call__(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True):
         # Model
         encoder, pooled = FlaxBertModule(
             vocab_size=self.vocab_size,
@@ -368,10 +373,12 @@ class FlaxBertOnlyMLMHead(nn.Module):
             num_heads=self.num_heads,
             num_encoder_layers=self.num_encoder_layers,
             max_length=self.max_length,
-            dtype=self.dtype
-        )(input_ids, attention_mask, token_type_ids, position_ids)
+            dropout_rate=self.dropout_rate,
+            dtype=self.dtype,
+        )(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic)
 
         # Compute the prediction scores
+        encoder = nn.Dropout(rate=self.dropout_rate)(encoder, deterministic=deterministic)
         logits = FlaxBertLMPredictionHead(vocab_size=self.vocab_size, name="predictions", dtype=self.dtype)(encoder)
 
         return logits, pooled
@@ -472,13 +479,14 @@ class FlaxBertModel(FlaxPreTrainedModel):
             num_heads=config.num_attention_heads,
             head_size=config.hidden_size,
             intermediate_size=config.intermediate_size,
+            dropout_rate=config.hidden_dropout_prob,
             dtype=dtype
         )
 
         super().__init__(config, module, state, seed)
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    def __call__(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, params: dict = None, dropout_rng: PRNGKey = None):
+    def __call__(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, params: dict = None, dropout_rng: PRNGKey = None, train: bool = False):
         input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
             input_ids,
             attention_mask,
@@ -497,6 +505,7 @@ class FlaxBertModel(FlaxPreTrainedModel):
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(token_type_ids, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
+            not train,
             rngs=rngs
         )
 
@@ -512,12 +521,17 @@ class FlaxBertModel(FlaxPreTrainedModel):
 
         return input_ids, attention_mask, token_type_ids, position_ids
 
-    def init(self, rng, input_shape):
+    def init(self, rng: jax.random.PRNGKey, input_shape: Tuple):
         input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
             jnp.zeros(input_shape, dtype="i4"), None, None, None
         )
 
-        self.params = self.module.init(rng, input_ids, attention_mask, token_type_ids, position_ids)["params"]
+        params_rng, dropout_rng = jax.random.split(rng)
+        rngs = {"params": params_rng, "dropout": dropout_rng}
+
+        self.params = self.module.init(
+            rngs, input_ids, attention_mask, token_type_ids, position_ids
+        )["params"]
 
 
 class FlaxBertForMaskedLM(FlaxBertModel):
@@ -536,7 +550,7 @@ class FlaxBertForMaskedLM(FlaxBertModel):
             **kwargs
         )
 
-    def __call__(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, params: dict = None, dropout_rng: PRNGKey = None):
+    def __call__(self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, params: dict = None, dropout_rng: PRNGKey = None, train: bool = False):
         input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
             input_ids,
             attention_mask,
@@ -555,7 +569,8 @@ class FlaxBertForMaskedLM(FlaxBertModel):
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(token_type_ids, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
-            rngs=rngs
+            not train,
+            rngs=rngs,
         )
 
         return logits, pooled

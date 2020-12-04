@@ -377,7 +377,7 @@ def training_step(optimizer, batch, dropout_rng):
         # Hide away tokens which doesn't participate in the optimization
         token_mask = jnp.where(targets > 0, 1.0, 0.)
 
-        pooled, logits = model(**batch, params=params, dropout_rng=dropout_rng)
+        pooled, logits = model(**batch, params=params, dropout_rng=dropout_rng, train=True)
         loss, weight_sum = cross_entropy(logits, targets, token_mask)
         return loss / weight_sum
 
@@ -399,7 +399,7 @@ def eval_step(params, batch):
 
     # Hide away tokens which doesn't participate in the optimization
     token_mask = jnp.where(targets > 0, 1.0, 0.0)
-    _, logits = model(**batch, params=params)
+    _, logits = model(**batch, params=params, train=False)
 
     return compute_metrics(logits, targets, token_mask)
 
@@ -550,14 +550,14 @@ if __name__ == "__main__":
 
     # Initialize our training
     rng = jax.random.PRNGKey(training_args.seed)
-    rng, init_rng = jax.random.split(rng)
     dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
     model = FlaxBertForMaskedLM.from_pretrained(
         "bert-base-cased",
-        dtype=jnp.bfloat16 if training_args.fp16 else jnp.float32
+        dtype=jnp.float32,
+        dropout_rate=0.1
     )
-    model.init(init_rng, (training_args.train_batch_size, model.config.max_length))
+    model.init(jax.random.PRNGKey(training_args.seed), (training_args.train_batch_size, model.config.max_length))
 
     # Setup optimizer
     optimizer = Adam(
@@ -580,7 +580,7 @@ if __name__ == "__main__":
     batch_size = int(training_args.train_batch_size)
     eval_batch_size = int(training_args.eval_batch_size)
 
-    epochs = tqdm(range(nb_epochs), desc=f"Epoch ... (1/{nb_epochs})")
+    epochs = tqdm(range(nb_epochs), desc=f"Epoch ... (1/{nb_epochs})", position=0)
     for epoch in epochs:
 
         # ======================== Training ================================
@@ -588,12 +588,13 @@ if __name__ == "__main__":
         rng, training_rng, eval_rng = jax.random.split(rng, 3)
 
         # Generate an epoch by shuffling sampling indices from the train dataset
-        nb_training_samples = len(tokenized_datasets["train"])
+        # nb_training_samples = len(tokenized_datasets["train"])
+        nb_training_samples = batch_size
         training_samples_idx = jax.random.permutation(training_rng, jnp.arange(nb_training_samples))
         training_batch_idx = generate_batch_splits(training_samples_idx, batch_size)
 
         # Gather the indexes for creating the batch and do a training step
-        for batch_idx in tqdm(training_batch_idx, desc=f"Training..."):
+        for batch_idx in tqdm(training_batch_idx, desc=f"Training...", position=1):
             samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples, pad_to_multiple_of=16)
 
@@ -607,7 +608,7 @@ if __name__ == "__main__":
         eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
 
         eval_metrics = []
-        for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...")):
+        for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
             samples = [tokenized_datasets["test"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples, pad_to_multiple_of=16)
 

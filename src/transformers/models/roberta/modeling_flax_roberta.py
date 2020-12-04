@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, Dict
+from typing import Callable, Dict, Tuple
 
 import numpy as np
 
@@ -161,7 +161,7 @@ class FlaxRobertaEmbeddings(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
-    def __call__(self, input_ids, token_type_ids, position_ids, attention_mask):
+    def __call__(self, input_ids, token_type_ids, position_ids, attention_mask, deterministic: bool = True):
 
         # Embed
         w_emb = FlaxRobertaEmbedding(self.vocab_size, self.hidden_size, name="word_embeddings", dtype=self.dtype)(
@@ -179,7 +179,7 @@ class FlaxRobertaEmbeddings(nn.Module):
 
         # Layer Norm
         layer_norm = FlaxRobertaLayerNorm(name="layer_norm", dtype=self.dtype)(summed_emb)
-        embeddings = nn.Dropout(rate=self.dropout_rate)(layer_norm)
+        embeddings = nn.Dropout(rate=self.dropout_rate)(layer_norm, deterministic=deterministic)
         return embeddings
 
 
@@ -191,12 +191,12 @@ class FlaxRobertaAttention(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
-    def __call__(self, hidden_state, attention_mask):
+    def __call__(self, hidden_state, attention_mask, deterministic: bool = True):
         # Attention mask comes in as attention_mask.shape == (*batch_sizes, kv_length)
         # FLAX expects: attention_mask.shape == (*batch_sizes, 1, 1, kv_length) such that it is broadcastable
         # with attn_weights.shape == (*batch_sizes, num_heads, q_length, kv_length)
         attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
-        self_att = nn.attention.SelfAttention(num_heads=self.num_heads, qkv_features=self.head_size, dropout_rate=self.dropout_rate, name="self", dtype=self.dtype)(
+        self_att = nn.attention.SelfAttention(num_heads=self.num_heads, qkv_features=self.head_size, dropout_rate=self.dropout_rate, deterministic=deterministic, name="self", dtype=self.dtype)(
             hidden_state, attention_mask
         )
 
@@ -222,9 +222,9 @@ class FlaxRobertaOutput(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
-    def __call__(self, intermediate_output, attention_output):
+    def __call__(self, intermediate_output, attention_output, deterministic: bool = True):
         hidden_state = nn.Dense(attention_output.shape[-1], name="dense", dtype=self.dtype)(intermediate_output)
-        hidden_state = nn.Dropout(rate=self.dropout_rate)(hidden_state)
+        hidden_state = nn.Dropout(rate=self.dropout_rate)(hidden_state, deterministic=deterministic)
         hidden_state = FlaxRobertaLayerNorm(name="layer_norm", dtype=self.dtype)(hidden_state + attention_output)
         return hidden_state
 
@@ -233,15 +233,16 @@ class FlaxRobertaLayer(nn.Module):
     num_heads: int
     head_size: int
     intermediate_size: int
+    dropout_rate: float = 0.0
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
-    def __call__(self, hidden_state, attention_mask):
-        attention = FlaxRobertaAttention(self.num_heads, self.head_size, name="attention", dtype=self.type)(
-            hidden_state, attention_mask
+    def __call__(self, hidden_state, attention_mask, deterministic: bool = True):
+        attention = FlaxRobertaAttention(self.num_heads, self.head_size, dropout_rate=self.dropout_rate, name="attention", dtype=self.type)(
+            hidden_state, attention_mask, deterministic=deterministic
         )
-        intermediate = FlaxRobertaIntermediate(self.intermediate_size, name="intermediate", dtype=self.dtype)(attention)
-        output = FlaxRobertaOutput(name="output", dtype=self.dtype)(intermediate, attention)
+        intermediate = FlaxRobertaIntermediate(self.intermediate_size, dropout_rate=self.dropout_rate, name="intermediate", dtype=self.dtype)(attention)
+        output = FlaxRobertaOutput(dropout_rate=self.dropout_rate, name="output", dtype=self.dtype)(intermediate, attention, deterministic=deterministic)
 
         return output
 
@@ -256,10 +257,11 @@ class FlaxRobertaLayerCollection(nn.Module):
     num_heads: int
     head_size: int
     intermediate_size: int
+    dropout_rate: float = 0.0
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
-    def __call__(self, inputs, attention_mask):
+    def __call__(self, inputs, attention_mask, deterministic: bool = True):
         assert self.num_layers > 0, f"num_layers should be >= 1, got ({self.num_layers})"
 
         # Initialize input / output
@@ -267,8 +269,8 @@ class FlaxRobertaLayerCollection(nn.Module):
 
         # Forward over all encoders
         for i in range(self.num_layers):
-            layer = FlaxRobertaLayer(self.num_heads, self.head_size, self.intermediate_size, name=f"{i}", dtype=self.dtype)
-            input_i = layer(input_i, attention_mask)
+            layer = FlaxRobertaLayer(self.num_heads, self.head_size, self.intermediate_size, dropout_rate=self.dropout_rate, name=f"{i}", dtype=self.dtype)
+            input_i = layer(input_i, attention_mask, deterministic=deterministic)
         return input_i
 
 
@@ -278,13 +280,14 @@ class FlaxRobertaEncoder(nn.Module):
     num_heads: int
     head_size: int
     intermediate_size: int
+    dropout_rate: float = 0.0
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
-    def __call__(self, hidden_state, attention_mask):
+    def __call__(self, hidden_state, attention_mask, deterministic: bool = True):
         layer = FlaxRobertaLayerCollection(
-            self.num_layers, self.num_heads, self.head_size, self.intermediate_size, name="layer", dtype=self.dtype
-        )(hidden_state, attention_mask)
+            self.num_layers, self.num_heads, self.head_size, self.intermediate_size, dropout_rate=self.dropout_rate, name="layer", dtype=self.dtype
+        )(hidden_state, attention_mask, deterministic=deterministic)
         return layer
 
 
@@ -309,20 +312,21 @@ class FlaxRobertaModule(nn.Module):
     num_heads: int
     head_size: int
     intermediate_size: int
+    dropout_rate: float = 0.0
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     @nn.compact
-    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids):
+    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True):
 
         # Embedding
         embeddings = FlaxRobertaEmbeddings(
-            self.vocab_size, self.hidden_size, self.type_vocab_size, self.max_length, name="embeddings", dtype=self.dtype
-        )(input_ids, token_type_ids, position_ids, attention_mask)
+            self.vocab_size, self.hidden_size, self.type_vocab_size, self.max_length, dropout_rate=self.dropout_rate, name="embeddings", dtype=self.dtype
+        )(input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic)
 
         # N stacked encoding layers
         encoder = FlaxRobertaEncoder(
-            self.num_encoder_layers, self.num_heads, self.head_size, self.intermediate_size, name="encoder", dtype=self.dtype
-        )(embeddings, attention_mask)
+            self.num_encoder_layers, self.num_heads, self.head_size, self.intermediate_size, dropout_rate=self.dropout_rate, name="encoder", dtype=self.dtype
+        )(embeddings, attention_mask, deterministic=deterministic)
 
         pooled = FlaxRobertaPooler(name="pooler", dtype=self.dtype)(encoder)
         return encoder, pooled
@@ -413,7 +417,7 @@ class FlaxRobertaModel(FlaxPreTrainedModel):
 
         return jax_state
 
-    def __init__(self, config: RobertaConfig, state: dict, seed: int = 0, **kwargs):
+    def __init__(self, config: RobertaConfig, state: dict, seed: int = 0, dtype: jnp.dtype = jnp.float32):
         module = FlaxRobertaModule(
             vocab_size=config.vocab_size,
             hidden_size=config.hidden_size,
@@ -423,22 +427,20 @@ class FlaxRobertaModel(FlaxPreTrainedModel):
             num_heads=config.num_attention_heads,
             head_size=config.hidden_size,
             intermediate_size=config.intermediate_size,
+            dropout_rate=config.hidden_dropout_prob,
+            dtype=dtype
         )
 
         super().__init__(config, module, state, seed)
 
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    def __call__(self, input_ids, token_type_ids=None, attention_mask=None, position_ids=None,  params: dict = None, dropout_rng: PRNGKey = None):
-        if token_type_ids is None:
-            token_type_ids = jnp.ones_like(input_ids)
-
-        if position_ids is None:
-            position_ids = jnp.arange(
-                self.config.pad_token_id + 1, jnp.atleast_2d(input_ids).shape[-1] + self.config.pad_token_id + 1
-            )
-
-        if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
+    def __call__(self, input_ids, token_type_ids=None, attention_mask=None, position_ids=None,  params: dict = None, dropout_rng: PRNGKey = None, train: bool = False):
+        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            position_ids
+        )
 
         # Handle any PRNG if needed
         rngs = {}
@@ -451,5 +453,30 @@ class FlaxRobertaModel(FlaxPreTrainedModel):
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(token_type_ids, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
+            not train,
             rngs=rngs
         )
+
+    def init(self, rng: jax.random.PRNGKey, input_shape: Tuple):
+        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
+            jnp.zeros(input_shape, dtype="i4"), None, None, None
+        )
+
+        params_rng, dropout_rng = jax.random.split(rng)
+        rngs = {"params": params_rng, "dropout": dropout_rng}
+
+        self.params = self.module.init(
+            rngs, input_ids, attention_mask, token_type_ids, position_ids
+        )["params"]
+
+    def _check_inputs(self, input_ids, attention_mask, token_type_ids, position_ids):
+        if token_type_ids is None:
+            token_type_ids = jnp.ones_like(input_ids)
+
+        if position_ids is None:
+            position_ids = jnp.arange(jnp.atleast_2d(input_ids).shape[-1])
+
+        if attention_mask is None:
+            attention_mask = jnp.ones_like(input_ids)
+
+        return input_ids, attention_mask, token_type_ids, position_ids
