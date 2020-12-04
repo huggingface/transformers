@@ -994,7 +994,7 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
                 batch_size, sequence_length = shape_list(inputs["inputs_embeds"])[:2]
             assert (
                 self.config.pad_token_id is not None or batch_size == 1
-            ), "Cannot handle batch sizes > 1 if no padding token is defined."
+            ), "Cannot handle batch size > 1 if no padding token is defined."
 
             if not tf.is_tensor(sequence_lengths):
                 in_logits = logits[0:batch_size, sequence_lengths]
