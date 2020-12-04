@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import tempfile
 import unittest
 
@@ -48,7 +49,7 @@ if is_torch_available():
         PegasusConfig,
         pipeline,
     )
-    from transformers.models.bart.modeling_bart import SinusoidalPositionalEmbedding, shift_tokens_right
+    from transformers.models.bart.modeling_bart import SinusoidalPositionalEmbedding, _shift_tokens_right
 PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
 
 
@@ -196,7 +197,7 @@ class BARTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         model = BartModel(config).to(torch_device).eval()
         decoder_features_with_created_mask = model(**inputs_dict)[0]
 
-        decoder_input_ids = shift_tokens_right(inputs_dict["input_ids"], config.pad_token_id)
+        decoder_input_ids = _shift_tokens_right(inputs_dict["input_ids"], config.pad_token_id)
         decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
         decoder_attention_mask[:, 0] = decoder_attention_mask[:, 1]
 
@@ -232,6 +233,36 @@ class BARTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    # BartForSequenceClassification does not support inputs_embeds
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in (BartModel, BartForConditionalGeneration, BartForQuestionAnswering):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+
+            if not self.is_encoder_decoder:
+                input_ids = inputs["input_ids"]
+                del inputs["input_ids"]
+            else:
+                encoder_input_ids = inputs["input_ids"]
+                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+                del inputs["input_ids"]
+                inputs.pop("decoder_input_ids", None)
+
+            wte = model.get_input_embeddings()
+            if not self.is_encoder_decoder:
+                inputs["inputs_embeds"] = wte(input_ids)
+            else:
+                inputs["inputs_embeds"] = wte(encoder_input_ids)
+                inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
+
+            with torch.no_grad():
+                model(**inputs)[0]
 
     @require_sentencepiece
     @require_tokenizers
@@ -374,7 +405,7 @@ class BartHeadTests(unittest.TestCase):
 
     def test_shift_tokens_right(self):
         input_ids = torch.Tensor([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]]).long()
-        shifted = shift_tokens_right(input_ids, 1)
+        shifted = _shift_tokens_right(input_ids, 1)
         n_pad_before = input_ids.eq(1).float().sum()
         n_pad_after = shifted.eq(1).float().sum()
         self.assertEqual(shifted.shape, input_ids.shape)
