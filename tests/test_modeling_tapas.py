@@ -422,7 +422,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
         # ideally we want to test this with the weights of tapas_inter_masklm_base_reset,
         # but since it's not straightforward to do this with the TF 1 implementation, we test it with 
         # the weights of the WTQ base model (i.e. tapas_wtq_wikisql_sqa_inter_masklm_base_reset)
-        model = TapasModel.from_pretrained("google/tapas-base-finetuned-wtq")
+        model = TapasModel.from_pretrained("nielsr/tapas-base-finetuned-wtq")
 
         inputs = prepare_tapas_inputs_for_inference()
         outputs = model(**inputs)
@@ -454,8 +454,8 @@ class TapasModelIntegrationTest(unittest.TestCase):
     # We test all of them:
     @slow
     def test_inference_question_answering_head_conversational(self):
-        # note that google/tapas-base-finetuned-sqa should correspond to tapas_sqa_inter_masklm_base_reset
-        model = TapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-sqa")
+        # note that nielsr/tapas-base-finetuned-sqa should correspond to tapas_sqa_inter_masklm_base_reset
+        model = TapasForQuestionAnswering.from_pretrained("nielsr/tapas-base-finetuned-sqa")
 
         inputs = prepare_tapas_inputs_for_inference()
         outputs = model(**inputs)
@@ -472,8 +472,8 @@ class TapasModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_question_answering_head_weak_supervision(self):
-        # note that google/tapas-base-finetuned-wtq should correspond to tapas_wtq_wikisql_sqa_inter_masklm_base_reset
-        model = TapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wtq")
+        # note that nielsr/tapas-base-finetuned-wtq should correspond to tapas_wtq_wikisql_sqa_inter_masklm_base_reset
+        model = TapasForQuestionAnswering.from_pretrained("nielsr/tapas-base-finetuned-wtq")
 
         inputs = prepare_tapas_inputs_for_inference()
         outputs = model(**inputs)
@@ -498,8 +498,8 @@ class TapasModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_question_answering_head_strong_supervision(self):
-        # note that google/tapas-base-finetuned-wikisql-supervised should correspond to tapas_wikisql_sqa_inter_masklm_base_reset
-        model = TapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wikisql-supervised")
+        # note that nielsr/tapas-base-finetuned-wikisql-supervised should correspond to tapas_wikisql_sqa_inter_masklm_base_reset
+        model = TapasForQuestionAnswering.from_pretrained("nielsr/tapas-base-finetuned-wikisql-supervised")
 
         inputs = prepare_tapas_inputs_for_inference()
         outputs = model(**inputs)
@@ -524,8 +524,8 @@ class TapasModelIntegrationTest(unittest.TestCase):
     
     @slow
     def test_inference_classification_head(self):
-        # note that google/tapas-base-finetuned-tabfact should correspond to tapas_tabfact_inter_masklm_base_reset
-        model = TapasForSequenceClassification.from_pretrained("google/tapas-base-finetuned-tabfact")
+        # note that nielsr/tapas-base-finetuned-tabfact should correspond to tapas_tabfact_inter_masklm_base_reset
+        model = TapasForSequenceClassification.from_pretrained("nielsr/tapas-base-finetuned-tabfact")
 
         inputs = prepare_tapas_inputs_for_inference()
         outputs = model(**inputs)
@@ -534,7 +534,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
         logits = outputs.logits
         expected_shape = torch.Size((1, 2))
         self.assertEqual(logits.shape, expected_shape)
-        expected_tensor = torch.tensor([[0.795137286 9.5572]]) # ok. Note that the PyTorch model outputs [[0.8057, 9.5281]]
+        expected_tensor = torch.tensor([[0.795137286, 9.5572]]) # ok. Note that the PyTorch model outputs [[0.8057, 9.5281]]
 
         self.assertTrue(torch.allclose(outputs.logits, expected_tensor, atol=1e-4))
 
