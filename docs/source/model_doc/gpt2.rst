@@ -120,3 +120,9 @@ TFGPT2ForSequenceClassification
 
 .. autoclass:: transformers.TFGPT2ForSequenceClassification
     :members: call
+
+TFSequenceClassifierOutputWithPast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_outputs.TFSequenceClassifierOutputWithPast
+    :members:
