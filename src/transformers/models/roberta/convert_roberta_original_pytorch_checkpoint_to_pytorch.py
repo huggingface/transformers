@@ -53,7 +53,7 @@ SAMPLE_TEXT = "Hello world! cécé herlolip"
 def convert_roberta_checkpoint_to_pytorch(
     roberta_checkpoint_path: str,
     pytorch_dump_folder_path: str,
-    classification_head: bool,
+    classification_head: str,
     data_dir: str,
 ):
     """
