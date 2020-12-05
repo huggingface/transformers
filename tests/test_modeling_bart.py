@@ -52,6 +52,9 @@ if is_torch_available():
     from transformers.models.bart.modeling_bart import SinusoidalPositionalEmbedding, shift_tokens_right
 
 
+PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
+
+
 def prepare_bart_inputs_dict(
     config,
     input_ids,
@@ -573,9 +576,7 @@ class BartModelIntegrationTests(unittest.TestCase):
 
         EXPECTED_SUMMARY = "California's largest power company has begun shutting off electricity to thousands of customers in the state."
         dct = tok.batch_encode_plus(
-            [
-                """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
-            ],
+            [PGE_ARTICLE],
             max_length=1024,
             padding="max_length",
             truncation=True,
