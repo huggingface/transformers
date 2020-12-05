@@ -49,7 +49,12 @@ if is_torch_available():
         PegasusConfig,
         pipeline,
     )
-    from transformers.models.bart.modeling_bart import SinusoidalPositionalEmbedding, shift_tokens_right
+    from transformers.models.bart.modeling_bart import (
+        BartDecoder,
+        BartEncoder,
+        SinusoidalPositionalEmbedding,
+        shift_tokens_right,
+    )
 
 
 PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
@@ -168,6 +173,38 @@ class BartModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
 
+    def check_encoder_decoder_model_standalone(self, config, inputs_dict):
+        model = BartModel(config=config).to(torch_device).eval()
+        outputs = model(**inputs_dict)
+
+        encoder_last_hidden_state = outputs.encoder_last_hidden_state
+        last_hidden_state = outputs.last_hidden_state
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            encoder = model.get_encoder()
+            encoder.save_pretrained(tmpdirname)
+            encoder = BartEncoder.from_pretrained(tmpdirname)
+
+        encoder_last_hidden_state_2 = encoder(inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"])[
+            0
+        ]
+
+        self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            decoder = model.get_decoder()
+            decoder.save_pretrained(tmpdirname)
+            decoder = BartDecoder.from_pretrained(tmpdirname)
+
+        last_hidden_state_2 = decoder(
+            input_ids=inputs_dict["decoder_input_ids"],
+            attention_mask=inputs_dict["decoder_attention_mask"],
+            encoder_hidden_states=encoder_last_hidden_state,
+            encoder_attention_mask=inputs_dict["attention_mask"],
+        )[0]
+
+        self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
+
 
 @require_torch
 class BARTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -250,6 +287,10 @@ class BARTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_encoder_decoder_model_standalone(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
     # BartForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):

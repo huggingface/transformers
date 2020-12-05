@@ -225,7 +225,7 @@ class BartAttention(nn.Module):
         key_padding_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attn_mask: Optional[torch.Tensor] = None,
-        output_attentions=False,
+        output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -257,7 +257,6 @@ class BartAttention(nn.Module):
             key_states = self.k_proj(hidden_states)
             value_states = self.v_proj(hidden_states)
 
-        # bsz must be first for reorder_cache
         if self.is_decoder:
             past_key_value = (key_states, value_states)
 
@@ -582,7 +581,7 @@ BART_INPUTS_DOCSTRING = r"""
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Provide for translation and summarization training. By default, the model will create this tensor by
             shifting the :obj:`input_ids` to the right, following the paper.
-        decoder_attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
+        decoder_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
 
@@ -642,12 +641,16 @@ class BartEncoder(BartPretrainedModel):
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
 
-        embed_dim = embed_tokens.embedding_dim
+        embed_dim = config.d_model
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
-        self.padding_idx = embed_tokens.padding_idx
+        self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
 
-        self.embed_tokens = embed_tokens
+        if embed_tokens is not None:
+            self.embed_tokens = embed_tokens
+        else:
+            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+
         if config.static_position_embeddings:
             self.embed_positions = SinusoidalPositionalEmbedding(
                 config.max_position_embeddings, embed_dim, self.padding_idx
@@ -748,10 +751,15 @@ class BartDecoder(BartPretrainedModel):
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
         self.do_blenderbot_90_layernorm = config.do_blenderbot_90_layernorm  # layernorm variant
-        self.padding_idx = embed_tokens.padding_idx
+        self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
-        self.embed_tokens = embed_tokens
+
+        if embed_tokens is not None:
+            self.embed_tokens = embed_tokens
+        else:
+            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+
         if config.static_position_embeddings:
             self.embed_positions = SinusoidalPositionalEmbedding(
                 config.max_position_embeddings, config.d_model, config.pad_token_id
@@ -1062,6 +1070,9 @@ class BartForConditionalGeneration(BartPretrainedModel):
 
     def get_output_embeddings(self):
         return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
