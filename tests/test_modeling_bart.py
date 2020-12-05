@@ -50,7 +50,19 @@ if is_torch_available():
         pipeline,
     )
     from transformers.models.bart.modeling_bart import SinusoidalPositionalEmbedding, shift_tokens_right
-PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
+
+
+def prepare_bart_inputs_dict(
+    config,
+    input_ids,
+    attention_mask=None,
+):
+    if attention_mask is None:
+        attention_mask = input_ids.ne(config.pad_token_id)
+    return {
+        "input_ids": input_ids,
+        "attention_mask": attention_mask,
+    }
 
 
 @require_torch
@@ -58,24 +70,40 @@ class BartModelTester:
     def __init__(
         self,
         parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_labels=False,
+        vocab_size=99,
+        hidden_size=16,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        intermediate_size=4,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=20,
+        eos_token_id=2,
+        pad_token_id=1,
+        bos_token_id=0,
     ):
         self.parent = parent
-        self.batch_size = 13
-        self.seq_length = 7
-        self.is_training = True
-        self.use_labels = False
-        self.vocab_size = 99
-        self.hidden_size = 16
-        self.num_hidden_layers = 2
-        self.num_attention_heads = 4
-        self.intermediate_size = 4
-        self.hidden_act = "gelu"
-        self.hidden_dropout_prob = 0.1
-        self.attention_probs_dropout_prob = 0.1
-        self.max_position_embeddings = 20
-        self.eos_token_id = 2
-        self.pad_token_id = 1
-        self.bos_token_id = 0
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_labels = use_labels
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
         torch.manual_seed(0)
 
     def prepare_config_and_inputs(self):
@@ -136,19 +164,6 @@ class BartModelTester:
 
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
-
-
-def prepare_bart_inputs_dict(
-    config,
-    input_ids,
-    attention_mask=None,
-):
-    if attention_mask is None:
-        attention_mask = input_ids.ne(config.pad_token_id)
-    return {
-        "input_ids": input_ids,
-        "attention_mask": attention_mask,
-    }
 
 
 @require_torch
@@ -558,7 +573,9 @@ class BartModelIntegrationTests(unittest.TestCase):
 
         EXPECTED_SUMMARY = "California's largest power company has begun shutting off electricity to thousands of customers in the state."
         dct = tok.batch_encode_plus(
-            [PGE_ARTICLE],
+            [
+                """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
+            ],
             max_length=1024,
             padding="max_length",
             truncation=True,
