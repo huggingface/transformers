@@ -568,7 +568,7 @@ if __name__ == "__main__":
     # Create learning rate scheduler
     lr_scheduler_fn = create_learning_rate_scheduler(
         base_learning_rate=training_args.learning_rate,
-        warmup_steps=training_args.warmup_step
+        warmup_steps=training_args.warmup_steps
     )
 
     # Create parallel version of the training and evaluation steps
