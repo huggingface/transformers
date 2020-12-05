@@ -385,10 +385,12 @@ class GenerationMixin:
                 speed up decoding.
             beam_groups (:obj:`int`, `optional`, defaults to 1):
                 Number of groups to divide :obj:`num_beams` into in order to ensure diversity among different groups of
-                beams. See `this paper <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
+                beams. To enable diverse beam search, :obj:`beam_groups` should be set to a value larger than 1.
+                See `this paper <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
             diversity_penalty (:obj:`float`, `optional`, defaults to 0.0):
                 This value is subtracted from a beam's score if it generates a token same as any beam from other group
-                at a particular time.
+                at a particular time. Note that :obj:`diversity_penalty` is only effective if ``diverse beam search``
+                is enabled.
             prefix_allowed_tokens_fn: (:obj:`Callable[[int, torch.Tensor], List[int]]`, `optional`):
                 If provided, this function constraints the beam search to allowed tokens only at each step. If not
                 provided no constraint is applied. This function takes 2 arguments :obj:`inputs_ids` and the batch ID
@@ -507,6 +509,10 @@ class GenerationMixin:
         is_diverse_beam_gen_mode = (num_beams > 1) and (beam_groups > 1)
         if beam_groups > num_beams:
             raise ValueError("`beam_groups` has to be smaller or equal to `num_beams`")
+        if is_diverse_beam_gen_mode and do_sample is True:
+            raise ValueError(
+                "Diverse beam search cannot be used in sampling mode. Make sure that `do_sample` is set to `False`."
+            )
 
         # set model_kwargs
         model_kwargs["use_cache"] = use_cache
@@ -1309,7 +1315,7 @@ class GenerationMixin:
             ...    AutoModelForSeq2SeqLM,
             ...    LogitsProcessorList,
             ...    MinLengthLogitsProcessor,
-            ...    BeamSearchScorer,
+            ...    DiverseBeamSearchScorer,
             ... )
             >>> import torch
 

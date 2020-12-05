@@ -316,6 +316,8 @@ class DiverseBeamSearchScorer(BeamScorer):
     Adapted in part from `Facebook's XLM beam search code
     <https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529>`__.
 
+    Reference for the diverse beam search algorithm and implementation
+    `Ashwin Kalyan's DBS implementation <https://github.com/ashwinkalyan/dbs/blob/master/dbs/beam_utils.lua>`__.
     Args:
         batch_size (:obj:`int`):
             Batch Size of :obj:`input_ids` for which diverse beam search decoding is run in parallel.
