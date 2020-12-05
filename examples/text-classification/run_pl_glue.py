@@ -38,7 +38,7 @@ class GLUETransformer(BaseTransformer):
     def training_step(self, batch, batch_idx):
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
 
-        if self.config.model_type != "distilbert":
+        if self.config.model_type not in ["distilbert", "bart"]:
             inputs["token_type_ids"] = batch[2] if self.config.model_type in ["bert", "xlnet", "albert"] else None
 
         outputs = self(**inputs)
@@ -101,7 +101,7 @@ class GLUETransformer(BaseTransformer):
     def validation_step(self, batch, batch_idx):
         inputs = {"input_ids": batch[0], "attention_mask": batch[1], "labels": batch[3]}
 
-        if self.config.model_type != "distilbert":
+        if self.config.model_type not in ["distilbert", "bart"]:
             inputs["token_type_ids"] = batch[2] if self.config.model_type in ["bert", "xlnet", "albert"] else None
 
         outputs = self(**inputs)
