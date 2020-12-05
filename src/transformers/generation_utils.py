@@ -385,8 +385,8 @@ class GenerationMixin:
                 speed up decoding.
             beam_groups (:obj:`int`, `optional`, defaults to 1):
                 Number of groups to divide :obj:`num_beams` into in order to ensure diversity among different groups of
-                beams. To enable diverse beam search, :obj:`beam_groups` should be set to a value larger than 1.
-                See `this paper <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
+                beams. To enable diverse beam search, :obj:`beam_groups` should be set to a value larger than 1. See
+                `this paper <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
             diversity_penalty (:obj:`float`, `optional`, defaults to 0.0):
                 This value is subtracted from a beam's score if it generates a token same as any beam from other group
                 at a particular time. Note that :obj:`diversity_penalty` is only effective if ``diverse beam search``
