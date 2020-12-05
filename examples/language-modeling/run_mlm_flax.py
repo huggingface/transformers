@@ -566,7 +566,10 @@ if __name__ == "__main__":
     ).create(model.params)
 
     # Create learning rate scheduler
-    lr_scheduler_fn = create_learning_rate_scheduler(base_learning_rate=training_args.learning_rate)
+    lr_scheduler_fn = create_learning_rate_scheduler(
+        base_learning_rate=training_args.learning_rate,
+        warmup_steps=training_args.warmup_step
+    )
 
     # Create parallel version of the training and evaluation steps
     p_training_step = jax.pmap(training_step, "batch", donate_argnums=(0,))
