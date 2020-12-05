@@ -15,6 +15,7 @@
 """PyTorch BART model, ported from the fairseq repo."""
 import math
 import random
+import warnings
 from typing import Dict, Optional, Tuple
 
 import numpy as np
@@ -114,7 +115,7 @@ def _expand_mask(
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
-def LayerNorm(normalized_shape: torch.Size, eps: float = 1e-5, elementwise_affine: bool = True):
+def BartLayerNorm(normalized_shape: torch.Size, eps: float = 1e-5, elementwise_affine: bool = True):
     if torch.cuda.is_available():
         try:
             from apex.normalization import FusedLayerNorm
@@ -125,7 +126,7 @@ def LayerNorm(normalized_shape: torch.Size, eps: float = 1e-5, elementwise_affin
     return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
 
 
-class LearnedPositionalEmbedding(nn.Embedding):
+class BartLearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size. Padding ids are ignored by either offsetting
     based on padding_idx or by setting padding_idx to None and ensuring that the appropriate position ids are passed to
@@ -323,13 +324,13 @@ class EncoderLayer(nn.Module):
             dropout=config.attention_dropout,
         )
         self.normalize_before = config.normalize_before
-        self.self_attn_layer_norm = LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = BartLayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
         self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = LayerNorm(self.embed_dim)
+        self.final_layer_norm = BartLayerNorm(self.embed_dim)
 
     def forward(
         self, hidden_states: torch.Tensor, encoder_padding_mask: torch.Tensor, output_attentions: bool = False
@@ -386,17 +387,17 @@ class DecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
         self.normalize_before = config.normalize_before
 
-        self.self_attn_layer_norm = LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = BartLayerNorm(self.embed_dim)
         self.encoder_attn = BartAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
         )
-        self.encoder_attn_layer_norm = LayerNorm(self.embed_dim)
+        self.encoder_attn_layer_norm = BartLayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = LayerNorm(self.embed_dim)
+        self.final_layer_norm = BartLayerNorm(self.embed_dim)
 
     def forward(
         self,
@@ -491,7 +492,7 @@ class BartClassificationHead(nn.Module):
         return hidden_states
 
 
-class PretrainedBartModel(PreTrainedModel):
+class BartPretrainedModel(PreTrainedModel):
     config_class = BartConfig
     base_model_prefix = "model"
 
@@ -517,6 +518,14 @@ class PretrainedBartModel(PreTrainedModel):
             "input_ids": input_ids,
         }
         return dummy_inputs
+
+
+class PretrainedBartModel(BartPretrainedModel):
+    def __init_subclass__(self):
+        warnings.warn(
+            "The class `PretrainedBartModel` has been depreciated, please use " "`BartPretrainedModel` instead.",
+            FutureWarning,
+        )
 
 
 BART_START_DOCSTRING = r"""
@@ -617,7 +626,7 @@ BART_INPUTS_DOCSTRING = r"""
 """
 
 
-class BartEncoder(PretrainedBartModel):
+class BartEncoder(BartPretrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
     :class:`EncoderLayer`.
@@ -644,16 +653,16 @@ class BartEncoder(PretrainedBartModel):
                 config.max_position_embeddings, embed_dim, self.padding_idx
             )
         else:
-            self.embed_positions = LearnedPositionalEmbedding(
+            self.embed_positions = BartLearnedPositionalEmbedding(
                 config.max_position_embeddings,
                 embed_dim,
                 self.padding_idx,
                 config.extra_pos_embeddings,
             )
         self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.layernorm_embedding = LayerNorm(embed_dim) if config.normalize_embedding else nn.Identity()
+        self.layernorm_embedding = BartLayerNorm(embed_dim) if config.normalize_embedding else nn.Identity()
         # mbart has one extra layer_norm
-        self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else None
+        self.layer_norm = BartLayerNorm(config.d_model) if config.add_final_layer_norm else None
 
         self.init_weights()
 
@@ -725,7 +734,7 @@ class BartEncoder(PretrainedBartModel):
         )
 
 
-class BartDecoder(PretrainedBartModel):
+class BartDecoder(BartPretrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`DecoderLayer`
 
@@ -748,15 +757,15 @@ class BartDecoder(PretrainedBartModel):
                 config.max_position_embeddings, config.d_model, config.pad_token_id
             )
         else:
-            self.embed_positions = LearnedPositionalEmbedding(
+            self.embed_positions = BartLearnedPositionalEmbedding(
                 config.max_position_embeddings,
                 config.d_model,
                 self.padding_idx,
                 config.extra_pos_embeddings,
             )
         self.layers = nn.ModuleList([DecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.layernorm_embedding = LayerNorm(config.d_model) if config.normalize_embedding else nn.Identity()
-        self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else None
+        self.layernorm_embedding = BartLayerNorm(config.d_model) if config.normalize_embedding else nn.Identity()
+        self.layer_norm = BartLayerNorm(config.d_model) if config.add_final_layer_norm else None
 
         self.init_weights()
 
@@ -902,7 +911,7 @@ class BartDecoder(PretrainedBartModel):
     "The bare BART Model outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
 )
-class BartModel(PretrainedBartModel):
+class BartModel(BartPretrainedModel):
     def __init__(self, config: BartConfig):
         super().__init__(config)
 
@@ -1014,7 +1023,7 @@ class BartModel(PretrainedBartModel):
 @add_start_docstrings(
     "The BART Model with a language modeling head. Can be used for summarization.", BART_START_DOCSTRING
 )
-class BartForConditionalGeneration(PretrainedBartModel):
+class BartForConditionalGeneration(BartPretrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
         r"final_logits_bias",
@@ -1189,7 +1198,7 @@ class BartForConditionalGeneration(PretrainedBartModel):
     """,
     BART_START_DOCSTRING,
 )
-class BartForSequenceClassification(PretrainedBartModel):
+class BartForSequenceClassification(BartPretrainedModel):
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = BartModel(config)
@@ -1289,7 +1298,7 @@ class BartForSequenceClassification(PretrainedBartModel):
     """,
     BART_START_DOCSTRING,
 )
-class BartForQuestionAnswering(PretrainedBartModel):
+class BartForQuestionAnswering(BartPretrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
