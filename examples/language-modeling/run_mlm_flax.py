@@ -19,38 +19,40 @@ text file or a dataset.
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
 https://huggingface.co/models?filter=masked-lm
 """
-# You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
-from pathlib import Path
-
-import jax
-import jax.numpy as jnp
 import logging
-import numpy as np
 import os
 import sys
 from dataclasses import dataclass, field
 
-from flax import jax_utils
-from flax.optim import Adam
-from typing import Optional, List, Dict, Tuple
+# You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
+import numpy as np
 from datasets import load_dataset
-from flax.training import common_utils
-from flax.training.common_utils import get_metrics, stack_forest
-from jax.nn import log_softmax
 from tqdm import tqdm
 
+import jax
+import jax.numpy as jnp
+from flax import jax_utils
+from flax.optim import Adam
+from flax.training import common_utils
+from flax.training.common_utils import get_metrics
+from jax.nn import log_softmax
 from transformers import (
     CONFIG_MAPPING,
     MODEL_FOR_MASKED_LM_MAPPING,
     AutoConfig,
-    FlaxBertForMaskedLM,
     AutoTokenizer,
+    FlaxBertForMaskedLM,
     HfArgumentParser,
+    PreTrainedTokenizerBase,
+    TensorType,
     TrainingArguments,
-    set_seed, PreTrainedTokenizerBase, TensorType,
-    is_tensorboard_available
+    is_tensorboard_available,
+    set_seed,
 )
+
 
 # Cache the result
 has_tensorboard = is_tensorboard_available()
@@ -82,7 +84,7 @@ class ModelArguments:
         default=None,
         metadata={
             "help": "The model checkpoint for weights initialization."
-                    "Don't set if you want to train a model from scratch."
+            "Don't set if you want to train a model from scratch."
         },
     )
     model_type: Optional[str] = field(
@@ -109,6 +111,7 @@ class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
+
     dataset_name: Optional[str] = field(
         default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
     )
@@ -135,7 +138,7 @@ class DataTrainingArguments:
         default=None,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
-                    "than this will be truncated. Default to the max input length of the model."
+            "than this will be truncated. Default to the max input length of the model."
         },
     )
     preprocessing_num_workers: Optional[int] = field(
@@ -149,7 +152,7 @@ class DataTrainingArguments:
         default=False,
         metadata={
             "help": "Whether to pad all samples to `max_seq_length`. "
-                    "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+            "If False, will pad the samples dynamically when batching to the maximum length in the batch."
         },
     )
 
@@ -219,14 +222,16 @@ class FlaxDataCollatorForLanguageModeling:
             batch["labels"] = labels
         return batch
 
-    def mask_tokens(self, inputs: np.ndarray, special_tokens_mask: Optional[np.ndarray]) -> Tuple[jnp.ndarray, jnp.ndarray]:
+    def mask_tokens(
+        self, inputs: np.ndarray, special_tokens_mask: Optional[np.ndarray]
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
         """
         labels = inputs.copy()
         # We sample a few tokens in each sequence for MLM training (with probability `self.mlm_probability`)
         probability_matrix = np.full(labels.shape, self.mlm_probability)
-        special_tokens_mask = special_tokens_mask.astype('bool')
+        special_tokens_mask = special_tokens_mask.astype("bool")
 
         probability_matrix[special_tokens_mask] = 0.0
         masked_indices = np.random.binomial(1, probability_matrix).astype("bool")
@@ -238,7 +243,7 @@ class FlaxDataCollatorForLanguageModeling:
 
         # 10% of the time, we replace masked input tokens with random word
         indices_random = np.random.binomial(1, np.full(labels.shape, 0.5)).astype("bool")
-        indices_random &= (masked_indices & ~indices_replaced)
+        indices_random &= masked_indices & ~indices_replaced
 
         random_words = np.random.randint(self.tokenizer.vocab_size, size=labels.shape, dtype="i4")
         inputs[indices_random] = random_words[indices_random]
@@ -248,12 +253,13 @@ class FlaxDataCollatorForLanguageModeling:
 
 
 def create_learning_rate_scheduler(
-        factors="constant * linear_warmup * rsqrt_decay",
-        base_learning_rate=0.5,
-        warmup_steps=1000,
-        decay_factor=0.5,
-        steps_per_decay=20000,
-        steps_per_cycle=100000):
+    factors="constant * linear_warmup * rsqrt_decay",
+    base_learning_rate=0.5,
+    warmup_steps=1000,
+    decay_factor=0.5,
+    steps_per_decay=20000,
+    steps_per_cycle=100000,
+):
     """Creates learning rate schedule.
     Interprets factors in the factors string which can consist of:
     * constant: interpreted as the constant value,
@@ -289,7 +295,7 @@ def create_learning_rate_scheduler(
                 ret *= jnp.sqrt(warmup_steps)
                 ret /= jnp.sqrt(jnp.maximum(step, warmup_steps))
             elif name == "decay_every":
-                ret *= (decay_factor**(step // steps_per_decay))
+                ret *= decay_factor ** (step // steps_per_decay)
             elif name == "cosine_decay":
                 progress = jnp.maximum(0.0, (step - warmup_steps) / float(steps_per_cycle))
                 ret *= jnp.maximum(0.0, 0.5 * (1.0 + jnp.cos(jnp.pi * (progress % 1.0))))
@@ -304,11 +310,7 @@ def compute_metrics(logits, labels, weights, label_smoothing=0.0):
     """Compute summary metrics."""
     loss, normalizer = cross_entropy(logits, labels, weights, label_smoothing)
     acc, _ = accuracy(logits, labels, weights)
-    metrics = {
-        "loss": loss,
-        "accuracy": acc,
-        "normalizer": normalizer
-    }
+    metrics = {"loss": loss, "accuracy": acc, "normalizer": normalizer}
     metrics = jax.lax.psum(metrics, axis_name="batch")
     return metrics
 
@@ -375,7 +377,7 @@ def training_step(optimizer, batch, dropout_rng):
         targets = batch.pop("labels")
 
         # Hide away tokens which doesn't participate in the optimization
-        token_mask = jnp.where(targets > 0, 1.0, 0.)
+        token_mask = jnp.where(targets > 0, 1.0, 0.0)
 
         pooled, logits = model(**batch, params=params, dropout_rng=dropout_rng, train=True)
         loss, weight_sum = cross_entropy(logits, targets, token_mask)
@@ -410,7 +412,7 @@ def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndar
 
     if samples_to_remove != 0:
         samples_idx = samples_idx[:-samples_to_remove]
-    sections_split = (nb_samples // batch_size)
+    sections_split = nb_samples // batch_size
     batch_idx = jnp.split(samples_idx, sections_split)
     return batch_idx
 
@@ -529,7 +531,7 @@ if __name__ == "__main__":
             return_special_tokens_mask=True,
             padding=padding,
             truncation=True,
-            max_length=data_args.max_seq_length
+            max_length=data_args.max_seq_length,
         )
 
     tokenized_datasets = datasets.map(
@@ -537,7 +539,7 @@ if __name__ == "__main__":
         batched=True,
         num_proc=data_args.preprocessing_num_workers,
         remove_columns=[text_column_name],
-        load_from_cache_file=not data_args.overwrite_cache
+        load_from_cache_file=not data_args.overwrite_cache,
     )
 
     # Enable tensorboard only on the master node
@@ -552,17 +554,15 @@ if __name__ == "__main__":
     rng = jax.random.PRNGKey(training_args.seed)
     dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
-    model = FlaxBertForMaskedLM.from_pretrained(
-        "bert-base-cased",
-        dtype=jnp.float32,
-        dropout_rate=0.1
-    )
+    model = FlaxBertForMaskedLM.from_pretrained("bert-base-cased", dtype=jnp.float32, dropout_rate=0.1)
     model.init(jax.random.PRNGKey(training_args.seed), (training_args.train_batch_size, model.config.max_length))
 
     # Setup optimizer
     optimizer = Adam(
         learning_rate=training_args.learning_rate,
-        weight_decay=training_args.weight_decay
+        weight_decay=training_args.weight_decay,
+        beta1=training_args.adam_beta1,
+        beta2=training_args.adam_beta2,
     ).create(model.params)
 
     # Create learning rate scheduler
@@ -622,10 +622,11 @@ if __name__ == "__main__":
         eval_summary = jax.tree_map(lambda x: x / eval_normalizer, eval_metrics_np)
 
         # Update progress bar
-        epochs.desc = f"Epoch... ({epoch + 1}/{nb_epochs} | Loss: {eval_summary['loss']}, Acc: {eval_summary['accuracy']})"
+        epochs.desc = (
+            f"Epoch... ({epoch + 1}/{nb_epochs} | Loss: {eval_summary['loss']}, Acc: {eval_summary['accuracy']})"
+        )
 
         # Save metrics
         if has_tensorboard and jax.host_id() == 0:
             for name, value in eval_summary.items():
                 summary_writer.scalar(name, value, epoch)
-
