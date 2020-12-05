@@ -83,7 +83,6 @@ class BlenderbotModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
         inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
-        inputs_dict["use_cache"] = False
         return self.config, inputs_dict
 
 
