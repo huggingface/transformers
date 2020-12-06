@@ -19,6 +19,7 @@ import unittest
 import copy
 
 import numpy as np
+import pandas as pd
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
@@ -440,43 +441,27 @@ class TapasModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
 
-def prepare_tapas_inputs_for_inference():
-    # Here we've prepared the following table-question pair to test TAPAS inference on:
-    # data = {'Footballer': ["Lionel Messi", "Cristiano Ronaldo"], 
-    #         'Age': ["33", "35"],
-    # }
-    # queries = "Which footballer is 33 years old?"
-    # table = pd.DataFrame.from_dict(data) 
-    
-    input_ids = torch.tensor([[101, 2029, 4362, 2003, 3943, 2086, 2214, 1029, 102, 4362,
-          2287, 14377, 6752, 2072, 3943, 13675, 2923, 15668, 8923,  2080, 3486]])
-    attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
-    token_type_ids = torch.tensor([[[0, 0, 0, 0, 0, 0, 0],
-                                    [0, 0, 0, 0, 0, 0, 0],
-                                    [0, 0, 0, 0, 0, 0, 0],
-                                    [0, 0, 0, 0, 0, 0, 0],
-                                    [0, 0, 0, 0, 0, 0, 0],
-                                    [0, 0, 0, 0, 0, 0, 0],
-                                    [0, 0, 0, 0, 0, 0, 0],
-                                    [0, 0, 0, 0, 0, 0, 0],
-                                    [0, 0, 0, 0, 0, 0, 0],
-                                    [1, 1, 0, 0, 0, 0, 0],
-                                    [1, 2, 0, 0, 0, 0, 0],
-                                    [1, 1, 1, 0, 0, 0, 0],
-                                    [1, 1, 1, 0, 0, 0, 0],
-                                    [1, 1, 1, 0, 0, 0, 0],
-                                    [1, 2, 1, 0, 1, 2, 1],
-                                    [1, 1, 2, 0, 0, 0, 0],
-                                    [1, 1, 2, 0, 0, 0, 0],
-                                    [1, 1, 2, 0, 0, 0, 0],
-                                    [1, 1, 2, 0, 0, 0, 0],
-                                    [1, 1, 2, 0, 0, 0, 0],
-                                    [1, 2, 2, 0, 2, 1, 2]]])
-    return {
-        "input_ids": input_ids,
-        "attention_mask": attention_mask,
-        "token_type_ids": token_type_ids
+def prepare_tapas_single_inputs_for_inference():
+    # Here we prepare a single table-question pair to test TAPAS on:
+    data = {'Footballer': ["Lionel Messi", "Cristiano Ronaldo"], 
+            'Age': ["33", "35"],
     }
+    queries = "Which footballer is 33 years old?"
+    table = pd.DataFrame.from_dict(data) 
+    
+    return table, queries
+
+
+def prepare_tapas_batch_inputs_for_inference():
+    # Here we prepare a batch of 2 table-question pairs to test TAPAS on:
+    data = {'Footballer': ["Lionel Messi", "Cristiano Ronaldo"], 
+        'Age': ["33", "35"],
+        'Number of goals': ["712", "750"]
+    }
+    queries = ["Which footballer is 33 years old?", "How many goals does Ronaldo have?"]
+    table = pd.DataFrame.from_dict(data)
+
+    return table, queries
 
 
 @require_torch
@@ -492,7 +477,9 @@ class TapasModelIntegrationTest(unittest.TestCase):
         # the weights of the WTQ base model (i.e. tapas_wtq_wikisql_sqa_inter_masklm_base_reset)
         model = TapasModel.from_pretrained("nielsr/tapas-base-finetuned-wtq")
 
-        inputs = prepare_tapas_inputs_for_inference()
+        tokenizer = default_tokenizer()
+        table, queries = prepare_tapas_single_inputs_for_inference()
+        inputs = tokenizer(table=table, queries=queries, return_tensors="pt")
         outputs = model(**inputs)
         # test the sequence output
         expected_slice = torch.tensor(
@@ -525,7 +512,9 @@ class TapasModelIntegrationTest(unittest.TestCase):
         # note that nielsr/tapas-base-finetuned-sqa should correspond to tapas_sqa_inter_masklm_base_reset
         model = TapasForQuestionAnswering.from_pretrained("nielsr/tapas-base-finetuned-sqa")
 
-        inputs = prepare_tapas_inputs_for_inference()
+        tokenizer = default_tokenizer()
+        table, queries = prepare_tapas_single_inputs_for_inference()
+        inputs = tokenizer(table=table, queries=queries, return_tensors="pt")
         outputs = model(**inputs)
         # test the logits
         logits = outputs.logits
@@ -543,36 +532,40 @@ class TapasModelIntegrationTest(unittest.TestCase):
         # note that nielsr/tapas-base-finetuned-wtq should correspond to tapas_wtq_wikisql_sqa_inter_masklm_base_reset
         model = TapasForQuestionAnswering.from_pretrained("nielsr/tapas-base-finetuned-wtq")
 
-        inputs = prepare_tapas_inputs_for_inference()
+        tokenizer = default_tokenizer()
+        # let's test on a batch 
+        table, queries = prepare_tapas_batch_inputs_for_inference()
+        inputs = tokenizer(table=table, queries=queries, padding="longest", return_tensors="pt")
         outputs = model(**inputs)
         # test the logits
         logits = outputs.logits
-        expected_shape = torch.Size((1, 21))
+        expected_shape = torch.Size((2, 28))
         self.assertEqual(logits.shape, expected_shape)
-        expected_slice = torch.tensor([[-10096.3633, -10096.3633, -10096.3633, -10096.3633, -10096.3633,
-                            -10096.3633, -10096.3633, -10096.3633, -10096.3633, -180.192322,
-                            -10080.2305, 157.994827, 157.994827, 157.994827, -10031.3721,
-                            -142.52597, -142.52597, -142.52597, -142.52597, -142.52597, -10065.7256]])  # ok 
+        expected_slice = torch.tensor([[-160.375504, -160.375504, -160.375504, -10072.3965, -10070.9414, -10094.9736],
+                                       [-9861.6123, -9861.6123, -9861.6123, -9861.6123, -9891.01172, 146.600677]]) # ok (batch size = 2)
 
-        self.assertTrue(torch.allclose(logits, expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(logits[:,-6:], expected_slice, atol=1e-4))
 
         # test the aggregation logits
         logits_aggregation = outputs.logits_aggregation
-        expected_shape = torch.Size((1, 4))
+        expected_shape = torch.Size((2, 4))
         self.assertEqual(logits_aggregation.shape, expected_shape)
-        expected_tensor = torch.tensor([[18.8111877 -9.91616917 -6.3120923 -2.97642279]]) # ok
+        expected_tensor = torch.tensor([[18.8545208, -9.76614857, -6.3128891, -2.93525243],
+                                        [-4.05782509, 40.0351, -5.35329962, 23.3978653]]) # ok (batch size = 2)
 
         self.assertTrue(torch.allclose(logits_aggregation, expected_tensor, atol=1e-4))
 
         tokenizer = default_tokenizer()
-        
+
 
     @slow
     def test_inference_question_answering_head_strong_supervision(self):
         # note that nielsr/tapas-base-finetuned-wikisql-supervised should correspond to tapas_wikisql_sqa_inter_masklm_base_reset
         model = TapasForQuestionAnswering.from_pretrained("nielsr/tapas-base-finetuned-wikisql-supervised")
 
-        inputs = prepare_tapas_inputs_for_inference()
+        tokenizer = default_tokenizer()
+        table, queries = prepare_tapas_single_inputs_for_inference()
+        inputs = tokenizer(table=table, queries=queries, return_tensors="pt")
         outputs = model(**inputs)
         # test the logits
         logits = outputs.logits
