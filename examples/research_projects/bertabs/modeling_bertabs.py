@@ -51,7 +51,7 @@ class BertAbs(BertAbsPreTrainedModel):
         self.bert = Bert()
 
         # If pre-trained weights are passed for Bert, load these.
-        load_bert_pretrained_extractive = bool(bert_extractive_checkpoint)
+        load_bert_pretrained_extractive = True if bert_extractive_checkpoint else False
         if load_bert_pretrained_extractive:
             self.bert.model.load_state_dict(
                 dict([(n[11:], p) for n, p in bert_extractive_checkpoint.items() if n.startswith("bert.model")]),
@@ -85,7 +85,7 @@ class BertAbs(BertAbsPreTrainedModel):
         self.generator = nn.Sequential(nn.Linear(args.dec_hidden_size, args.vocab_size), gen_func)
         self.generator[0].weight = self.decoder.embeddings.weight
 
-        load_from_checkpoints = not checkpoint is None
+        load_from_checkpoints = False if checkpoint is None else True
         if load_from_checkpoints:
             self.load_state_dict(checkpoint)
 

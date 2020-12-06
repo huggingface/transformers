@@ -256,8 +256,7 @@ def read_init():
 def create_dummy_object(name, type="pt"):
     """ Create the code for the dummy object corresponding to `name`."""
     _pretrained = [
-        "Config",
-        "ForCausalLM",
+        "Config" "ForCausalLM",
         "ForConditionalGeneration",
         "ForMaskedLM",
         "ForMultipleChoice",

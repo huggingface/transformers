@@ -56,6 +56,7 @@ from .file_utils import WEIGHTS_NAME, is_datasets_available, is_in_notebook, is_
 from .modeling_utils import PreTrainedModel
 from .models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from .optimization import AdamW, get_linear_schedule_with_warmup
+from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
     DefaultFlowCallback,
@@ -1555,7 +1556,7 @@ class Trainer:
         Returns:
             :obj:`torch.nn.modules.Module`: unwrapped module
         """
-        if isinstance(model, (torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel)):
+        if isinstance(model, torch.nn.DataParallel) or isinstance(model, torch.nn.parallel.DistributedDataParallel):
             model = model.module
         else:
             model = model
