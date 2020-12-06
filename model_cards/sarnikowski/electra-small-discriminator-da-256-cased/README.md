@@ -1,6 +1,6 @@
 ---
 language: da
-license: CC-BY-4.0
+license: cc-by-4.0
 ---
 
 # Danish ELECTRA small (cased)
