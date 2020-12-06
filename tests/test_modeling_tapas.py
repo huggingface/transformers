@@ -442,7 +442,7 @@ class TapasModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 def prepare_tapas_single_inputs_for_inference():
-    # Here we prepare a single table-question pair to test TAPAS on:
+    # Here we prepare a single table-question pair to test TAPAS inference on:
     data = {'Footballer': ["Lionel Messi", "Cristiano Ronaldo"], 
             'Age': ["33", "35"],
     }
@@ -453,7 +453,7 @@ def prepare_tapas_single_inputs_for_inference():
 
 
 def prepare_tapas_batch_inputs_for_inference():
-    # Here we prepare a batch of 2 table-question pairs to test TAPAS on:
+    # Here we prepare a batch of 2 table-question pairs to test TAPAS inference on:
     data = {'Footballer': ["Lionel Messi", "Cristiano Ronaldo"], 
         'Age': ["33", "35"],
         'Number of goals': ["712", "750"]
@@ -462,6 +462,22 @@ def prepare_tapas_batch_inputs_for_inference():
     table = pd.DataFrame.from_dict(data)
 
     return table, queries
+
+
+def prepare_tapas_batch_inputs_for_training():
+    # Here we prepare a DIFFERENT batch of 2 table-question pairs to test TAPAS training on:
+    data = {'Footballer': ["Lionel Messi", "Cristiano Ronaldo"], 
+        'Age': ["33", "35"],
+        'Number of goals': ["712", "750"]
+    }
+    queries = ["Which footballer is 33 years old?", "What's the total number of goals?"]
+    table = pd.DataFrame.from_dict(data)
+
+    answer_coordinates = [[(0, 0)], [(0, 2), (1, 2)]]
+    answer_text = [["Lionel Messi"], ["1462"]]
+    float_answer = [float("NaN"), float("1462")]
+
+    return table, queries, answer_coordinates, answer_text, float_answer
 
 
 @require_torch
@@ -557,6 +573,56 @@ class TapasModelIntegrationTest(unittest.TestCase):
 
         tokenizer = default_tokenizer()
 
+    @slow
+    def test_training_question_answering_head_weak_supervision(self):
+        # note that nielsr/tapas-base-finetuned-wtq should correspond to tapas_wtq_wikisql_sqa_inter_masklm_base_reset
+        model = TapasForQuestionAnswering.from_pretrained("nielsr/tapas-base-finetuned-wtq")
+        model.to(torch_device)
+
+        tokenizer = default_tokenizer()
+        # let's test on a batch 
+        table, queries, answer_coordinates, answer_text, float_answer = prepare_tapas_batch_inputs_for_training()
+        inputs = tokenizer(table=table, queries=queries, answer_coordinates=answer_coordinates,
+                                answer_text=answer_text, padding="longest", return_tensors="pt")
+        
+        # prepare data (created by the tokenizer) and move to torch_device
+        input_ids = inputs["input_ids"].to(torch_device)
+        attention_mask = inputs["attention_mask"].to(torch_device)
+        token_type_ids = inputs["token_type_ids"].to(torch_device)
+        label_ids = inputs["label_ids"].to(torch_device)
+        numeric_values = inputs["numeric_values"].to(torch_device)
+        numeric_values_scale = inputs["numeric_values_scale"].to(torch_device)
+
+        # the answer should be prepared by the user
+        float_answer = torch.FloatTensor(float_answer).to(torch_device)
+
+        # forward pass to get loss + logits:
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, label_ids=label_ids,
+                        numeric_values=numeric_values, numeric_values_scale=numeric_values_scale, 
+                        float_answer=float_answer)
+
+        # test the loss
+        loss = outputs.loss
+        expected_loss = 3.3527612686157227e-08 # ok
+        self.assertEqual(loss.item(), expected_loss, atol=1e-4)
+
+        # test the logits on the first example
+        logits = outputs.logits
+        expected_shape = torch.Size((2, 28))
+        self.assertEqual(logits.shape, expected_shape)
+        expected_slice = torch.tensor([-160.0156, -160.0156, -160.0156, -160.0156, -160.0156,
+                                        -10072.2266, -10070.8896, -10092.6006, -10092.6006]) # ok 
+
+        self.assertTrue(torch.allclose(logits[:,-9:], expected_slice, atol=1e-4))
+        
+
+        # test the aggregation logits on the second example
+        logits_aggregation = outputs.logits_aggregation
+        expected_shape = torch.Size((2, 4))
+        self.assertEqual(logits_aggregation.shape, expected_shape)
+        expected_slice = torch.tensor([-4.0538, 40.0304, -5.3554, 23.3965]) # ok
+
+        self.assertTrue(torch.allclose(logits_aggregation[1,-4:], expected_slice, atol=1e-4))
 
     @slow
     def test_inference_question_answering_head_strong_supervision(self):
