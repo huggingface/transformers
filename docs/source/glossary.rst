@@ -1,6 +1,11 @@
 Glossary
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+These definitions have also been put into a form which can be easily learnt/revised using `Anki <https://apps.ankiweb.net/>`_ a cross platform app specifically designed for long term knowledge retention.
+
+- `Introductory video on how to use the flashcards <https://www.youtube.com/watch?v=Dji_h7PILrw>`_
+- `Hugging Face Transformers Glossary Flashcards <https://www.darigovresearch.com/huggingface-transformers-glossary-flashcards>`_
+
 General terms
 -----------------------------------------------------------------------------------------------------------------------
 
