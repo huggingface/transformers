@@ -18,10 +18,10 @@
 from .configuration_utils import PretrainedConfig
 
 
-TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP = {"nielsr/tapas-base-finetuned-sqa": "https://huggingface.co/nielsr/tapas-base-finetuned-sqa/blob/main/config.json", 
-                                       "nielsr/tapas-base-finetuned-wtq": "https://huggingface.co/nielsr/tapas-base-finetuned-wtq/blob/main/config.json",
-                                       "nielsr/tapas-base-finetuned-wikisql-supervised": "https://huggingface.co/nielsr/tapas-base-finetuned-wikisql-supervised/blob/main/config.json",
-                                       "nielsr/tapas-base-finetuned-tabfact": "https://huggingface.co/nielsr/tapas-base-finetuned-tabfact/blob/main/config.json"}  
+TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP = {"nielsr/tapas-base-finetuned-sqa": "https://huggingface.co/nielsr/tapas-base-finetuned-sqa/resolve/main/config.json", 
+                                       "nielsr/tapas-base-finetuned-wtq": "https://huggingface.co/nielsr/tapas-base-finetuned-wtq/resolve/main/config.json",
+                                       "nielsr/tapas-base-finetuned-wikisql-supervised": "https://huggingface.co/nielsr/tapas-base-finetuned-wikisql-supervised/resolve/main/config.json",
+                                       "nielsr/tapas-base-finetuned-tabfact": "https://huggingface.co/nielsr/tapas-base-finetuned-tabfact/resolve/main/config.json"}  
 
 
 class TapasConfig(PretrainedConfig):

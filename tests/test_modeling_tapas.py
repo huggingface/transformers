@@ -21,6 +21,7 @@ import copy
 import numpy as np
 
 from transformers import is_torch_available
+from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -480,6 +481,10 @@ def prepare_tapas_inputs_for_inference():
 
 @require_torch
 class TapasModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_tokenizer(self):
+        return TapasTokenizer.from_pretrained("nielsr/tapas-base-finetuned-wtq")
+    
     @slow
     def test_inference_no_head(self):
         # ideally we want to test this with the weights of tapas_inter_masklm_base_reset,
@@ -559,6 +564,9 @@ class TapasModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(logits_aggregation, expected_tensor, atol=1e-4))
 
+        tokenizer = default_tokenizer()
+        
+
     @slow
     def test_inference_question_answering_head_strong_supervision(self):
         # note that nielsr/tapas-base-finetuned-wikisql-supervised should correspond to tapas_wikisql_sqa_inter_masklm_base_reset
@@ -601,9 +609,9 @@ class TapasModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(outputs.logits, expected_tensor, atol=1e-4))
 
-# Below: tests for Tapas utilities, based on segmented_tensor_test.py of the original implementation.
+# Below: tests for Tapas utilities which are defined in modeling_tapas.py.
+# These are based on segmented_tensor_test.py of the original implementation.
 # URL: https://github.com/google-research/tapas/blob/master/tapas/models/segmented_tensor_test.py
-# These test the operations on segmented tensors.
 class TapasUtilitiesTest(unittest.TestCase):
     def _prepare_tables(self):
         """Prepares two tables, both with three distinct rows.
