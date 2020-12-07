@@ -80,7 +80,6 @@ class MPNetEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
-    # Copied from transformers.modeling_roberta.RobertaEmbeddings.forward
     def forward(self, input_ids=None, position_ids=None, inputs_embeds=None, **kwargs):
         if position_ids is None:
             if input_ids is not None:
@@ -245,7 +244,7 @@ class MPNetAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.modeling_bert.BertIntermediate
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate
 class MPNetIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -261,7 +260,7 @@ class MPNetIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.modeling_bert.BertOutput
+# Copied from transformers.models.bert.modeling_bert.BertOutput
 class MPNetOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -647,7 +646,7 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
         )
 
 
-# Copied from transformers.modeling_roberta.RobertaLMHead
+# Copied from transformers.models.roberta.modeling_roberta.RobertaLMHead
 class MPNetLMHead(nn.Module):
     """MPNet Head for masked and permuted language modeling."""
 
@@ -939,7 +938,7 @@ class MPNetForTokenClassification(MPNetPreTrainedModel):
         )
 
 
-# Copied from transformers.modeling_roberta.MPNetClassificationHead
+# Copied from transformers.models.roberta.modeling_roberta.RobertaClassificationHead
 class MPNetClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 

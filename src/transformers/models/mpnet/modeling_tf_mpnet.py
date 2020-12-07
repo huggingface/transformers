@@ -323,7 +323,7 @@ class TFMPNetAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.modeling_tf_bert.TFBertIntermediate
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate
 class TFMPNetIntermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -344,7 +344,7 @@ class TFMPNetIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.modeling_tf_bert.TFBertOutput
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput
 class TFMPNetOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -444,7 +444,6 @@ class TFMPNetEncoder(tf.keras.layers.Layer):
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
 
-    # Copied from transformers.modeling_tf_t5.TFT5Attention
     @staticmethod
     def _relative_position_bucket(relative_position, num_buckets=32, max_distance=128):
         ret = 0
@@ -510,16 +509,16 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
         # The embeddings must be the last declaration in order to follow the weights order
         self.embeddings = TFMPNetEmbeddings(config, name="embeddings")
 
-    # Copied from transformers.modeling_tf_bert.TFBertMainLayer.get_input_embeddings
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.get_input_embeddings
     def get_input_embeddings(self):
         return self.embeddings
 
-    # Copied from transformers.modeling_tf_bert.TFBertMainLayer.set_input_embeddings
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.set_input_embeddings
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
         self.embeddings.vocab_size = value.shape[0]
 
-    # Copied from transformers.modeling_tf_bert.TFBertMainLayer._prune_heads
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer._prune_heads
     def _prune_heads(self, heads_to_prune):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
@@ -527,7 +526,7 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
-    # Copied from transformers.modeling_tf_bert.TFBertMainLayer.call
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.call
     def call(
         self,
         input_ids=None,
