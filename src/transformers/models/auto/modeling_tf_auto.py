@@ -111,6 +111,13 @@ from ..mobilebert.modeling_tf_mobilebert import (
     TFMobileBertForTokenClassification,
     TFMobileBertModel,
 )
+from ..mpnet.modeling_tf_mpnet import (
+    TFMPNetForMultipleChoice,
+    TFMPNetForQuestionAnswering,
+    TFMPNetForSequenceClassification,
+    TFMPNetForTokenClassification,
+    TFMPNetModel,
+)
 from ..mt5.modeling_tf_mt5 import TFMT5ForConditionalGeneration, TFMT5Model
 from ..openai.modeling_tf_openai import TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
 from ..pegasus.modeling_tf_pegasus import TFPegasusForConditionalGeneration
@@ -167,6 +174,7 @@ from .configuration_auto import (
     MarianConfig,
     MBartConfig,
     MobileBertConfig,
+    MPNetConfig,
     MT5Config,
     OpenAIGPTConfig,
     PegasusConfig,
