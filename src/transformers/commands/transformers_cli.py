@@ -5,6 +5,7 @@ from transformers.commands.add_new_model import AddNewModelCommand
 from transformers.commands.convert import ConvertCommand
 from transformers.commands.download import DownloadCommand
 from transformers.commands.env import EnvironmentCommand
+from transformers.commands.lfs import LfsCommands
 from transformers.commands.run import RunCommand
 from transformers.commands.serving import ServeCommand
 from transformers.commands.user import UserCommands
@@ -22,6 +23,7 @@ def main():
     ServeCommand.register_subcommand(commands_parser)
     UserCommands.register_subcommand(commands_parser)
     AddNewModelCommand.register_subcommand(commands_parser)
+    LfsCommands.register_subcommand(commands_parser)
 
     # Let's go
     args = parser.parse_args()
