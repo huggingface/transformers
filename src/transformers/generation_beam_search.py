@@ -288,7 +288,8 @@ class BeamSearchScorer(BeamScorer):
             if self._done[batch_idx]:
                 continue
 
-            # need to add best num_beams hypotheses to generated hyps
+            # all open beam hypotheses are added to the beam hypothesis
+            # beam hypothesis class automatically keeps the best beams
             for beam_id in range(self.num_beams):
                 batch_beam_idx = batch_idx * self.num_beams + beam_id
                 final_score = final_beam_scores[batch_beam_idx].item()
