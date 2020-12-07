@@ -15,12 +15,15 @@
 
 
 import os
+import shutil
+import subprocess
 import time
 import unittest
 
 import requests
 from requests.exceptions import HTTPError
 from transformers.hf_api import HfApi, HfFolder, ModelInfo, PresignedUrl, RepoObj, S3Obj
+from transformers.testing_utils import require_git_lfs
 
 
 USER = "__DUMMY_TRANSFORMERS_USER__"
@@ -35,8 +38,14 @@ FILES = [
         os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/empty.txt"),
     ),
 ]
-REPO_NAME = "my-model-{}".format(int(time.time()))
 ENDPOINT_STAGING = "https://moon-staging.huggingface.co"
+ENDPOINT_STAGING_BASIC_AUTH = f"https://{USER}:{PASS}@moon-staging.huggingface.co"
+
+REPO_NAME = "my-model-{}".format(int(time.time()))
+REPO_NAME_LARGE_FILE = "my-model-largefiles-{}".format(int(time.time()))
+WORKING_REPO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/working_repo")
+LARGE_FILE_14MB = "https://cdn-media.huggingface.co/lfs-largefiles/progit.epub"
+LARGE_FILE_18MB = "https://cdn-media.huggingface.co/lfs-largefiles/progit.pdf"
 
 
 class HfApiCommonTest(unittest.TestCase):
@@ -64,7 +73,7 @@ class HfApiEndpointsTest(HfApiCommonTest):
     @classmethod
     def tearDownClass(cls):
         for FILE_KEY, FILE_PATH in FILES:
-            cls._api.delete_obj(token=cls._token, filename=FILE_KEY)
+            cls._api.delete_obj(token=cls._token, filetype="datasets", filename=FILE_KEY)
 
     def test_whoami(self):
         user, orgs = self._api.whoami(token=self._token)
@@ -73,21 +82,27 @@ class HfApiEndpointsTest(HfApiCommonTest):
 
     def test_presign_invalid_org(self):
         with self.assertRaises(HTTPError):
-            _ = self._api.presign(token=self._token, filename="nested/fake_org.txt", organization="fake")
+            _ = self._api.presign(
+                token=self._token, filetype="datasets", filename="nested/fake_org.txt", organization="fake"
+            )
 
     def test_presign_valid_org(self):
-        urls = self._api.presign(token=self._token, filename="nested/valid_org.txt", organization="valid_org")
+        urls = self._api.presign(
+            token=self._token, filetype="datasets", filename="nested/valid_org.txt", organization="valid_org"
+        )
         self.assertIsInstance(urls, PresignedUrl)
 
     def test_presign(self):
         for FILE_KEY, FILE_PATH in FILES:
-            urls = self._api.presign(token=self._token, filename=FILE_KEY)
+            urls = self._api.presign(token=self._token, filetype="datasets", filename=FILE_KEY)
             self.assertIsInstance(urls, PresignedUrl)
             self.assertEqual(urls.type, "text/plain")
 
     def test_presign_and_upload(self):
         for FILE_KEY, FILE_PATH in FILES:
-            access_url = self._api.presign_and_upload(token=self._token, filename=FILE_KEY, filepath=FILE_PATH)
+            access_url = self._api.presign_and_upload(
+                token=self._token, filetype="datasets", filename=FILE_KEY, filepath=FILE_PATH
+            )
             self.assertIsInstance(access_url, str)
             with open(FILE_PATH, "r") as f:
                 body = f.read()
@@ -95,7 +110,7 @@ class HfApiEndpointsTest(HfApiCommonTest):
             self.assertEqual(r.text, body)
 
     def test_list_objs(self):
-        objs = self._api.list_objs(token=self._token)
+        objs = self._api.list_objs(token=self._token, filetype="datasets")
         self.assertIsInstance(objs, list)
         if len(objs) > 0:
             o = objs[-1]
@@ -108,7 +123,6 @@ class HfApiEndpointsTest(HfApiCommonTest):
             o = objs[-1]
             self.assertIsInstance(o, RepoObj)
 
-    @unittest.skip("Until @julien-c or @pierrci debugs")
     def test_create_and_delete_repo(self):
         self._api.create_repo(token=self._token, name=REPO_NAME)
         self._api.delete_repo(token=self._token, name=REPO_NAME)
@@ -140,3 +154,75 @@ class HfFolderTest(unittest.TestCase):
         # ^^ not an error, we test that the
         # second call does not fail.
         self.assertEqual(HfFolder.get_token(), None)
+
+
+@require_git_lfs
+class HfLargefilesTest(HfApiCommonTest):
+    @classmethod
+    def setUpClass(cls):
+        """
+        Share this valid token in all tests below.
+        """
+        cls._token = cls._api.login(username=USER, password=PASS)
+
+    def setUp(self):
+        try:
+            shutil.rmtree(WORKING_REPO_DIR)
+        except FileNotFoundError:
+            pass
+
+    def tearDown(self):
+        self._api.delete_repo(token=self._token, name=REPO_NAME_LARGE_FILE)
+
+    def setup_local_clone(self, REMOTE_URL):
+        REMOTE_URL_AUTH = REMOTE_URL.replace(ENDPOINT_STAGING, ENDPOINT_STAGING_BASIC_AUTH)
+        subprocess.run(["git", "clone", REMOTE_URL_AUTH, WORKING_REPO_DIR], check=True, capture_output=True)
+        subprocess.run(["git", "lfs", "track", "*.pdf"], check=True, cwd=WORKING_REPO_DIR)
+        subprocess.run(["git", "lfs", "track", "*.epub"], check=True, cwd=WORKING_REPO_DIR)
+
+    def test_end_to_end_thresh_6M(self):
+        REMOTE_URL = self._api.create_repo(
+            token=self._token, name=REPO_NAME_LARGE_FILE, lfsmultipartthresh=6 * 10 ** 6
+        )
+        self.setup_local_clone(REMOTE_URL)
+
+        subprocess.run(["wget", LARGE_FILE_18MB], check=True, capture_output=True, cwd=WORKING_REPO_DIR)
+        subprocess.run(["git", "add", "*"], check=True, cwd=WORKING_REPO_DIR)
+        subprocess.run(["git", "commit", "-m", "commit message"], check=True, cwd=WORKING_REPO_DIR)
+
+        # This will fail as we haven't set up our custom transfer agent yet.
+        failed_process = subprocess.run(["git", "push"], capture_output=True, cwd=WORKING_REPO_DIR)
+        self.assertEqual(failed_process.returncode, 1)
+        self.assertIn("transformers-cli lfs-enable-largefiles", failed_process.stderr.decode())
+        # ^ Instructions on how to fix this are included in the error message.
+
+        subprocess.run(["transformers-cli", "lfs-enable-largefiles", WORKING_REPO_DIR], check=True)
+
+        start_time = time.time()
+        subprocess.run(["git", "push"], check=True, cwd=WORKING_REPO_DIR)
+        print("took", time.time() - start_time)
+
+        # To be 100% sure, let's download the resolved file
+        pdf_url = f"{REMOTE_URL}/resolve/main/progit.pdf"
+        DEST_FILENAME = "uploaded.pdf"
+        subprocess.run(["wget", pdf_url, "-O", DEST_FILENAME], check=True, capture_output=True, cwd=WORKING_REPO_DIR)
+        dest_filesize = os.stat(os.path.join(WORKING_REPO_DIR, DEST_FILENAME)).st_size
+        self.assertEqual(dest_filesize, 18685041)
+
+    def test_end_to_end_thresh_16M(self):
+        # Here we'll push one multipart and one non-multipart file in the same commit, and see what happens
+        REMOTE_URL = self._api.create_repo(
+            token=self._token, name=REPO_NAME_LARGE_FILE, lfsmultipartthresh=16 * 10 ** 6
+        )
+        self.setup_local_clone(REMOTE_URL)
+
+        subprocess.run(["wget", LARGE_FILE_18MB], check=True, capture_output=True, cwd=WORKING_REPO_DIR)
+        subprocess.run(["wget", LARGE_FILE_14MB], check=True, capture_output=True, cwd=WORKING_REPO_DIR)
+        subprocess.run(["git", "add", "*"], check=True, cwd=WORKING_REPO_DIR)
+        subprocess.run(["git", "commit", "-m", "both files in same commit"], check=True, cwd=WORKING_REPO_DIR)
+
+        subprocess.run(["transformers-cli", "lfs-enable-largefiles", WORKING_REPO_DIR], check=True)
+
+        start_time = time.time()
+        subprocess.run(["git", "push"], check=True, cwd=WORKING_REPO_DIR)
+        print("took", time.time() - start_time)
