@@ -611,10 +611,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             base_model.set_input_embeddings(value)
         else:
             raise NotImplementedError
-    
+
     def get_output_embeddings(self) -> tf.keras.layers.Layer:
         """
-        Returns the model's output embeddings.
+        Returns the model's output embeddings
+
         Returns:
             :obj:`tf.keras.layers.Layer`: A torch module mapping hidden states to vocabulary.
         """
