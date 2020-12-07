@@ -29,6 +29,7 @@ if is_tf_available():
     from transformers.models.gpt2.modeling_tf_gpt2 import (
         TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFGPT2DoubleHeadsModel,
+        TFGPT2ForSequenceClassification,
         TFGPT2LMHeadModel,
         TFGPT2Model,
         shape_list,
@@ -65,6 +66,7 @@ class TFGPT2ModelTester:
         self.scope = None
         self.bos_token_id = self.vocab_size - 1
         self.eos_token_id = self.vocab_size - 1
+        self.pad_token_id = self.vocab_size - 1
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -104,6 +106,8 @@ class TFGPT2ModelTester:
             # initializer_range=self.initializer_range
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
+            pad_token_id=self.pad_token_id,
+            return_dict=True,
         )
 
         head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
@@ -271,6 +275,21 @@ class TFGPT2ModelTester:
         )
         self.parent.assertEqual(result.mc_logits.shape, (self.batch_size, self.num_choices))
 
+    def create_and_check_gpt2_for_sequence_classification(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, mc_token_ids, sequence_labels, *args
+    ):
+        config.num_labels = self.num_labels
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "token_type_ids": token_type_ids,
+            "labels": sequence_labels,
+        }
+        model = TFGPT2ForSequenceClassification(config)
+
+        result = model(inputs)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
 
@@ -297,7 +316,11 @@ class TFGPT2ModelTester:
 @require_tf
 class TFGPT2ModelTest(TFModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (TFGPT2Model, TFGPT2LMHeadModel, TFGPT2DoubleHeadsModel) if is_tf_available() else ()
+    all_model_classes = (
+        (TFGPT2Model, TFGPT2LMHeadModel, TFGPT2ForSequenceClassification, TFGPT2DoubleHeadsModel)
+        if is_tf_available()
+        else ()
+    )
     all_generative_model_classes = (TFGPT2LMHeadModel,) if is_tf_available() else ()
 
     def setUp(self):
@@ -330,6 +353,10 @@ class TFGPT2ModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_gpt2_double_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_double_head(*config_and_inputs)
+
+    def test_gpt2_sequence_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt2_for_sequence_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

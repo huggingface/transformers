@@ -768,6 +768,15 @@ class TFGPT2DoubleHeadsModel:
         requires_tf(self)
 
 
+class TFGPT2ForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
 class TFGPT2LMHeadModel:
     def __init__(self, *args, **kwargs):
         requires_tf(self)

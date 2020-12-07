@@ -89,7 +89,7 @@ from ..funnel.modeling_tf_funnel import (
     TFFunnelForTokenClassification,
     TFFunnelModel,
 )
-from ..gpt2.modeling_tf_gpt2 import TFGPT2LMHeadModel, TFGPT2Model
+from ..gpt2.modeling_tf_gpt2 import TFGPT2ForSequenceClassification, TFGPT2LMHeadModel, TFGPT2Model
 from ..longformer.modeling_tf_longformer import (
     TFLongformerForMaskedLM,
     TFLongformerForMultipleChoice,
@@ -326,6 +326,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (XLMConfig, TFXLMForSequenceClassification),
         (ElectraConfig, TFElectraForSequenceClassification),
         (FunnelConfig, TFFunnelForSequenceClassification),
+        (GPT2Config, TFGPT2ForSequenceClassification),
     ]
 )
 

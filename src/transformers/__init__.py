@@ -775,6 +775,7 @@ if is_tf_available():
     from .models.gpt2 import (
         TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFGPT2DoubleHeadsModel,
+        TFGPT2ForSequenceClassification,
         TFGPT2LMHeadModel,
         TFGPT2MainLayer,
         TFGPT2Model,
