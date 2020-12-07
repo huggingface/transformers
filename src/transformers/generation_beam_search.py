@@ -117,7 +117,7 @@ class BeamScorer(ABC):
 
 class BeamSearchScorer(BeamScorer):
     r"""
-    :class:`transformers.BeamScorer` implementing diverse beam search decoding.
+    :class:`transformers.BeamScorer` implementing standard beam search decoding.
 
     Adapted in part from `Facebook's XLM beam search code
     <https://github.com/facebookresearch/XLM/blob/9e6f6814d17be4fe5b15f2e6c43eb2b2d76daeb4/src/model/transformer.py#L529>`__.
@@ -127,7 +127,7 @@ class BeamSearchScorer(BeamScorer):
 
     Args:
         batch_size (:obj:`int`):
-            Batch Size of :obj:`input_ids` for which diverse beam search decoding is run in parallel.
+            Batch Size of :obj:`input_ids` for which standard beam search decoding is run in parallel.
         max_length (:obj:`int`):
             The maximum length of the sequence to be generated.
         num_beams (:obj:`int`):

@@ -118,11 +118,6 @@ class BeamSearchScorer:
         requires_pytorch(self)
 
 
-class GroupBeamScorer:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
 class LogitsProcessor:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
