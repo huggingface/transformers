@@ -20,7 +20,7 @@ import os
 import unicodedata
 from typing import List, Optional, Tuple
 
-from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
+from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace, _is_number
 from ...utils import logging
 
 
@@ -412,7 +412,14 @@ class BasicTokenizer(object):
                         token = self._run_strip_accents(token)
                 elif self.strip_accents:
                     token = self._run_strip_accents(token)
-            split_tokens.extend(self._run_split_on_punc(token, never_split))
+            # split on number before punctuation so the comma in number can be parsed meaningfully.
+            split_num_token, is_number_list = self._run_split_on_num(token)
+            for token, is_num in zip(split_num_token, is_number_list):
+                if not is_num:
+                    split_tokens.extend(self._run_split_on_punc(token))
+                else:
+                    split_tokens.append(token)
+
 
         output_tokens = whitespace_tokenize(" ".join(split_tokens))
         return output_tokens
@@ -449,6 +456,31 @@ class BasicTokenizer(object):
             i += 1
 
         return ["".join(x) for x in output]
+
+    def _run_split_on_num(self, text):
+        """Splits number after being split for whitespace."""
+        num_pos = [(i.start(0), i.end(0))
+                   for i in re.finditer('([\d,]+[\d]+(\.\d+)?)|[\d]', text)]
+        split_pos_list = []
+        is_number = []
+        if num_pos:
+            prev_iend = None
+            for istart, iend in num_pos:
+                if istart != prev_iend and prev_iend is not None:
+                    split_pos_list.append((prev_iend, istart))
+                    is_number.append(False)
+                prev_iend = iend
+                split_pos_list.append((istart, iend))
+                is_number.append(True)
+            if num_pos[0][0] != 0:
+                split_pos_list.insert(0, (0, num_pos[0][0]))
+                is_number.insert(0, False)
+            if num_pos[-1][1] != len(text):           
+                split_pos_list.append((num_pos[-1][1], len(text)))
+                is_number.append(False)
+            return [text[s: e] for s, e in split_pos_list], is_number
+        else:
+            return [text], [False]
 
     def _tokenize_chinese_chars(self, text):
         """Adds whitespace around any CJK character."""
@@ -526,6 +558,12 @@ class WordpieceTokenizer(object):
 
         output_tokens = []
         for token in whitespace_tokenize(text):
+            if _is_number(token):
+                output_tokens.extend(tokenize_number_with_position(token,
+                                                                   self.vocab,
+                                                                   self.unk_token))
+                continue
+
             chars = list(token)
             if len(chars) > self.max_input_chars_per_word:
                 output_tokens.append(self.unk_token)
@@ -556,3 +594,47 @@ class WordpieceTokenizer(object):
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
+
+def tokenize_number_with_position(text: str, 
+                                  vocab: collections.OrderedDict, 
+                                  unk_token: str) -> List[str]:
+    """tokenize number with respect to its position in numeral system"""
+    text_with_position = []
+    if '.' in text:
+        before_decimal = text[:text.index('.')]
+        after_decimal = text[text.index('.'):]
+    else:
+        before_decimal = text
+        after_decimal = []
+
+    before_decimal_digit_len = len([i for i in before_decimal if i.isdigit()]) - 1
+    text_with_position += _infuse_number_with_position(before_decimal,
+                                                       vocab,
+                                                       unk_token,
+                                                       before_decimal_digit_len)
+
+    after_decimal_place = -1
+    text_with_position += _infuse_number_with_position(after_decimal,
+                                                       vocab,
+                                                       unk_token,
+                                                       after_decimal_place)
+    return text_with_position
+
+
+def _infuse_number_with_position(text: List[str],
+                                 vocab: collections.OrderedDict,
+                                 unk_token: str,
+                                 start_idx: int) -> List[str]:
+    text_with_position = []
+    for c in text:
+        if c.isdigit():
+            token = f'{c}@{start_idx}'
+            start_idx -= 1
+        else:
+            token = c
+
+        if token in vocab:
+            text_with_position.append(token)
+        else:
+            text_with_position.append(unk_token)
+    return text_with_position

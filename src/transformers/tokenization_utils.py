@@ -100,7 +100,12 @@ def _is_start_of_word(text):
     first_char = text[0]
     return bool(_is_control(first_char) | _is_punctuation(first_char) | _is_whitespace(first_char))
 
-
+def _is_number(text: str) -> bool:
+    """Checks whether a string is a number."""
+    if text in [',', '.']:
+        return False
+    return all([c.isdigit() or c in [',', '.'] for c in text])
+    
 @add_end_docstrings(INIT_TOKENIZER_DOCSTRING, """    .. automethod:: __call__""")
 class PreTrainedTokenizer(PreTrainedTokenizerBase):
     """
