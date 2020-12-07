@@ -102,8 +102,8 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
     )
-    block_size: int = field(
-        default=-1,
+    block_size: Optional[int] = field(
+        default=None,
         metadata={
             "help": "Optional input sequence length after tokenization."
             "The training dataset will be truncated in block of this size for training."
@@ -261,8 +261,14 @@ def main():
         load_from_cache_file=not data_args.overwrite_cache,
     )
 
-    if data_args.block_size <= 0:
+    if data_args.block_size is None:
         block_size = tokenizer.model_max_length
+        if block_size > 1024:
+            logger.warn(
+                f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
+                "Picking 1024 instead. You can change that default value by passing --block_size xxx."
+            )
+        block_size = 1024
     else:
         if data_args.block_size > tokenizer.model_max_length:
             logger.warn(
