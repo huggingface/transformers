@@ -294,7 +294,7 @@ if is_torch_available():
         TextDataset,
         TextDatasetForNextSentencePrediction,
     )
-    from .generation_beam_search import BeamScorer, BeamSearchScorer, GroupBeamScorer
+    from .generation_beam_search import BeamScorer, BeamSearchScorer
     from .generation_logits_process import (
         LogitsProcessor,
         LogitsProcessorList,

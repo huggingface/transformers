@@ -24,7 +24,7 @@ if is_torch_available():
     import torch
 
     from transformers import BartForConditionalGeneration, BartTokenizer, top_k_top_p_filtering
-    from transformers.generation_beam_search import BeamSearchScorer, GroupBeamScorer
+    from transformers.generation_beam_search import BeamSearchScorer
     from transformers.generation_logits_process import (
         HammingDiversityLogitsProcessor,
         LogitsProcessorList,
@@ -133,15 +133,15 @@ class GenerationTesterMixin:
             "num_beam_groups": 2,  # one beam per group
             "diversity_penalty": 2.0,
         }
-        beam_scorer = GroupBeamScorer(
+        beam_scorer = BeamSearchScorer(
             batch_size=batch_size,
             max_length=max_length,
             num_beams=beam_kwargs["num_beams"],
-            num_beam_groups=beam_kwargs["num_beam_groups"],
             device=torch_device,
             length_penalty=beam_kwargs["length_penalty"],
             do_early_stopping=beam_kwargs["early_stopping"],
             num_beam_hyps_to_keep=num_return_sequences,
+            num_beam_groups=beam_kwargs["num_beam_groups"],
         )
         return beam_kwargs, beam_scorer
 
