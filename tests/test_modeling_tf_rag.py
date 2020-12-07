@@ -1,24 +1,20 @@
 import unittest
 
-
 from transformers.file_utils import cached_property, is_datasets_available, is_faiss_available, is_tf_available
-from transformers.testing_utils import (
-    require_sentencepiece,
-    require_tokenizers,
-    require_tf,
-    slow,
-)
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+
 
 if is_tf_available() and is_datasets_available() and is_faiss_available():
     import tensorflow as tf
+
     from transformers import (
         AutoConfig,
         BartTokenizer,
         DPRQuestionEncoderTokenizer,
         RagConfig,
         RagRetriever,
-        TFRagTokenForGeneration,
         RagTokenizer,
+        TFRagTokenForGeneration,
     )
 
 
@@ -42,10 +38,8 @@ def require_retrieval(test_case):
 class TFRagModelIntegrationTests(unittest.TestCase):
     @cached_property
     def token_model(self):
-        return (
-            TFRagTokenForGeneration.from_pretrained_question_encoder_generator(
-                "facebook/dpr-question_encoder-single-nq-base", "facebook/bart-large-cnn"
-            )
+        return TFRagTokenForGeneration.from_pretrained_question_encoder_generator(
+            "facebook/dpr-question_encoder-single-nq-base", "facebook/bart-large-cnn"
         )
 
     def get_rag_config(self):
@@ -99,12 +93,16 @@ class TFRagModelIntegrationTests(unittest.TestCase):
             labels=decoder_input_ids,
         )
 
-        expected_shape = tf.Size([5, 5, 50264])
+        expected_shape = tf.TensorShape([5, 5, 50264])
         self.assertEqual(output.logits.shape, expected_shape)
 
         expected_doc_scores = tf.convert_to_tensor([[75.0286, 74.4998, 74.0804, 74.0306, 73.9504]])
         expected_loss = tf.convert_to_tensor([36.3557])
 
+        tf.debugging.assert_near(output.loss, expected_loss, atol=1e-3)
+        tf.debugging.assert_near(output.doc_scores, expected_doc_scores, atol=1e-3)
+
+    @property
     def test_data_questions(self):
         return [
             "who got the first nobel prize in physics",
@@ -128,11 +126,11 @@ class TFRagModelIntegrationTests(unittest.TestCase):
     def test_rag_token_generate_batch(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
         retriever = RagRetriever.from_pretrained("facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True)
-        rag_token = TFRagTokenForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever)
+        rag_token = TFRagTokenForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever, from_pt=True)
 
         input_dict = tokenizer(
             self.test_data_questions,
-            return_tensors="pt",
+            return_tensors="tf",
             padding=True,
             truncation=True,
         )
