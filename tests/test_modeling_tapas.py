@@ -569,8 +569,6 @@ class TapasModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([[-160.375504, -160.375504, -160.375504, -10072.3965, -10070.9414, -10094.9736],
                                        [-9861.6123, -9861.6123, -9861.6123, -9861.6123, -9891.01172, 146.600677]],
                                        device=torch_device) # ok (batch size = 2)
-
-        print(logits[:, -6:])
         
         self.assertTrue(torch.allclose(logits[:,-6:], expected_slice, atol=TOLERANCE))
 
