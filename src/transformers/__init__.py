@@ -18,8 +18,10 @@ else:
     absl.logging._warn_preinit_stderr = False
 
 from . import dependency_versions_check
+
 # Configuration
 from .configuration_utils import PretrainedConfig
+
 # Data
 from .data import (
     DataProcessor,
@@ -41,6 +43,7 @@ from .data import (
     xnli_processors,
     xnli_tasks_num_labels,
 )
+
 # Files and general utilities
 from .file_utils import (
     CONFIG_NAME,
@@ -69,8 +72,10 @@ from .file_utils import (
     is_torch_tpu_available,
 )
 from .hf_argparser import HfArgumentParser
+
 # Model Cards
 from .modelcard import ModelCard
+
 # TF 2.0 <=> PyTorch conversion utilities
 from .modeling_tf_pytorch_utils import (
     convert_tf_weight_name_to_pt_weight_name,
@@ -154,6 +159,7 @@ from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokeniz
 from .models.xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
 from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
 from .models.xlnet import XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLNetConfig
+
 # Pipelines
 from .pipelines import (
     Conversation,
@@ -176,6 +182,7 @@ from .pipelines import (
     ZeroShotClassificationPipeline,
     pipeline,
 )
+
 # Tokenization
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import (
@@ -187,6 +194,7 @@ from .tokenization_utils_base import (
     TensorType,
     TokenSpan,
 )
+
 # Trainer
 from .trainer_callback import (
     DefaultFlowCallback,
@@ -261,7 +269,6 @@ if is_tokenizers_available():
         from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
 else:
     from .utils.dummy_tokenizers_objects import *
-
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
