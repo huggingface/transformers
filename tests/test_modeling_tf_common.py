@@ -542,7 +542,6 @@ class TFModelTesterMixin:
             inputs_dict["use_cache"] = False
             config.output_hidden_states = False
             model = model_class(config)
-            print(self._prepare_for_class(inputs_dict, model_class))
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
             out_len = len(outputs)
             self.assertEqual(config.output_hidden_states, False)
