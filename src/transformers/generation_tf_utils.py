@@ -45,19 +45,6 @@ class TFGenerationMixin:
             return False
         return True
 
-    def is_lm_model(self):
-        from .models.auto import (
-            TF_MODEL_FOR_CAUSAL_LM_MAPPING,
-            TF_MODEL_FOR_MASKED_LM_MAPPING,
-            TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-        )
-
-        list_models = list(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.values())
-        list_models.extend(list(TF_MODEL_FOR_CAUSAL_LM_MAPPING.values()))
-        list_models.extend(list(TF_MODEL_FOR_MASKED_LM_MAPPING.values()))
-
-        return (type(self) in list_models, [model.__name__ for model in list_models])
-
     def generate(
         self,
         input_ids=None,
@@ -198,10 +185,10 @@ class TFGenerationMixin:
         """
 
         # We cannot generate if the model does not have a LM head
-        is_lm, list_models = self.is_lm_model()
-        if not is_lm:
+        if self.get_output_embeddings() is None:
             raise AttributeError(
-                f"You tried to generate sequences with a model that does not have a LM Head. Please use a model class that belongs to {list_models}."
+                "You tried to generate sequences with a model that does not have a LM Head."
+                "Please use another model class (e.g. `TFOpenAIGPTLMHeadModel`, `TFXLNetLMHeadModel`, `TFGPT2LMHeadModel`, `TFCTRLLMHeadModel`, `TFT5ForConditionalGeneration`, `TFTransfoXLLMHeadModel`)"
             )
 
         max_length = max_length if max_length is not None else self.config.max_length

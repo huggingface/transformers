@@ -626,6 +626,9 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
 
         self.lm_head = TFCTRLLMHead(config, self.transformer.w, name="lm_head")
 
+    def get_output_embeddings(self):
+        return self.lm_head.input_embeddings
+
     def get_output_layer_with_bias(self):
         return self.lm_head
 

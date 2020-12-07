@@ -807,6 +807,9 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
         self.roberta = TFRobertaMainLayer(config, add_pooling_layer=False, name="roberta")
         self.lm_head = TFRobertaLMHead(config, self.roberta.embeddings, name="lm_head")
 
+    def get_output_embeddings(self):
+        return self.lm_head.decoder
+
     def get_output_layer_with_bias(self):
         return self.lm_head
 

@@ -823,6 +823,9 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
         self.predictions = TFAlbertMLMHead(config, self.albert.embeddings, name="predictions")
         self.sop_classifier = TFAlbertSOPHead(config, name="sop_classifier")
 
+    def get_output_embeddings(self):
+        return self.albert.embeddings
+
     def resize_token_embeddings(self, new_num_tokens):
         super().resize_token_embeddings(new_num_tokens=new_num_tokens)
 
@@ -953,6 +956,9 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
 
         self.albert = TFAlbertMainLayer(config, add_pooling_layer=False, name="albert")
         self.predictions = TFAlbertMLMHead(config, self.albert.embeddings, name="predictions")
+
+    def get_output_embeddings(self):
+        return self.albert.embeddings
 
     def resize_token_embeddings(self, new_num_tokens):
         super().resize_token_embeddings(new_num_tokens=new_num_tokens)

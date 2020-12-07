@@ -652,6 +652,9 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         self.vocab_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="vocab_layer_norm")
         self.vocab_projector = TFDistilBertLMHead(config, self.distilbert.embeddings, name="vocab_projector")
 
+    def get_output_embeddings(self):
+        return self.vocab_projector.input_embeddings
+
     def get_output_layer_with_bias(self):
         return self.vocab_projector
 

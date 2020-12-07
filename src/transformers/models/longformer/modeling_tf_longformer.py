@@ -2006,6 +2006,9 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
         self.longformer = TFLongformerMainLayer(config, add_pooling_layer=False, name="longformer")
         self.lm_head = TFLongformerLMHead(config, self.longformer.embeddings, name="lm_head")
 
+    def get_output_embeddings(self):
+        return self.lm_head.decoder
+
     def get_output_layer_with_bias(self):
         return self.lm_head
 

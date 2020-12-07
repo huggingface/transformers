@@ -1218,6 +1218,9 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         self.transformer = TFXLNetMainLayer(config, name="transformer")
         self.lm_loss = TFXLNetLMHead(config, self.transformer.word_embedding, name="lm_loss")
 
+    def get_output_embeddings(self):
+        return self.lm_loss.input_embeddings
+
     def get_output_layer_with_bias(self):
         return self.lm_loss
 

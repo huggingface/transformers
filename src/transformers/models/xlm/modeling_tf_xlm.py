@@ -800,6 +800,9 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         self.transformer = TFXLMMainLayer(config, name="transformer")
         self.pred_layer = TFXLMPredLayer(config, self.transformer.embeddings, name="pred_layer_._proj")
 
+    def get_output_embeddings(self):
+        return self.pred_layer.input_embeddings
+
     def get_output_layer_with_bias(self):
         return self.pred_layer
 
