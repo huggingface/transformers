@@ -20,7 +20,7 @@ import torch
 from torch.nn import functional as F
 
 from .file_utils import ModelOutput
-from .generation_beam_search import BeamScorer, BeamSearchScorer, DiverseBeamSearchScorer
+from .generation_beam_search import BeamScorer, BeamSearchScorer, GroupBeamScorer
 from .generation_logits_process import (
     LogitsProcessorList,
     MinLengthLogitsProcessor,
@@ -506,10 +506,10 @@ class GenerationMixin:
         is_sample_gen_mode = (num_beams == 1) and (beam_groups == 1) and do_sample is True
         is_beam_gen_mode = (num_beams > 1) and (beam_groups == 1) and do_sample is False
         is_beam_sample_gen_mode = (num_beams > 1) and (beam_groups == 1) and do_sample is True
-        is_diverse_beam_gen_mode = (num_beams > 1) and (beam_groups > 1)
+        is_group_beam_gen_mode = (num_beams > 1) and (beam_groups > 1)
         if beam_groups > num_beams:
             raise ValueError("`beam_groups` has to be smaller or equal to `num_beams`")
-        if is_diverse_beam_gen_mode and do_sample is True:
+        if is_group_beam_gen_mode and do_sample is True:
             raise ValueError(
                 "Diverse beam search cannot be used in sampling mode. Make sure that `do_sample` is set to `False`."
             )
@@ -637,7 +637,7 @@ class GenerationMixin:
                 **model_kwargs,
             )
 
-        elif is_diverse_beam_gen_mode:
+        elif is_group_beam_gen_mode:
             batch_size = input_ids.shape[0]
 
             length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
@@ -649,7 +649,7 @@ class GenerationMixin:
             if num_beams % beam_groups != 0:
                 raise ValueError("`num_beams` should be divisible by `beam_groups` for diverse beam search.")
 
-            diverse_beam_scorer = DiverseBeamSearchScorer(
+            diverse_beam_scorer = GroupBeamScorer(
                 batch_size=batch_size,
                 max_length=max_length,
                 num_beams=num_beams,
@@ -663,7 +663,7 @@ class GenerationMixin:
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids, expand_size=num_beams, is_encoder_decoder=self.config.is_encoder_decoder, **model_kwargs
             )
-            return self.diverse_beam_search(
+            return self.group_beam_search(
                 input_ids,
                 diversity_penalty,
                 diverse_beam_scorer,
@@ -1263,7 +1263,7 @@ class GenerationMixin:
 
         return decoded
 
-    def diverse_beam_search(
+    def group_beam_search(
         self,
         input_ids: torch.LongTensor,
         diversity_penalty: float,
@@ -1315,7 +1315,7 @@ class GenerationMixin:
             ...    AutoModelForSeq2SeqLM,
             ...    LogitsProcessorList,
             ...    MinLengthLogitsProcessor,
-            ...    DiverseBeamSearchScorer,
+            ...    GroupBeamScorer,
             ... )
             >>> import torch
 
@@ -1338,7 +1338,7 @@ class GenerationMixin:
             ... }
 
             >>> # instantiate beam scorer
-            >>> beam_scorer = DiverseBeamSearchScorer(
+            >>> beam_scorer = GroupBeamScorer(
             ...     batch_size=1,
             ...     max_length=model.config.max_length,
             ...     num_beams=num_beams,
@@ -1351,7 +1351,7 @@ class GenerationMixin:
             ...     MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id),
             ... ])
 
-            >>> outputs = model.diverse_beam_search(input_ids, 5.5, beam_scorer, logits_processor=logits_processor, **model_kwargs)
+            >>> outputs = model.group_beam_search(input_ids, 5.5, beam_scorer, logits_processor=logits_processor, **model_kwargs)
 
             >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         """

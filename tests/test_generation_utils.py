@@ -24,7 +24,7 @@ if is_torch_available():
     import torch
 
     from transformers import BartForConditionalGeneration, BartTokenizer, top_k_top_p_filtering
-    from transformers.generation_beam_search import BeamSearchScorer, DiverseBeamSearchScorer
+    from transformers.generation_beam_search import BeamSearchScorer, GroupBeamScorer
     from transformers.generation_logits_process import (
         LogitsProcessorList,
         MinLengthLogitsProcessor,
@@ -125,7 +125,7 @@ class GenerationTesterMixin:
             "beam_groups": 2,  # one beam per group
             "diversity_penalty": 1.0,
         }
-        beam_scorer = DiverseBeamSearchScorer(
+        beam_scorer = GroupBeamScorer(
             batch_size=batch_size,
             max_length=max_length,
             num_beams=beam_kwargs["num_beams"],
@@ -430,7 +430,7 @@ class GenerationTesterMixin:
 
                 self.assertIsNotNone(output_ids_generate)
 
-    def test_diverse_beam_search_generate(self):
+    def test_group_beam_search_generate(self):
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
 
@@ -441,7 +441,7 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device)
             model.eval()
 
-            # check `generate()` and `diverse_beam_search()` are equal
+            # check `generate()` and `group_beam_search()` are equal
             if model.config.is_encoder_decoder:
                 max_length = 4
             beam_kwargs, beam_scorer = self._get_diverse_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
@@ -454,7 +454,7 @@ class GenerationTesterMixin:
                 **logits_process_kwargs,
             )
 
-            # diverse_beam_search does not automatically interleave `batch_size` dim for `num_beams`
+            # group_beam_search does not automatically interleave `batch_size` dim for `num_beams`
             kwargs = {}
             if model.config.is_encoder_decoder:
                 encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
@@ -467,7 +467,7 @@ class GenerationTesterMixin:
                 input_ids_clone = input_ids.repeat_interleave(beam_scorer.num_beams, dim=0)
 
             with torch.no_grad():
-                output_ids_diverse_beam_search = model.diverse_beam_search(
+                output_ids_group_beam_search = model.group_beam_search(
                     input_ids_clone,
                     beam_kwargs["diversity_penalty"],
                     beam_scorer,
@@ -476,9 +476,9 @@ class GenerationTesterMixin:
                     logits_processor=logits_processor,
                     **kwargs,
                 )
-            self.assertListEqual(output_ids_generate.tolist(), output_ids_diverse_beam_search.tolist())
+            self.assertListEqual(output_ids_generate.tolist(), output_ids_group_beam_search.tolist())
 
-            # check `generate()` and `diverse_beam_search()` are equal for `num_return_sequences`
+            # check `generate()` and `group_beam_search()` are equal for `num_return_sequences`
             num_return_sequences = 2
             if model.config.is_encoder_decoder:
                 max_length = 4
@@ -494,7 +494,7 @@ class GenerationTesterMixin:
                 **beam_kwargs,
                 **logits_process_kwargs,
             )
-            # diverse_beam_search does not automatically interleave `batch_size` dim for `num_beams`
+            # group_beam_search does not automatically interleave `batch_size` dim for `num_beams`
             kwargs = {}
             if model.config.is_encoder_decoder:
                 encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
@@ -507,7 +507,7 @@ class GenerationTesterMixin:
                 input_ids_clone = input_ids.repeat_interleave(beam_scorer.num_beams, dim=0)
 
             with torch.no_grad():
-                output_ids_beam_search = model.diverse_beam_search(
+                output_ids_beam_search = model.group_beam_search(
                     input_ids_clone,
                     beam_kwargs["diversity_penalty"],
                     beam_scorer,

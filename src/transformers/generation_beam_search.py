@@ -309,7 +309,7 @@ class BeamSearchScorer(BeamScorer):
         return decoded
 
 
-class DiverseBeamSearchScorer(BeamScorer):
+class GroupBeamScorer(BeamScorer):
     r"""
     :class:`transformers.BeamScorer` implementing diverse beam search decoding.
 
