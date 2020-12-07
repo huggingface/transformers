@@ -527,10 +527,10 @@ Pegasus
 <https://arxiv.org/pdf/1912.08777.pdf>`_, Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu on Dec 18, 2019.
 
 Sequence-to-sequence model with the same encoder-decoder model architecture as BART. Pegasus is pre-trained jointly on
-two self-supervised objective functions: Masked Language Modeling (MLM) and a novel summarization specific pre-training
+two self-supervised objective functions: Masked Language Modeling (MLM) and a novel summarization specific pretraining
 objective, called Gap Sentence Generation (GSG).
 
-  * MLM: encoder input tokens are randomely replaced by a mask tokens and have to be predicted by the encoder (like in
+  * MLM: encoder input tokens are randomly replaced by a mask tokens and have to be predicted by the encoder (like in
     BERT)
   * GSG: whole encoder input sentences are replaced by a second mask token and fed to the decoder, but which has a
     causal mask to hide the future words like a regular auto-regressive transformer decoder.
@@ -609,7 +609,7 @@ MT5
 `mT5: A massively multilingual pre-trained text-to-text transformer <https://arxiv.org/abs/2010.11934>`_, Linting Xue
 et al.
 
-The model architecture is same as T5. mT5's pre-training objective includes T5's self-supervised training, but not T5's
+The model architecture is same as T5. mT5's pretraining objective includes T5's self-supervised training, but not T5's
 supervised training. mT5 is trained on 101 languages.
 
 The library provides a version of this model for conditional generation.
@@ -630,8 +630,8 @@ MBart
 `Multilingual Denoising Pre-training for Neural Machine Translation <https://arxiv.org/abs/2001.08210>`_ by Yinhan Liu,
 Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.
 
-The model architecture and pre-training objective is same as BART, but MBart is trained on 25 languages and is intended
-for supervised and unsupervised machine translation. MBart is one of the first methods for pre-training a complete
+The model architecture and pretraining objective is same as BART, but MBart is trained on 25 languages and is intended
+for supervised and unsupervised machine translation. MBart is one of the first methods for pretraining a complete
 sequence-to-sequence model by denoising full texts in multiple languages,
 
 The library provides a version of this model for conditional generation.
@@ -658,7 +658,7 @@ ProphetNet
 `ProphetNet: Predicting Future N-gram for Sequence-to-Sequence Pre-training, <https://arxiv.org/abs/2001.04063>`__ by
 Yu Yan, Weizhen Qi, Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang, Ming Zhou.
 
-ProphetNet introduces a novel *sequence-to-sequence* pre-training objective, called *future n-gram prediction*. In
+ProphetNet introduces a novel *sequence-to-sequence* pretraining objective, called *future n-gram prediction*. In
 future n-gram prediction, the model predicts the next n tokens simultaneously based on previous context tokens at each
 time step instead instead of just the single next token. The future n-gram prediction explicitly encourages the model
 to plan for the future tokens and prevent overfitting on strong local correlations. The model architecture is based on
@@ -683,8 +683,8 @@ XLM-ProphetNet
 `ProphetNet: Predicting Future N-gram for Sequence-to-Sequence Pre-training, <https://arxiv.org/abs/2001.04063>`__ by
 Yu Yan, Weizhen Qi, Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang, Ming Zhou.
 
-XLM-ProphetNet's model architecture and pre-training objective is same as ProphetNet, but XLM-ProphetNet was
-pre-trained on the cross-lingual dataset `XGLUE <https://arxiv.org/abs/2004.01401>`__.
+XLM-ProphetNet's model architecture and pretraining objective is same as ProphetNet, but XLM-ProphetNet was pre-trained
+on the cross-lingual dataset `XGLUE <https://arxiv.org/abs/2004.01401>`__.
 
 The library provides a pre-trained version of this model for multi-lingual conditional generation and fine-tuned
 versions for headline generation and question generation, respectively.

@@ -68,6 +68,7 @@ class ModelTesterMixin:
     test_resize_embeddings = True
     test_head_masking = True
     test_missing_keys = True
+    test_model_parallel = False
     is_encoder_decoder = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -134,17 +135,17 @@ class ModelTesterMixin:
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    def test_save_load_keys_to_never_save(self):
+    def test_save_load__keys_to_ignore_on_save(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            keys_to_never_save = getattr(model, "keys_to_never_save", None)
-            if keys_to_never_save is None:
+            _keys_to_ignore_on_save = getattr(model, "_keys_to_ignore_on_save", None)
+            if _keys_to_ignore_on_save is None:
                 continue
 
             # check the keys are in the original state_dict
-            for k in keys_to_never_save:
+            for k in _keys_to_ignore_on_save:
                 self.assertIn(k, model.state_dict())
 
             # check that certain keys didn't get saved with the model
@@ -152,7 +153,7 @@ class ModelTesterMixin:
                 model.save_pretrained(tmpdirname)
                 output_model_file = os.path.join(tmpdirname, WEIGHTS_NAME)
                 state_dict_saved = torch.load(output_model_file)
-                for k in keys_to_never_save:
+                for k in _keys_to_ignore_on_save:
                     self.assertNotIn(k, state_dict_saved)
 
     def test_initialization(self):
@@ -658,12 +659,14 @@ class ModelTesterMixin:
 
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            hidden_states = outputs["hidden_states"] if "hidden_states" in outputs else outputs[-1]
+
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
 
             expected_num_layers = getattr(
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
+
             if hasattr(self.model_tester, "encoder_seq_length"):
                 seq_length = self.model_tester.encoder_seq_length
                 if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
@@ -676,6 +679,19 @@ class ModelTesterMixin:
                 [seq_length, self.model_tester.hidden_size],
             )
 
+            if config.is_encoder_decoder:
+                hidden_states = outputs.decoder_hidden_states
+
+                self.assertIsInstance(hidden_states, (list, tuple))
+                self.assertEqual(len(hidden_states), expected_num_layers)
+                seq_len = getattr(self.model_tester, "seq_length", None)
+                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]),
+                    [decoder_seq_length, self.model_tester.hidden_size],
+                )
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -687,6 +703,56 @@ class ModelTesterMixin:
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_retain_grad_hidden_states_attentions(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+        output = outputs[0]
+
+        if config.is_encoder_decoder:
+            # Seq2Seq models
+            encoder_hidden_states = outputs.encoder_hidden_states[0]
+            encoder_attentions = outputs.encoder_attentions[0]
+            encoder_hidden_states.retain_grad()
+            encoder_attentions.retain_grad()
+
+            decoder_hidden_states = outputs.decoder_hidden_states[0]
+            decoder_attentions = outputs.decoder_attentions[0]
+            decoder_hidden_states.retain_grad()
+            decoder_attentions.retain_grad()
+
+            cross_attentions = outputs.cross_attentions[0]
+            cross_attentions.retain_grad()
+
+            output.flatten()[0].backward(retain_graph=True)
+
+            self.assertIsNotNone(encoder_hidden_states.grad)
+            self.assertIsNotNone(encoder_attentions.grad)
+            self.assertIsNotNone(decoder_hidden_states.grad)
+            self.assertIsNotNone(decoder_attentions.grad)
+            self.assertIsNotNone(cross_attentions.grad)
+        else:
+            # Encoder-/Decoder-only models
+            hidden_states = outputs.hidden_states[0]
+            attentions = outputs.attentions[0]
+
+            hidden_states.retain_grad()
+            attentions.retain_grad()
+
+            output.flatten()[0].backward(retain_graph=True)
+
+            self.assertIsNotNone(hidden_states.grad)
+            self.assertIsNotNone(attentions.grad)
 
     def test_feed_forward_chunking(self):
         (
@@ -749,6 +815,10 @@ class ModelTesterMixin:
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             # Input ids should be clamped to the maximum size of the vocabulary
             inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+
+            # make sure that decoder_input_ids are resized as well
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
             # Check that adding and removing tokens has not modified the first part of the embedding matrix.
@@ -758,6 +828,57 @@ class ModelTesterMixin:
                     models_equal = False
 
             self.assertTrue(models_equal)
+
+    def test_resize_embeddings_untied(self):
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            return
+
+        original_config.tie_word_embeddings = False
+
+        # if model cannot untied embeddings -> leave test
+        if original_config.tie_word_embeddings:
+            return
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config).to(torch_device)
+
+            # if no output embeddings -> leave test
+            if model.get_output_embeddings() is None:
+                continue
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_vocab_size = config.vocab_size
+            model.resize_token_embeddings(model_vocab_size + 10)
+            self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
+            output_embeds = model.get_output_embeddings()
+            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
+            # Check bias if present
+            if output_embeds.bias is not None:
+                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size + 10)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+            model.resize_token_embeddings(model_vocab_size - 15)
+            self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
+            # Check that it actually resizes the embeddings matrix
+            output_embeds = model.get_output_embeddings()
+            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size - 15)
+            # Check bias if present
+            if output_embeds.bias is not None:
+                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size - 15)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            # Input ids should be clamped to the maximum size of the vocabulary
+            inputs_dict["input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
 
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -952,6 +1073,97 @@ class ModelTesterMixin:
             model = torch.nn.DataParallel(model)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
+
+    @require_torch_multi_gpu
+    def test_model_parallelization(self):
+        if not self.test_model_parallel:
+            return
+
+        import subprocess
+
+        def get_current_gpu_memory_use():
+            run_process = subprocess.Popen(
+                "nvidia-smi --query-gpu=memory.used --format=csv,nounits,noheader", shell=True, stdout=subprocess.PIPE
+            )
+
+            memory_usage = run_process.stdout.read().decode("utf-8").strip()
+            per_device_memory = [int(memory) for memory in memory_usage.split("\n")]
+            return per_device_memory
+
+        # Needs a large model to see the difference.
+        config = self.model_tester.get_large_model_config()
+
+        for model_class in self.all_parallelizable_model_classes:
+            torch.cuda.empty_cache()
+
+            # Retrieve initial memory usage (should be close to 0)
+            initial_memory = get_current_gpu_memory_use()
+
+            # Put model on device
+            model = model_class(config.from_pretrained("gpt2"))
+            model.to("cuda:0")
+
+            # Retrieve the memory after the model is put on the device
+            memory_after_model_load = get_current_gpu_memory_use()
+
+            del model
+            torch.cuda.empty_cache()
+
+            # The memory use on that device should be higher than it was initially.
+            self.assertGreater(memory_after_model_load[0], initial_memory[0])
+
+            # Spread model layers over multiple devices
+            model = model_class(config.from_pretrained("gpt2"))
+            model.parallelize()
+            memory_after_parallelization = get_current_gpu_memory_use()
+
+            # Assert that the memory use on all devices is higher than it was when loaded only on CPU
+            for n in range(torch.cuda.device_count()):
+                self.assertGreater(memory_after_parallelization[n], initial_memory[n])
+
+            # Assert that the memory use of the first device is lower than it was when the entire model was loaded on it
+            self.assertLess(memory_after_parallelization[0], memory_after_model_load[0])
+
+            # Assert that the memory use of the second device is higher than it was when the entire model was loaded
+            # on the other device.
+            self.assertGreater(memory_after_parallelization[1], memory_after_model_load[1])
+
+            del model
+            torch.cuda.empty_cache()
+
+    @require_torch_multi_gpu
+    def test_model_parallel_equal_results(self):
+        if not self.test_model_parallel:
+            return
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_parallelizable_model_classes:
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+
+            def cast_to_device(dictionary, device):
+                output = {}
+                for k, v in dictionary.items():
+                    if isinstance(v, torch.Tensor):
+                        output[k] = v.to(device)
+                    else:
+                        output[k] = v
+
+                return output
+
+            model = model_class(config)
+            output = model(**cast_to_device(inputs_dict, "cpu"))
+
+            model.parallelize()
+
+            parallel_output = model(**cast_to_device(inputs_dict, "cuda:0"))
+
+            for value, parallel_value in zip(output, parallel_output):
+                if isinstance(value, torch.Tensor):
+                    self.assertTrue(torch.allclose(value, parallel_value.to("cpu"), atol=1e-7))
+                elif isinstance(value, (Tuple, List)):
+                    for value_, parallel_value_ in zip(value, parallel_value):
+                        self.assertTrue(torch.allclose(value_, parallel_value_.to("cpu"), atol=1e-7))
 
 
 global_rng = random.Random()

@@ -40,6 +40,9 @@ class TrainingArguments:
     Using :class:`~transformers.HfArgumentParser` we can turn this class into argparse arguments to be able to specify
     them on the command line.
 
+
+
+
     Parameters:
         output_dir (:obj:`str`):
             The output directory where the model predictions and checkpoints will be written.
@@ -89,6 +92,10 @@ class TrainingArguments:
             The initial learning rate for Adam.
         weight_decay (:obj:`float`, `optional`, defaults to 0):
             The weight decay to apply (if not zero).
+        adam_beta1 (:obj:`float`, `optional`, defaults to 0.9):
+            The beta1 for the Adam optimizer.
+        adam_beta2 (:obj:`float`, `optional`, defaults to 0.999):
+            The beta2 for the Adam optimizer.
         adam_epsilon (:obj:`float`, `optional`, defaults to 1e-8):
             Epsilon for the Adam optimizer.
         max_grad_norm (:obj:`float`, `optional`, defaults to 1.0):
@@ -179,6 +186,13 @@ class TrainingArguments:
             - :obj:`True` if :obj:`metric_for_best_model` is set to a value that isn't :obj:`"loss"` or
               :obj:`"eval_loss"`.
             - :obj:`False` if :obj:`metric_for_best_model` is not set, or set to :obj:`"loss"` or :obj:`"eval_loss"`.
+        model_parallel (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If there are more than one devices, whether to use model parallelism to distribute the model's modules
+            across devices or not.
+        ignore_skip_data (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
+            stage as in the previous training. If set to :obj:`True`, the training will begin faster (as that skipping
+            step can take a long time) but will not yield the same results as the interrupted training would have.
     """
 
     output_dir: str = field(
@@ -197,6 +211,15 @@ class TrainingArguments:
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
     do_eval: bool = field(default=None, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
+    model_parallel: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "If there are more than one devices, whether to use model parallelism to distribute the "
+                "model's modules across devices."
+            )
+        },
+    )
     evaluation_strategy: EvaluationStrategy = field(
         default="no",
         metadata={"help": "Run evaluation during training at each logging step."},
@@ -331,6 +354,12 @@ class TrainingArguments:
     greater_is_better: Optional[bool] = field(
         default=None, metadata={"help": "Whether the `metric_for_best_model` should be maximized or not."}
     )
+    ignore_data_skip: bool = field(
+        default=False,
+        metadata={
+            "help": "When resuming training, whether or not to skip the first epochs and batches to get to the same training data."
+        },
+    )
 
     def __post_init__(self):
         if self.disable_tqdm is None:
@@ -362,7 +391,11 @@ class TrainingArguments:
                 "version. Using `--per_device_train_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_train_batch_size or self.per_device_train_batch_size
-        return per_device_batch_size * max(1, self.n_gpu)
+        if not self.model_parallel:
+            train_batch_size = per_device_batch_size * max(1, self.n_gpu)
+        else:
+            train_batch_size = per_device_batch_size
+        return train_batch_size
 
     @property
     def eval_batch_size(self) -> int:
@@ -375,7 +408,11 @@ class TrainingArguments:
                 "version. Using `--per_device_eval_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_eval_batch_size or self.per_device_eval_batch_size
-        return per_device_batch_size * max(1, self.n_gpu)
+        if not self.model_parallel:
+            eval_batch_size = per_device_batch_size * max(1, self.n_gpu)
+        else:
+            eval_batch_size = per_device_batch_size
+        return eval_batch_size
 
     @cached_property
     @torch_required
@@ -428,6 +465,27 @@ class TrainingArguments:
         """
         return self._setup_devices[1]
 
+    @property
+    @torch_required
+    def parallel_mode(self):
+        """
+        The current mode used for parallelism if multiple GPUs/TPU cores are available. One of:
+
+        - :obj:`ParallelMode.NOT_PARALLEL`: no parallelism (CPU or one GPU).
+        - :obj:`ParallelMode.NOT_DISTRIBUTED`: several GPUs in one single process (uses :obj:`torch.nn.DataParallel`).
+        - :obj:`ParallelMode.DISTRIBUTED`: several GPUs, each ahving its own process (uses
+          :obj:`torch.nn.DistributedDataParallel`).
+        - :obj:`ParallelMode.TPU`: several TPU cores.
+        """
+        if is_torch_tpu_available():
+            return ParallelMode.TPU
+        elif self.local_rank != -1:
+            return ParallelMode.DISTRIBUTED
+        elif self.n_gpu > 1:
+            return ParallelMode.NOT_DISTRIBUTED
+        else:
+            return ParallelMode.NOT_PARALLEL
+
     def to_dict(self):
         """
         Serializes this instance while replace `Enum` by their values (for JSON serialization support).
@@ -456,3 +514,10 @@ class TrainingArguments:
             valid_types.append(torch.Tensor)
 
         return {k: v if type(v) in valid_types else str(v) for k, v in d.items()}
+
+
+class ParallelMode(Enum):
+    NOT_PARALLEL = "not_parallel"
+    NOT_DISTRIBUTED = "not_distributed"
+    DISTRIBUTED = "distributed"
+    TPU = "tpu"

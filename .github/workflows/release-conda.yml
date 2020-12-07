@@ -1,0 +1,43 @@
+name: Release - Conda
+
+on:
+  push:
+    tags:
+      - v*
+
+env:
+  ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_API_TOKEN }}
+
+jobs:
+  build_and_package:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v1
+
+      - name: Install miniconda
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-update-conda: true
+          auto-activate-base: false
+          activate-environment: "build-transformers"
+          channels: huggingface
+
+      - name: Setup conda env
+        run: |
+          conda install -c defaults anaconda-client conda-build
+
+      - name: Extract version
+        run: echo "TRANSFORMERS_VERSION=`python setup.py --version`" >> $GITHUB_ENV
+
+      - name: Build conda packages
+        run: |
+          conda info
+          conda build .github/conda
+
+      - name: Upload to Anaconda
+        run: anaconda upload `conda build .github/conda --output` --force

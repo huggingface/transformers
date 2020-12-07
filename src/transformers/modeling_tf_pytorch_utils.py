@@ -39,7 +39,7 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
     return tuple with:
 
         - pytorch model weight name
-        - transpose: boolean indicating wether TF2.0 and PyTorch weights matrices are transposed with regards to each
+        - transpose: boolean indicating whether TF2.0 and PyTorch weights matrices are transposed with regards to each
           other
     """
     tf_name = tf_name.replace(":0", "")  # device ids
@@ -164,9 +164,9 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             if allow_missing_keys:
                 missing_keys.append(name)
                 continue
-            elif tf_model.authorized_missing_keys is not None:
+            elif tf_model._keys_to_ignore_on_load_missing is not None:
                 # authorized missing keys don't have to be loaded
-                if any(re.search(pat, name) is not None for pat in tf_model.authorized_missing_keys):
+                if any(re.search(pat, name) is not None for pat in tf_model._keys_to_ignore_on_load_missing):
                     continue
 
             raise AttributeError("{} not found in PyTorch model".format(name))
@@ -209,11 +209,11 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
     unexpected_keys = list(all_pytorch_weights)
 
-    if tf_model.authorized_missing_keys is not None:
-        for pat in tf_model.authorized_missing_keys:
+    if tf_model._keys_to_ignore_on_load_missing is not None:
+        for pat in tf_model._keys_to_ignore_on_load_missing:
             missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
-    if tf_model.authorized_unexpected_keys is not None:
-        for pat in tf_model.authorized_unexpected_keys:
+    if tf_model._keys_to_ignore_on_load_unexpected is not None:
+        for pat in tf_model._keys_to_ignore_on_load_unexpected:
             unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
     if len(unexpected_keys) > 0:

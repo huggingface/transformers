@@ -6,10 +6,6 @@
 name: Self-hosted runner (scheduled)
 
 on:
-  push:
-    branches:
-      - ci_*
-      - framework-agnostic-tokenizers
   repository_dispatch:
   schedule:
     - cron: "0 0 * * *"
