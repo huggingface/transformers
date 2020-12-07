@@ -449,20 +449,23 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
         self,
         input_ids: torch.LongTensor,
         scores: torch.FloatTensor,
-        recent_tokens: torch.LongTensor,
+        current_tokens: torch.LongTensor,
         beam_group_idx: int,
     ) -> torch.FloatTensor:
         # hamming diversity: penalise using same token in current group which was used in previous groups at
         # the same time step
-        batch_size = recent_tokens.shape[0] // self._num_beams
+        batch_size = current_tokens.shape[0] // self._num_beams
         group_start_idx = beam_group_idx * self._num_sub_beams
         group_end_idx = min(group_start_idx + self._num_sub_beams, self._num_beams)
         group_size = group_end_idx - group_start_idx
         vocab_size = scores.shape[-1]
 
+        if group_start_idx == 0:
+            return scores
+
         for batch_idx in range(batch_size):
             # predicted tokens of last time step of previous groups
-            previous_group_tokens = recent_tokens[
+            previous_group_tokens = current_tokens[
                 batch_idx * self._num_beams : batch_idx * self._num_beams + group_start_idx
             ]
             token_frequency = torch.bincount(previous_group_tokens, minlength=vocab_size).to(scores.device)

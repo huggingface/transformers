@@ -1389,7 +1389,7 @@ class GenerationMixin:
 
         while cur_len < max_length:
             # predicted tokens in cur_len step
-            recent_tokens = torch.zeros(batch_size * num_beams, dtype=input_ids.dtype, device=device)
+            current_tokens = torch.zeros(batch_size * num_beams, dtype=input_ids.dtype, device=device)
 
             # indices which will form the beams in the next time step
             reordering_indices = torch.zeros(batch_size * num_beams, dtype=torch.long, device=device)
@@ -1423,7 +1423,7 @@ class GenerationMixin:
                 vocab_size = next_token_scores.shape[-1]
 
                 next_token_scores = logits_processor(
-                    group_input_ids, next_token_scores, recent_tokens=recent_tokens, beam_group_idx=beam_group_idx
+                    group_input_ids, next_token_scores, current_tokens=current_tokens, beam_group_idx=beam_group_idx
                 )
                 next_token_scores = next_token_scores + beam_scores[batch_group_indices].unsqueeze(-1).expand_as(
                     next_token_scores
@@ -1454,7 +1454,7 @@ class GenerationMixin:
 
                 input_ids[batch_group_indices] = group_input_ids[beam_idx]
                 group_input_ids = torch.cat([group_input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
-                recent_tokens[batch_group_indices] = group_input_ids[:, -1]
+                current_tokens[batch_group_indices] = group_input_ids[:, -1]
 
                 # (beam_idx // group_size) -> batch_idx
                 # (beam_idx % group_size) -> offset of idx inside the group
@@ -1468,7 +1468,7 @@ class GenerationMixin:
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], reordering_indices)
 
-            input_ids = torch.cat([input_ids, recent_tokens.unsqueeze(-1)], dim=-1)
+            input_ids = torch.cat([input_ids, current_tokens.unsqueeze(-1)], dim=-1)
             cur_len = cur_len + 1
             if beam_scorer.is_done:
                 break
