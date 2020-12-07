@@ -630,8 +630,8 @@ class TFRagModel(TFRagPreTrainedModel):
 
             if has_to_retrieve:
                 question_enc_outputs = self.question_encoder(
-                    input_ids, 
-                    attention_mask=attention_mask, 
+                    input_ids,
+                    attention_mask=attention_mask,
                     return_dict=True,
                     training=training
                 )
@@ -684,7 +684,7 @@ class TFRagModel(TFRagPreTrainedModel):
             decoder_attention_mask = tf.repeat(decoder_attention_mask, n_docs, axis=0)
 
         gen_outputs = self.generator(
-            inputs=context_input_ids,
+            context_input_ids,
             attention_mask=context_attention_mask,
             encoder_outputs=encoder_outputs,
             decoder_input_ids=decoder_input_ids,
