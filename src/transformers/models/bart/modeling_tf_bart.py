@@ -1029,68 +1029,6 @@ class TFBartModel(TFPretrainedBartModel):
 
 
 @add_start_docstrings(
-    "The bare BART Model outputting raw hidden-states without any specific head on top.",
-    BART_START_DOCSTRING,
-)
-class TFBartModel(TFPretrainedBartModel):
-    def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-        self.bart = TFBartMainLayer(config, name="model")
-
-    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="facebook/bart-large",
-        output_type=TFSeq2SeqModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def call(
-        self,
-        input_ids,
-        attention_mask=None,
-        decoder_input_ids=None,  # BAD DEFAULT LEFT FOR CONSISTENT SIGNATURE
-        decoder_attention_mask=None,
-        encoder_outputs: Optional[TFBaseModelOutput] = None,
-        past_key_values=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-        **kwargs,
-    ):
-        inputs = input_processing(
-            func=self.call,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            encoder_outputs=encoder_outputs,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-        )
-        outputs = self.bart(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            decoder_input_ids=inputs["decoder_input_ids"],
-            decoder_attention_mask=inputs["decoder_attention_mask"],
-            encoder_outputs=inputs["encoder_outputs"],
-            past_key_values=inputs["past_key_values"],
-            use_cache=inputs["use_cache"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-        )
-
-        return outputs
-
-
-@add_start_docstrings(
     "The BART Model with a language modeling head. Can be used for summarization.",
     BART_START_DOCSTRING,
 )
