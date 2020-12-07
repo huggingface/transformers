@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.abspath('../../src'))
 # -- Project information -----------------------------------------------------
 
 project = u'transformers'
-copyright = u'2020, huggingface'
+copyright = u'2020, The Hugging Face Team, Licenced under the Apache License, Version 2.0'
 author = u'huggingface'
 
 # The short X.Y version
