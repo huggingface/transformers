@@ -27,7 +27,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers.models.mpnet.modeling_tf_mpnet import (
-        TF_MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFMPNetForMaskedLM,
         TFMPNetForMultipleChoice,
         TFMPNetForQuestionAnswering,
@@ -92,10 +91,6 @@ class TFMPNetModelTester:
         input_mask = None
         if self.use_input_mask:
             input_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
         sequence_labels = None
         token_labels = None

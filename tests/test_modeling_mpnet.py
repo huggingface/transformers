@@ -17,15 +17,16 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
+    import torch
+
     from transformers import (
-        MODEL_FOR_PRETRAINING_MAPPING,
         MPNetConfig,
         MPNetForMaskedLM,
         MPNetForMultipleChoice,
@@ -94,10 +95,6 @@ class MPNetModelTester:
         input_mask = None
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
         sequence_labels = None
         token_labels = None
@@ -235,3 +232,19 @@ class MPNetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mpnet_for_question_answering(*config_and_inputs)
+
+
+@require_torch
+class MPNetModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference_no_head(self):
+        model = MPNetModel.from_pretrained("microsoft/mpnet-base")
+        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
+        output = model(input_ids)[0]
+        expected_shape = torch.Size((1, 11, 768))
+        self.assertEqual(output.shape, expected_shape)
+        expected_slice = torch.tensor(
+            [[[-0.0550, 0.1943, -0.0740], [-0.0562, 0.2211, -0.0579], [-0.0437, 0.3337, -0.0641]]]
+        )
+        # compare the actual values for a slice.
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
