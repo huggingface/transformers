@@ -138,10 +138,8 @@ class HfApi:
 
         Call HF API to get a presigned url to upload `filename` to S3.
         """
-        assert filetype in self.ALLOWED_S3_FILE_TYPES, "Please specify filetype from {}".format(
-            self.ALLOWED_S3_FILE_TYPES
-        )
-        path = "{}/api/{}/presign".format(self.endpoint, filetype)
+        assert filetype in self.ALLOWED_S3_FILE_TYPES, f"Please specify filetype from {self.ALLOWED_S3_FILE_TYPES}"
+        path = f"{self.endpoint}/api/{filetype}/presign"
         r = requests.post(
             path,
             headers={"authorization": "Bearer {}".format(token)},

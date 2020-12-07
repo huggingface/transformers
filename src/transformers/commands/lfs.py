@@ -43,27 +43,27 @@ class LfsCommands(BaseTransformersCLICommand):
     #
     # This introduces two commands to the CLI:
     #
-    #     transformers-cli lfs-enable-largefiles
+    #    1. $ transformers-cli lfs-enable-largefiles
     #
-    # Do this once per model repo where you want to push >5GB files.
+    This should be executed once for each model repo that contains a model file >5GB.
     # It's documented in the error message you get if you just try to git push a 5GB file
     # without having enabled it before.
     #
-    #     transformers-cli lfs-multipart-upload
+    #  2. $ transformers-cli lfs-multipart-upload
     #
-    # is the custom transfer agent itself. This is not meant to be
+    # This command is called by lfs directly and is not meant to be called by the user.
     # called by the user, but by lfs directly.
 
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
         enable_parser = parser.add_parser(
-            "lfs-enable-largefiles", help="Configure your repository to enable upload of files > 5GB"
+            "lfs-enable-largefiles", help="Configure your repository to enable upload of files > 5GB."
         )
         enable_parser.add_argument("path", type=str, help="Local path to repository you want to configure.")
         enable_parser.set_defaults(func=lambda args: LfsEnableCommand(args))
 
         upload_parser = parser.add_parser(
-            LFS_MULTIPART_UPLOAD_COMMAND, help="This will get called by git-lfs, do not call it directly."
+            LFS_MULTIPART_UPLOAD_COMMAND, help="Command will get called by git-lfs, do not call it directly."
         )
         upload_parser.set_defaults(func=lambda args: LfsUploadCommand(args))
 
@@ -75,7 +75,7 @@ class LfsEnableCommand:
     def run(self):
         local_path = os.path.abspath(self.args.path)
         if not os.path.isdir(local_path):
-            print("This does not look like a valid git repo")
+            print("This does not look like a valid git repo.")
             exit(1)
         subprocess.run(
             "git config lfs.customtransfer.multipart.path transformers-cli".split(), check=True, cwd=local_path
@@ -201,7 +201,7 @@ class LfsUploadCommand:
                         {
                             "event": "progress",
                             "oid": oid,
-                            "bytesSoFar": i * chunk_size,
+                            "bytesSoFar": (i + 1) * chunk_size,
                             "bytesSinceLast": chunk_size,
                         }
                     )
