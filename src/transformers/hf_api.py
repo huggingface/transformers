@@ -159,9 +159,7 @@ class HfApi:
 
         Outputs: url: Read-only url for the stored file on S3.
         """
-        assert filetype in self.ALLOWED_S3_FILE_TYPES, "Please specify filetype from {}".format(
-            self.ALLOWED_S3_FILE_TYPES
-        )
+        assert filetype in self.ALLOWED_S3_FILE_TYPES, f"Please specify filetype from {self.ALLOWED_S3_FILE_TYPES}"
         urls = self.presign(token, filetype=filetype, filename=filename, organization=organization)
         # streaming upload:
         # https://2.python-requests.org/en/master/user/advanced/#streaming-uploads
@@ -183,9 +181,7 @@ class HfApi:
 
         Call HF API to list all stored files for user (or one of their organizations).
         """
-        assert filetype in self.ALLOWED_S3_FILE_TYPES, "Please specify filetype from {}".format(
-            self.ALLOWED_S3_FILE_TYPES
-        )
+        assert filetype in self.ALLOWED_S3_FILE_TYPES, f"Please specify filetype from {self.ALLOWED_S3_FILE_TYPES}"
         path = "{}/api/{}/listObjs".format(self.endpoint, filetype)
         params = {"organization": organization} if organization is not None else None
         r = requests.get(path, params=params, headers={"authorization": "Bearer {}".format(token)})
@@ -199,9 +195,7 @@ class HfApi:
 
         Call HF API to delete a file stored by user
         """
-        assert filetype in self.ALLOWED_S3_FILE_TYPES, "Please specify filetype from {}".format(
-            self.ALLOWED_S3_FILE_TYPES
-        )
+        assert filetype in self.ALLOWED_S3_FILE_TYPES, f"Please specify filetype from {self.ALLOWED_S3_FILE_TYPES}"
         path = "{}/api/{}/deleteObj".format(self.endpoint, filetype)
         r = requests.delete(
             path,

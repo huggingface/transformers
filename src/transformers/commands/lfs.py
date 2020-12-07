@@ -37,22 +37,22 @@ LFS_MULTIPART_UPLOAD_COMMAND = "lfs-multipart-upload"
 
 
 class LfsCommands(BaseTransformersCLICommand):
-    # Implementation of a custom transfer agent for the transfer type "multipart" for git-lfs.
-    # This lets users upload large files >5GB 🔥.
-    # Spec for LFS custom transfer agent is: https://github.com/git-lfs/git-lfs/blob/master/docs/custom-transfers.md
-    #
-    # This introduces two commands to the CLI:
-    #
-    #    1. $ transformers-cli lfs-enable-largefiles
-    #
-    This should be executed once for each model repo that contains a model file >5GB.
-    # It's documented in the error message you get if you just try to git push a 5GB file
-    # without having enabled it before.
-    #
-    #  2. $ transformers-cli lfs-multipart-upload
-    #
-    # This command is called by lfs directly and is not meant to be called by the user.
-    # called by the user, but by lfs directly.
+    """
+    Implementation of a custom transfer agent for the transfer type "multipart" for git-lfs. This lets users upload
+    large files >5GB 🔥. Spec for LFS custom transfer agent is:
+    https://github.com/git-lfs/git-lfs/blob/master/docs/custom-transfers.md
+
+    This introduces two commands to the CLI:
+
+    1. $ transformers-cli lfs-enable-largefiles
+
+    This should be executed once for each model repo that contains a model file >5GB. It's documented in the error
+    message you get if you just try to git push a 5GB file without having enabled it before.
+
+    2. $ transformers-cli lfs-multipart-upload
+
+    This command is called by lfs directly and is not meant to be called by the user.
+    """
 
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
