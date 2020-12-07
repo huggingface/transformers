@@ -165,6 +165,12 @@ from ..squeezebert.modeling_squeezebert import (
     SqueezeBertModel,
 )
 from ..t5.modeling_t5 import T5ForConditionalGeneration, T5Model
+from ..tapas.modeling_tapas import (
+    TapasModel,
+    TapasForMaskedLM,
+    TapasForQuestionAnswering,
+    TapasForSequenceClassification,
+)
 from ..transfo_xl.modeling_transfo_xl import TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
 from ..xlm.modeling_xlm import (
     XLMForMultipleChoice,
@@ -230,6 +236,7 @@ from .configuration_auto import (
     RobertaConfig,
     SqueezeBertConfig,
     T5Config,
+    TapasConfig,
     TransfoXLConfig,
     XLMConfig,
     XLMProphetNetConfig,
@@ -277,6 +284,7 @@ MODEL_MAPPING = OrderedDict(
         (XLMProphetNetConfig, XLMProphetNetModel),
         (ProphetNetConfig, ProphetNetModel),
         (MPNetConfig, MPNetModel),
+        (TapasConfig, TapasModel),
     ]
 )
 
@@ -308,6 +316,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (LxmertConfig, LxmertForPreTraining),
         (FunnelConfig, FunnelForPreTraining),
         (MPNetConfig, MPNetForMaskedLM),
+        (TapasConfig, TapasForMaskedLM),
     ]
 )
 
@@ -340,6 +349,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (ReformerConfig, ReformerModelWithLMHead),
         (FunnelConfig, FunnelForMaskedLM),
         (MPNetConfig, MPNetForMaskedLM),
+        (TapasConfig, TapasForMaskedLM),
     ]
 )
 
@@ -386,6 +396,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (ReformerConfig, ReformerForMaskedLM),
         (FunnelConfig, FunnelForMaskedLM),
         (MPNetConfig, MPNetForMaskedLM),
+        (TapasConfig, TapasForMaskedLM),
     ]
 )
 
@@ -431,6 +442,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (CTRLConfig, CTRLForSequenceClassification),
         (TransfoXLConfig, TransfoXLForSequenceClassification),
         (MPNetConfig, MPNetForSequenceClassification),
+        (TapasConfig, TapasForSequenceClassification),
     ]
 )
 
@@ -455,6 +467,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForQuestionAnswering),
         (LxmertConfig, LxmertForQuestionAnswering),
         (MPNetConfig, MPNetForQuestionAnswering),
+        (TapasConfig, TapasForQuestionAnswering),
     ]
 )
 
