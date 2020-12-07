@@ -23,12 +23,18 @@ from unittest.mock import patch
 
 import numpy as np
 
-from transformers.file_utils import cached_property, is_datasets_available, is_faiss_available, is_tf_available
+from transformers import BartTokenizer, T5Tokenizer
+from transformers.file_utils import cached_property, is_datasets_available, is_faiss_available, is_torch_available
+from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
+from transformers.models.dpr.tokenization_dpr import DPRQuestionEncoderTokenizer
+from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
 from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
-    require_tf,
+    require_torch,
+    require_torch_non_multi_gpu,
     slow,
+    torch_device,
 )
 
 from .test_modeling_bart import ModelTester as BartModelTester
@@ -38,18 +44,25 @@ from .test_modeling_t5 import T5ModelTester
 
 TOLERANCE = 1e-3
 
-if is_tf_available() and is_datasets_available() and is_faiss_available():
+T5_SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
+
+if is_torch_available() and is_datasets_available() and is_faiss_available():
     import torch
     from datasets import Dataset
 
     import faiss
     from transformers import (
+        AutoConfig,
+        AutoModel,
+        AutoModelForSeq2SeqLM,
         RagConfig,
-        TFRagModel,
+        RagModel,
         RagRetriever,
-        TFRagTokenForGeneration,
+        RagSequenceForGeneration,
+        RagTokenForGeneration,
         RagTokenizer,
     )
+    from transformers.modeling_outputs import BaseModelOutput
 
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
@@ -1027,4 +1040,3 @@ class RagModelSaveLoadTests(unittest.TestCase):
         loss_init = output.loss
 
         self.assertAlmostEqual(loss_pretrained.item(), loss_init.item(), places=4)
-
