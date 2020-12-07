@@ -31,8 +31,8 @@ import pandas as pd
 import torch
 from transformers import add_end_docstrings
 
-from .tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
-from .tokenization_utils_base import (
+from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
+from ...tokenization_utils_base import (
     BatchEncoding,
     EncodedInput,
     PaddingStrategy,
@@ -41,7 +41,7 @@ from .tokenization_utils_base import (
     TextInput,
     ExplicitEnum, ENCODE_KWARGS_DOCSTRING,
 )
-from .utils import logging
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)

@@ -25,9 +25,9 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from .activations import ACT2FN
+from ...activations import ACT2FN
 from .configuration_tapas import TapasConfig
-from .file_utils import (
+from ...file_utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -35,20 +35,18 @@ from .file_utils import (
     replace_return_docstrings,
     requires_scatter,
 )
-from .modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
-from .modeling_utils import (
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MaskedLMOutput, SequenceClassifierOutput
+from ...modeling_utils import (
     PreTrainedModel,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
-from .utils import logging
-
+from ...utils import logging
 
 # soft dependency
 if is_scatter_available():
     from torch_scatter import scatter
-
 
 logger = logging.get_logger(__name__)
 

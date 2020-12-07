@@ -41,7 +41,7 @@ if is_torch_available():
         TapasModel,
     )
 
-    from transformers.modeling_tapas import (
+    from transformers.models.tapas.modeling_tapas import (
         IndexMap,
         ProductIndexMap,
         gather,

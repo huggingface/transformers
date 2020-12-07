@@ -15,7 +15,7 @@
 """ TAPAS configuration. Adds additional hyperparameters to the configuration of BERT."""
 
 
-from .configuration_utils import PretrainedConfig
+from ...configuration_utils import PretrainedConfig
 
 
 TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP = {"nielsr/tapas-base-finetuned-sqa": "https://huggingface.co/nielsr/tapas-base-finetuned-sqa/resolve/main/config.json", 
