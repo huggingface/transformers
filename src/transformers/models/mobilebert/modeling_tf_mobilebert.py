@@ -1029,13 +1029,13 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.predictions.predictions
-    
+
     def get_output_layer_with_bias(self):
         return self.predictions.predictions
 
     def get_prefix_bias_name(self):
         return self.name + "/" + self.predictions.name + "/" + self.predictions.predictions.name
-    
+
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFMobileBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -1128,7 +1128,7 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
 
     def get_output_embeddings(self):
         return self.mlm.predictions
-    
+
     def get_output_layer_with_bias(self):
         return self.mlm.predictions
 
