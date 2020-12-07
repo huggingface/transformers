@@ -26,6 +26,7 @@ if is_torch_available():
     from transformers import BartForConditionalGeneration, BartTokenizer, top_k_top_p_filtering
     from transformers.generation_beam_search import BeamSearchScorer, GroupBeamScorer
     from transformers.generation_logits_process import (
+        HammingDiversityLogitsProcessor,
         LogitsProcessorList,
         MinLengthLogitsProcessor,
         NoBadWordsLogitsProcessor,
@@ -61,7 +62,7 @@ class GenerationTesterMixin:
         return config, input_ids, attention_mask, max_length
 
     @staticmethod
-    def _get_logits_processor_and_kwargs(input_length, eos_token_id):
+    def _get_logits_processor_and_kwargs(input_length, eos_token_id, diversity_penalty=None):
         process_kwargs = {
             "min_length": input_length + 1,
             "bad_words_ids": [[1, 0]],
@@ -70,6 +71,13 @@ class GenerationTesterMixin:
         }
         logits_processor = LogitsProcessorList(
             (
+                [
+                    HammingDiversityLogitsProcessor(diversity_penalty, num_beams=2, num_beam_groups=2),
+                ]
+                if diversity_penalty is not None
+                else []
+            )
+            + (
                 [
                     MinLengthLogitsProcessor(process_kwargs["min_length"], eos_token_id),
                 ]
@@ -122,14 +130,14 @@ class GenerationTesterMixin:
             "length_penalty": 2.0,
             "num_beams": 2,
             "num_return_sequences": num_return_sequences,
-            "beam_groups": 2,  # one beam per group
-            "diversity_penalty": 1.0,
+            "num_beam_groups": 2,  # one beam per group
+            "diversity_penalty": 2.0,
         }
         beam_scorer = GroupBeamScorer(
             batch_size=batch_size,
             max_length=max_length,
             num_beams=beam_kwargs["num_beams"],
-            beam_groups=beam_kwargs["beam_groups"],
+            num_beam_groups=beam_kwargs["num_beam_groups"],
             device=torch_device,
             length_penalty=beam_kwargs["length_penalty"],
             do_early_stopping=beam_kwargs["early_stopping"],
@@ -435,7 +443,7 @@ class GenerationTesterMixin:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
 
             logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-                input_ids.shape[-1], config.eos_token_id
+                input_ids.shape[-1], config.eos_token_id, diversity_penalty=2.0
             )
 
             model = model_class(config).to(torch_device)
@@ -469,7 +477,6 @@ class GenerationTesterMixin:
             with torch.no_grad():
                 output_ids_group_beam_search = model.group_beam_search(
                     input_ids_clone,
-                    beam_kwargs["diversity_penalty"],
                     beam_scorer,
                     max_length=max_length,
                     attention_mask=attention_mask_clone,
@@ -509,7 +516,6 @@ class GenerationTesterMixin:
             with torch.no_grad():
                 output_ids_beam_search = model.group_beam_search(
                     input_ids_clone,
-                    beam_kwargs["diversity_penalty"],
                     beam_scorer,
                     max_length=max_length,
                     attention_mask=attention_mask_clone,
@@ -638,7 +644,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
         outputs = bart_model.generate(
-            input_ids, num_beams=4, num_return_sequences=2, beam_groups=4, diversity_penalty=2.0
+            input_ids, num_beams=4, num_return_sequences=2, num_beam_groups=4, diversity_penalty=2.0
         )
 
         generated_text = bart_tokenizer.batch_decode(outputs, skip_special_tokens=True)

@@ -326,7 +326,7 @@ class GroupBeamScorer(BeamScorer):
             The maximum length of the sequence to be generated.
         num_beams (:obj:`int`):
             Number of beams for beam search.
-        beam_groups (:obj:`int`):
+        num_beam_groups (:obj:`int`):
             Number of groups to divide :obj:`num_beams` into in order to ensure diversity among different groups of
             beams. See `this paper <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
         device (:obj:`torch.device`):
@@ -348,7 +348,7 @@ class GroupBeamScorer(BeamScorer):
         batch_size: int,
         max_length: int,
         num_beams: int,
-        beam_groups: int,
+        num_beam_groups: int,
         device: torch.device,
         length_penalty: Optional[float] = 1.0,
         do_early_stopping: Optional[bool] = False,
@@ -360,8 +360,8 @@ class GroupBeamScorer(BeamScorer):
         self.length_penalty = length_penalty
         self.do_early_stopping = do_early_stopping
         self.num_beam_hyps_to_keep = num_beam_hyps_to_keep
-        self.beam_groups = beam_groups
-        self.group_size = self.num_beams // self.beam_groups
+        self.num_beam_groups = num_beam_groups
+        self.group_size = self.num_beams // self.num_beam_groups
 
         self._is_init = False
         self._beam_hyps = [

@@ -22,6 +22,7 @@ from torch.nn import functional as F
 from .file_utils import ModelOutput
 from .generation_beam_search import BeamScorer, BeamSearchScorer, GroupBeamScorer
 from .generation_logits_process import (
+    HammingDiversityLogitsProcessor,
     LogitsProcessorList,
     MinLengthLogitsProcessor,
     NoBadWordsLogitsProcessor,
@@ -261,6 +262,8 @@ class GenerationMixin:
         eos_token_id: int,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
         num_beams: int,
+        num_beam_groups: int,
+        diversity_penalty: float,
     ) -> LogitsProcessorList:
         """
         This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
@@ -275,11 +278,18 @@ class GenerationMixin:
         bad_words_ids = bad_words_ids if bad_words_ids is not None else self.config.bad_words_ids
         min_length = min_length if min_length is not None else self.config.min_length
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        diversity_penalty = diversity_penalty if diversity_penalty is not None else self.config.diversity_penalty
         # instantiate processors list
         processors = LogitsProcessorList()
 
         # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
         # all samplers can be found in `generation_utils_samplers.py`
+        if diversity_penalty is not None and diversity_penalty > 0.0:
+            processors.append(
+                HammingDiversityLogitsProcessor(
+                    diversity_penalty=diversity_penalty, num_beams=num_beams, num_beam_groups=num_beam_groups
+                )
+            )
         if repetition_penalty is not None and repetition_penalty != 1.0:
             processors.append(RepetitionPenaltyLogitsProcessor(penalty=repetition_penalty))
         if no_repeat_ngram_size is not None and no_repeat_ngram_size > 0:
@@ -314,8 +324,8 @@ class GenerationMixin:
         num_return_sequences: Optional[int] = None,
         decoder_start_token_id: Optional[int] = None,
         use_cache: Optional[bool] = None,
-        beam_groups: Optional[int] = 1,
-        diversity_penalty: Optional[float] = 0.0,
+        num_beam_groups: Optional[int] = None,
+        diversity_penalty: Optional[float] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
         **model_kwargs
     ) -> torch.LongTensor:
@@ -383,14 +393,13 @@ class GenerationMixin:
             use_cache: (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not the model should use the past last key/values attentions (if applicable to the model) to
                 speed up decoding.
-            beam_groups (:obj:`int`, `optional`, defaults to 1):
+            num_beam_groups (:obj:`int`, `optional`, defaults to 1):
                 Number of groups to divide :obj:`num_beams` into in order to ensure diversity among different groups of
-                beams. To enable diverse beam search, :obj:`beam_groups` should be set to a value larger than 1. See
-                `this paper <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
+                beams. `this paper <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
             diversity_penalty (:obj:`float`, `optional`, defaults to 0.0):
                 This value is subtracted from a beam's score if it generates a token same as any beam from other group
-                at a particular time. Note that :obj:`diversity_penalty` is only effective if ``diverse beam search``
-                is enabled.
+                at a particular time. Note that :obj:`diversity_penalty` is only effective if ``group beam search`` is
+                enabled.
             prefix_allowed_tokens_fn: (:obj:`Callable[[int, torch.Tensor], List[int]]`, `optional`):
                 If provided, this function constraints the beam search to allowed tokens only at each step. If not
                 provided no constraint is applied. This function takes 2 arguments :obj:`inputs_ids` and the batch ID
@@ -463,6 +472,7 @@ class GenerationMixin:
 
         # set init values
         num_beams = num_beams if num_beams is not None else self.config.num_beams
+        num_beam_groups = num_beam_groups if num_beam_groups is not None else self.config.num_beam_groups
         max_length = max_length if max_length is not None else self.config.max_length
         do_sample = do_sample if do_sample is not None else self.config.do_sample
         num_return_sequences = (
@@ -502,13 +512,13 @@ class GenerationMixin:
                 raise ValueError("Make sure that `model_kwargs` include `encoder_outputs` of type `ModelOutput`.")
 
         # determine generation mode
-        is_greedy_gen_mode = (num_beams == 1) and (beam_groups == 1) and do_sample is False
-        is_sample_gen_mode = (num_beams == 1) and (beam_groups == 1) and do_sample is True
-        is_beam_gen_mode = (num_beams > 1) and (beam_groups == 1) and do_sample is False
-        is_beam_sample_gen_mode = (num_beams > 1) and (beam_groups == 1) and do_sample is True
-        is_group_beam_gen_mode = (num_beams > 1) and (beam_groups > 1)
-        if beam_groups > num_beams:
-            raise ValueError("`beam_groups` has to be smaller or equal to `num_beams`")
+        is_greedy_gen_mode = (num_beams == 1) and (num_beam_groups == 1) and do_sample is False
+        is_sample_gen_mode = (num_beams == 1) and (num_beam_groups == 1) and do_sample is True
+        is_beam_gen_mode = (num_beams > 1) and (num_beam_groups == 1) and do_sample is False
+        is_beam_sample_gen_mode = (num_beams > 1) and (num_beam_groups == 1) and do_sample is True
+        is_group_beam_gen_mode = (num_beams > 1) and (num_beam_groups > 1)
+        if num_beam_groups > num_beams:
+            raise ValueError("`num_beam_groups` has to be smaller or equal to `num_beams`")
         if is_group_beam_gen_mode and do_sample is True:
             raise ValueError(
                 "Diverse beam search cannot be used in sampling mode. Make sure that `do_sample` is set to `False`."
@@ -526,6 +536,8 @@ class GenerationMixin:
             eos_token_id=eos_token_id,
             prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             num_beams=num_beams,
+            num_beam_groups=num_beam_groups,
+            diversity_penalty=diversity_penalty,
         )
 
         if is_greedy_gen_mode:
@@ -646,14 +658,14 @@ class GenerationMixin:
             if num_return_sequences > num_beams:
                 raise ValueError("`num_return_sequences` has to be smaller or equal to `num_beams`.")
 
-            if num_beams % beam_groups != 0:
-                raise ValueError("`num_beams` should be divisible by `beam_groups` for diverse beam search.")
+            if num_beams % num_beam_groups != 0:
+                raise ValueError("`num_beams` should be divisible by `num_beam_groups` for group beam search.")
 
             diverse_beam_scorer = GroupBeamScorer(
                 batch_size=batch_size,
                 max_length=max_length,
                 num_beams=num_beams,
-                beam_groups=beam_groups,
+                num_beam_groups=num_beam_groups,
                 device=self.device,
                 length_penalty=length_penalty,
                 do_early_stopping=early_stopping,
@@ -665,7 +677,6 @@ class GenerationMixin:
             )
             return self.group_beam_search(
                 input_ids,
-                diversity_penalty,
                 diverse_beam_scorer,
                 logits_processor=logits_processor,
                 max_length=max_length,
@@ -1266,7 +1277,6 @@ class GenerationMixin:
     def group_beam_search(
         self,
         input_ids: torch.LongTensor,
-        diversity_penalty: float,
         beam_scorer: BeamScorer,
         logits_processor: Optional[LogitsProcessorList] = None,
         max_length: Optional[int] = None,
@@ -1282,9 +1292,6 @@ class GenerationMixin:
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 The sequence used as a prompt for the generation. If :obj:`None` the method initializes it as an empty
                 :obj:`torch.LongTensor` of shape :obj:`(1,)`.
-            diversity_penalty (:obj:`float`):
-                This value is subtracted from a beam's score if it generates a token same as any beam from other group
-                at a particular time.
             beam_scorer (:obj:`BeamScorer`):
                 An derived instance of :class:`~transformers.BeamScorer` that defines how beam hypotheses are
                 constructed, stored and sorted during generation. For more information, the documentation of
@@ -1300,7 +1307,7 @@ class GenerationMixin:
             eos_token_id (:obj:`int`, `optional`):
                 The id of the `end-of-sequence` token.
             model_kwargs:
-                Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
+                Additional model specific kwargs that will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
 
         Return:
@@ -1343,7 +1350,7 @@ class GenerationMixin:
             ...     max_length=model.config.max_length,
             ...     num_beams=num_beams,
             ...     device=model.device,
-            ...     beam_groups=3
+            ...     num_beam_groups=3
             ... )
 
             >>> # instantiate logits processors
@@ -1364,8 +1371,8 @@ class GenerationMixin:
 
         batch_size = len(beam_scorer._beam_hyps)
         num_beams = beam_scorer.num_beams
-        beam_groups = beam_scorer.beam_groups
-        num_sub_beams = num_beams // beam_groups
+        num_beam_groups = beam_scorer.num_beam_groups
+        num_sub_beams = num_beams // num_beam_groups
         device = input_ids.device
 
         batch_beam_size, cur_len = input_ids.shape
@@ -1391,7 +1398,7 @@ class GenerationMixin:
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
             outputs = self(**model_inputs, return_dict=True)
 
-            for beam_group_idx in range(beam_groups):
+            for beam_group_idx in range(num_beam_groups):
                 group_start_idx = beam_group_idx * num_sub_beams
                 group_end_idx = min(group_start_idx + num_sub_beams, num_beams)
                 group_size = group_end_idx - group_start_idx
@@ -1415,19 +1422,9 @@ class GenerationMixin:
                 next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * group_size, vocab_size)
                 vocab_size = next_token_scores.shape[-1]
 
-                # hamming diversity: penalise using same token in current group which was used in previous groups at
-                # the same time step
-                for batch_idx in range(batch_size):
-                    # predicted tokens of last time step of previous groups
-                    previous_group_tokens = recent_tokens[
-                        batch_idx * num_beams : batch_idx * num_beams + group_start_idx
-                    ]
-                    token_frequency = torch.bincount(previous_group_tokens, minlength=vocab_size).to(device)
-                    next_token_scores[batch_idx * group_size : (batch_idx + 1) * group_size] -= (
-                        diversity_penalty * token_frequency
-                    )
-
-                next_token_scores = logits_processor(group_input_ids, next_token_scores)
+                next_token_scores = logits_processor(
+                    group_input_ids, next_token_scores, recent_tokens=recent_tokens, beam_group_idx=beam_group_idx
+                )
                 next_token_scores = next_token_scores + beam_scores[batch_group_indices].unsqueeze(-1).expand_as(
                     next_token_scores
                 )
