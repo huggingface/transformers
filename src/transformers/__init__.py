@@ -211,21 +211,6 @@ from .training_args import TrainingArguments
 from .training_args_tf import TFTrainingArguments
 from .utils import logging
 
-# Trainer
-from .trainer_callback import (
-    DefaultFlowCallback,
-    EarlyStoppingCallback,
-    PrinterCallback,
-    ProgressCallback,
-    TrainerCallback,
-    TrainerControl,
-    TrainerState,
-)
-from .trainer_utils import EvalPrediction, EvaluationStrategy, set_seed
-from .training_args import TrainingArguments
-from .training_args_tf import TFTrainingArguments
-from .utils import logging
-
 
 # Integrations: this needs to come before other ml imports
 # in order to allow any 3rd-party code to initialize properly
