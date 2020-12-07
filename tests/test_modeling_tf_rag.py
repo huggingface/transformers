@@ -5,7 +5,6 @@ from transformers.file_utils import cached_property, is_datasets_available, is_f
 from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
-    require_retrieval,
     require_tf,
     slow,
 )
@@ -21,6 +20,19 @@ if is_tf_available() and is_datasets_available() and is_faiss_available():
         TFRagTokenForGeneration,
         RagTokenizer,
     )
+
+
+def require_retrieval(test_case):
+    """
+    Decorator marking a test that requires a set of dependencies necessary for pefrorm retrieval with
+    :class:`~transformers.RagRetriever`.
+
+    These tests are skipped when respective libraries are not installed.
+
+    """
+    if not (is_tf_available() and is_datasets_available() and is_faiss_available()):
+        test_case = unittest.skip("test requires PyTorch, datasets and faiss")(test_case)
+    return test_case
 
 
 @require_tf
@@ -78,9 +90,9 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         rag_token.set_retriever(rag_retriever)
 
         input_ids = rag_question_encoder_tokenizer(
-            "who sings does he love me with reba", return_tensors="pt"
+            "who sings does he love me with reba", return_tensors="tf"
         ).input_ids
-        decoder_input_ids = rag_decoder_tokenizer("Linda Davis", return_tensors="pt").input_ids
+        decoder_input_ids = rag_decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
 
         output = rag_token(
             input_ids,

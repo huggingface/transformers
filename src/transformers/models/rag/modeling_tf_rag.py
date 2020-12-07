@@ -520,6 +520,7 @@ class TFRagModel(TFRagPreTrainedModel):
 
             generator = TFAutoModelForSeq2SeqLM.from_config(config.generator)
             generator._name = 'generator' # NEED_ADVICE: hack to make from_pretrained work
+
         self.retriever = retriever
         if self.retriever is not None:
             assert isinstance(
@@ -621,6 +622,9 @@ class TFRagModel(TFRagPreTrainedModel):
             and (context_input_ids is None or context_attention_mask is None or doc_scores is None)
             and encoder_outputs is None
         )
+
+        import ipdb; ipdb.set_trace()
+
         # encoder_outputs are pre-computed during RAG-token generation
         if encoder_outputs is None:
 
@@ -754,32 +758,6 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         # instantiate model
         self.rag = TFRagModel(config=config, question_encoder=question_encoder, generator=generator, retriever=retriever, name='rag')
         self.rag._name = 'rag' # NEED_ADVICE: hack to force correct name
-
-    # NEED_HELP: manually and ineffcient fixed of two weights name mismatched
-    # really ugly fixed and require torch
-    @classmethod
-    def from_pretrained(cls, path_or_weight_name, model_pt=None, **kwargs):
-        
-        # print(path_or_weight_name, kwargs)
-        model = super(TFRagTokenForGeneration, cls).from_pretrained(path_or_weight_name, **kwargs)
-
-        try:
-            import gc
-            import tensorflow.keras.backend as K
-
-            gc.collect()
-            if model_pt is None:
-                model_pt = transformers.RagTokenForGeneration.from_pretrained(path_or_weight_name, **kwargs)
-            K.set_value(model.rag.generator.model.shared.weight, model_pt.rag.generator.model.shared.weight.detach().numpy())
-            K.set_value(model.rag.generator.final_logits_bias, model_pt.rag.generator.final_logits_bias.detach().numpy())
-            del model_pt
-            gc.collect()
-            print('*** Ugly fix of weights loading -- not a generalizable solution ***')
-        except:
-            print('Could not finish load all weights')
-            pass
-
-        return model
 
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
