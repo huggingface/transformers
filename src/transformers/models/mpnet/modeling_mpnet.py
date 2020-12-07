@@ -646,7 +646,6 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaLMHead
 class MPNetLMHead(nn.Module):
     """MPNet Head for masked and permuted language modeling."""
 
@@ -938,7 +937,6 @@ class MPNetForTokenClassification(MPNetPreTrainedModel):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaClassificationHead
 class MPNetClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
