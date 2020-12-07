@@ -17,13 +17,13 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
     import torch
 
-    from transformers import top_k_top_p_filtering
+    from transformers import BartForConditionalGeneration, BartTokenizer, top_k_top_p_filtering
     from transformers.generation_beam_search import BeamSearchScorer, DiverseBeamSearchScorer
     from transformers.generation_logits_process import (
         LogitsProcessorList,
@@ -622,3 +622,31 @@ class UtilsFunctionsTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(non_inf_expected_output, non_inf_output, atol=1e-12))
         self.assertTrue(torch.all(torch.eq(non_inf_expected_idx, non_inf_idx)))
+
+
+@require_torch
+class GenerationIntegrationTests(unittest.TestCase):
+    @slow
+    def test_diverse_beam_search(self):
+        article = """Justin Timberlake and Jessica Biel, welcome to parenthood.
+        The celebrity couple announced the arrival of their son, Silas Randall Timberlake, in statements to People.
+        "Silas was the middle name of Timberlake's maternal grandfather Bill Bomar, who died in 2012, while Randall is the musician's own middle name, as well as his father's first," People reports.
+        The couple announced the pregnancy in January, with an Instagram post. It is the first baby for both."""
+
+        bart_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        bart_model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn").to(torch_device)
+        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        outputs = bart_model.generate(
+            input_ids, num_beams=4, num_return_sequences=2, beam_groups=4, diversity_penalty=2.0
+        )
+
+        generated_text = bart_tokenizer.batch_decode(outputs, skip_special_tokens=True)
+
+        self.assertListEqual(
+            generated_text,
+            [
+                "The couple announced the birth of their son, Silas Randall Timberlake, in a statement. Silas was the middle name of Timberlake's maternal grandfather Bill Bomar. Randall is the musician's own middle name, as well as his father's first. It is the first baby for both of them.",
+                "Justin Timberlake and Jessica Biel have a son. The baby is named Silas Randall Timberlake. It is the first child for both. The couple announced the pregnancy in January. The name Silas is the middle name of Timberlake's maternal grandfather. It's also his own middle name.",
+            ],
+        )
