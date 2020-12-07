@@ -327,27 +327,6 @@ def input_processing(func, config, input_ids, **kwargs):
     parameter_names = list(signature.keys())
     output = {}
     allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict)
-    boolean_properties = ["return_dict", "output_attentions", "output_hidden_states", "use_cache"]
-
-    if "inputs" in kwargs["kwargs_call"]:
-        warnings.warn(
-            "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
-            FutureWarning,
-        )
-
-        output["input_ids"] = kwargs["kwargs_call"].pop("inputs")
-
-    if "decoder_cached_states" in kwargs["kwargs_call"]:
-        warnings.warn(
-            "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
-            FutureWarning,
-        )
-        output["past_key_values"] = kwargs["kwargs_call"].pop("decoder_cached_states")
-
-    if len(kwargs["kwargs_call"]) > 0:
-        raise ValueError(
-            f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
-        )
 
     if "inputs" in kwargs["kwargs_call"]:
         warnings.warn(
