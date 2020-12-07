@@ -1511,7 +1511,7 @@ class ProductIndexMap(IndexMap):
         if outer_index.batch_dims != inner_index.batch_dims:
             raise ValueError("outer_index.batch_dims and inner_index.batch_dims must be the same.")
 
-        super(ProductIndexMap, self).__init__(
+        super().__init__(
             indices=(inner_index.indices + outer_index.indices * inner_index.num_segments),
             num_segments=inner_index.num_segments * outer_index.num_segments,
             batch_dims=inner_index.batch_dims,
