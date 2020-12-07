@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library models for question answering with beam search.
+Fine-tuning XLNet for question answering with beam search.
 """
 # You can also adapt this script on your own question answering task. Pointers for this are left as comments.
 
@@ -28,18 +28,18 @@ from datasets import load_dataset, load_metric
 import transformers
 from trainer_qa import QuestionAnsweringTrainer
 from transformers import (
-    AutoConfig,
-    AutoModelForQuestionAnswering,
-    AutoTokenizer,
     DataCollatorWithPadding,
     EvalPrediction,
     HfArgumentParser,
     TrainingArguments,
+    XLNetConfig,
+    XLNetForQuestionAnswering,
+    XLNetTokenizerFast,
     default_data_collator,
     set_seed,
 )
 from transformers.trainer_utils import is_main_process
-from utils_qa import postprocess_qa_predictions
+from utils_qa import postprocess_qa_predictions_with_beam_search
 
 
 logger = logging.getLogger(__name__)
@@ -220,16 +220,15 @@ def main():
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
-    config = AutoConfig.from_pretrained(
+    config = XLNetConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
     )
-    tokenizer = AutoTokenizer.from_pretrained(
+    tokenizer = XLNetTokenizerFast.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
-        use_fast=model_args.use_fast_tokenizer,
     )
-    model = AutoModelForQuestionAnswering.from_pretrained(
+    model = XLNetForQuestionAnswering.from_pretrained(
         model_args.model_name_or_path,
         from_tf=bool(".ckpt" in model_args.model_name_or_path),
         config=config,
@@ -249,7 +248,7 @@ def main():
     # Padding side determines if we do (question|context) or (context|question).
     pad_on_right = tokenizer.padding_side == "right"
 
-    # Training preprocessing
+        # Training preprocessing
     def prepare_train_features(examples):
         # Tokenize our examples with truncation and maybe padding, but keep the overflows using a stride. This results
         # in one example possible giving several features when a context is long, each of those features having a
@@ -263,7 +262,7 @@ def main():
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
             return_special_tokens_mask=True,
-            padding="max_length" if data_args.pad_to_max_length else False,
+            padding="max_length",
         )
 
         # Since one example might give us several features if it has a long context, we need a map from a feature to
@@ -289,12 +288,16 @@ def main():
             tokenized_examples["cls_index"].append(cls_index)
 
             # Grab the sequence corresponding to that example (to know what is the context and what is the question).
-            sequence_ids = tokenized_examples.sequence_ids(i)
+            sequence_ids = tokenized_examples["token_type_ids"][i]
+            for k, s in enumerate(special_tokens[i]):
+                if s:
+                    sequence_ids[k] = 3
             context_idx = 1 if pad_on_right else 0
 
-            # Build the p_mask: non special tokens and context gets 0.0, the others 1.0.
+            # Build the p_mask: non special tokens and context gets 0.0, the others get 1.0.
+            # The cls token gets 1.0 too (for predictions of empty answers).
             tokenized_examples["p_mask"].append(
-                [0.0 if not special_tokens[i][k] and s == context_idx else 1.0 for k, s in enumerate(sequence_ids)]
+                [0.0 if (not special_tokens[i][k] and s == context_idx) or k == cls_index else 1.0 for k, s in enumerate(sequence_ids)]
             )
 
             # One example can give several spans, this is the index of the example containing this span of text.
@@ -304,7 +307,7 @@ def main():
             if len(answers["answer_start"]) == 0:
                 tokenized_examples["start_positions"].append(cls_index)
                 tokenized_examples["end_positions"].append(cls_index)
-                tokenized_examples["is_impossible"].append(True)
+                tokenized_examples["is_impossible"].append(1.0)
             else:
                 # Start/end character index of the answer in the text.
                 start_char = answers["answer_start"][0]
@@ -319,12 +322,11 @@ def main():
                 token_end_index = len(input_ids) - 1
                 while sequence_ids[token_end_index] != context_idx:
                     token_end_index -= 1
-
                 # Detect if the answer is out of the span (in which case this feature is labeled with the CLS index).
                 if not (offsets[token_start_index][0] <= start_char and offsets[token_end_index][1] >= end_char):
                     tokenized_examples["start_positions"].append(cls_index)
                     tokenized_examples["end_positions"].append(cls_index)
-                    tokenized_examples["is_impossible"].append(True)
+                    tokenized_examples["is_impossible"].append(1.0)
                 else:
                     # Otherwise move the token_start_index and token_end_index to the two ends of the answer.
                     # Note: we could go after the last offset if the answer is the last word (edge case).
@@ -334,7 +336,7 @@ def main():
                     while offsets[token_end_index][1] >= end_char:
                         token_end_index -= 1
                     tokenized_examples["end_positions"].append(token_end_index + 1)
-                    tokenized_examples["is_impossible"].append(False)
+                    tokenized_examples["is_impossible"].append(0.0)
 
         return tokenized_examples
 
@@ -361,7 +363,7 @@ def main():
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
             return_special_tokens_mask=True,
-            padding="max_length" if data_args.pad_to_max_length else False,
+            padding="max_length",
         )
 
         # Since one example might give us several features if it has a long context, we need a map from a feature to
@@ -390,7 +392,7 @@ def main():
 
             # Build the p_mask: non special tokens and context gets 0.0, the others 1.0.
             tokenized_examples["p_mask"].append(
-                [0.0 if not special_tokens[i][k] and s == context_idx else 1.0 for k, s in enumerate(sequence_ids)]
+                [0.0 if not special_tokens[i][k] and s == context_index else 1.0 for k, s in enumerate(sequence_ids)]
             )
 
             # One example can give several spans, this is the index of the example containing this span of text.
@@ -421,22 +423,21 @@ def main():
     # Post-processing:
     def post_processing_function(examples, features, predictions):
         # Post-processing: we match the start logits and end logits to answers in the original context.
-        predictions = postprocess_qa_predictions(
+        predictions, scores_diff_json = postprocess_qa_predictions_with_beam_search(
             examples=examples,
             features=features,
             predictions=predictions,
             version_2_with_negative=data_args.version_2_with_negative,
             n_best_size=data_args.n_best_size,
             max_answer_length=data_args.max_answer_length,
-            null_score_diff_threshold=data_args.null_score_diff_threshold,
+            start_n_top=model.config.start_n_top,
+            end_n_top=model.config.end_n_top,
             output_dir=training_args.output_dir,
             is_world_process_zero=trainer.is_world_process_zero(),
         )
         # Format the result to the format the metric expects.
         if data_args.version_2_with_negative:
-            formatted_predictions = [
-                {"id": k, "prediction_text": v, "no_answer_probability": 0.0} for k, v in predictions.items()
-            ]
+            formatted_predictions = [{"id": k, "prediction_text": v, "no_answer_probability": scores_diff_json[k]} for k, v in predictions.items()]
         else:
             formatted_predictions = [{"id": k, "prediction_text": v} for k, v in predictions.items()]
         references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in datasets["validation"]]
@@ -473,14 +474,6 @@ def main():
     results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
-
-        # Metric
-        # TODO: Once the fix lands in a Datasets release, remove the _local here and the squad_v2_local folder.
-        current_dir = os.path.sep.join(os.path.join(__file__).split(os.path.sep)[:-1])
-        metric = load_metric(
-            os.path.join(current_dir, "squad_v2_local") if data_args.version_2_with_negative else "squad"
-        )
-
         results = trainer.evaluate()
 
         output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
