@@ -1322,6 +1322,7 @@ class GenerationMixin:
             ...    AutoModelForSeq2SeqLM,
             ...    LogitsProcessorList,
             ...    MinLengthLogitsProcessor,
+            ...    HammingDiversityLogitsProcessor,
             ...    BeamSearchScorer,
             ... )
             >>> import torch

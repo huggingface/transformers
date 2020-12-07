@@ -40,6 +40,12 @@ generation.
 .. autoclass:: transformers.NoBadWordsLogitsProcessor
     :members: __call__
 
+.. autoclass:: transformers.PrefixConstrainedLogitsProcessor
+    :members: __call__
+
+.. autoclass:: transformers.HammingDiversityLogitsProcessor
+    :members: __call__
+
 BeamSearch
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
