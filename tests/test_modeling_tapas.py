@@ -23,7 +23,7 @@ import pandas as pd
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, require_scatter, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -35,7 +35,7 @@ if is_torch_available():
     from transformers import (
         TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
         TapasConfig,
-        #TapasForMaskedLM,
+        TapasForMaskedLM,
         TapasForQuestionAnswering,
         TapasForSequenceClassification,
         TapasModel,
@@ -148,16 +148,16 @@ class TapasModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).to(torch_device)
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+            input_mask = random_attention_mask([self.batch_size, self.seq_length]).to(torch_device)
 
         token_type_ids = []
         for type_vocab_size in self.type_vocab_sizes:
             token_type_ids.append(ids_tensor(shape=[self.batch_size, self.seq_length], vocab_size=type_vocab_size))
-        token_type_ids = torch.stack(token_type_ids, dim=2)
+        token_type_ids = torch.stack(token_type_ids, dim=2).to(torch_device)
 
         sequence_labels = None
         token_labels = None
@@ -168,13 +168,13 @@ class TapasModelTester:
         float_answer = None
         aggregation_labels = None
         if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            label_ids = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-            numeric_values = floats_tensor([self.batch_size, self.seq_length])
-            numeric_values_scale = floats_tensor([self.batch_size, self.seq_length])
-            float_answer = floats_tensor([self.batch_size])
-            aggregation_labels = ids_tensor([self.batch_size], self.num_aggregation_labels)
+            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size).to(torch_device)
+            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels).to(torch_device)
+            label_ids = ids_tensor([self.batch_size, self.seq_length], vocab_size=2).to(torch_device)
+            numeric_values = floats_tensor([self.batch_size, self.seq_length]).to(torch_device)
+            numeric_values_scale = floats_tensor([self.batch_size, self.seq_length]).to(torch_device)
+            float_answer = floats_tensor([self.batch_size]).to(torch_device)
+            aggregation_labels = ids_tensor([self.batch_size], self.num_aggregation_labels).to(torch_device)
 
         config = TapasConfig(
             vocab_size=self.vocab_size,
@@ -211,7 +211,6 @@ class TapasModelTester:
             init_cell_selection_weights_to_zero=self.init_cell_selection_weights_to_zero,
             reset_position_index_per_cell=self.reset_position_index_per_cell,
             disable_per_token_loss=self.disable_per_token_loss,
-            return_dict=True,
         )
 
         return (
@@ -251,25 +250,25 @@ class TapasModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
-    # def create_and_check_for_masked_lm(
-    #     self,
-    #     config,
-    #     input_ids,
-    #     input_mask,
-    #     token_type_ids,
-    #     sequence_labels,
-    #     token_labels,
-    #     label_ids,
-    #     numeric_values,
-    #     numeric_values_scale,
-    #     float_answer,
-    #     aggregation_labels,
-    # ):
-    #     model = TapasForMaskedLM(config=config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-    #     self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+    def create_and_check_for_masked_lm(
+        self,
+        config,
+        input_ids,
+        input_mask,
+        token_type_ids,
+        sequence_labels,
+        token_labels,
+        label_ids,
+        numeric_values,
+        numeric_values_scale,
+        float_answer,
+        aggregation_labels,
+    ):
+        model = TapasForMaskedLM(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_for_question_answering(
         self,
@@ -285,7 +284,7 @@ class TapasModelTester:
         float_answer,
         aggregation_labels,
     ):
-        # inference: without aggregation head (SQA). 
+        # inference: without aggregation head (SQA). Model only returns logits
         sqa_config = copy.copy(config)
         sqa_config.num_aggregation_labels = 0
         sqa_config.use_answer_as_supervision = False
@@ -299,7 +298,7 @@ class TapasModelTester:
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length))
         
-        # inference: with aggregation head (WTQ, WikiSQL-supervised)
+        # inference: with aggregation head (WTQ, WikiSQL-supervised). Model returns logits and aggregation logits
         model = TapasForQuestionAnswering(config=config)
         model.to(torch_device)
         model.eval()
@@ -400,6 +399,7 @@ class TapasModelTester:
 
 
 @require_torch
+@require_scatter
 class TapasModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
@@ -481,6 +481,7 @@ def prepare_tapas_batch_inputs_for_training():
 
 
 @require_torch
+@require_scatter
 class TapasModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_tokenizer(self):
@@ -491,11 +492,12 @@ class TapasModelIntegrationTest(unittest.TestCase):
         # ideally we want to test this with the weights of tapas_inter_masklm_base_reset,
         # but since it's not straightforward to do this with the TF 1 implementation, we test it with 
         # the weights of the WTQ base model (i.e. tapas_wtq_wikisql_sqa_inter_masklm_base_reset)
-        model = TapasModel.from_pretrained("nielsr/tapas-base-finetuned-wtq")
+        model = TapasModel.from_pretrained("nielsr/tapas-base-finetuned-wtq").to(torch_device)
 
         tokenizer = default_tokenizer()
         table, queries = prepare_tapas_single_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, return_tensors="pt")
+        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
         outputs = model(**inputs)
         # test the sequence output
         expected_slice = torch.tensor(
@@ -526,11 +528,12 @@ class TapasModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_question_answering_head_conversational(self):
         # note that nielsr/tapas-base-finetuned-sqa should correspond to tapas_sqa_inter_masklm_base_reset
-        model = TapasForQuestionAnswering.from_pretrained("nielsr/tapas-base-finetuned-sqa")
+        model = TapasForQuestionAnswering.from_pretrained("nielsr/tapas-base-finetuned-sqa").to(torch_device)
 
         tokenizer = default_tokenizer()
         table, queries = prepare_tapas_single_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, return_tensors="pt")
+        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
         outputs = model(**inputs)
         # test the logits
         logits = outputs.logits
@@ -546,12 +549,13 @@ class TapasModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_question_answering_head_weak_supervision(self):
         # note that nielsr/tapas-base-finetuned-wtq should correspond to tapas_wtq_wikisql_sqa_inter_masklm_base_reset
-        model = TapasForQuestionAnswering.from_pretrained("nielsr/tapas-base-finetuned-wtq")
+        model = TapasForQuestionAnswering.from_pretrained("nielsr/tapas-base-finetuned-wtq").to(torch_device)
 
         tokenizer = default_tokenizer()
         # let's test on a batch 
         table, queries = prepare_tapas_batch_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, padding="longest", return_tensors="pt")
+        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
         outputs = model(**inputs)
         # test the logits
         logits = outputs.logits
@@ -576,7 +580,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
     @slow
     def test_training_question_answering_head_weak_supervision(self):
         # note that nielsr/tapas-base-finetuned-wtq should correspond to tapas_wtq_wikisql_sqa_inter_masklm_base_reset
-        model = TapasForQuestionAnswering.from_pretrained("nielsr/tapas-base-finetuned-wtq")
+        model = TapasForQuestionAnswering.from_pretrained("nielsr/tapas-base-finetuned-wtq").to(torch_device)
         model.to(torch_device)
 
         tokenizer = default_tokenizer()
@@ -627,11 +631,12 @@ class TapasModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_question_answering_head_strong_supervision(self):
         # note that nielsr/tapas-base-finetuned-wikisql-supervised should correspond to tapas_wikisql_sqa_inter_masklm_base_reset
-        model = TapasForQuestionAnswering.from_pretrained("nielsr/tapas-base-finetuned-wikisql-supervised")
+        model = TapasForQuestionAnswering.from_pretrained("nielsr/tapas-base-finetuned-wikisql-supervised").to(torch_device)
 
         tokenizer = default_tokenizer()
         table, queries = prepare_tapas_single_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, return_tensors="pt")
+        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
         outputs = model(**inputs)
         # test the logits
         logits = outputs.logits
@@ -655,9 +660,10 @@ class TapasModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_classification_head(self):
         # note that nielsr/tapas-base-finetuned-tabfact should correspond to tapas_tabfact_inter_masklm_base_reset
-        model = TapasForSequenceClassification.from_pretrained("nielsr/tapas-base-finetuned-tabfact")
+        model = TapasForSequenceClassification.from_pretrained("nielsr/tapas-base-finetuned-tabfact").to(torch_device)
 
         inputs = prepare_tapas_inputs_for_inference()
+        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
         outputs = model(**inputs)
 
         # test the classification logits
@@ -671,6 +677,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
 # Below: tests for Tapas utilities which are defined in modeling_tapas.py.
 # These are based on segmented_tensor_test.py of the original implementation.
 # URL: https://github.com/google-research/tapas/blob/master/tapas/models/segmented_tensor_test.py
+@require_scatter
 class TapasUtilitiesTest(unittest.TestCase):
     def _prepare_tables(self):
         """Prepares two tables, both with three distinct rows.
