@@ -419,13 +419,13 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
     <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
 
     Args:
-        diversity_penalty (:obj:`float`, `optional`):
+        diversity_penalty (:obj:`float`):
             This value is subtracted from a beam's score if it generates a token same as any beam from other group at a
             particular time. Note that :obj:`diversity_penalty` is only effective if ``group beam search`` is enabled.
-        num_beams (:obj:`int`, `optional`):
+        num_beams (:obj:`int`):
             Number of beams used for group beam search. See `this paper <https://arxiv.org/pdf/1610.02424.pdf>`__ for
             more details.
-        num_beam_groups (:obj:`int`, `optional`):
+        num_beam_groups (:obj:`int`):
             Number of groups to divide :obj:`num_beams` into in order to ensure diversity among different groups of
             beams. See `this paper <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
     """

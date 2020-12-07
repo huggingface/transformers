@@ -188,7 +188,8 @@ class BeamSearchScorer(BeamScorer):
 
         if not isinstance(num_beam_groups, int) or (num_beam_groups > num_beams) or (num_beams % num_beam_groups != 0):
             raise ValueError(
-                f"`num_beam_groups` has to be an integer smaller or equal than `num_beams` and `num_beams` has to be divisible by `num_beam_groups`, but is {num_beam_groups} with `num_beams` being {num_beams}."
+                f"`num_beam_groups` has to be an integer smaller or equal than `num_beams` and `num_beams` "
+                f"has to be divisible by `num_beam_groups`, but is {num_beam_groups} with `num_beams` being {num_beams}."
             )
 
     @property
