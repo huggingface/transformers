@@ -34,6 +34,7 @@ from transformers import (
     DataCollatorWithPadding,
     EvalPrediction,
     HfArgumentParser,
+    PreTrainedTokenizerFast,
     TrainingArguments,
     default_data_collator,
     set_seed,
@@ -63,10 +64,6 @@ class ModelArguments:
     cache_dir: Optional[str] = field(
         default=None,
         metadata={"help": "Path to directory to store the pretrained models downloaded from huggingface.co"},
-    )
-    use_fast_tokenizer: bool = field(
-        default=True,
-        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library)."},
     )
 
 
@@ -227,7 +224,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
-        use_fast=model_args.use_fast_tokenizer,
+        use_fast=True,
     )
     model = AutoModelForQuestionAnswering.from_pretrained(
         model_args.model_name_or_path,
@@ -235,6 +232,14 @@ def main():
         config=config,
         cache_dir=model_args.cache_dir,
     )
+
+    # Tokenizer check: this script requires a fast tokenizer.
+    if not isinstance(tokenizer, PreTrainedTokenizerFast):
+        raise ValueError(
+            "This example script only works for models that have a fast tokenizer. Checkout the big table of models "
+            "at https://huggingface.co/transformers/index.html#bigtable to find the model types that meet this "
+            "requirement"
+        )
 
     # Preprocessing the datasets.
     # Preprocessing is slighlty different for training and evaluation.
@@ -440,14 +445,6 @@ def main():
     results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
-
-        # Metric
-        # TODO: Once the fix lands in a Datasets release, remove the _local here and the squad_v2_local folder.
-        current_dir = os.path.sep.join(os.path.join(__file__).split(os.path.sep)[:-1])
-        metric = load_metric(
-            os.path.join(current_dir, "squad_v2_local") if data_args.version_2_with_negative else "squad"
-        )
-
         results = trainer.evaluate()
 
         output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
