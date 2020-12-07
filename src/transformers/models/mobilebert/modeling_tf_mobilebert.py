@@ -1028,35 +1028,14 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
         self.seq_relationship = TFMobileBertOnlyNSPHead(2, name="seq_relationship___cls")
 
     def get_output_embeddings(self):
-        return self.mobilebert.embeddings
+        return self.predictions.predictions
+    
+    def get_output_layer_with_bias(self):
+        return self.predictions.predictions
 
-    def resize_token_embeddings(self, new_num_tokens):
-        super().resize_token_embeddings(new_num_tokens=new_num_tokens)
-
-        if new_num_tokens is not None:
-            num_tokens_to_copy = min(self.predictions.predictions.bias.shape[0], new_num_tokens)
-            self.predictions.predictions.vocab_size = num_tokens_to_copy
-            init_bias = tf.zeros((new_num_tokens,))
-            init_bias[:num_tokens_to_copy] = self.predictions.predictions.bias.value()[:num_tokens_to_copy]
-            name = self.name + "/" + self.predictions.name + "/" + self.predictions.predictions.name + "/bias"
-            self.predictions.predictions.bias = self.add_weight(
-                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
-            )
-            self.predictions.predictions.bias.assign(init_bias)
-
-            init_weights = tf.zeros((new_num_tokens,))
-            init_weights[:num_tokens_to_copy] = self.predictions.predictions.decoder.value()[:num_tokens_to_copy]
-            name = (
-                self.name + "/" + self.predictions.name + "/" + self.predictions.predictions.name + "/decoder/weight"
-            )
-            self.predictions.predictions.decoder = self.add_weight(
-                shape=(new_num_tokens, self.predictions.predictions.config.embedding_size),
-                initializer="zeros",
-                trainable=True,
-                name=name,
-            )
-            self.predictions.predictions.decoder.assign(init_weights)
-
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.predictions.name + "/" + self.predictions.predictions.name
+    
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFMobileBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -1148,32 +1127,13 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
         self.mlm = TFMobileBertMLMHead(config, name="mlm___cls")
 
     def get_output_embeddings(self):
-        return self.mobilebert.embeddings
+        return self.mlm.predictions
+    
+    def get_output_layer_with_bias(self):
+        return self.mlm.predictions
 
-    def resize_token_embeddings(self, new_num_tokens):
-        super().resize_token_embeddings(new_num_tokens=new_num_tokens)
-
-        if new_num_tokens is not None:
-            num_tokens_to_copy = min(self.mlm.predictions.bias.shape[0], new_num_tokens)
-            self.mlm.predictions.vocab_size = num_tokens_to_copy
-            init_bias = tf.zeros((new_num_tokens,))
-            init_bias[:num_tokens_to_copy] = self.mlm.predictions.bias.value()[:num_tokens_to_copy]
-            name = self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name + "/bias"
-            self.mlm.predictions.bias = self.add_weight(
-                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
-            )
-            self.mlm.predictions.bias.assign(init_bias)
-
-            init_weights = tf.zeros((new_num_tokens,))
-            init_weights[:num_tokens_to_copy] = self.mlm.predictions.decoder.value()[:num_tokens_to_copy]
-            name = self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name + "/decoder/weight"
-            self.mlm.predictions.decoder = self.add_weight(
-                shape=(new_num_tokens, self.mlm.predictions.config.embedding_size),
-                initializer="zeros",
-                trainable=True,
-                name=name,
-            )
-            self.mlm.predictions.decoder.assign(init_weights)
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

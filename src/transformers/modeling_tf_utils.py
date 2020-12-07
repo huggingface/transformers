@@ -758,9 +758,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
             # initialize bias
             init_bias = np.zeros((new_num_tokens,))
-            init_bias[:num_tokens_to_copy] = tf.make_ndarray(tf.make_tensor_proto(bias_layer.bias.value()))[
-                :num_tokens_to_copy
-            ]
+            init_bias[:num_tokens_to_copy] = bias_layer.bias.value()[:num_tokens_to_copy] # tf.make_ndarray(tf.make_tensor_proto(bias_layer.bias.value()))[:num_tokens_to_copy]
 
             bias_layer.bias = self.add_weight(
                 shape=(new_num_tokens,),
@@ -770,6 +768,18 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             )
 
             bias_layer.bias.assign(init_bias)
+        
+            if self.get_input_embeddings() != self.get_output_embeddings():
+                init_weights = np.zeros((new_num_tokens, old_embedding_dim))
+                init_weights[:num_tokens_to_copy] = bias_layer.decoder.value()[:num_tokens_to_copy, :]
+
+                bias_layer.decoder = self.add_weight(
+                    shape=(new_num_tokens, old_embedding_dim),
+                    initializer="zeros",
+                    trainable=True,
+                    name=self.get_prefix_bias_name() + "/decoder/weight",
+                )
+                bias_layer.decoder.assign(init_weights)
 
         return new_embeddings
 
