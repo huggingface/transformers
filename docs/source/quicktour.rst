@@ -182,6 +182,7 @@ and get tensors back. You can specify all of that to the tokenizer:
     ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
     ...     padding=True,
     ...     truncation=True,
+    ...     max_length=512,
     ...     return_tensors="pt"
     ... )
     >>> ## TENSORFLOW CODE
@@ -189,6 +190,7 @@ and get tensors back. You can specify all of that to the tokenizer:
     ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
     ...     padding=True,
     ...     truncation=True,
+    ...     max_length=512,
     ...     return_tensors="tf"
     ... )
 
