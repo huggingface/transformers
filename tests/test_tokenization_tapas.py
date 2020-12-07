@@ -24,7 +24,7 @@ import pandas as pd
 
 from transformers import AddedToken
 from transformers.testing_utils import require_tokenizers, slow
-from transformers.tokenization_tapas import (
+from transformers.models.tapas.tokenization_tapas import (
     VOCAB_FILES_NAMES,
     BasicTokenizer,
     TapasTokenizer,
