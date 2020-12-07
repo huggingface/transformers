@@ -426,7 +426,12 @@ def check_model_table(overwrite=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--fix_and_overwrite", action="store_true", help="Whether to fix inconsistencies.")
+    parser.add_argument(
+        "--only_check_copies", action="store_true", help="Whether to only check the copies and not the table."
+    )
     args = parser.parse_args()
 
     check_copies(args.fix_and_overwrite)
-    check_model_table(args.fix_and_overwrite)
+
+    if not args.only_check_copies:
+        check_model_table(args.fix_and_overwrite)
