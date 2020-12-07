@@ -39,7 +39,7 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import is_main_process
-from utils_qa import postprocess_predictions
+from utils_qa import postprocess_qa_predictions
 
 
 logger = logging.getLogger(__name__)
@@ -388,7 +388,7 @@ def main():
     # Post-processing:
     def post_processing_function(examples, features, predictions):
         # Post-processing: we match the start logits and end logits to answers in the original context.
-        predictions = postprocess_predictions(
+        predictions = postprocess_qa_predictions(
             examples=examples,
             features=features,
             predictions=predictions,

@@ -28,7 +28,7 @@ from tqdm.auto import tqdm
 logger = logging.getLogger(__name__)
 
 
-def postprocess_predictions(
+def postprocess_qa_predictions(
     examples,
     features,
     predictions: Tuple[np.ndarray, np.ndarray],
@@ -76,7 +76,7 @@ def postprocess_predictions(
     assert len(predictions) == 2, "`predictions` should be a tuple with two elements (start_logits, end_logits)."
     all_start_logits, all_end_logits = predictions
 
-    assert len(predictions[0]) == len(features), f"Got {len(predictions)} predicitions and {len(features)} features."
+    assert len(predictions[0]) == len(features), f"Got {len(predictions[0])} predicitions and {len(features)} features."
 
     # Build a map example to its corresponding features.
     example_id_to_index = {k: i for i, k in enumerate(examples["id"])}
