@@ -849,7 +849,7 @@ def add_code_sample_docstrings(
         elif "MaskedLM" in model_class or model_class in ["FlaubertWithLMHeadModel", "XLMWithLMHeadModel"]:
             doc_kwargs["mask"] = "[MASK]" if mask is None else mask
             code_sample = TF_MASKED_LM_SAMPLE if is_tf_class else PT_MASKED_LM_SAMPLE
-        elif "LMHead" in model_class:
+        elif "LMHead" in model_class or "CausalLM" in model_class:
             code_sample = TF_CAUSAL_LM_SAMPLE if is_tf_class else PT_CAUSAL_LM_SAMPLE
         elif "Model" in model_class or "Encoder" in model_class:
             code_sample = TF_BASE_MODEL_SAMPLE if is_tf_class else PT_BASE_MODEL_SAMPLE

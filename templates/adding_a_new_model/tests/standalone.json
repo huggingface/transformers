@@ -1,8 +1,8 @@
 {
-  "modelname": "BIEncoderBERT",
-  "uppercase_modelname": "BI_ENCODER_BERT",
-  "lowercase_modelname": "bi_encoder_bert",
-  "camelcase_modelname": "BiEncoderBert",
+  "modelname": "TemplateBI",
+  "uppercase_modelname": "TEMPLATE_BI",
+  "lowercase_modelname": "template_bi",
+  "camelcase_modelname": "TemplateBi",
   "authors": "The HuggingFace Team",
   "checkpoint_identifier": "bi-brand-new-bert-base-cased",
   "tokenizer_type": "Standalone",
