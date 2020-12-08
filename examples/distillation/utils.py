@@ -52,7 +52,7 @@ def init_gpu_params(params):
     """
     Handle single and multi-GPU / multi-node.
     """
-    if params.n_gpu <= 0:
+    if params.gpus <= 0:
         params.local_rank = 0
         params.master_port = -1
         params.is_master = True
@@ -62,7 +62,7 @@ def init_gpu_params(params):
     assert torch.cuda.is_available()
 
     logger.info("Initializing GPUs")
-    if params.n_gpu > 1:
+    if params.gpus > 1:
         assert params.local_rank != -1
 
         params.world_size = int(os.environ["WORLD_SIZE"])
@@ -129,5 +129,5 @@ def set_seed(args):
     """
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
-    if args.n_gpu > 0:
+    if args.gpus > 0:
         torch.cuda.manual_seed_all(args.seed)

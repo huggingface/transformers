@@ -286,13 +286,13 @@ def main():
     else:
         student = student_model_class(stu_architecture_config)
 
-    if args.n_gpu > 0:
+    if args.gpus > 0:
         student.to(f"cuda:{args.local_rank}")
     logger.info("Student loaded.")
 
     # TEACHER #
     teacher = teacher_model_class.from_pretrained(args.teacher_name, output_hidden_states=True)
-    if args.n_gpu > 0:
+    if args.gpus > 0:
         teacher.to(f"cuda:{args.local_rank}")
     logger.info(f"Teacher loaded from {args.teacher_name}.")
 
