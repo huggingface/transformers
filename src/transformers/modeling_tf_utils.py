@@ -309,9 +309,9 @@ def booleans_processing(config, **kwargs):
 
 def input_processing(func, config, input_ids, **kwargs):
     """
-    Process the input of each TensorFlow model including the booleans. In case of a list of tensors, each tensor has to
-    be named them accordingly to the parameters names, i.e. `input_ids = tf.keras.Input(shape=(128,), dtype='int32',
-    name="input_ids")` otherwise the order of each tensor in the list will not be guaranteed during the training.
+    Process the input of each TensorFlow model including the booleans. In case of a list of symbolic inputs, each input
+    has to be named accordingly to the parameters name, i.e. `input_ids = tf.keras.Input(shape=(128,), dtype='int32',
+    name="input_ids")` otherwise the order of the tensors will not be guaranteed during the training.
 
     Args:
         func (:obj:`callable`):
