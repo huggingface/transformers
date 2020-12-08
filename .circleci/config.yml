@@ -18,14 +18,17 @@ commands:
                 head_sha=$(jq -r .head.sha \<<< $resp)
                 commits=$(jq -r .commits \<<< $resp)
 
+                echo base_sha=$base_sha, head_sha=$head_sha, commits=$commits
+
                 echo log
                 git --no-pager log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit | head -15
+                
+                echo count backward $commits commits
+                git --no-pager diff --name-only HEAD~$commits
                 
                 echo github api base.sha could be outdated
                 git --no-pager diff --name-only $base_sha $head_sha
 
-                echo count backward $commits commits
-                git --no-pager diff --name-only HEAD~$commits
 
             fi
 
