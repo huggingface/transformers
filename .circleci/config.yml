@@ -15,56 +15,22 @@ commands:
             then
                 echo $CIRCLE_PR_NUMBER
                 resp=$(curl -Ls https://api.github.com/repos/huggingface/transformers/pulls/${CIRCLE_PR_NUMBER})
-                base_sha=$(jq -r .base.sha \<<< $resp)
-                head_sha=$(jq -r .head.sha \<<< $resp)
-                base_ref=$(jq -r .base.ref \<<< $resp)
                 head_ref=$(jq -r .head.ref \<<< $resp)
-                commits=$(jq -r .commits \<<< $resp)
                 user=$(jq -r .user.login \<<< $resp)
                 
-                echo base_ref=$base_ref, head_ref=$head_ref, commits=$commits
-                echo base_sha=$base_sha, head_sha=$head_sha, commits=$commits
+                echo head_ref=$head_ref, user=$user
 
-                # CIRCLE_PR_USERNAME (forked PRs)
+                # CIRCLE_PR_USERNAME (only forked PRs)
                 echo CIRCLE_PR_USERNAME=$CIRCLE_PR_USERNAME, user=$user
-                mkdir user-clone
+                git clone https://github.com/$user/transformers user-clone
                 cd user-clone
-                pwd
-                git clone https://github.com/$user/transformers
-                cd transformers
                 git checkout $head_ref
-                git merge-base --fork-point master
-                echo done
+                fork_point_sha=$(git merge-base --fork-point master)
+                cd -
 
-                echo log
-                git --no-pager log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit | head -$(($commits+1)) || if [[ $? -eq 141 ]]; then true; else exit $?; fi
-
-                echo current branch
-                git rev-parse --abbrev-ref HEAD
-
-                circle_head_sha=$(git rev-parse $CIRCLE_BRANCH)
-                base_ref=$(jq -r .base.ref \<<< $resp)
-                echo CIRCLE_BRANCH=$CIRCLE_BRANCH circle_head_sha=$circle_head_sha head_ref=$head_ref
-                if test -n "$circle_head_sha" && test -n "$head_sha"
-                then
-                    echo base_ref CIRCLE_BRANCH
-                    git --no-pager diff --name-only $base_ref $CIRCLE_BRANCH
-                    echo base_sha circle_head_sha
-                    git --no-pager diff --name-only $base_sha $circle_head_sha
-                fi
-
-            fi
-
-            if test -n "$base_sha" && test -n "$head_sha" && test -n "$(git diff --name-only $base_sha $head_sha)"
+            if test -n "$fork_point_sha" && test -n "$(git diff --name-only $fork_point_sha)"
             then
-
-                echo count backward $commits commits
-                git --no-pager diff --name-only HEAD~$commits
-                
-                echo github api note: base.sha could be outdated
-                git --no-pager diff --name-only $base_sha $head_sha
-
-                if git diff --name-only $base_sha $head_sha | egrep -qv '\.(md|rst)$'
+                if git diff --name-only $fork_point_sha | egrep -qv '\.(md|rst)$'
                 then
                     echo "Non-docs were modified in this PR, proceeding normally"
                 else
