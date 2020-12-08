@@ -17,7 +17,12 @@ commands:
                 resp=$(curl -Ls https://api.github.com/repos/huggingface/transformers/pulls/${CIRCLE_PR_NUMBER})
                 base_sha=$(jq -r .base.sha \<<< $resp)
                 head_sha=$(jq -r .head.sha \<<< $resp)
+                base_ref=$(jq -r .base.ref \<<< $resp)
+                head_ref=$(jq -r .head.ref \<<< $resp)
                 commits=$(jq -r .commits \<<< $resp)
+
+                git fetch upstream pull/$CIRCLE_PR_NUMBER/head && git checkout FETCH_HEAD
+                git merge-base --fork-point master
 
                 echo base_sha=$base_sha, head_sha=$head_sha, commits=$commits
                 
@@ -33,9 +38,9 @@ commands:
                 if test -n "$circle_head_sha" && test -n "$head_sha"
                 then
                     echo base_ref CIRCLE_BRANCH
-                    git diff --name-only $base_ref $CIRCLE_BRANCH
+                    git --no-pager diff --name-only $base_ref $CIRCLE_BRANCH
                     echo base_sha circle_head_sha
-                    git diff --name-only $base_sha $circle_head_sha
+                    git --no-pager diff --name-only $base_sha $circle_head_sha
                 fi
 
             fi
