@@ -788,6 +788,8 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
 
     config_class = T5Config
     base_model_prefix = "transformer"
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"decoder\Wblock[\W_0]+layer[\W_1]+EncDecAttention\Wrelative_attention_bias"]
 
     @property
     def dummy_inputs(self):

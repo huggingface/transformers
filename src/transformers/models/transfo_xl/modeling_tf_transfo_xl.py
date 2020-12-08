@@ -16,6 +16,7 @@
 """
  TF 2.0 Transformer XL model.
 """
+
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
