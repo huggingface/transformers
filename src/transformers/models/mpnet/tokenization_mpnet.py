@@ -93,7 +93,7 @@ class MPNetTokenizer(PreTrainedTokenizer):
 
                 When building a sequence using special tokens, this is not the token that is used for the end of
                 sequence. The token used is the :obj:`sep_token`.
-        sep_token (:obj:`string`, `optional`, defaults to :obj:`"</s>"`):
+        sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
             token of a sequence built with special tokens.
