@@ -388,6 +388,8 @@ def main():
         )
 
     # Data collator
+    # We have already padded to max length if the corresponding flag is True, otherwise we need to pad in the data
+    # collator.
     data_collator = default_data_collator if data_args.pad_to_max_length else DataCollatorWithPadding(tokenizer)
 
     # Post-processing:
