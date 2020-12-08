@@ -24,7 +24,7 @@ commands:
                 git --no-pager log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit | head -$(($commits+1)) || if [[ $? -eq 141 ]]; then true; else exit $?; fi
 
                 echo current branch
-                git branch --show-current
+                git rev-parse --abbrev-ref HEAD
 
                 circle_base_sha=$(git rev-parse $CIRCLE_BRANCH)
                 head_ref=$(jq -r .head.ref \<<< $resp)
