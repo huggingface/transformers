@@ -34,7 +34,8 @@ from .utils import logging
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
 
-if version.parse(torch.__version__) <= version.parse("1.4.1"):
+# this is used to supress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
+if version.parse(torch.__version__) <= version.parse("1.4.1") or version.parse(torch.__version__) > version.parse("1.7.0"):
     SAVE_STATE_WARNING = ""
 else:
     from torch.optim.lr_scheduler import SAVE_STATE_WARNING
