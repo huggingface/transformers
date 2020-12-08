@@ -31,6 +31,7 @@
     from .models.{{cookiecutter.lowercase_modelname}} import (
         {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
         {{cookiecutter.camelcase_modelname}}ForMaskedLM,
+        {{cookiecutter.camelcase_modelname}}ForCausalLM,
         {{cookiecutter.camelcase_modelname}}ForMultipleChoice,
         {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
         {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
@@ -47,6 +48,7 @@
     from .models.{{cookiecutter.lowercase_modelname}} import (
         TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
         TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
+        TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
         TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
         TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
         TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
@@ -57,10 +59,13 @@
     )
 # End.
 
+# Below: "if is_tokenizers_available():"
+# Replace with:
+    from models.{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}TokenizerFast
 
 # Below: "from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig"
 # Replace with:
-from .models.{{cookiecutter.lowercase_modelname}} import {{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP, {{cookiecutter.camelcase_modelname}}Config
+from .models.{{cookiecutter.lowercase_modelname}} import {{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP, {{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}Tokenizer
 # End.
 
 
@@ -96,9 +101,9 @@ from ..{{cookiecutter.lowercase_modelname}}.configuration_{{cookiecutter.lowerca
 
 # Below: "# Add modeling imports here"
 # Replace with:
-
 from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_modelname}} import (
     {{cookiecutter.camelcase_modelname}}ForMaskedLM,
+    {{cookiecutter.camelcase_modelname}}ForCausalLM,
     {{cookiecutter.camelcase_modelname}}ForMultipleChoice,
     {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
     {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
@@ -115,6 +120,11 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_mo
 # Below: "# Model with LM heads mapping"
 # Replace with:
         ({{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}ForMaskedLM),
+# End.
+
+# Below: "# Model for Causal LM mapping"
+# Replace with:
+        ({{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}ForCausalLM),
 # End.
 
 # Below: "# Model for Masked LM mapping"
@@ -151,9 +161,9 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_mo
 
 # Below: "# Add modeling imports here"
 # Replace with:
-
 from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase_modelname}} import (
     TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
+    TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
     TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
     TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
     TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
@@ -170,6 +180,11 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase
 # Below: "# Model with LM heads mapping"
 # Replace with:
         ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForMaskedLM),
+# End.
+
+# Below: "# Model for Causal LM mapping"
+# Replace with:
+        ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForCausalLM),
 # End.
 
 # Below: "# Model for Masked LM mapping"
