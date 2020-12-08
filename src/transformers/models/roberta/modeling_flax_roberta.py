@@ -123,9 +123,11 @@ class FlaxRobertaLayerNorm(nn.Module):
         mean2 = jnp.mean(jax.lax.square(x), axis=-1, keepdims=True)
         var = mean2 - jax.lax.square(mean)
         mul = jax.lax.rsqrt(var + self.epsilon)
+
         if self.scale:
             mul = mul * jnp.asarray(self.param("gamma", self.scale_init, (features,)))
         y = (x - mean) * mul
+
         if self.bias:
             y = y + jnp.asarray(self.param("beta", self.bias_init, (features,)))
         return y
@@ -370,7 +372,7 @@ class FlaxRobertaPooler(nn.Module):
             name="dense",
             dtype=self.dtype,
         )(cls_token)
-        return jax.lax.tanh(out)
+        return nn.tanh(out)
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertModule with Bert->Roberta

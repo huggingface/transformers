@@ -372,7 +372,7 @@ class FlaxBertModule(nn.Module):
     num_heads: int
     head_size: int
     intermediate_size: int
-    dropout_rate: float
+    dropout_rate: float = 0.0
     kernel_init_scale: float = 0.2
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
