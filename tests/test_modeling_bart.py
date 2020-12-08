@@ -52,7 +52,7 @@ if is_torch_available():
     from transformers.models.bart.modeling_bart import (
         BartDecoder,
         BartEncoder,
-        SinusoidalPositionalEmbedding,
+        BartSinusoidalPositionalEmbedding,
         shift_tokens_right,
     )
 
@@ -183,7 +183,7 @@ class BartModelTester:
         with tempfile.TemporaryDirectory() as tmpdirname:
             encoder = model.get_encoder()
             encoder.save_pretrained(tmpdirname)
-            encoder = BartEncoder.from_pretrained(tmpdirname)
+            encoder = BartEncoder.from_pretrained(tmpdirname).to(torch_device)
 
         encoder_last_hidden_state_2 = encoder(inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"])[
             0
@@ -194,7 +194,7 @@ class BartModelTester:
         with tempfile.TemporaryDirectory() as tmpdirname:
             decoder = model.get_decoder()
             decoder.save_pretrained(tmpdirname)
-            decoder = BartDecoder.from_pretrained(tmpdirname)
+            decoder = BartDecoder.from_pretrained(tmpdirname).to(torch_device)
 
         last_hidden_state_2 = decoder(
             input_ids=inputs_dict["decoder_input_ids"],
@@ -566,14 +566,14 @@ class BartModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     @slow
-    def test_bart_base_mask_filling(self):
+    def test_base_mask_filling(self):
         pbase = pipeline(task="fill-mask", model="facebook/bart-base")
         src_text = [" I went to the <mask>."]
         results = [x["token_str"] for x in pbase(src_text)]
         assert "Ġbathroom" in results
 
     @slow
-    def test_bart_large_mask_filling(self):
+    def test_large_mask_filling(self):
         plarge = pipeline(task="fill-mask", model="facebook/bart-large")
         src_text = [" I went to the <mask>."]
         results = [x["token_str"] for x in plarge(src_text)]
@@ -704,7 +704,7 @@ class BartModelIntegrationTests(unittest.TestCase):
 
 
 @require_torch
-class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
+class TestBartSinusoidalPositionalEmbeddings(unittest.TestCase):
     desired_weights = [
         [0, 0, 0, 0, 0],
         [0.84147096, 0.82177866, 0.80180490, 0.78165019, 0.76140374],
@@ -712,7 +712,7 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
     ]
 
     def test_positional_emb_cache_logic(self):
-        emb1 = SinusoidalPositionalEmbedding(num_positions=32, embedding_dim=6, padding_idx=1).to(torch_device)
+        emb1 = BartSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=6, padding_idx=1).to(torch_device)
         no_cache = emb1((4, 10), past_key_values_length=0)
         yes_cache = emb1((4, 10), past_key_values_length=2)
 
@@ -721,14 +721,16 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
 
     def test_odd_embed_dim(self):
         # odd embedding_dim is allowed
-        SinusoidalPositionalEmbedding(num_positions=4, embedding_dim=5, padding_idx=0).to(torch_device)
+        BartSinusoidalPositionalEmbedding(num_positions=4, embedding_dim=5, padding_idx=0).to(torch_device)
 
         # odd num_positions is allowed
-        SinusoidalPositionalEmbedding(num_positions=5, embedding_dim=4, padding_idx=0).to(torch_device)
+        BartSinusoidalPositionalEmbedding(num_positions=5, embedding_dim=4, padding_idx=0).to(torch_device)
 
     def test_positional_emb_weights_against_marian(self):
         pad = 1
-        emb1 = SinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512, padding_idx=pad).to(torch_device)
+        emb1 = BartSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512, padding_idx=pad).to(
+            torch_device
+        )
         weights = emb1.weight.data[:3, :5].tolist()
         for i, (expected_weight, actual_weight) in enumerate(zip(self.desired_weights, weights)):
             for j in range(5):

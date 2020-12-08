@@ -78,8 +78,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = torch.zeros(tgt_len, tgt_len, dtype=torch.long)
-    mask = mask.float().fill_(float("-inf")).type_as(mask)
+    mask = torch.full((tgt_len, tgt_len), float("-inf"))
     mask_cond = torch.arange(mask.size(-1))
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
     mask = mask.to(dtype)
@@ -150,7 +149,7 @@ class BartLearnedPositionalEmbedding(nn.Embedding):
         return super().forward(positions + self.offset)
 
 
-class SinusoidalPositionalEmbedding(nn.Embedding):
+class BartSinusoidalPositionalEmbedding(nn.Embedding):
     """This module produces sinusoidal positional embeddings of any length."""
 
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
@@ -222,11 +221,10 @@ class BartAttention(nn.Module):
         self,
         hidden_states,
         key_value_states: Optional[torch.Tensor] = None,
-        key_padding_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attn_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -258,6 +256,13 @@ class BartAttention(nn.Module):
             value_states = self.v_proj(hidden_states)
 
         if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
         query_states = self._shape(query_states, tgt_len, bsz)
@@ -313,7 +318,7 @@ class BartAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class EncoderLayer(nn.Module):
+class BartEncoderLayer(nn.Module):
     def __init__(self, config: BartConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -370,7 +375,7 @@ class EncoderLayer(nn.Module):
         return hidden_states, attn_weights
 
 
-class DecoderLayer(nn.Module):
+class BartDecoderLayer(nn.Module):
     def __init__(self, config: BartConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -412,6 +417,7 @@ class DecoderLayer(nn.Module):
             hidden_states = self.self_attn_layer_norm(hidden_states)
         # Self Attention
 
+        # decoder uni-directional self-attention cached key/values tuple is at first position
         self_attn_past_key_value = past_key_value[0] if past_key_value is not None else None
         hidden_states, self_attn_weights, self_attn_present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -432,6 +438,7 @@ class DecoderLayer(nn.Module):
             if self.normalize_before:
                 hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
+            # cross_attn cached key/values tuple is at second position
             cross_attn_past_key_value = past_key_value[1] if past_key_value is not None else None
             hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
                 hidden_states=hidden_states,
@@ -457,6 +464,7 @@ class DecoderLayer(nn.Module):
         if not self.normalize_before:
             hidden_states = self.final_layer_norm(hidden_states)
 
+        # make sure decoder uni-directional self-attn at 1st position and cross-attn at 2nd position.
         present_key_value = (self_attn_present_key_value, cross_attn_present_key_value)
 
         return (
@@ -501,7 +509,7 @@ class BartPretrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, SinusoidalPositionalEmbedding):
+        elif isinstance(module, BartSinusoidalPositionalEmbedding):
             pass
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
@@ -522,7 +530,7 @@ class BartPretrainedModel(PreTrainedModel):
 class PretrainedBartModel(BartPretrainedModel):
     def __init_subclass__(self):
         warnings.warn(
-            "The class `PretrainedBartModel` has been depreciated, please use " "`BartPretrainedModel` instead.",
+            "The class `PretrainedBartModel` has been depreciated, please use `BartPretrainedModel` instead.",
             FutureWarning,
         )
 
@@ -593,7 +601,7 @@ BART_INPUTS_DOCSTRING = r"""
             :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
             `optional`) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
             cross-attention of the decoder.
-        past_key_values (:obj:`Tuple[Dict[str: tf.Tensor]]` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+        past_key_values (:obj:`Tuple[Tuple[Tuple[torch.Tensor]]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
 
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
@@ -628,7 +636,7 @@ BART_INPUTS_DOCSTRING = r"""
 class BartEncoder(BartPretrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    :class:`EncoderLayer`.
+    :class:`BartEncoderLayer`.
 
     Args:
         config: BartConfig
@@ -652,7 +660,7 @@ class BartEncoder(BartPretrainedModel):
             self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
         if config.static_position_embeddings:
-            self.embed_positions = SinusoidalPositionalEmbedding(
+            self.embed_positions = BartSinusoidalPositionalEmbedding(
                 config.max_position_embeddings, embed_dim, self.padding_idx
             )
         else:
@@ -662,7 +670,7 @@ class BartEncoder(BartPretrainedModel):
                 self.padding_idx,
                 config.extra_pos_embeddings,
             )
-        self.layers = nn.ModuleList([EncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([BartEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = BartLayerNorm(embed_dim) if config.normalize_embedding else nn.Identity()
         # mbart has one extra layer_norm
         self.layer_norm = BartLayerNorm(config.d_model) if config.add_final_layer_norm else None
@@ -678,6 +686,37 @@ class BartEncoder(BartPretrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        Args:
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
+                provide it.
+
+                Indices can be obtained using :class:`~transformers.BartTokenizer`. See
+                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
+                for details.
+
+                `What are input IDs? <../glossary.html#input-ids>`__
+            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                `What are attention masks? <../glossary.html#attention-mask>`__
+            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
+                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
+                into associated vectors than the model's internal embedding lookup matrix.
+            output_attentions (:obj:`bool`, `optional`):
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more detail.
+            output_hidden_states (:obj:`bool`, `optional`):
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
+                for more detail.
+            return_dict (:obj:`bool`, `optional`):
+                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -739,7 +778,7 @@ class BartEncoder(BartPretrainedModel):
 
 class BartDecoder(BartPretrainedModel):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`DecoderLayer`
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`BartDecoderLayer`
 
     Args:
         config: BartConfig
@@ -761,7 +800,7 @@ class BartDecoder(BartPretrainedModel):
             self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
         if config.static_position_embeddings:
-            self.embed_positions = SinusoidalPositionalEmbedding(
+            self.embed_positions = BartSinusoidalPositionalEmbedding(
                 config.max_position_embeddings, config.d_model, config.pad_token_id
             )
         else:
@@ -771,7 +810,7 @@ class BartDecoder(BartPretrainedModel):
                 self.padding_idx,
                 config.extra_pos_embeddings,
             )
-        self.layers = nn.ModuleList([DecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList([BartDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = BartLayerNorm(config.d_model) if config.normalize_embedding else nn.Identity()
         self.layer_norm = BartLayerNorm(config.d_model) if config.add_final_layer_norm else None
 
@@ -790,6 +829,56 @@ class BartDecoder(BartPretrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        Args:
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
+                provide it.
+
+                Indices can be obtained using :class:`~transformers.BartTokenizer`. See
+                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
+                for details.
+
+                `What are input IDs? <../glossary.html#input-ids>`__
+            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                `What are attention masks? <../glossary.html#attention-mask>`__
+            encoder_hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, encoder_sequence_length, hidden_size)`, `optional`):
+                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+                of the decoder.
+            encoder_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, encoder_sequence_length)`, `optional`):
+                Mask to avoid performing cross-attention on padding tokens indices of encoder input_ids. Mask values
+                selected in ``[0, 1]``:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                `What are attention masks? <../glossary.html#attention-mask>`__
+            past_key_values (:obj:`Tuple[Tuple[Tuple[torch.Tensor]]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+                Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
+                decoding.
+
+                If :obj:`past_key_values` are used, the user can optionally input only the last
+                :obj:`decoder_input_ids` (those that don't have their past key value states given to this model) of
+                shape :obj:`(batch_size, 1)` instead of all :obj:`decoder_input_ids`` of shape :obj:`(batch_size,
+                sequence_length)`.
+            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
+                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
+                into associated vectors than the model's internal embedding lookup matrix.
+            output_attentions (:obj:`bool`, `optional`):
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more detail.
+            output_hidden_states (:obj:`bool`, `optional`):
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
+                for more detail.
+            return_dict (:obj:`bool`, `optional`):
+                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1271,13 +1360,15 @@ class BartForSequenceClassification(BartPretrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        x = outputs[0]  # last hidden state
+        hidden_states = outputs[0]  # last hidden state
 
         eos_mask = input_ids.eq(self.config.eos_token_id)
 
         if len(torch.unique(eos_mask.sum(1))) > 1:
             raise ValueError("All examples must have the same number of <eos> tokens.")
-        sentence_representation = x[eos_mask, :].view(x.size(0), -1, x.size(-1))[:, -1, :]
+        sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[
+            :, -1, :
+        ]
         logits = self.classification_head(sentence_representation)
 
         loss = None
