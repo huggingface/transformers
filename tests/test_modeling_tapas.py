@@ -566,6 +566,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
         logits = outputs.logits
         expected_shape = torch.Size((2, 28))
         self.assertEqual(logits.shape, expected_shape)
+
         expected_slice = torch.tensor([[-160.375504, -160.375504, -160.375504, -10072.3965, -10070.9414, -10094.9736],
                                        [-9861.6123, -9861.6123, -9861.6123, -9861.6123, -9891.01172, 146.600677]],
                                        device=torch_device) # ok (batch size = 2)
@@ -599,6 +600,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
         # note that nielsr/tapas-base-finetuned-wtq should correspond to tapas_wtq_wikisql_sqa_inter_masklm_base_reset
         model = TapasForQuestionAnswering.from_pretrained("nielsr/tapas-base-finetuned-wtq").to(torch_device)
         model.to(torch_device)
+        # normally we should put the model in training mode but it's a pain to do this with the TF 1 implementation 
 
         tokenizer = self.default_tokenizer
         # let's test on a batch 

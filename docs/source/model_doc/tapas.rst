@@ -5,8 +5,8 @@ Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The TAPAS model was proposed in `TAPAS: Weakly Supervised Table Parsing via Pre-training
-<https://arxiv.org/abs/2004.02349>`__ by Jonathan Herzig, Paweł Krzysztof Nowak, Thomas Müller, Francesco Piccinno and
-Julian Martin Eisenschlos. It's a BERT-based model specifically designed (and pre-trained) for answering questions
+<https://www.aclweb.org/anthology/2020.acl-main.398>`__ by Jonathan Herzig, Paweł Krzysztof Nowak, Thomas Müller, Francesco 
+Piccinno and Julian Martin Eisenschlos. It's a BERT-based model specifically designed (and pre-trained) for answering questions
 about tabular data. Compared to BERT, TAPAS uses relative position embeddings and has 7 token types that encode tabular
 structure. TAPAS is pre-trained on the masked language modeling (MLM) objective on a large dataset comprising millions
 of tables from English Wikipedia and corresponding texts. For question answering, TAPAS has 2 heads on top: a cell
@@ -39,16 +39,20 @@ table entailment (a binary classification task). For more details, see their fol
 intermediate pre-training <https://arxiv.org/abs/2010.00571>`__ by Julian Martin Eisenschlos, Syrine Krichene and
 Thomas Müller.
 
-The original code can be found `here <https://github.com/google-research/tapas>`__.
+The original code can be found `here <https://github.com/google-research/tapas>`__. This page also includes links to the 
+datasets (SQA, WTQ, WikiSQL and TabFact).
 
 Tips:
 
 - TAPAS is a model that uses relative position embeddings by default (restarting the position embeddings at every cell
-  of the table). According to the authors, this usually results in a slightly better performance, and allows you to
-  encode longer sequences without running out of embeddings. This is reflected in the ``reset_position_index_per_cell`` 
-  parameter of :class:`~transformers.TapasConfig`, which is set to ``True`` by default. 
-  There are both pre-trained models in the `model hub <https://huggingface.co/models?search=tapas>`_ with absolute and relative 
-  position embeddings. Note that it's usually advised to pad the inputs on the right rather than the left.
+  of the table). Note that this is something that was added after the publication of the original TAPAS paper. According 
+  to the authors, this usually results in a slightly better performance, and allows you to encode longer sequences without 
+  running out of embeddings. This is reflected in the ``reset_position_index_per_cell`` parameter of :class:`~transformers.TapasConfig`, 
+  which is set to ``True`` by default. 
+  The latest versions of the models available in the `model hub <https://huggingface.co/models?search=tapas>`_ all use relative 
+  position embeddings. You can still use the ones with absolute position embeddings by passing in a certain version when calling the
+  `.from_pretrained` method as explained in the model cards. 
+  Note that it's usually advised to pad the inputs on the right rather than the left.
 - TAPAS is based on BERT, so ``TAPAS-base`` for example corresponds to a ``BERT-base`` architecture. Of course, TAPAS-large 
   will result in the best performance (the results reported in the paper are from TAPAS-large). Metrics of the various 
   sized models are shown on the `original Github repository <https://github.com/google-research/tapas>`_. 
@@ -77,13 +81,13 @@ the different datasets on which Tapas was fine-tuned:
 1. SQA: if you're interested in asking follow-up questions related to a table, in a conversational set-up. For example if you 
    first ask "what's the name of the first actor?" then you can ask a follow-up question such as "how old is he?". Here, questions 
    do not involve any aggregation (all questions are cell selection questions).
-2. WTQ/WikiSQL: if you're not interested in asking questions in a conversational set-up, but rather just asking questions related 
+2. WTQ: if you're not interested in asking questions in a conversational set-up, but rather just asking questions related 
    to a table, which might involve aggregation, such as counting a number of rows, summing up cell values or averaging cell values. 
    You can then for example ask "what's the total number of goals Cristiano Ronaldo made in his career?". This case is also called **weak 
    supervision**, since the model itself must learn the appropriate aggregation operator (SUM/COUNT/AVERAGE/NONE) given only the answer 
    to the question as supervision.
-3. WikiSQL-supervised: this dataset is actually the same dataset as WikiSQL, but here the model is given the ground truth aggregation 
-   operator during training. This is also called **strong supervision**. Here, learning the appropriate aggregation operator is much easier.
+3. WikiSQL-supervised: this dataset is based on WikiSQL with the model being given the ground truth aggregation operator during training. 
+   This is also called **strong supervision**. Here, learning the appropriate aggregation operator is much easier.
 
 To summarize:
 
@@ -92,7 +96,7 @@ To summarize:
 +------------------------------------+----------------------+-------------------------------------------------------------------------------------------------------------------+
 | Conversational                     | SQA                  | Conversational, only cell selection questions                                                                     |
 +------------------------------------+----------------------+-------------------------------------------------------------------------------------------------------------------+
-| Weak supervision for aggregation   | WTQ, WikiSQL         | Questions might involve aggregation, and the model must learn this given only the answer as supervision           |
+| Weak supervision for aggregation   | WTQ                  | Questions might involve aggregation, and the model must learn this given only the answer as supervision           |
 +------------------------------------+----------------------+-------------------------------------------------------------------------------------------------------------------+
 | Strong supervision for aggregation | WikiSQL-supervised   | Questions might involve aggregation, and the model must learn this given the gold aggregation operator            |
 +------------------------------------+----------------------+-------------------------------------------------------------------------------------------------------------------+
@@ -107,7 +111,7 @@ Initializing a model with a pre-trained base and randomly initialized classifica
         >>> model = TapasForQuestionAnswering.from_pretrained('google/tapas-base-uncased')
 
 
-Of course, you don't necessarily have to follow one these three ways in which TAPAS was fine-tuned. You can also experiment by defining any hyperparameters 
+Of course, you don't necessarily have to follow one of these three ways in which TAPAS was fine-tuned. You can also experiment by defining any hyperparameters 
 you want when initializing :class:`~transformers.TapasConfig`, and then create a :class:`~transformers.TapasForQuestionAnswering` based on that 
 configuration. For example, if you have a dataset that has both conversational questions and questions that might involve aggregation, then you can do it 
 this way. Here's an example:
@@ -136,7 +140,7 @@ This format is a TSV/CSV file with the following columns:
 - ``id``: optional, id of the table-question pair, for bookkeeping purposes. 
 - ``annotator``: optional, id of the person who annotated the table-question pair, for bookkeeping purposes. 
 - ``position``: integer indicating if the question is the first, second, third,... related to the table. Only required in case of conversational setup (SQA). 
-  You don't need this column in case you're going for WTQ/WikiSQL/WikiSQL-supervised.
+  You don't need this column in case you're going for WTQ/WikiSQL-supervised.
 - ``question``: string
 - ``table_file``: string, name of a csv file containing the tabular data
 - ``answer_coordinates``: list of one or more tuples (each tuple being a cell coordinate, i.e. row, column pair that is part of the answer)
@@ -145,7 +149,7 @@ This format is a TSV/CSV file with the following columns:
 - ``float_answer``: the float answer to the question, if there is one (np.nan if there isn't). Only required in case of weak supervision for aggregation (such as WTQ and WikiSQL)
 
 The tables themselves should be present in a folder, each table being a separate csv file. Note that the authors of the TAPAS algorithm used conversion 
-scripts with some automated logic to convert the other datasets (WTQ and WikiSQL) into the SQA format. The author explains this `here <https://github.com/google-research/tapas/issues/50#issuecomment-705465960>`__. 
+scripts with some automated logic to convert the other datasets (WTQ, WikiSQL) into the SQA format. The author explains this `here <https://github.com/google-research/tapas/issues/50#issuecomment-705465960>`__. 
 Interestingly, these conversion scripts are not perfect (the ``answer_coordinates`` and ``float_answer`` fields are populated based on the ``answer_text``), 
 meaning that WTQ and WikiSQL results could actually be improved.
 
@@ -267,7 +271,7 @@ Usage: inference
 
 Here we explain how you can use :class:`~transformers.TapasForQuestionAnswering` for inference (i.e. making predictions on new data).
 For inference, only ``input_ids``, ``attention_mask`` and ``token_type_ids`` (which you can obtain using 
-:class:`~transformers.TapasTokenizer`) have to provided to the model to obtain the logits. Next, you can use the handy 
+:class:`~transformers.TapasTokenizer`) have to be provided to the model to obtain the logits. Next, you can use the handy 
 ``convert_logits_to_predictions`` method of :class:`~transformers.TapasTokenizer` to convert these into predicted coordinates 
 and optional aggregation indices. 
 
@@ -332,7 +336,7 @@ the ``prev_label_ids`` token types can be overwritten by the predicted ``label_i
 Tapas specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.modeling_tapas.TableQuestionAnsweringOutput
+.. autoclass:: transformers.models.tapas.modeling_tapas.TableQuestionAnsweringOutput
     :members:
 
 
