@@ -281,12 +281,11 @@ class FlaxRobertaLayer(nn.Module):
             kernel_init_scale=self.kernel_init_scale,
             dropout_rate=self.dropout_rate,
             name="attention",
-            dtype=self.type,
+            dtype=self.dtype,
         )(hidden_state, attention_mask, deterministic=deterministic)
         intermediate = FlaxRobertaIntermediate(
             self.intermediate_size,
             kernel_init_scale=self.kernel_init_scale,
-            dropout_rate=self.dropout_rate,
             name="intermediate",
             dtype=self.dtype,
         )(attention)
@@ -541,7 +540,7 @@ class FlaxRobertaModel(FlaxPreTrainedModel):
         if dropout_rng is not None:
             rngs["dropout"] = dropout_rng
 
-        return self.model.apply(
+        return self.module.apply(
             {"params": params or self.params},
             jnp.array(input_ids, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),

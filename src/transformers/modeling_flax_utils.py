@@ -97,7 +97,7 @@ class FlaxPreTrainedModel(ABC):
         raise NotImplementedError()
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, dtype: jnp.dtype, *model_args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path, dtype: jnp.dtype = jnp.float32, *model_args, **kwargs):
         r"""
         Instantiate a pretrained Flax model from a pre-trained model configuration.
         """
