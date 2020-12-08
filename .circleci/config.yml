@@ -11,20 +11,30 @@ commands:
       - run:
           name: docs-only changes skip check
           command: |
-            # pipeline.git.base_revision is not always defined, so only proceed if all external vars are defined
-            if test -n "<< pipeline.git.base_revision >>" && test -n "<< pipeline.git.revision >>" && test -n "$(git diff --name-only << pipeline.git.base_revision >>...<< pipeline.git.revision >>)"
+            if test -n "$CIRCLE_PR_NUMBER"
             then
-                if git diff --name-only << pipeline.git.base_revision >>...<< pipeline.git.revision >> | egrep -qv '\.(md|rst)$'
+                resp=$(curl -Ls https://api.github.com/repos/huggingface/transformers/pulls/${CIRCLE_PR_NUMBER})
+                base_ref=$(jq -r .base.ref <<< $resp)
+                head_ref=$(jq -r .head.ref <<< $resp)
+                echo "$(base_ref}..${head_ref}"
+            fi
+
+            if test -n "${base_ref}" && test -n "${head_ref}" && test -n "$(git diff --name-only ${base_ref}..${head_ref})"
+            then
+                # XXX: remove the next debug line when ready
+                git diff --name-only ${base_ref}..${head_ref}
+                if git diff --name-only ${base_ref}..${head_ref} | egrep -qv '\.(md|rst)$'
                 then
                     echo "Non-docs were modified in this PR, proceeding normally"
                 else
                     echo "Only docs were modified in this PR, quitting this job"
-                    # disable skipping for now, as circleCI's base_revision is inconsistent leading to invalid ranges
+                    # enable skipping once we get this sorted out
                     # circleci step halt
                 fi
             else
-                echo "Can't perform skipping check w/o base_revision defined, continuing the job"
+                echo "Not enough data to perform a skipping check - continuing the job"
             fi
+
 
 # TPU REFERENCES
 references:
