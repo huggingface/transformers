@@ -25,7 +25,7 @@ commands:
 
                 head_ref=$(jq -r .head.ref \<<< $resp)
                 echo CIRCLE_BRANCH=$CIRCLE_BRANCH head_ref=$head_ref
-                if test -n "$head_ref" && test -n "$CIRCLE_BRANCH" && test -n "$(git diff --name-only ${CIRCLE_BRANCH}..${head_sha})"
+                if test -n "$head_ref" && test -n "$CIRCLE_BRANCH"
                 then
                     echo with head_sha
                     git diff --name-only ${CIRCLE_BRANCH}..${head_sha}
