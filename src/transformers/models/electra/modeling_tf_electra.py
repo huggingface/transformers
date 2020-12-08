@@ -914,7 +914,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
         self.generator_lm_head = TFElectraMaskedLMHead(config, self.electra.embeddings, name="generator_lm_head")
 
     def get_output_embeddings(self):
-        return self.generator_lm_head
+        return self.electra.embeddings
 
     def get_output_layer_with_bias(self):
         return self.generator_lm_head

@@ -333,7 +333,7 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        list_lm_models = [TFBertForMaskedLM, TFBertForPreTraining]
+        list_lm_models = [TFBertForMaskedLM, TFBertForPreTraining, TFBertLMHeadModel]
 
         for model_class in self.all_model_classes:
             model = model_class(config)

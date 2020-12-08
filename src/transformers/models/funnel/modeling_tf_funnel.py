@@ -1320,6 +1320,9 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
         self.funnel = TFFunnelMainLayer(config, name="funnel")
         self.lm_head = TFFunnelMaskedLMHead(config, self.funnel.embeddings, name="lm_head")
 
+    def get_output_embeddings(self):
+        return self.funnel.embeddings
+
     def get_output_layer_with_bias(self):
         return self.lm_head
 

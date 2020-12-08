@@ -1257,6 +1257,9 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             **({"obj_labels": obj_labels} if self.config.task_obj_predict else {}),
         }
 
+    def get_output_embeddings(self):
+        return self.lxmert.embeddings
+
     def get_output_layer_with_bias(self):
         return self.cls.predictions
 
