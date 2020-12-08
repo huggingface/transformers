@@ -251,8 +251,6 @@ class MobileBertSelfAttention(nn.Module):
         value_tensor,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions=None,
     ):
         mixed_query_layer = self.query(query_tensor)
@@ -335,8 +333,6 @@ class MobileBertAttention(nn.Module):
         layer_input,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions=None,
     ):
         self_outputs = self.self(
@@ -345,8 +341,6 @@ class MobileBertAttention(nn.Module):
             value_tensor,
             attention_mask,
             head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
             output_attentions,
         )
         # Run a linear projection of `hidden_size` then add a residual
@@ -498,8 +492,6 @@ class MobileBertLayer(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions=None,
     ):
         if self.use_bottleneck:
@@ -554,8 +546,6 @@ class MobileBertEncoder(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
@@ -570,8 +560,6 @@ class MobileBertEncoder(nn.Module):
                 hidden_states,
                 attention_mask,
                 head_mask[i],
-                encoder_hidden_states,
-                encoder_attention_mask,
                 output_attentions,
             )
             hidden_states = layer_outputs[0]
@@ -783,16 +771,6 @@ MOBILEBERT_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
-        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
@@ -852,8 +830,6 @@ class MobileBertModel(MobileBertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_hidden_states=None,
         output_attentions=None,
         return_dict=None,
@@ -886,17 +862,6 @@ class MobileBertModel(MobileBertPreTrainedModel):
             attention_mask, input_shape, self.device
         )
 
-        # If a 2D ou 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.config.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_extended_attention_mask = None
-
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
@@ -911,8 +876,6 @@ class MobileBertModel(MobileBertPreTrainedModel):
             embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_extended_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1083,8 +1046,6 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1104,8 +1065,6 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
