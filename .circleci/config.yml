@@ -23,7 +23,7 @@ commands:
             then
                 # XXX: remove the next debug line when ready
                 git diff --name-only ${base_ref} ${head_ref}
-                if git diff --name-only ${base_ref} ${head_ref} | egrep -qv '\.(md|rst)$'
+                if git diff --name-only ${base_ref} ${head_ref} | egrep -qv '\.(yml|md|rst)$'
                 then
                     echo "Non-docs were modified in this PR, proceeding normally"
                 else
