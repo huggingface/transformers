@@ -27,9 +27,19 @@ class SentimentAnalysisPipelineTests(MonoInputPipelineCommonMixin, unittest.Test
             model.eval()
             classifier = pipeline(task="sentiment-analysis", model=model, tokenizer=tokenizer)
 
+            def check_output(output):
+                # This model does not have a sequence-classification head, so results are random
+                self.assertTrue(isinstance(output, list))
+                self.assertEqual(len(output), 1)
+                d = string_output[0]
+                self.assertEqual(set(d.keys()), {"label", "score"})
+                self.assertEqual(type(d["label"]), str)
+                self.assertEqual(type(d["score"]), float)
+
             def pipeline_call_argument(argument=None):
                 _string_output = classifier(string_input, function_to_apply=argument)
                 _string_list_output = classifier(string_list_input, function_to_apply=argument)
+                check_output(_string_output)
                 return _string_output, _string_list_output
 
             def pipeline_init_argument(argument=None):
@@ -38,6 +48,7 @@ class SentimentAnalysisPipelineTests(MonoInputPipelineCommonMixin, unittest.Test
                 )
                 _string_output = _classifier(string_input)
                 _string_list_output = _classifier(string_list_input)
+                check_output(_string_output)
                 return _string_output, _string_list_output
 
             def pipeline_model_argument(argument=None):
@@ -45,6 +56,7 @@ class SentimentAnalysisPipelineTests(MonoInputPipelineCommonMixin, unittest.Test
                 _classifier = pipeline(task="sentiment-analysis", model=model, tokenizer=tokenizer)
                 _string_output = _classifier(string_input)
                 _string_list_output = _classifier(string_list_input)
+                check_output(_string_output)
                 return _string_output, _string_list_output
 
             string_output = classifier(string_input)
@@ -87,4 +99,19 @@ class SentimentAnalysisPipelineTests(MonoInputPipelineCommonMixin, unittest.Test
                                 # Compare all outputs (call, init, model argument)
                                 for example_result_0, example_result_1 in zip(pipeline_output_0, pipeline_output_1):
                                     # Iterate through the results
-                                    print(np.allclose(example_result_0["score"], example_result_1["score"], atol=1e-6))
+                                    self.assertTrue(
+                                        np.allclose(example_result_0["score"], example_result_1["score"], atol=1e-6)
+                                    )
+
+    @slow
+    def test_function_to_apply_error(self):
+        for model_name in self.small_models:
+            string_input, _ = VALID_INPUTS
+            tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+
+            model = DistilBertForSequenceClassification(DistilBertConfig.from_pretrained(model_name))
+            model.eval()
+            classifier = pipeline(task="sentiment-analysis", model=model, tokenizer=tokenizer)
+
+            with self.assertRaises(ValueError):
+                classifier(string_input, function_to_apply="logits")
