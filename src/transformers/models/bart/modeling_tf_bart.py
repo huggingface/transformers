@@ -1035,7 +1035,6 @@ class TFBartModel(TFPretrainedBartModel):
     BART_START_DOCSTRING,
 )
 class TFBartForConditionalGeneration(TFPretrainedBartModel):
-    base_model_prefix = "model"
     _keys_to_ignore_on_load_unexpected = [
         r"model.encoder.embed_tokens.weight",
         r"model.decoder.embed_tokens.weight",
