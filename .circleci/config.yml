@@ -19,21 +19,20 @@ commands:
                 commits=$(jq -r .commits \<<< $resp)
 
                 echo base_sha=$base_sha, head_sha=$head_sha, commits=$commits
-
-                #echo log
-                #git --no-pager log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit | head -20
                 
-                echo count backward $commits commits
-                git --no-pager diff --name-only HEAD~$commits
-                
-                echo github api base.sha could be outdated
-                git --no-pager diff --name-only $base_sha $head_sha
-
+                echo log
+                git --no-pager log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit | head -$(($commits+1)) || if [[ $? -eq 141 ]]; then true; else exit $?; fi
 
             fi
 
             if test -n "$base_sha" && test -n "$head_sha" && test -n "$(git diff --name-only $base_sha $head_sha)"
             then
+
+                echo count backward $commits commits
+                git --no-pager diff --name-only HEAD~$commits
+                
+                echo github api base.sha could be outdated
+                git --no-pager diff --name-only $base_sha $head_sha
 
                 if git diff --name-only $base_sha $head_sha | egrep -qv '\.(yml|md|rst)$'
                 then
