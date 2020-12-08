@@ -20,16 +20,17 @@ commands:
 
                 echo log
                 git --no-pager log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit | head -15
-            fi
-
-            if test -n "$base_sha" && test -n "$head_sha" && test -n "$(git diff --name-only $base_sha $head_sha)"
-            then
-
+                
                 echo github api (base.sha could be outdated)
                 git --no-pager diff --name-only $base_sha $head_sha
 
                 echo count backward $commits commits
                 git --no-pager diff --name-only HEAD~$commits
+
+            fi
+
+            if test -n "$base_sha" && test -n "$head_sha" && test -n "$(git diff --name-only $base_sha $head_sha)"
+            then
 
                 if git diff --name-only $base_sha $head_sha | egrep -qv '\.(yml|md|rst)$'
                 then
