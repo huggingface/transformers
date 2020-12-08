@@ -173,7 +173,7 @@ def postprocess_qa_predictions(
 
         # In the very rare edge case we have not a single non-null prediction, we create a fake prediction to avoid
         # failure.
-        if len(predictions) == 0 or (len(predictions) == 1 and predictions[0]["offsets"] == (0, 0)):
+        if len(predictions) == 0 or (len(predictions) == 1 and predictions[0]["text"] == ""):
             predictions.insert(0, {"text": "empty", "start_logit": 0.0, "end_logit": 0.0, "score": 0.0})
 
         # Compute the softmax of all scores (we do it with numpy to stay independent from torch/tf in this file, using
@@ -381,7 +381,7 @@ def postprocess_qa_predictions_with_beam_search(
         # Pick the best prediction and set the probability for the null answer.
         all_predictions[example["id"]] = predictions[0]["text"]
         if version_2_with_negative:
-            scores_diff_json[example["id"]] = float(min_null_score)
+            scores_diff_json[example["id"]] = float(1 / (1 + np.exp(-min_null_score)))
 
         # Make `predictions` JSON-serializable by casting np.float back to float.
         all_nbest_json[example["id"]] = [

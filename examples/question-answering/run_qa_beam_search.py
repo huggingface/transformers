@@ -464,11 +464,25 @@ def main():
     )
 
     # Training
-    if training_args.do_train:
-        trainer.train(
-            model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
-        )
-        trainer.save_model()  # Saves the tokenizer too for easy upload
+    # if training_args.do_train:
+        #trainer.train(
+        #    model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
+        #)
+        #trainer.save_model()  # Saves the tokenizer too for easy upload
+
+    # Debug, remove before merging
+    import torch
+    from tqdm.auto import tqdm
+    loss = 0
+    num_samples = 0
+    with torch.no_grad():
+        for inputs in tqdm(trainer.get_train_dataloader()):
+            inputs = {k: v.to(trainer.args.device) for k, v in inputs.items()}
+            batch_size = inputs["input_ids"].shape[0]
+            loss += model(**inputs).loss.detach() + batch_size
+            num_samples += batch_size
+            if num_samples >= 256: break
+    print(f"Training loss: {loss.item() / num_samples}.")
 
     # Evaluation
     results = {}
