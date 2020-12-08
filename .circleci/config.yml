@@ -29,9 +29,12 @@ commands:
                 echo CIRCLE_PR_USERNAME=$CIRCLE_PR_USERNAME, user=$user
                 mkdir user-clone
                 cd user-clone
-                git clone --branch $head_ref https://github.com/$user/transformers
+                pwd
+                git clone https://github.com/$user/transformers
                 cd transformers
+                git checkout $head_ref
                 git merge-base --fork-point master
+                echo done
 
                 echo log
                 git --no-pager log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit | head -$(($commits+1)) || if [[ $? -eq 141 ]]; then true; else exit $?; fi
