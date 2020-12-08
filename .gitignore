@@ -159,3 +159,6 @@ tags
 
 # pre-commit
 .pre-commit*
+
+# .lock
+*.lock
