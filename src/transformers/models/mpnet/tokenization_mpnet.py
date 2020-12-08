@@ -97,7 +97,7 @@ class MPNetTokenizer(PreTrainedTokenizer):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
             token of a sequence built with special tokens.
-        cls_token (:obj:`string`, `optional`, defaults to :obj:`"<s>"`):
+        cls_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
             The classifier token which is used when doing sequence classification (classification of the whole sequence
             instead of per-token classification). It is the first token of the sequence when built with special tokens.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"[UNK]"`):
