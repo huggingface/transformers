@@ -65,7 +65,6 @@ def whitespace_tokenize(text):
 
 class MPNetTokenizer(PreTrainedTokenizer):
     """
-    Constructs a MPNet tokenizer, derived from the Bert tokenizer. Peculiarities:
 
     This tokenizer inherits from :class:`~transformers.BertTokenizer` which contains most of the methods. Users should
     refer to the superclass for more information regarding methods.
