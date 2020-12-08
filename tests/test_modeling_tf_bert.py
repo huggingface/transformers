@@ -335,7 +335,7 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
         model, output_loading_info = TFBertForTokenClassification.from_pretrained(
             "jplu/tiny-tf-bert-random", output_loading_info=True
         )
-        self.assertEqual(sorted(output_loading_info["unexpected_keys"]), ["mlm___cls", "nsp___cls"])
+        self.assertEqual(sorted(output_loading_info["unexpected_keys"]), [])
         for layer in output_loading_info["missing_keys"]:
             self.assertTrue(layer.split("_")[0] in ["dropout", "classifier"])
 

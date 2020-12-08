@@ -1566,7 +1566,7 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
 class TFLongformerMainLayer(tf.keras.layers.Layer):
     config_class = LongformerConfig
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config, add_pooling_layer=True, **kwargs):
         super().__init__(**kwargs)
 
         if isinstance(config.attention_window, int):
@@ -1589,7 +1589,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         self.attention_window = config.attention_window
         self.embeddings = TFLongformerEmbeddings(config, name="embeddings")
         self.encoder = TFLongformerEncoder(config, name="encoder")
-        self.pooler = TFLongformerPooler(config, name="pooler")
+        self.pooler = TFLongformerPooler(config, name="pooler") if add_pooling_layer else None
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -1710,7 +1710,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
             training=inputs["training"],
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         # undo padding
         if padding_len > 0:
@@ -1997,13 +1997,13 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
     LONGFORMER_START_DOCSTRING,
 )
 class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModelingLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.longformer = TFLongformerMainLayer(config, name="longformer")
+        self.longformer = TFLongformerMainLayer(config, add_pooling_layer=False, name="longformer")
         self.lm_head = TFLongformerLMHead(config, self.longformer.embeddings, name="lm_head")
 
     def get_output_embeddings(self):
@@ -2091,14 +2091,14 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
     LONGFORMER_START_DOCSTRING,
 )
 class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAnsweringLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.longformer = TFLongformerMainLayer(config, name="longformer")
+        self.longformer = TFLongformerMainLayer(config, add_pooling_layer=False, name="longformer")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -2248,15 +2248,15 @@ class TFLongformerClassificationHead(tf.keras.layers.Layer):
     LONGFORMER_START_DOCSTRING,
 )
 class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSequenceClassificationLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
 
-        self.longformer = TFLongformerMainLayer(config, name="longformer")
+        self.longformer = TFLongformerMainLayer(config, add_pooling_layer=False, name="longformer")
         self.classifier = TFLongformerClassificationHead(config, name="classifier")
 
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -2346,6 +2346,9 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
     LONGFORMER_START_DOCSTRING,
 )
 class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoiceLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_missing = [r"dropout"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -2478,14 +2481,15 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
     LONGFORMER_START_DOCSTRING,
 )
 class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenClassificationLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.longformer = TFLongformerMainLayer(config=config, name="longformer")
+        self.longformer = TFLongformerMainLayer(config=config, add_pooling_layer=False, name="longformer")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"

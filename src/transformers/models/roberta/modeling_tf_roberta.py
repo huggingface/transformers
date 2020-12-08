@@ -464,7 +464,7 @@ class TFRobertaEncoder(tf.keras.layers.Layer):
 class TFRobertaMainLayer(tf.keras.layers.Layer):
     config_class = RobertaConfig
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config, add_pooling_layer=True, **kwargs):
         super().__init__(**kwargs)
 
         self.config = config
@@ -474,7 +474,7 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
         self.output_hidden_states = config.output_hidden_states
         self.return_dict = config.use_return_dict
         self.encoder = TFRobertaEncoder(config, name="encoder")
-        self.pooler = TFRobertaPooler(config, name="pooler")
+        self.pooler = TFRobertaPooler(config, name="pooler") if add_pooling_layer else None
         # The embeddings must be the last declaration in order to follow the weights order
         self.embeddings = TFRobertaEmbeddings(config, name="embeddings")
 
@@ -586,7 +586,7 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
         )
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not inputs["return_dict"]:
             return (
@@ -798,13 +798,13 @@ class TFRobertaLMHead(tf.keras.layers.Layer):
 
 @add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """, ROBERTA_START_DOCSTRING)
 class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head.decoder.weight"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.roberta = TFRobertaMainLayer(config, name="roberta")
+        self.roberta = TFRobertaMainLayer(config, add_pooling_layer=False, name="roberta")
         self.lm_head = TFRobertaLMHead(config, self.roberta.embeddings, name="lm_head")
 
     def get_output_embeddings(self):
@@ -917,14 +917,14 @@ class TFRobertaClassificationHead(tf.keras.layers.Layer):
     ROBERTA_START_DOCSTRING,
 )
 class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceClassificationLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.roberta = TFRobertaMainLayer(config, name="roberta")
+        self.roberta = TFRobertaMainLayer(config, add_pooling_layer=False, name="roberta")
         self.classifier = TFRobertaClassificationHead(config, name="classifier")
 
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -983,7 +983,6 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output, training=inputs["training"])
 
@@ -1009,6 +1008,10 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
     ROBERTA_START_DOCSTRING,
 )
 class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"lm_head"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1129,14 +1132,15 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
     ROBERTA_START_DOCSTRING,
 )
 class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassificationLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.roberta = TFRobertaMainLayer(config, name="roberta")
+        self.roberta = TFRobertaMainLayer(config, add_pooling_layer=False, name="roberta")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
@@ -1224,14 +1228,14 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
     ROBERTA_START_DOCSTRING,
 )
 class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnsweringLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.roberta = TFRobertaMainLayer(config, name="roberta")
+        self.roberta = TFRobertaMainLayer(config, add_pooling_layer=False, name="roberta")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )

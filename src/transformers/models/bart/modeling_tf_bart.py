@@ -876,6 +876,8 @@ class TFSinusoidalPositionalEmbedding(tf.keras.layers.Embedding):
 )
 @keras_serializable
 class TFBartModel(TFPretrainedBartModel):
+    base_model_prefix = "model"
+
     def __init__(self, config: BartConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, config.pad_token_id, name="model.shared")
@@ -1033,10 +1035,6 @@ class TFBartModel(TFPretrainedBartModel):
     BART_START_DOCSTRING,
 )
 class TFBartForConditionalGeneration(TFPretrainedBartModel):
-    base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [
-        r"final_logits_bias",
-    ]
     _keys_to_ignore_on_load_unexpected = [
         r"model.encoder.embed_tokens.weight",
         r"model.decoder.embed_tokens.weight",

@@ -754,7 +754,6 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
             input_shape = shape_list(inputs["inputs_embeds"])[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
-
         if inputs["visual_pos"] is None or inputs["visual_feats"] is None:
             raise ValueError("visual_feats and visual_pos cannot be `None` in LXMERT's `call` method.")
 

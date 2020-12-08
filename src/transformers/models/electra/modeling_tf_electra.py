@@ -468,6 +468,9 @@ class TFElectraPreTrainedModel(TFPreTrainedModel):
 
     config_class = ElectraConfig
     base_model_prefix = "electra"
+    # When the model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"generator_lm_head.weight"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
 
 
 @keras_serializable
