@@ -776,7 +776,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         if output_embeddings is not None:
             if self.get_input_embeddings() != output_embeddings:
                 if not hasattr(output_embeddings, "decoder"):
-                    bias_layer.build([])
+                    output_embeddings.build([])
 
                 # Second check in order to be sure the attribute has been properly created
                 if not hasattr(output_embeddings, "decoder"):
