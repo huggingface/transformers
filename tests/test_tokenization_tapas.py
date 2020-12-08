@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 from transformers import AddedToken
-from transformers.testing_utils import require_tokenizers, slow
+from transformers.testing_utils import require_tokenizers, slow, require_torch, is_pt_tf_cross_test
 from transformers.models.tapas.tokenization_tapas import (
     VOCAB_FILES_NAMES,
     BasicTokenizer,
@@ -34,7 +34,7 @@ from transformers.models.tapas.tokenization_tapas import (
     _is_whitespace,
 )
 
-from .test_tokenization_common import TokenizerTesterMixin, filter_non_english
+from .test_tokenization_common import TokenizerTesterMixin, filter_non_english, merge_model_tokenizer_mappings
 
 
 @require_tokenizers
@@ -294,16 +294,17 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_sequence_builders(self):
-        tokenizer = self.tokenizer_class.from_pretrained("tapas-base-uncased")
+        tokenizer = self.tokenizer_class.from_pretrained("nielsr/tapas-base-finetuned-wtq")
 
-        text = tokenizer.encode("sequence builders", add_special_tokens=False)
-        text_2 = tokenizer.encode("multi-sequence build", add_special_tokens=False)
+        empty_table = self.get_table(tokenizer, length=0)
+        table = self.get_table(tokenizer, length=10)
 
-        encoded_sentence = tokenizer.build_inputs_with_special_tokens(text)
+        text = tokenizer.encode(table, add_special_tokens=False)
+        text_2 = tokenizer.encode(empty_table, "multi-sequence build", add_special_tokens=False)
+
         encoded_pair = tokenizer.build_inputs_with_special_tokens(text, text_2)
 
-        assert encoded_sentence == [101] + text + [102]
-        assert encoded_pair == [101] + text + [102] + text_2 + [102]
+        assert encoded_pair == [101] + text + [102] + text_2
 
     def test_offsets_with_special_characters(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
@@ -998,6 +999,118 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 assert sequence_length == padded_sequence_left_length
                 assert encoded_sequence == padded_sequence_left
 
+    def test_token_type_ids(self):
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                empty_table = self.get_table(tokenizer, length=0)
+                seq_0 = "Test this method."
+
+                # We want to have sequence 0 and sequence 1 are tagged
+                # respectively with 0 and 1 token_ids
+                # (regardless of whether the model use token type ids)
+                # We use this assumption in the QA pipeline among other place
+                output = tokenizer(empty_table, seq_0, return_token_type_ids=True)
+
+                # Assert that the token type IDs have the same length as the input IDs
+                self.assertEqual(len(output["token_type_ids"]), len(output["input_ids"]))
+
+                # Assert that each token type ID has 7 values
+                self.assertTrue(all(len(token_type_ids) == 7 for token_type_ids in output["token_type_ids"]))
+
+                # Do the same test as modeling common.
+                self.assertIn(0, output["token_type_ids"][0])
+
+    # TODO: Check if require_torch is the best to test for numpy here ... Maybe move to require_flax when available
+    @require_torch
+    @slow
+    def test_np_encode_plus_sent_to_model(self):
+        from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
+
+        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
+
+        tokenizer = self.get_tokenizer()
+        if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
+            return
+
+        config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
+        config = config_class()
+
+        if config.is_encoder_decoder or config.pad_token_id is None:
+            return
+
+        # Build sequence
+        first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
+        table = self.get_table(tokenizer, length=0)
+        sequence = " ".join(first_ten_tokens)
+        encoded_sequence = tokenizer.encode_plus(table, sequence, return_tensors="np")
+        batch_encoded_sequence = tokenizer.batch_encode_plus(table, [sequence, sequence], return_tensors="np")
+
+        # TODO: add forward through JAX/Flax when PR is merged
+        # This is currently here to make flake8 happy !
+        if encoded_sequence is None:
+            raise ValueError("Cannot convert list to numpy tensor on  encode_plus()")
+
+        if batch_encoded_sequence is None:
+            raise ValueError("Cannot convert list to numpy tensor on  batch_encode_plus()")
+
+        if self.test_rust_tokenizer:
+            fast_tokenizer = self.get_rust_tokenizer()
+            encoded_sequence_fast = fast_tokenizer.encode_plus(table, sequence, return_tensors="np")
+            batch_encoded_sequence_fast = fast_tokenizer.batch_encode_plus(table, [sequence, sequence], return_tensors="np")
+
+            # TODO: add forward through JAX/Flax when PR is merged
+            # This is currently here to make flake8 happy !
+            if encoded_sequence_fast is None:
+                raise ValueError("Cannot convert list to numpy tensor on  encode_plus() (fast)")
+
+            if batch_encoded_sequence_fast is None:
+                raise ValueError("Cannot convert list to numpy tensor on  batch_encode_plus() (fast)")
+
+    @require_torch
+    @slow
+    def test_torch_encode_plus_sent_to_model(self):
+        import torch
+
+        from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
+
+        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
+
+        tokenizers = self.get_tokenizers(do_lower_case=False)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+
+                if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
+                    return
+
+                config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
+                config = config_class()
+
+                if config.is_encoder_decoder or config.pad_token_id is None:
+                    return
+
+                model = model_class(config)
+
+                # Make sure the model contains at least the full vocabulary size in its embedding matrix
+                is_using_common_embeddings = hasattr(model.get_input_embeddings(), "weight")
+                assert (
+                    (model.get_input_embeddings().weight.shape[0] >= len(tokenizer))
+                    if is_using_common_embeddings
+                    else True
+                )
+
+                # Build sequence
+                first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
+                sequence = " ".join(first_ten_tokens)
+                table = self.get_table(tokenizer, length=0)
+                encoded_sequence = tokenizer.encode_plus(table, sequence, return_tensors="pt")
+                batch_encoded_sequence = tokenizer.batch_encode_plus(table, [sequence, sequence], return_tensors="pt")
+                # This should not fail
+
+                with torch.no_grad():  # saves some time
+                    model(**encoded_sequence)
+                    model(**batch_encoded_sequence)
+
     @unittest.skip("TAPAS doesn't handle pre-tokenized inputs.")
     def test_pretokenized_inputs(self):
         pass
@@ -1030,6 +1143,52 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
             # Ensure that the input IDs are less than the max length defined.
             self.assertLessEqual(len(new_encoded_inputs), i)
+
+    @is_pt_tf_cross_test
+    def test_batch_encode_plus_tensors(self):
+        tokenizers = self.get_tokenizers(do_lower_case=False)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                sequences = [
+                    "Testing batch encode plus",
+                    "Testing batch encode plus with different sequence lengths",
+                    "Testing batch encode plus with different sequence lengths correctly pads",
+                ]
+
+                table = self.get_table(tokenizer, length=0)
+
+                # A Tensor cannot be build by sequences which are not the same size
+                self.assertRaises(ValueError, tokenizer.batch_encode_plus, table, sequences, return_tensors="pt")
+                self.assertRaises(ValueError, tokenizer.batch_encode_plus, table, sequences, return_tensors="tf")
+
+                if tokenizer.pad_token_id is None:
+                    self.assertRaises(
+                        ValueError,
+                        tokenizer.batch_encode_plus,
+                        table,
+                        sequences,
+                        padding=True,
+                        return_tensors="pt",
+                    )
+                    self.assertRaises(
+                        ValueError,
+                        tokenizer.batch_encode_plus,
+                        table,
+                        sequences,
+                        padding="longest",
+                        return_tensors="tf",
+                    )
+                else:
+                    pytorch_tensor = tokenizer.batch_encode_plus(table, sequences, padding=True, return_tensors="pt")
+                    tensorflow_tensor = tokenizer.batch_encode_plus(table, sequences, padding="longest", return_tensors="tf")
+                    encoded_sequences = tokenizer.batch_encode_plus(table, sequences, padding=True)
+
+                    for key in encoded_sequences.keys():
+                        pytorch_value = pytorch_tensor[key].tolist()
+                        tensorflow_value = tensorflow_tensor[key].numpy().tolist()
+                        encoded_value = encoded_sequences[key]
+
+                        self.assertEqual(pytorch_value, tensorflow_value, encoded_value)
 
     # TODO SET TO SLOW
     def test_tapas_integration_test(self):

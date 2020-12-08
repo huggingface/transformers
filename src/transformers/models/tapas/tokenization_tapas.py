@@ -64,12 +64,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-PRETRAINED_INIT_CONFIGURATION = {
-    "nielsr/tapas-base-finetuned-sqa": {"do_lower_case": True},
-    "nielsr/tapas-base-finetuned-wtq": {"do_lower_case": True},
-    "nielsr/tapas-base-finetuned-wikisql-supervised": {"do_lower_case": True},
-}
-
 
 class TapasTruncationStrategy(ExplicitEnum):
     """
@@ -178,7 +172,7 @@ class TapasTokenizer(PreTrainedTokenizer):
     Users should refer to this superclass for more information regarding those methods.
     :class:`~transformers.TapasTokenizer` creates several token type ids to encode tabular structure. To be more
     precise, it adds 7 token type ids, in the following order: :obj:`segment_ids`, :obj:`column_ids`, :obj:`row_ids`,
-    :obj:`prev_label_ids`, :obj:`column_ranks`, :obj:`inv_column_ranks` and :obj:`numeric_relations`:
+    :obj:`prev_labels`, :obj:`column_ranks`, :obj:`inv_column_ranks` and :obj:`numeric_relations`:
 
     - segment_ids: indicate whether a token belongs to the question (0) or the table (1). 0 for special tokens and
       padding.
@@ -186,7 +180,7 @@ class TapasTokenizer(PreTrainedTokenizer):
       tokens, special tokens and padding.
     - row_ids: indicate to which row of the table a token belongs (starting from 1). Is 0 for all question tokens,
       special tokens and padding. Tokens of column headers are also 0.
-    - prev_label_ids: indicate whether a token was (part of) an answer to the previous question (1) or not (0). Useful
+    - prev_labels: indicate whether a token was (part of) an answer to the previous question (1) or not (0). Useful
       in a conversational setup (such as SQA).
     - column_ranks: indicate the rank of a table token relative to a column, if applicable. For example, if you have a
       column "number of movies" with values 87, 53 and 69, then the column ranks of these tokens are 3, 1 and 2 respectively. 
@@ -252,7 +246,6 @@ class TapasTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
 
     def __init__(
         self,
@@ -1153,10 +1146,10 @@ class TapasTokenizer(PreTrainedTokenizer):
         column_ids = self.create_column_token_type_ids_from_sequences(query_ids, table_data)
         row_ids = self.create_row_token_type_ids_from_sequences(query_ids, table_data)
         if not is_part_of_batch or (prev_answer_coordinates is None and prev_answer_text is None):
-            # simply set the prev_label_ids to zeros
-            prev_label_ids = [0] * len(row_ids)
+            # simply set the prev_labels to zeros
+            prev_labels = [0] * len(row_ids)
         else:
-            prev_label_ids = self.get_answer_ids(
+            prev_labels = self.get_answer_ids(
                 column_ids, row_ids, table_data, prev_answer_text, prev_answer_coordinates
             )
 
@@ -1185,13 +1178,13 @@ class TapasTokenizer(PreTrainedTokenizer):
             encoded_inputs["attention_mask"] = attention_mask
 
         if answer_coordinates is not None and answer_text is not None:
-            label_ids = self.get_answer_ids(
+            labels = self.get_answer_ids(
                 column_ids, row_ids, table_data, answer_text, answer_coordinates
             )
             numeric_values = self._get_numeric_values(raw_table, column_ids, row_ids)
             numeric_values_scale = self._get_numeric_values_scale(raw_table, column_ids, row_ids)
 
-            encoded_inputs["label_ids"] = label_ids
+            encoded_inputs["labels"] = labels
             encoded_inputs["numeric_values"] = numeric_values
             encoded_inputs["numeric_values_scale"] = numeric_values_scale
 
@@ -1200,7 +1193,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 segment_ids,
                 column_ids,
                 row_ids,
-                prev_label_ids,
+                prev_labels,
                 column_ranks,
                 inv_column_ranks,
                 numeric_relations,
@@ -1829,8 +1822,8 @@ class TapasTokenizer(PreTrainedTokenizer):
                     encoded_inputs["token_type_ids"] = (
                         encoded_inputs["token_type_ids"] + [[self.pad_token_type_id] * 7] * difference
                     )
-                if "label_ids" in encoded_inputs:
-                    encoded_inputs["label_ids"] = encoded_inputs["label_ids"] + [0] * difference
+                if "labels" in encoded_inputs:
+                    encoded_inputs["labels"] = encoded_inputs["labels"] + [0] * difference
                 if "numeric_values" in encoded_inputs:
                     encoded_inputs["numeric_values"] = encoded_inputs["numeric_values"] + [float("nan")] * difference
                 if "numeric_values_scale" in encoded_inputs:
@@ -1845,8 +1838,8 @@ class TapasTokenizer(PreTrainedTokenizer):
                     encoded_inputs["token_type_ids"] = [[self.pad_token_type_id] * 7] * difference + encoded_inputs[
                         "token_type_ids"
                     ]
-                if "label_ids" in encoded_inputs:
-                    encoded_inputs["label_ids"] = [0] * difference + encoded_inputs["label_ids"] 
+                if "labels" in encoded_inputs:
+                    encoded_inputs["labels"] = [0] * difference + encoded_inputs["labels"]
                 if "numeric_values" in encoded_inputs:
                     encoded_inputs["numeric_values"] = [float("nan")] * difference + encoded_inputs["numeric_values"] 
                 if "numeric_values_scale" in encoded_inputs:
@@ -1918,7 +1911,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             "segment_ids",
             "column_ids",
             "row_ids",
-            "prev_label_ids",
+            "prev_labels",
             "column_ranks",
             "inv_column_ranks",
             "numeric_relations",
