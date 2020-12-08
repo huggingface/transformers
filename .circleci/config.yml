@@ -13,6 +13,7 @@ commands:
           command: |
             if test -n "$CIRCLE_PR_NUMBER"
             then
+                echo $CIRCLE_PR_NUMBER
                 resp=$(curl -Ls https://api.github.com/repos/huggingface/transformers/pulls/${CIRCLE_PR_NUMBER})
                 base_sha=$(jq -r .base.sha \<<< $resp)
                 head_sha=$(jq -r .head.sha \<<< $resp)
@@ -32,9 +33,9 @@ commands:
                 if test -n "$circle_base_sha" && test -n "$head_sha"
                 then
                     echo with head_sha
-                    git diff --name-only $circle_base_sha $head_sha
+                    git diff --name-only $CIRCLE_BRANCH $head_sha
                     echo with HEAD
-                    git diff --name-only $circle_base_sha HEAD
+                    git diff --name-only $CIRCLE_BRANCH HEAD
                 fi
 
             fi
