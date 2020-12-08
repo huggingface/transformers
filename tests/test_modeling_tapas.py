@@ -21,12 +21,16 @@ import copy
 import numpy as np
 import pandas as pd
 
-from transformers import is_torch_available
+from transformers import is_torch_available, MODEL_FOR_MULTIPLE_CHOICE_MAPPING, MODEL_FOR_QUESTION_ANSWERING_MAPPING, \
+    MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING, MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING, \
+    MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING, MODEL_FOR_CAUSAL_LM_MAPPING, MODEL_FOR_MASKED_LM_MAPPING, \
+    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, require_scatter, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+
 
 
 if is_torch_available():
@@ -162,7 +166,7 @@ class TapasModelTester:
 
         sequence_labels = None
         token_labels = None
-        label_ids = None
+        labels = None
         answer = None
         numeric_values = None
         numeric_values_scale = None
@@ -171,7 +175,7 @@ class TapasModelTester:
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size).to(torch_device)
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels).to(torch_device)
-            label_ids = ids_tensor([self.batch_size, self.seq_length], vocab_size=2).to(torch_device)
+            labels = ids_tensor([self.batch_size, self.seq_length], vocab_size=2).to(torch_device)
             numeric_values = floats_tensor([self.batch_size, self.seq_length]).to(torch_device)
             numeric_values_scale = floats_tensor([self.batch_size, self.seq_length]).to(torch_device)
             float_answer = floats_tensor([self.batch_size]).to(torch_device)
@@ -221,7 +225,7 @@ class TapasModelTester:
             token_type_ids,
             sequence_labels,
             token_labels,
-            label_ids,
+            labels,
             numeric_values,
             numeric_values_scale,
             float_answer,
@@ -236,7 +240,7 @@ class TapasModelTester:
         token_type_ids,
         sequence_labels,
         token_labels,
-        label_ids,
+        labels,
         numeric_values,
         numeric_values_scale,
         float_answer,
@@ -259,7 +263,7 @@ class TapasModelTester:
         token_type_ids,
         sequence_labels,
         token_labels,
-        label_ids,
+        labels,
         numeric_values,
         numeric_values_scale,
         float_answer,
@@ -279,7 +283,7 @@ class TapasModelTester:
         token_type_ids,
         sequence_labels,
         token_labels,
-        label_ids,
+        labels,
         numeric_values,
         numeric_values_scale,
         float_answer,
@@ -320,7 +324,7 @@ class TapasModelTester:
             input_ids,
             attention_mask=input_mask,
             token_type_ids=token_type_ids,
-            label_ids=label_ids,
+            labels=labels,
         )
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length))
@@ -333,7 +337,7 @@ class TapasModelTester:
             input_ids=input_ids,
             attention_mask=input_mask,
             token_type_ids=token_type_ids,
-            label_ids=label_ids,
+            labels=labels,
             numeric_values=numeric_values,
             numeric_values_scale=numeric_values_scale,
             float_answer=float_answer,
@@ -352,7 +356,7 @@ class TapasModelTester:
             input_ids,
             attention_mask=input_mask,
             token_type_ids=token_type_ids,
-            label_ids=label_ids,
+            labels=labels,
             aggregation_labels=aggregation_labels,
         )
         self.parent.assertEqual(result.loss.shape, ())
@@ -367,7 +371,7 @@ class TapasModelTester:
         token_type_ids,
         sequence_labels,
         token_labels,
-        label_ids,
+        labels,
         numeric_values,
         numeric_values_scale,
         float_answer,
@@ -389,7 +393,7 @@ class TapasModelTester:
             token_type_ids,
             sequence_labels,
             token_labels,
-            label_ids,
+            labels,
             numeric_values,
             numeric_values_scale,
             float_answer,
@@ -417,6 +421,53 @@ class TapasModelTest(ModelTesterMixin, unittest.TestCase):
     test_torchscript = True
     test_resize_embeddings = True
     test_head_masking = False
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = copy.deepcopy(inputs_dict)
+        if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
+            inputs_dict = {
+                k: v.unsqueeze(1).expand(-1, self.model_tester.num_choices, -1).contiguous()
+                if isinstance(v, torch.Tensor) and v.ndim > 1
+                else v
+                for k, v in inputs_dict.items()
+            }
+
+        if return_labels:
+            if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
+                inputs_dict["labels"] = torch.ones(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
+            elif model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+                inputs_dict["aggregation_labels"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+                inputs_dict["numeric_values"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.float, device=torch_device
+                )
+                inputs_dict["numeric_values_scale"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.float, device=torch_device
+                )
+                inputs_dict["float_answer"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.float, device=torch_device
+                )
+            elif model_class in [
+                *MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values(),
+                *MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.values(),
+            ]:
+                inputs_dict["labels"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+            elif model_class in [
+                *MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.values(),
+                *MODEL_FOR_CAUSAL_LM_MAPPING.values(),
+                *MODEL_FOR_MASKED_LM_MAPPING.values(),
+                *MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.values(),
+            ]:
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+        return inputs_dict
 
     def setUp(self):
         self.model_tester = TapasModelTester(self)
@@ -612,7 +663,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
         input_ids = inputs["input_ids"].to(torch_device)
         attention_mask = inputs["attention_mask"].to(torch_device)
         token_type_ids = inputs["token_type_ids"].to(torch_device)
-        label_ids = inputs["label_ids"].to(torch_device)
+        labels = inputs["labels"].to(torch_device)
         numeric_values = inputs["numeric_values"].to(torch_device)
         numeric_values_scale = inputs["numeric_values_scale"].to(torch_device)
 
@@ -620,7 +671,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
         float_answer = torch.FloatTensor(float_answer).to(torch_device)
 
         # forward pass to get loss + logits:
-        outputs = model(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, label_ids=label_ids,
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids, labels=labels,
                         numeric_values=numeric_values, numeric_values_scale=numeric_values_scale, 
                         float_answer=float_answer)
 
