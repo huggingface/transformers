@@ -16,6 +16,7 @@ commands:
                 # resp=$(curl -Ls https://api.github.com/repos/huggingface/transformers/pulls/${CIRCLE_PR_NUMBER})
                 # base_ref=$(jq -r .base.ref \<<< $resp)
                 # head_ref=$(jq -r .head.ref \<<< $resp)
+                git merge-base --fork-point master
                 echo $base_ref $head_ref $CIRCLE_SHA1
                 git diff --name-only master $CIRCLE_SHA1
             fi
