@@ -344,6 +344,7 @@ class TF{{cookiecutter.camelcase_modelname}}Layer(tf.keras.layers.Layer):
         self.intermediate = TF{{cookiecutter.camelcase_modelname}}Intermediate(config, name="intermediate")
         self.{{cookiecutter.lowercase_modelname}}_output = TF{{cookiecutter.camelcase_modelname}}Output(config, name="output")
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer.call with bert->{{cookiecutter.lowercase_modelname}}
     def call(self, hidden_states, attention_mask, head_mask, output_attentions, training=False):
         attention_outputs = self.attention(
             hidden_states, attention_mask, head_mask, output_attentions, training=training
@@ -355,7 +356,7 @@ class TF{{cookiecutter.camelcase_modelname}}Layer(tf.keras.layers.Layer):
 
         return outputs
 
-
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertEncoder with Bert->{{cookiecutter.camelcase_modelname}}
 class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -459,20 +460,6 @@ class TF{{cookiecutter.camelcase_modelname}}MLMHead(tf.keras.layers.Layer):
         prediction_scores = self.predictions(sequence_output)
 
         return prediction_scores
-
-
-class TF{{cookiecutter.camelcase_modelname}}NSPHead(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
-        super().__init__(**kwargs)
-
-        self.seq_relationship = tf.keras.layers.Dense(
-            2, kernel_initializer=get_initializer(config.initializer_range), name="seq_relationship"
-        )
-
-    def call(self, pooled_output):
-        seq_relationship_score = self.seq_relationship(pooled_output)
-
-        return seq_relationship_score
 
 
 @keras_serializable
@@ -865,13 +852,13 @@ class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelca
 @add_start_docstrings(
     """{{cookiecutter.modelname}} Model with a `language modeling` head on top for CLM fine-tuning. """, {{cookiecutter.uppercase_modelname}}_START_DOCSTRING
 )
-class TF{{cookiecutter.camelcase_modelname}}LMHeadModel(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFCausalLanguageModelingLoss):
+class TF{{cookiecutter.camelcase_modelname}}ForCausalLM(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFCausalLanguageModelingLoss):
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `TF{{cookiecutter.camelcase_modelname}}LMHeadModel` as a standalone, add `is_decoder=True.`")
+            logger.warning("If you want to use `TF{{cookiecutter.camelcase_modelname}}ForCausalLM` as a standalone, add `is_decoder=True.`")
 
         self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
         self.mlm = TF{{cookiecutter.camelcase_modelname}}MLMHead(config, self.{{cookiecutter.lowercase_modelname}}.embeddings, name="mlm___cls")

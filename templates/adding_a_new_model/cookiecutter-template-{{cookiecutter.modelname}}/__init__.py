@@ -34,7 +34,7 @@ if is_torch_available():
     from .modeling_{{cookiecutter.lowercase_modelname}} import (
         {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
         {{cookiecutter.camelcase_modelname}}ForMaskedLM,
-        {{cookiecutter.camelcase_modelname}}LMHeadModel,
+        {{cookiecutter.camelcase_modelname}}ForCausalLM,
         {{cookiecutter.camelcase_modelname}}ForMultipleChoice,
         {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
         {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
@@ -50,7 +50,7 @@ if is_tf_available():
     from .modeling_tf_{{cookiecutter.lowercase_modelname}} import (
         TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
         TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
-        TF{{cookiecutter.camelcase_modelname}}LMHeadModel,
+        TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
         TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
         TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
         TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification,

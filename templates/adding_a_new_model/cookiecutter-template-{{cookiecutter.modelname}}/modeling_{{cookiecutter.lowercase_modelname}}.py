@@ -901,7 +901,7 @@ class {{cookiecutter.camelcase_modelname}}ForMaskedLM({{cookiecutter.camelcase_m
 @add_start_docstrings(
     """{{cookiecutter.modelname}} Model with a `language modeling` head on top for CLM fine-tuning. """, {{cookiecutter.uppercase_modelname}}_START_DOCSTRING
 )
-class {{cookiecutter.camelcase_modelname}}LMHeadModel({{cookiecutter.camelcase_modelname}}PreTrainedModel):
+class {{cookiecutter.camelcase_modelname}}ForCausalLM({{cookiecutter.camelcase_modelname}}PreTrainedModel):
 
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
@@ -909,7 +909,7 @@ class {{cookiecutter.camelcase_modelname}}LMHeadModel({{cookiecutter.camelcase_m
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `{{cookiecutter.camelcase_modelname}}LMHeadModel` as a standalone, add `is_decoder=True.`")
+            logger.warning("If you want to use `{{cookiecutter.camelcase_modelname}}ForCausalLM` as a standalone, add `is_decoder=True.`")
 
         self.{{cookiecutter.lowercase_modelname}} = {{cookiecutter.camelcase_modelname}}Model(config)
         self.cls = {{cookiecutter.camelcase_modelname}}OnlyMLMHead(config)
@@ -958,13 +958,13 @@ class {{cookiecutter.camelcase_modelname}}LMHeadModel({{cookiecutter.camelcase_m
 
         Example::
 
-            >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, {{cookiecutter.camelcase_modelname}}LMHeadModel, {{cookiecutter.camelcase_modelname}}Config
+            >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, {{cookiecutter.camelcase_modelname}}ForCausalLM, {{cookiecutter.camelcase_modelname}}Config
             >>> import torch
 
             >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
             >>> config = {{cookiecutter.camelcase_modelname}}Config.from_pretrained("{{cookiecutter.checkpoint_identifier}}")
             >>> config.is_decoder = True
-            >>> model = {{cookiecutter.camelcase_modelname}}LMHeadModel.from_pretrained('{{cookiecutter.checkpoint_identifier}}', config=config)
+            >>> model = {{cookiecutter.camelcase_modelname}}ForCausalLM.from_pretrained('{{cookiecutter.checkpoint_identifier}}', config=config)
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)

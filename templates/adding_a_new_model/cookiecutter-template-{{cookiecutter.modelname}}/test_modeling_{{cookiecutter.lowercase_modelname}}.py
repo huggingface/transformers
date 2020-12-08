@@ -31,7 +31,7 @@ if is_torch_available():
     from transformers import (
         {{cookiecutter.camelcase_modelname}}Config,
         {{cookiecutter.camelcase_modelname}}ForMaskedLM,
-        {{cookiecutter.camelcase_modelname}}LMHeadModel,
+        {{cookiecutter.camelcase_modelname}}ForCausalLM,
         {{cookiecutter.camelcase_modelname}}ForMultipleChoice,
         {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
         {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
@@ -208,7 +208,7 @@ class {{cookiecutter.camelcase_modelname}}ModelTester:
             encoder_hidden_states,
             encoder_attention_mask,
     ):
-        model = {{cookiecutter.camelcase_modelname}}LMHeadModel(config=config)
+        model = {{cookiecutter.camelcase_modelname}}ForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -299,7 +299,7 @@ class {{cookiecutter.camelcase_modelname}}ModelTest(ModelTesterMixin, unittest.T
         (
             {{cookiecutter.camelcase_modelname}}Model,
             {{cookiecutter.camelcase_modelname}}ForMaskedLM,
-            {{cookiecutter.camelcase_modelname}}LMHeadModel,
+            {{cookiecutter.camelcase_modelname}}ForCausalLM,
             {{cookiecutter.camelcase_modelname}}ForMultipleChoice,
             {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
             {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
@@ -308,7 +308,7 @@ class {{cookiecutter.camelcase_modelname}}ModelTest(ModelTesterMixin, unittest.T
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = ({{cookiecutter.camelcase_modelname}}LMHeadModel,) if is_torch_available() else ()
+    all_generative_model_classes = ({{cookiecutter.camelcase_modelname}}ForCausalLM,) if is_torch_available() else ()
 
     def setUp(self):
         self.model_tester = {{cookiecutter.camelcase_modelname}}ModelTester(self)

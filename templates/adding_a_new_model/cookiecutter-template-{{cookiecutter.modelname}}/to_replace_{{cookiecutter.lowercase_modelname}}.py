@@ -31,7 +31,7 @@
     from .models.{{cookiecutter.lowercase_modelname}} import (
         {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
         {{cookiecutter.camelcase_modelname}}ForMaskedLM,
-        {{cookiecutter.camelcase_modelname}}LMHeadModel,
+        {{cookiecutter.camelcase_modelname}}ForCausalLM,
         {{cookiecutter.camelcase_modelname}}ForMultipleChoice,
         {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
         {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
@@ -48,7 +48,7 @@
     from .models.{{cookiecutter.lowercase_modelname}} import (
         TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
         TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
-        TF{{cookiecutter.camelcase_modelname}}LMHeadModel,
+        TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
         TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
         TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
         TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
@@ -103,7 +103,7 @@ from ..{{cookiecutter.lowercase_modelname}}.configuration_{{cookiecutter.lowerca
 # Replace with:
 from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_modelname}} import (
     {{cookiecutter.camelcase_modelname}}ForMaskedLM,
-    {{cookiecutter.camelcase_modelname}}LMHeadModel,
+    {{cookiecutter.camelcase_modelname}}ForCausalLM,
     {{cookiecutter.camelcase_modelname}}ForMultipleChoice,
     {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
     {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
@@ -124,7 +124,7 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_mo
 
 # Below: "# Model for Causal LM mapping"
 # Replace with:
-        ({{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}LMHeadModel),
+        ({{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}ForCausalLM),
 # End.
 
 # Below: "# Model for Masked LM mapping"
@@ -163,7 +163,7 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_mo
 # Replace with:
 from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase_modelname}} import (
     TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
-    TF{{cookiecutter.camelcase_modelname}}LMHeadModel,
+    TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
     TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
     TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
     TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
@@ -184,7 +184,7 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase
 
 # Below: "# Model for Causal LM mapping"
 # Replace with:
-        ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}LMHeadModel),
+        ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForCausalLM),
 # End.
 
 # Below: "# Model for Masked LM mapping"

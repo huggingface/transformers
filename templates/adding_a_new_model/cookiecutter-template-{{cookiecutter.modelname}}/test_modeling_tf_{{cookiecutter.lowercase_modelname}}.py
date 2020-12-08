@@ -32,7 +32,7 @@ if is_tf_available():
         TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
         TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
         TF{{cookiecutter.camelcase_modelname}}ForTokenClassification,
-        TF{{cookiecutter.camelcase_modelname}}LMHeadModel,
+        TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
         TF{{cookiecutter.camelcase_modelname}}Model,
     )
 
@@ -139,7 +139,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.is_decoder = True
-        model = TF{{cookiecutter.camelcase_modelname}}LMHeadModel(config=config)
+        model = TF{{cookiecutter.camelcase_modelname}}ForCausalLM(config=config)
         inputs = {
             "input_ids": input_ids,
             "attention_mask": input_mask,
@@ -240,7 +240,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTest(TFModelTesterMixin, unitte
     all_model_classes = (
         (
             TF{{cookiecutter.camelcase_modelname}}Model,
-            TF{{cookiecutter.camelcase_modelname}}LMHeadModel,
+            TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
             TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
             TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
             TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
