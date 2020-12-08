@@ -365,9 +365,7 @@ def input_processing(func, config, input_ids, **kwargs):
                 if tensor_name in parameter_names:
                     output[tensor_name] = input
                 else:
-                    raise ValueError(
-                        f"The tensor named {input.name} does not belong to the authorized list of names {parameter_names}."
-                    )
+                    output[parameter_names[i]] = input
             elif isinstance(input, allowed_types) or input is None:
                 output[parameter_names[i]] = input
             else:
