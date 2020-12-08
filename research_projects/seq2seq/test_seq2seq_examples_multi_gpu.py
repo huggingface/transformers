@@ -2,19 +2,17 @@
 
 import os
 import sys
+from pathlib import Path
 
-from transformers.testing_utils import (
-    TestCasePlus,
-    execute_subprocess_async,
-    get_gpu_count,
-    require_torch_gpu,
-    require_torch_multi_gpu,
-    slow,
-)
+import torch
 
+from transformers.testing_utils import TestCasePlus, execute_subprocess_async, require_torch_multi_gpu
 from utils import load_json
 
 
+CUDA_AVAILABLE = torch.cuda.is_available()
+ARTICLES = [" Sam ate lunch today.", "Sams lunch ingredients."]
+SUMMARIES = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
 CHEAP_ARGS = {
     "max_tokens_per_batch": None,
     "supervise_forward": True,
@@ -79,6 +77,11 @@ CHEAP_ARGS = {
     "overwrite_output_dir": False,
     "student": None,
 }
+
+
+def _dump_articles(path: Path, articles: list):
+    content = "\n".join(articles)
+    Path(path).open("w").writelines(content)
 
 
 def make_test_data_dir(tmp_dir):

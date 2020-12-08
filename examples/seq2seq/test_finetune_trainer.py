@@ -17,7 +17,6 @@ from transformers.trainer_utils import set_seed
 
 from .finetune_trainer import Seq2SeqTrainingArguments, main
 from .seq2seq_trainer import Seq2SeqTrainer
-from .test_seq2seq_examples import MBART_TINY
 
 
 set_seed(42)

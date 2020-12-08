@@ -24,6 +24,11 @@ MBART_TINY = "sshleifer/tiny-mbart"
 MARIAN_TINY = "sshleifer/tiny-marian-en-de"
 
 
+def _dump_articles(path: Path, articles: list):
+    content = "\n".join(articles)
+    Path(path).open("w").writelines(content)
+
+
 def make_test_data_dir(tmp_dir):
     for split in ["train", "val", "test"]:
         _dump_articles(os.path.join(tmp_dir, f"{split}.source"), ARTICLES)
