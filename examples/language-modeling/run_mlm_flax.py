@@ -604,6 +604,8 @@ if __name__ == "__main__":
             model_inputs = common_utils.shard(model_inputs.data)
             loss, optimizer, dropout_rngs = p_training_step(optimizer, model_inputs, dropout_rngs)
 
+        epochs.write(f"Loss: {loss}")
+
         # ======================== Evaluating ==============================
         nb_eval_samples = len(tokenized_datasets["test"])
         eval_samples_idx = jnp.arange(nb_eval_samples)
