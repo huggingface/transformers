@@ -595,7 +595,7 @@ if __name__ == "__main__":
         training_batch_idx = generate_batch_splits(training_samples_idx, batch_size)
 
         # Gather the indexes for creating the batch and do a training step
-        for batch_idx in tqdm(training_batch_idx, desc=f"Training...", position=1):
+        for batch_idx in tqdm(training_batch_idx, desc="Training...", position=1):
             samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples, pad_to_multiple_of=16)
 
