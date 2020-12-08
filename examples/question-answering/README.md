@@ -2,7 +2,9 @@
 
 ## SQuAD
 
-Based on the script [`run_squad.py`](https://github.com/huggingface/transformers/blob/master/examples/question-answering/run_squad.py).
+Based on the script [`run_qa.py`](https://github.com/huggingface/transformers/blob/master/examples/question-answering/run_qa.py).
+
+The old version of this script can be found [here](https://github.com/huggingface/transformers/blob/master/examples/contrib/legacy/question-answering/run_squad.py).
 
 #### Fine-tuning BERT on SQuAD1.0
 

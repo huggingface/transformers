@@ -1,8 +1,8 @@
 ## Sequence to Sequence Training and Evaluation
 
 This directory contains examples for finetuning and evaluating transformers on summarization and translation tasks.
-Please tag @patil-suraj with any issues/unexpected behaviors, or send a PR!
-For deprecated `bertabs` instructions, see [`bertabs/README.md`](bertabs/README.md).
+
+Author: San Shleifer (https://github.com/sshleifer)
 
 ### Supported Architectures
 

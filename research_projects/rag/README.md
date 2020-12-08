@@ -1,4 +1,7 @@
 # Intro
+
+Authors: @patrickvonplaten and @lhoestq
+
 Aimed at tackling the knowledge-intensive NLP tasks (think tasks a human wouldn't be expected to solve without access to external knowledge sources), RAG models are seq2seq models with access to a retrieval mechanism providing relevant context documents at training and evaluation time.
 
 A RAG model encapsulates two core components: a question encoder and a generator.

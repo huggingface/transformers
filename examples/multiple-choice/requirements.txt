@@ -1,0 +1,2 @@
+sentencepiece != 0.1.92
+-e git+https://github.com/huggingface/transformers.git
