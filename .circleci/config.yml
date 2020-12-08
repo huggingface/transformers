@@ -13,7 +13,7 @@ commands:
           command: |
             if test -n "$CIRCLE_PR_NUMBER"
             then
-                # resp=$(curl -Ls https://api.github.com/repos/huggingface/transformers/pulls/${CIRCLE_PR_NUMBER})
+                resp=$(curl -Ls https://api.github.com/repos/huggingface/transformers/pulls/${CIRCLE_PR_NUMBER})
                 base_sha=$(jq -r .base.sha \<<< $resp)
                 head_sha=$(jq -r .head.sha \<<< $resp)
                 commits=$(jq -r .commits \<<< $resp)
@@ -21,7 +21,7 @@ commands:
                 echo base_sha=$base_sha, head_sha=$head_sha, commits=$commits
 
                 echo log
-                git --no-pager log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit | head -15
+                git --no-pager log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit | head -20
                 
                 echo count backward $commits commits
                 git --no-pager diff --name-only HEAD~$commits
