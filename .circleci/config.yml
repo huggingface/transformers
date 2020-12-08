@@ -27,6 +27,7 @@ commands:
                 git checkout $head_ref
                 fork_point_sha=$(git merge-base --fork-point master)
                 cd -
+            fi
 
             if test -n "$fork_point_sha" && test -n "$(git diff --name-only $fork_point_sha)"
             then
