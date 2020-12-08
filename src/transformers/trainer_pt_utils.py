@@ -23,7 +23,6 @@ from typing import List, Optional, Union
 
 import numpy as np
 import torch
-from packaging import version
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler
 
