@@ -19,11 +19,17 @@ from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import List
 
-from cookiecutter.main import cookiecutter
 from transformers.commands import BaseTransformersCLICommand
 
 from ..utils import logging
 
+
+try:
+    from cookiecutter.main import cookiecutter
+
+    _has_cookiecutter = True
+except ImportError:
+    _has_cookiecutter = False
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -49,6 +55,11 @@ class AddNewModelCommand(BaseTransformersCLICommand):
         self._path = path
 
     def run(self):
+        if not _has_cookiecutter:
+            raise ImportError(
+                "Model creation dependencies are required to use the `add_new_model` command. Install them by running "
+                "the folowing at the root of your `transformers` clone:\n\n\t$ pip install -e .[modelcreation]\n"
+            )
         # Ensure that there is no other `cookiecutter-template-xxx` directory in the current working directory
         directories = [directory for directory in os.listdir() if "cookiecutter-template-" == directory[:22]]
         if len(directories) > 0:
@@ -151,6 +162,11 @@ class AddNewModelCommand(BaseTransformersCLICommand):
         shutil.move(
             f"{directory}/tokenization_{lowercase_model_name}.py",
             f"{model_dir}/tokenization_{lowercase_model_name}.py",
+        )
+
+        shutil.move(
+            f"{directory}/tokenization_fast_{lowercase_model_name}.py",
+            f"{model_dir}/tokenization_{lowercase_model_name}_fast.py",
         )
 
         from os import fdopen, remove
