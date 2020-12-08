@@ -360,12 +360,12 @@ def input_processing(func, config, input_ids, **kwargs):
             if type(input) == tf.Tensor:
                 # Tensor names have always the pattern name:device_id then we check only the
                 # name and not the device id
-                tensor_name = input.name.split(":")[0]
+                tensor_name, id = input.name.split(":")
 
                 if tensor_name in parameter_names:
                     output[tensor_name] = input
                 else:
-                    output[parameter_names[i]] = input
+                    output[parameter_names[int(id)]] = input
             elif isinstance(input, allowed_types) or input is None:
                 output[parameter_names[i]] = input
             else:
