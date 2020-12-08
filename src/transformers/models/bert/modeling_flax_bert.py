@@ -300,21 +300,28 @@ class FlaxBertModule(nn.Module):
         return encoder, pooled
 
 
+class FlaxBertPretrainedModel(FlaxPreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    model_class = FlaxBertModule
+    config_class = BertConfig
+    base_model_prefix = "bert"
+
+
 @add_start_docstrings(
     "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
     BERT_START_DOCSTRING,
 )
-class FlaxBertModel(FlaxPreTrainedModel):
+class FlaxBertModel(FlaxBertPretrainedModel):
     """
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in `Attention is
     all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
     Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
     """
-
-    model_class = FlaxBertModule
-    config_class = BertConfig
-    base_model_prefix = "bert"
 
     @staticmethod
     def convert_from_pytorch(pt_state: Dict, config: BertConfig) -> Dict:

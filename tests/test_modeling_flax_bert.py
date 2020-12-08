@@ -31,6 +31,8 @@ class FlaxBertModelTest(unittest.TestCase):
         with torch.no_grad():
             with self.subTest("bert-base-cased"):
                 tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
+
+                fx_model_from_pt = FlaxBertModel.from_pretrained("bert-base-cased", from_pt=True)
                 fx_model = FlaxBertModel.from_pretrained("bert-base-cased")
                 pt_model = BertModel.from_pretrained("bert-base-cased")
 
@@ -38,12 +40,19 @@ class FlaxBertModelTest(unittest.TestCase):
                 pt_inputs = tokenizer.encode_plus("This is a simple input", return_tensors=TensorType.PYTORCH)
                 fx_inputs = tokenizer.encode_plus("This is a simple input", return_tensors=TensorType.JAX)
                 pt_outputs = pt_model(**pt_inputs).to_tuple()
+                fx_outputs_from_pt = fx_model_from_pt(**fx_inputs)
                 fx_outputs = fx_model(**fx_inputs)
 
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+                self.assertEqual(
+                    len(fx_outputs_from_pt), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
+                )
 
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
                     self.assert_almost_equals(fx_output, pt_output.numpy(), 5e-3)
+
+                for fx_output_from_pt, pt_output in zip(fx_outputs_from_pt, pt_outputs):
+                    self.assert_almost_equals(fx_output_from_pt, pt_output.numpy(), 5e-3)
 
     def test_multiple_sequences(self):
         tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")

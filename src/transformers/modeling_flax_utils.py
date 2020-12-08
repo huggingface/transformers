@@ -16,17 +16,17 @@
 import os
 from abc import ABC, abstractmethod
 from pickle import UnpicklingError
-from typing import Dict
+from typing import Dict, Union
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.serialization import to_bytes
+from flax.serialization import from_bytes, to_bytes
 from flax.traverse_util import unflatten_dict
 from jax.random import PRNGKey
 
 from .configuration_utils import PretrainedConfig
-from .file_utils import WEIGHTS_NAME, cached_path, hf_bucket_url, is_remote_url
+from .file_utils import FLAX_WEIGHTS_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_remote_url
 from .utils import logging
 
 
@@ -101,7 +101,7 @@ class FlaxPreTrainedModel(ABC):
         config = kwargs.pop("config", None)
         # state_dict = kwargs.pop("state_dict", None)
         cache_dir = kwargs.pop("cache_dir", None)
-        # from_tf = kwargs.pop("from_tf", False)
+        from_pt = kwargs.pop("from_pt", False)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
@@ -129,10 +129,28 @@ class FlaxPreTrainedModel(ABC):
 
         # Load model
         if pretrained_model_name_or_path is not None:
-            if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
+            if os.path.isdir(pretrained_model_name_or_path):
+                if from_pt and os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
+                    # Load from a PyTorch checkpoint
+                    archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
+                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)):
+                    # Load from a Flax checkpoint
+                    archive_file = os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)
+                else:
+                    raise EnvironmentError(
+                        "Error no file named {} found in directory {} or `from_pt` set to False".format(
+                            [FLAX_WEIGHTS_NAME, WEIGHTS_NAME],
+                            pretrained_model_name_or_path,
+                        )
+                    )
+            elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
             else:
-                archive_file = hf_bucket_url(pretrained_model_name_or_path, filename=WEIGHTS_NAME, revision=revision)
+                archive_file = hf_bucket_url(
+                    pretrained_model_name_or_path,
+                    filename=WEIGHTS_NAME if from_pt else FLAX_WEIGHTS_NAME,
+                    revision=revision,
+                )
 
             # redirect to the cache, if necessary
             try:
@@ -163,31 +181,44 @@ class FlaxPreTrainedModel(ABC):
         # Instantiate model.
         with open(resolved_archive_file, "rb") as state_f:
             try:
-                from flax.serialization import from_bytes
-
-                state = from_bytes(cls.model_class, state_f)
-            except TypeError:
-                try:
+                if from_pt:
                     import torch
 
                     state = torch.load(state_f)
                     state = {k: v.numpy() for k, v in state.items()}
                     state = cls.convert_from_pytorch(state, config)
                     state = unflatten_dict({tuple(k.split(".")[1:]): v for k, v in state.items()})
-                except UnpicklingError:
-                    raise EnvironmentError(
-                        f"Unable to convert model {archive_file} to Flax deserializable object. "
-                        "Supported format are PyTorch archive or Flax msgpack"
-                    )
+                else:
+                    state = from_bytes(cls.model_class, state_f.read())
+
+            except UnpicklingError:
+                raise EnvironmentError(
+                    f"Unable to convert pytorch model {archive_file} to Flax deserializable object. "
+                )
 
         return cls(config, state, *model_args, **model_kwargs)
 
-    def save_pretrained(self, folder):
-        folder_abs = os.path.abspath(folder)
+    def save_pretrained(self, save_directory: Union[str, os.PathLike]):
+        """
+        Save a model and its configuration file to a directory, so that it can be re-loaded using the
+        `:func:`~transformers.PreTrainedModel.from_pretrained`` class method.
 
-        if not os.path.exists(folder_abs):
-            os.mkdir(folder_abs)
+        Arguments:
+            save_directory (:obj:`str` or :obj:`os.PathLike`):
+                Directory to which to save. Will be created if it doesn't exist.
+        """
+        if os.path.isfile(save_directory):
+            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
+            return
+        os.makedirs(save_directory, exist_ok=True)
 
-        with open(os.path.join(folder_abs, f"{self._config.model_type}.flax", "wb")) as f:
+        # get abs dir
+        save_directory = os.path.abspath(save_directory)
+
+        # save config as well
+        self.config.save_pretrained(save_directory)
+
+        # save model
+        with open(os.path.join(save_directory, FLAX_WEIGHTS_NAME), "wb") as f:
             model_bytes = to_bytes(self.params)
             f.write(model_bytes)
