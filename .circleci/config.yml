@@ -31,6 +31,7 @@ commands:
 
             if test -n "$fork_point_sha" && test -n "$(git diff --name-only $fork_point_sha)"
             then
+                git diff --name-only $fork_point_sha
                 if git diff --name-only $fork_point_sha | egrep -qv '\.(md|rst)$'
                 then
                     echo "Non-docs were modified in this PR, proceeding normally"
