@@ -1011,9 +1011,9 @@ class TapasLMHead(nn.Module):
 
 @add_start_docstrings(
     """
-    Tapas Model with a cell selection head and optionally aggregation head on top for question-answering tasks on
-    tables (linear layers on top of the hidden-states output to compute `logits` and optionally `logits_aggregation`),
-    e.g. for SQA, WTQ or WikiSQL tasks.
+    Tapas Model with a cell selection head and optional aggregation head on top for question-answering tasks on
+    tables (linear layers on top of the hidden-states output to compute `logits` and optional `logits_aggregation`),
+    e.g. for SQA, WTQ or WikiSQL-supervised tasks.
     """,
     TAPAS_START_DOCSTRING,
 )
@@ -1085,17 +1085,17 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         aggregation_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, )`, `optional`):
             Aggregation function index for every example in the batch for computing the aggregation loss. Indices
             should be in :obj:`[0, ..., config.num_aggregation_labels - 1]`. Only required in case of strong
-            supervision for aggregation (WikiSQL-SUPERVISED).
+            supervision for aggregation (WikiSQL-supervised).
         float_answer (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, )`, `optional`):
             Float answer for every example in the batch. Set to `float('nan')` for cell selection questions.  
-            Only required in case of weak supervision (WTQ, WikiSQL) to calculate the aggregate mask and regression loss.
+            Only required in case of weak supervision (WTQ) to calculate the aggregate mask and regression loss.
         numeric_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
             Numeric values of every token, NaN for tokens which are not numeric values. Can be obtained using
-            :class:`~transformers.TapasTokenizer`. Only required in case of weak supervision for aggregation (WTQ,
-            WikiSQL) to calculate the regression loss.
+            :class:`~transformers.TapasTokenizer`. Only required in case of weak supervision for aggregation (WTQ) 
+            to calculate the regression loss.
         numeric_values_scale (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
             Scale of the numeric values of every token. Can be obtained using :class:`~transformers.TapasTokenizer`.
-            Only required in case of weak supervision for aggregation (WTQ, WikiSQL) to calculate the regression loss.
+            Only required in case of weak supervision for aggregation (WTQ) to calculate the regression loss.
 
         Returns:
 
