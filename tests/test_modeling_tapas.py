@@ -582,6 +582,18 @@ class TapasModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(logits_aggregation, expected_tensor, atol=TOLERANCE))
 
+        # test the predicted answer coordinates and aggregation indices
+        EXPECTED_PREDICTED_ANSWER_COORDINATES = [[(0, 0)], [(1, 2)]]
+        EXPECTED_PREDICTED_AGGREGATION_INDICES = [0, 1]
+        
+        predicted_answer_coordinates, predicted_aggregation_indices = tokenizer.convert_logits_to_predictions(inputs, 
+                                                                                                      outputs.logits, 
+                                                                                                      outputs.logits_aggregation)
+
+        self.assertEqual(EXPECTED_PREDICTED_ANSWER_COORDINATES, predicted_answer_coordinates)
+        self.assertEqual(EXPECTED_PREDICTED_AGGREGATION_INDICES, predicted_aggregation_indices)
+
+                                                                                        
     @slow
     def test_training_question_answering_head_weak_supervision(self):
         # note that nielsr/tapas-base-finetuned-wtq should correspond to tapas_wtq_wikisql_sqa_inter_masklm_base_reset
@@ -684,6 +696,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
                            device=torch_device) # ok. Note that the PyTorch model outputs [[0.8057, 9.5281]]
 
         self.assertTrue(torch.allclose(outputs.logits, expected_tensor, atol=TOLERANCE))
+
 
 # Below: tests for Tapas utilities which are defined in modeling_tapas.py.
 # These are based on segmented_tensor_test.py of the original implementation.
