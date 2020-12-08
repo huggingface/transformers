@@ -19,6 +19,11 @@ commands:
                 git merge-base --fork-point master
                 echo $base_ref $head_ref $CIRCLE_SHA1
                 git diff --name-only master $CIRCLE_SHA1
+                head=$(git rev-parse HEAD)
+                base=$(git rev-parse --verify refs/heads/master)
+                echo base: $base head: $head 
+                git diff --name-only $base $head
+                git log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit | head -15
             fi
 
             #if test -n "$base_ref" && test -n "$head_ref" && test -n "$(git diff --name-only $base_ref $head_ref)"
