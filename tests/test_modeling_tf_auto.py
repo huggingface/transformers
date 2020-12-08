@@ -167,14 +167,14 @@ class TFAutoModelTest(unittest.TestCase):
     def test_from_pretrained_identifier(self):
         model = TFAutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)
         self.assertIsInstance(model, TFBertForMaskedLM)
-        self.assertEqual(model.num_parameters(), 14830)
-        self.assertEqual(model.num_parameters(only_trainable=True), 14830)
+        self.assertEqual(model.num_parameters(), 14410)
+        self.assertEqual(model.num_parameters(only_trainable=True), 14410)
 
     def test_from_identifier_from_model_type(self):
         model = TFAutoModelWithLMHead.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER)
         self.assertIsInstance(model, TFRobertaForMaskedLM)
-        self.assertEqual(model.num_parameters(), 14830)
-        self.assertEqual(model.num_parameters(only_trainable=True), 14830)
+        self.assertEqual(model.num_parameters(), 14410)
+        self.assertEqual(model.num_parameters(only_trainable=True), 14410)
 
     def test_parents_and_children_in_mappings(self):
         # Test that the children are placed before the parents in the mappings, as the `instanceof` will be triggered
