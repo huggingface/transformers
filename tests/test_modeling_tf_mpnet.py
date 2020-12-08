@@ -189,6 +189,7 @@ class TFMPNetModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFMPNetForMaskedLM,
+            TFMPNetForMultipleChoice,
             TFMPNetForQuestionAnswering,
             TFMPNetForSequenceClassification,
             TFMPNetForTokenClassification,

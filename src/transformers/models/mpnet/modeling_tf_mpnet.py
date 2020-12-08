@@ -172,6 +172,8 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
             else:
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
+        assert position_ids is None or len(position_ids.shape) <= 2
+
         if input_ids is not None:
             input_shape = shape_list(input_ids)
         else:
