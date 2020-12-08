@@ -770,7 +770,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             )
 
             bias_layer.bias.assign(init_bias)
-        
+
         output_embeddings = self.get_output_embeddings()
 
         if output_embeddings is not None:
