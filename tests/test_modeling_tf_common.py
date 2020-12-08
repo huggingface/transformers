@@ -514,6 +514,7 @@ class TFModelTesterMixin:
             out_len = len(outputs)
             self.assertEqual(out_len % 2, 0)
             decoder_attentions = outputs.decoder_attentions
+            self.assertTrue(isinstance(decoder_attentions, tf.Tensor))
             self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
@@ -521,9 +522,8 @@ class TFModelTesterMixin:
             )
 
         def check_encoder_attentions_output(outputs):
-            attentions = [
-                t.numpy() for t in (outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions)
-            ]
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self.assertTrue(isinstance(attentions, tf.Tensor))
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
@@ -576,6 +576,7 @@ class TFModelTesterMixin:
 
             hidden_states = outputs[-1]
             self.assertEqual(config.output_attentions, False)
+            self.assertTrue(isinstance(hidden_states, tf.Tensor))
             self.assertEqual(len(hidden_states), expected_num_layers)
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
