@@ -14,8 +14,8 @@ commands:
             if test -n "$CIRCLE_PR_NUMBER"
             then
                 resp=$(curl -Ls https://api.github.com/repos/huggingface/transformers/pulls/${CIRCLE_PR_NUMBER})
-                base_ref=$(jq -r .base.ref \\<<< $resp)
-                head_ref=$(jq -r .head.ref \\<<< $resp)
+                base_ref=$(jq -r .base.ref \<<< $resp)
+                head_ref=$(jq -r .head.ref \<<< $resp)
                 echo "$(base_ref}..${head_ref}"
             fi
 
