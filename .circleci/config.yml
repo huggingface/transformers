@@ -27,6 +27,8 @@ commands:
 
                 # CIRCLE_PR_USERNAME (forked PRs)
                 echo CIRCLE_PR_USERNAME=$CIRCLE_PR_USERNAME, user=$user
+                mkdir user-clone
+                cd user-clone
                 git clone --branch $head_ref https://github.com/$user/transformers
                 cd transformers
                 git merge-base --fork-point master
