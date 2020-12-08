@@ -23,6 +23,13 @@ commands:
                 echo log
                 git --no-pager log --color --graph --pretty=format:'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset' --abbrev-commit | head -$(($commits+1)) || if [[ $? -eq 141 ]]; then true; else exit $?; fi
 
+                head_ref=$(jq -r .head.ref \<<< $resp)
+                echo CIRCLE_BRANCH=$CIRCLE_BRANCH head_ref=$head_ref
+                if test -n "$head_ref" && test -n "$CIRCLE_BRANCH" && test -n "$(git diff --name-only ${CIRCLE_BRANCH}..${head_ref})"
+                then
+                    git diff --name-only ${CIRCLE_BRANCH}..${head_ref}
+                fi
+
             fi
 
             if test -n "$base_sha" && test -n "$head_sha" && test -n "$(git diff --name-only $base_sha $head_sha)"
