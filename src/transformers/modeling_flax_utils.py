@@ -199,7 +199,7 @@ class FlaxPreTrainedModel(ABC):
     def save_pretrained(self, save_directory: Union[str, os.PathLike]):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
-        `:func:`~transformers.PreTrainedModel.from_pretrained`` class method.
+        `:func:`~transformers.FlaxPreTrainedModel.from_pretrained`` class method.
 
         Arguments:
             save_directory (:obj:`str` or :obj:`os.PathLike`):
