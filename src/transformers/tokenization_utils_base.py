@@ -2814,7 +2814,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         len_ids = len(ids)
         len_pair_ids = len(pair_ids) if pair else 0
 
-        if return_token_type_ids is not None and not add_special_tokens:
+        if return_token_type_ids and not add_special_tokens:
             raise ValueError(
                 "Asking to return token_type_ids while setting add_special_tokens to False "
                 "results in an undefined behavior. Please set add_special_tokens to True or "
