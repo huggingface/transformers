@@ -23,7 +23,6 @@ from typing import List, Optional, Union
 
 import numpy as np
 import torch
-from packaging import version
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler
 
@@ -34,10 +33,11 @@ from .utils import logging
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
 
-if version.parse(torch.__version__) <= version.parse("1.4.1"):
-    SAVE_STATE_WARNING = ""
-else:
+# this is used to supress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
+try:
     from torch.optim.lr_scheduler import SAVE_STATE_WARNING
+except ImportError:
+    SAVE_STATE_WARNING = ""
 
 logger = logging.get_logger(__name__)
 
