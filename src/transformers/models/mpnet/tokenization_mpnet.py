@@ -79,7 +79,7 @@ class MPNetTokenizer(PreTrainedTokenizer):
         never_split (:obj:`Iterable`, `optional`):
             Collection of tokens which will never be split during tokenization. Only has an effect when
             :obj:`do_basic_tokenize=True`
-        bos_token (:obj:`string`, `optional`, defaults to :obj:`"<s>"`):
+        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
             The beginning of sequence token that was used during pre-training. Can be used a sequence classifier token.
 
             .. note::
