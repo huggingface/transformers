@@ -770,16 +770,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             )
 
             bias_layer.bias.assign(init_bias)
+        
+        output_embeddings = self.get_output_embeddings()
 
-        if self.get_output_embeddings is not None:
-            if self.get_input_embeddings() != self.get_output_embeddings():
-                output_embeddings = self.get_output_embeddings()
-
-                if not hasattr(bias_layer, "decoder"):
+        if output_embeddings is not None:
+            if self.get_input_embeddings() != output_embeddings:
+                if not hasattr(output_embeddings, "decoder"):
                     bias_layer.build([])
 
                 # Second check in order to be sure the attribute has been properly created
-                if not hasattr(bias_layer, "decoder"):
+                if not hasattr(output_embeddings, "decoder"):
                     raise ValueError("decoder is not defined.")
 
                 # initialize decoder
