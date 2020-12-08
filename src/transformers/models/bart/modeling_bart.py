@@ -195,7 +195,9 @@ class BartAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
+        assert (
+            self.head_dim * num_heads == self.embed_dim
+        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
@@ -328,11 +330,9 @@ class EncoderLayer(nn.Module):
     def forward(self, hidden_states, encoder_padding_mask, output_attentions=False):
         """
         Args:
-            hidden_states (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
-            encoder_padding_mask (ByteTensor): binary ByteTensor of shape
-                `(batch, src_len)` where padding elements are indicated by ``1``.
-            for t_tgt, t_src is ehidden_statescluded (or masked out), =0 means it is
-            included in attention
+            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            encoder_padding_mask (:obj:`torch.FloatTensor`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
 
         Returns:
             encoded output of shape `(seq_len, batch, embed_dim)`
@@ -458,13 +458,11 @@ class DecoderLayer(nn.Module):
             self_attn_weights,
             present_key_value,
             cross_attn_weights,
-        )  # past_key_value = cache for decoding
+        )
 
 
 class BartClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
-
-    # This can trivially be shared with RobertaClassificationHead
 
     def __init__(
         self,
