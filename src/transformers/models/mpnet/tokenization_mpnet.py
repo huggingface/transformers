@@ -105,7 +105,7 @@ class MPNetTokenizer(PreTrainedTokenizer):
             token instead.
         pad_token (:obj:`string`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
-        mask_token (:obj:`string`, `optional`, defaults to :obj:`"<mask>"`):
+        mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
         tokenize_chinese_chars (:obj:`bool`, `optional`, defaults to :obj:`True`):
