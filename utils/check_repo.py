@@ -37,7 +37,6 @@ IGNORE_NON_TESTED = [
     "TFDPRSpanPredictor",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
     "TFRobertaForMultipleChoice",  # TODO: fix
-    "TFMPNetForMultipleChoice",  # TODO: fix
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
