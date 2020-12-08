@@ -8,7 +8,6 @@ from torch.utils.data import DataLoader
 from pack_dataset import pack_data_dir
 from parameterized import parameterized
 from save_len_file import save_len_file
-from test_seq2seq_examples import ARTICLES, BART_TINY, MARIAN_TINY, MBART_TINY, SUMMARIES, T5_TINY, make_test_data_dir
 from transformers import AutoTokenizer
 from transformers.models.bart.modeling_bart import shift_tokens_right
 from transformers.testing_utils import TestCasePlus, require_torch_non_multi_gpu_but_fix_me, slow
@@ -17,6 +16,19 @@ from utils import FAIRSEQ_AVAILABLE, DistributedSortishSampler, LegacySeq2SeqDat
 
 BERT_BASE_CASED = "bert-base-cased"
 PEGASUS_XSUM = "google/pegasus-xsum"
+ARTICLES = [" Sam ate lunch today.", "Sams lunch ingredients."]
+SUMMARIES = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
+T5_TINY = "patrickvonplaten/t5-tiny-random"
+BART_TINY = "sshleifer/bart-tiny-random"
+MBART_TINY = "sshleifer/tiny-mbart"
+MARIAN_TINY = "sshleifer/tiny-marian-en-de"
+
+
+def make_test_data_dir(tmp_dir):
+    for split in ["train", "val", "test"]:
+        _dump_articles(os.path.join(tmp_dir, f"{split}.source"), ARTICLES)
+        _dump_articles(os.path.join(tmp_dir, f"{split}.target"), SUMMARIES)
+    return tmp_dir
 
 
 class TestAll(TestCasePlus):

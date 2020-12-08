@@ -31,7 +31,7 @@ mkdir -p $OUTPUT_DIR
 # Add parent directory to python path to access lightning_base.py
 export PYTHONPATH="../":"${PYTHONPATH}"
 
-python3 run_pl_ner.py --data_dir ./ \
+python3 run_ner.py --data_dir ./ \
 --labels ./labels.txt \
 --model_name_or_path $BERT_MODEL \
 --output_dir $OUTPUT_DIR \

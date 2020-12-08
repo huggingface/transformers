@@ -22,6 +22,7 @@ from .test_seq2seq_examples import MBART_TINY
 
 set_seed(42)
 MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
+MBART_TINY = "sshleifer/tiny-mbart"
 
 
 class TestFinetuneTrainer(TestCasePlus):

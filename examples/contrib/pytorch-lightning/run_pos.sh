@@ -26,7 +26,7 @@ export SEED=1
 # Add parent directory to python path to access lightning_base.py
 export PYTHONPATH="../":"${PYTHONPATH}"
 
-python3 run_pl_ner.py --data_dir ./ \
+python3 run_ner.py --data_dir ./ \
 --task_type POS \
 --model_name_or_path $BERT_MODEL \
 --output_dir $OUTPUT_DIR \

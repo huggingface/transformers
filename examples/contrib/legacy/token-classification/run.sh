@@ -20,7 +20,7 @@ export NUM_EPOCHS=3
 export SAVE_STEPS=750
 export SEED=1
 
-python3 run_ner_old.py \
+python3 run_ner.py \
 --task_type NER \
 --data_dir . \
 --labels ./labels.txt \
