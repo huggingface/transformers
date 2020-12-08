@@ -1040,9 +1040,6 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         r"model.encoder.embed_tokens.weight",
         r"model.decoder.embed_tokens.weight",
     ]
-    _keys_to_ignore_on_load_missing = [
-        r"final_logits_bias",
-    ]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
