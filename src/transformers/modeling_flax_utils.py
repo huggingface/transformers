@@ -63,7 +63,6 @@ class FlaxPreTrainedModel(ABC):
     config_class = None
     pretrained_model_archive_map = {}
     base_model_prefix = ""
-    model_class = None
 
     def __init__(self, config: PretrainedConfig, module: nn.Module, params: Dict, seed: int = 0):
         if config is None:
@@ -189,13 +188,12 @@ class FlaxPreTrainedModel(ABC):
                     state = cls.convert_from_pytorch(state, config)
                     state = unflatten_dict({tuple(k.split(".")[1:]): v for k, v in state.items()})
                 else:
-                    state = from_bytes(cls.model_class, state_f.read())
+                    state = from_bytes(cls, state_f.read())
 
             except UnpicklingError:
                 raise EnvironmentError(
                     f"Unable to convert pytorch model {archive_file} to Flax deserializable object. "
                 )
-
         return cls(config, state, *model_args, **model_kwargs)
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike]):

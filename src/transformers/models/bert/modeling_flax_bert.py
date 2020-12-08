@@ -306,7 +306,6 @@ class FlaxBertPretrainedModel(FlaxPreTrainedModel):
     models.
     """
 
-    model_class = FlaxBertModule
     config_class = BertConfig
     base_model_prefix = "bert"
 
