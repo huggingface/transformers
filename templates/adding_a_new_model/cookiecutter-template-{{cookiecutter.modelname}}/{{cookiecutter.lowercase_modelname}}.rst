@@ -58,6 +58,13 @@ Tips:
     :members: forward
 
 
+{{cookiecutter.camelcase_modelname}}LMHeadModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.{{cookiecutter.camelcase_modelname}}LMHeadModel
+    :members: forward
+
+
 {{cookiecutter.camelcase_modelname}}ForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -107,6 +114,13 @@ TF{{cookiecutter.camelcase_modelname}}ForMaskedLM
 
 .. autoclass:: transformers.TF{{cookiecutter.camelcase_modelname}}ForMaskedLM
     :members: call
+
+
+TF{{cookiecutter.camelcase_modelname}}LMHeadModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TF{{cookiecutter.camelcase_modelname}}LMHeadModel
+    :members: forward
 
 
 TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification

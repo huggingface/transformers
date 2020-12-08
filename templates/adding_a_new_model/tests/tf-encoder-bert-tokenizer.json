@@ -1,8 +1,8 @@
 {
-  "modelname": "TFEncoderBERT",
-  "uppercase_modelname": "TF_ENCODER_BERT",
-  "lowercase_modelname": "tf_encoder_bert",
-  "camelcase_modelname": "TfEncoderBert",
+  "modelname": "TemplateTFEncoderBERT",
+  "uppercase_modelname": "TEMPLATE_TF_ENCODER_BERT",
+  "lowercase_modelname": "template_tf_encoder_bert",
+  "camelcase_modelname": "TemplateTfEncoderBert",
   "authors": "The HuggingFace Team",
   "checkpoint_identifier": "brand-new-bert-base-cased",
   "tokenizer_type": "Based on BERT",
