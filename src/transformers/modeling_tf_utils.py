@@ -771,17 +771,28 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
             bias_layer.bias.assign(init_bias)
 
+        if self.get_output_embeddings is not None:
             if self.get_input_embeddings() != self.get_output_embeddings():
-                init_weights = np.zeros((new_num_tokens, old_embedding_dim))
-                init_weights[:num_tokens_to_copy] = bias_layer.decoder.value()[:num_tokens_to_copy, :]
+                output_embeddings = self.get_output_embeddings()
 
-                bias_layer.decoder = self.add_weight(
+                if not hasattr(bias_layer, "decoder"):
+                    bias_layer.build([])
+
+                # Second check in order to be sure the attribute has been properly created
+                if not hasattr(bias_layer, "decoder"):
+                    raise ValueError("decoder is not defined.")
+
+                # initialize decoder
+                init_weights = np.zeros((new_num_tokens, old_embedding_dim))
+                init_weights[:num_tokens_to_copy] = output_embeddings.decoder.value()[:num_tokens_to_copy, :]
+
+                output_embeddings.decoder = self.add_weight(
                     shape=(new_num_tokens, old_embedding_dim),
                     initializer="zeros",
                     trainable=True,
                     name=self.get_prefix_bias_name() + "/decoder/weight",
                 )
-                bias_layer.decoder.assign(init_weights)
+                output_embeddings.decoder.assign(init_weights)
 
         return new_embeddings
 
