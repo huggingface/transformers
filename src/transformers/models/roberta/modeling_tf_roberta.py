@@ -452,7 +452,7 @@ class TFRobertaEncoder(tf.keras.layers.Layer):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
             all_hidden_states = tf.convert_to_tensor(all_hidden_states)
-        
+
         if output_attentions:
             all_attentions = tf.convert_to_tensor(all_attentions)
 
