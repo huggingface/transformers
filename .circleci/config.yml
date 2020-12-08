@@ -21,7 +21,7 @@ commands:
                 head_ref=$(jq -r .head.ref \<<< $resp)
                 commits=$(jq -r .commits \<<< $resp)
 
-                git fetch upstream pull/$CIRCLE_PR_NUMBER/head && git checkout FETCH_HEAD
+                git fetch origin pull/$CIRCLE_PR_NUMBER/head && git checkout FETCH_HEAD
                 git merge-base --fork-point master
 
                 echo base_sha=$base_sha, head_sha=$head_sha, commits=$commits
