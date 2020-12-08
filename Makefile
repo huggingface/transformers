@@ -23,6 +23,7 @@ deps_table_update:
 
 extra_quality_checks: deps_table_update
 	python utils/check_copies.py
+	python utils/check_table.py
 	python utils/check_dummies.py
 	python utils/check_repo.py
 	python utils/style_doc.py src/transformers docs/source --max_len 119
@@ -50,6 +51,7 @@ fixup: modified_only_fixup extra_quality_checks
 
 fix-copies:
 	python utils/check_copies.py --fix_and_overwrite
+	python utils/check_table.py --fix_and_overwrite
 	python utils/check_dummies.py --fix_and_overwrite
 
 # Run tests for the library
