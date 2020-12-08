@@ -16,7 +16,14 @@
 
 import datasets
 
-from .evaluate import apply_no_ans_threshold, get_raw_scores, make_eval_dict, make_qid_to_has_ans, merge_eval
+from .evaluate import (
+    apply_no_ans_threshold,
+    find_all_best_thresh,
+    get_raw_scores,
+    make_eval_dict,
+    make_qid_to_has_ans,
+    merge_eval,
+)
 
 
 _CITATION = """\
@@ -116,4 +123,6 @@ class SquadV2(datasets.Metric):
         if no_ans_qids:
             no_ans_eval = make_eval_dict(exact_thresh, f1_thresh, qid_list=no_ans_qids)
             merge_eval(out_eval, no_ans_eval, "NoAns")
+        find_all_best_thresh(out_eval, predictions, exact_raw, f1_raw, no_answer_probabilities, qid_to_has_ans)
+
         return out_eval

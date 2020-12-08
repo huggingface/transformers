@@ -76,7 +76,9 @@ def postprocess_qa_predictions(
     assert len(predictions) == 2, "`predictions` should be a tuple with two elements (start_logits, end_logits)."
     all_start_logits, all_end_logits = predictions
 
-    assert len(predictions[0]) == len(features), f"Got {len(predictions[0])} predicitions and {len(features)} features."
+    assert len(predictions[0]) == len(
+        features
+    ), f"Got {len(predictions[0])} predicitions and {len(features)} features."
 
     # Build a map example to its corresponding features.
     example_id_to_index = {k: i for i, k in enumerate(examples["id"])}
@@ -273,7 +275,7 @@ def postprocess_qa_predictions_with_beam_search(
         start_n_top (:obj:`int`, `optional`, defaults to 5):
             The number of top start logits too keep when searching for the :obj:`n_best_size` predictions.
         end_n_top (:obj:`int`, `optional`, defaults to 5):
-            The number of top end logits too keep when searching for the :obj:`n_best_size` predictions.   
+            The number of top end logits too keep when searching for the :obj:`n_best_size` predictions.
         output_dir (:obj:`str`, `optional`):
             If provided, the dictionaries of predictions, n_best predictions (with their scores and logits) and, if
             :obj:`version_2_with_negative=True`, the dictionary of the scores differences between best and null
@@ -286,10 +288,12 @@ def postprocess_qa_predictions_with_beam_search(
     assert len(predictions) == 5, "`predictions` should be a tuple with five elements."
     start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits = predictions
 
-    assert len(predictions[0]) == len(features), f"Got {len(predictions[0])} predicitions and {len(features)} features."
+    assert len(predictions[0]) == len(
+        features
+    ), f"Got {len(predictions[0])} predicitions and {len(features)} features."
 
     # Build a map example to its corresponding features.
-    example_id_to_index = {k: i for i, k in enumerate(examples["id"])} 
+    example_id_to_index = {k: i for i, k in enumerate(examples["id"])}
     features_per_example = collections.defaultdict(list)
     for i, feature in enumerate(features):
         features_per_example[example_id_to_index[feature["example_id"]]].append(i)
@@ -338,7 +342,12 @@ def postprocess_qa_predictions_with_beam_search(
                     end_index = end_indexes[j_index]
                     # Don't consider out-of-scope answers (last part of the test should be unnecessary because of the
                     # p_mask but let's not take any risk)
-                    if start_index >= len(offset_mapping) or end_index >= len(offset_mapping) or offset_mapping[start_index] is None or offset_mapping[end_index] is None:
+                    if (
+                        start_index >= len(offset_mapping)
+                        or end_index >= len(offset_mapping)
+                        or offset_mapping[start_index] is None
+                        or offset_mapping[end_index] is None
+                    ):
                         continue
                     # Don't consider answers with a length negative or > max_answer_length.
                     if end_index < start_index or end_index - start_index + 1 > max_answer_length:
@@ -347,12 +356,14 @@ def postprocess_qa_predictions_with_beam_search(
                     # provided).
                     if token_is_max_context is not None and not token_is_max_context.get(str(start_index), False):
                         continue
-                    prelim_predictions.append({
-                        "offsets": (offset_mapping[start_index][0], offset_mapping[end_index][1]),
-                        "score": start_log_prob[i] + end_log_prob[j_index],
-                        "start_log_prob": start_log_prob[i],
-                        "end_log_prob": end_log_prob[j_index],
-                    })
+                    prelim_predictions.append(
+                        {
+                            "offsets": (offset_mapping[start_index][0], offset_mapping[end_index][1]),
+                            "score": start_log_prob[i] + end_log_prob[j_index],
+                            "start_log_prob": start_log_prob[i],
+                            "end_log_prob": end_log_prob[j_index],
+                        }
+                    )
 
         # Only keep the best `n_best_size` predictions.
         predictions = sorted(prelim_predictions, key=lambda x: x["score"], reverse=True)[:n_best_size]
@@ -381,7 +392,7 @@ def postprocess_qa_predictions_with_beam_search(
         # Pick the best prediction and set the probability for the null answer.
         all_predictions[example["id"]] = predictions[0]["text"]
         if version_2_with_negative:
-            scores_diff_json[example["id"]] = float(1 / (1 + np.exp(-min_null_score)))
+            scores_diff_json[example["id"]] = float(min_null_score)
 
         # Make `predictions` JSON-serializable by casting np.float back to float.
         all_nbest_json[example["id"]] = [
@@ -392,12 +403,18 @@ def postprocess_qa_predictions_with_beam_search(
     # If we have an output_dir, let's save all those dicts.
     if output_dir is not None:
         assert os.path.isdir(output_dir), f"{output_dir} is not a directory."
-            
-        prediction_file = os.path.join(output_dir, "predictions.json" if prefix is None else f"predictions_{prefix}".json)
-        nbest_file = os.path.join(output_dir, "nbest_predictions.json" if prefix is None else f"nbest_predictions_{prefix}".json)
+
+        prediction_file = os.path.join(
+            output_dir, "predictions.json" if prefix is None else f"predictions_{prefix}".json
+        )
+        nbest_file = os.path.join(
+            output_dir, "nbest_predictions.json" if prefix is None else f"nbest_predictions_{prefix}".json
+        )
         if version_2_with_negative:
-            null_odds_file = os.path.join(output_dir, "null_odds.json" if prefix is None else f"null_odds_{prefix}".json)
-    
+            null_odds_file = os.path.join(
+                output_dir, "null_odds.json" if prefix is None else f"null_odds_{prefix}".json
+            )
+
         print(f"Saving predictions to {prediction_file}.")
         with open(prediction_file, "w") as writer:
             writer.write(json.dumps(all_predictions, indent=4) + "\n")
@@ -408,5 +425,5 @@ def postprocess_qa_predictions_with_beam_search(
             print(f"Saving null_odds to {null_odds_file}.")
             with open(null_odds_file, "w") as writer:
                 writer.write(json.dumps(scores_diff_json, indent=4) + "\n")
-    
+
     return all_predictions, scores_diff_json

@@ -248,7 +248,7 @@ def main():
     # Padding side determines if we do (question|context) or (context|question).
     pad_on_right = tokenizer.padding_side == "right"
 
-        # Training preprocessing
+    # Training preprocessing
     def prepare_train_features(examples):
         # Tokenize our examples with truncation and maybe padding, but keep the overflows using a stride. This results
         # in one example possible giving several features when a context is long, each of those features having a
@@ -262,6 +262,7 @@ def main():
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
             return_special_tokens_mask=True,
+            return_token_type_ids=True,
             padding="max_length",
         )
 
@@ -297,7 +298,10 @@ def main():
             # Build the p_mask: non special tokens and context gets 0.0, the others get 1.0.
             # The cls token gets 1.0 too (for predictions of empty answers).
             tokenized_examples["p_mask"].append(
-                [0.0 if (not special_tokens[i][k] and s == context_idx) or k == cls_index else 1.0 for k, s in enumerate(sequence_ids)]
+                [
+                    0.0 if (not special_tokens[i][k] and s == context_idx) or k == cls_index else 1.0
+                    for k, s in enumerate(sequence_ids)
+                ]
             )
 
             # One example can give several spans, this is the index of the example containing this span of text.
@@ -363,6 +367,7 @@ def main():
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
             return_special_tokens_mask=True,
+            return_token_type_ids=True,
             padding="max_length",
         )
 
@@ -387,12 +392,18 @@ def main():
             tokenized_examples["cls_index"].append(cls_index)
 
             # Grab the sequence corresponding to that example (to know what is the context and what is the question).
-            sequence_ids = tokenized_examples.sequence_ids(i)
-            context_index = 1 if pad_on_right else 0
+            sequence_ids = tokenized_examples["token_type_ids"][i]
+            for k, s in enumerate(special_tokens[i]):
+                if s:
+                    sequence_ids[k] = 3
+            context_idx = 1 if pad_on_right else 0
 
             # Build the p_mask: non special tokens and context gets 0.0, the others 1.0.
             tokenized_examples["p_mask"].append(
-                [0.0 if not special_tokens[i][k] and s == context_index else 1.0 for k, s in enumerate(sequence_ids)]
+                [
+                    0.0 if (not special_tokens[i][k] and s == context_idx) or k == cls_index else 1.0
+                    for k, s in enumerate(sequence_ids)
+                ]
             )
 
             # One example can give several spans, this is the index of the example containing this span of text.
@@ -402,7 +413,7 @@ def main():
             # Set to None the offset_mapping that are not part of the context so it's easy to determine if a token
             # position is part of the context or not.
             tokenized_examples["offset_mapping"][i] = [
-                (o if sequence_ids[k] == context_index else None)
+                (o if sequence_ids[k] == context_idx else None)
                 for k, o in enumerate(tokenized_examples["offset_mapping"][i])
             ]
 
@@ -437,7 +448,10 @@ def main():
         )
         # Format the result to the format the metric expects.
         if data_args.version_2_with_negative:
-            formatted_predictions = [{"id": k, "prediction_text": v, "no_answer_probability": scores_diff_json[k]} for k, v in predictions.items()]
+            formatted_predictions = [
+                {"id": k, "prediction_text": v, "no_answer_probability": scores_diff_json[k]}
+                for k, v in predictions.items()
+            ]
         else:
             formatted_predictions = [{"id": k, "prediction_text": v} for k, v in predictions.items()]
         references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in datasets["validation"]]
@@ -464,25 +478,11 @@ def main():
     )
 
     # Training
-    # if training_args.do_train:
-        #trainer.train(
-        #    model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
-        #)
-        #trainer.save_model()  # Saves the tokenizer too for easy upload
-
-    # Debug, remove before merging
-    import torch
-    from tqdm.auto import tqdm
-    loss = 0
-    num_samples = 0
-    with torch.no_grad():
-        for inputs in tqdm(trainer.get_train_dataloader()):
-            inputs = {k: v.to(trainer.args.device) for k, v in inputs.items()}
-            batch_size = inputs["input_ids"].shape[0]
-            loss += model(**inputs).loss.detach() + batch_size
-            num_samples += batch_size
-            if num_samples >= 256: break
-    print(f"Training loss: {loss.item() / num_samples}.")
+    if training_args.do_train:
+        trainer.train(
+            model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
+        )
+        trainer.save_model()  # Saves the tokenizer too for easy upload
 
     # Evaluation
     results = {}
