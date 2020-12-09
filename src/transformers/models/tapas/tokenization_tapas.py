@@ -1152,7 +1152,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         num_columns = self._get_num_columns(raw_table)
         _, _, num_tokens = self._get_table_boundaries(tokenized_table)
 
-        if truncation != TapasTruncationStrategy.DO_NOT_TRUNCATE and max_length:
+        if truncation != TapasTruncationStrategy.DO_NOT_TRUNCATE:
             num_rows, num_tokens = self._get_truncated_table_rows(query_tokens, tokenized_table, num_rows, num_columns,
                                                                   max_length, truncation_strategy=truncation)
         table_data = list(self._get_table_values(tokenized_table, num_columns, num_rows, num_tokens))
@@ -1305,6 +1305,9 @@ class TapasTokenizer(PreTrainedTokenizer):
         """
         if not isinstance(truncation_strategy, TapasTruncationStrategy):
             truncation_strategy = TapasTruncationStrategy(truncation_strategy)
+
+        if max_length is None:
+            max_length = self.model_max_length
 
         if truncation_strategy == TapasTruncationStrategy.DROP_ROWS_TO_FIT:
             while True:

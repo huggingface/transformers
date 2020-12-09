@@ -1144,6 +1144,14 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             # Ensure that the input IDs are less than the max length defined.
             self.assertLessEqual(len(new_encoded_inputs), i)
 
+        tokenizer.model_max_length = 20
+        new_encoded_inputs = tokenizer.encode(table=table, query=queries[0], truncation=True)
+        dropped_encoded_inputs = tokenizer.encode(table=table, query=queries[0], truncation="drop_rows_to_fit")
+
+        # Ensure that the input IDs are still truncated when no max_length is specified
+        self.assertListEqual(new_encoded_inputs, dropped_encoded_inputs)
+        self.assertLessEqual(len(new_encoded_inputs), 20)
+
     @is_pt_tf_cross_test
     def test_batch_encode_plus_tensors(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
