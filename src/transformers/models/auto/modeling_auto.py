@@ -122,6 +122,14 @@ from ..mobilebert.modeling_mobilebert import (
     MobileBertForTokenClassification,
     MobileBertModel,
 )
+from ..mpnet.modeling_mpnet import (
+    MPNetForMaskedLM,
+    MPNetForMultipleChoice,
+    MPNetForQuestionAnswering,
+    MPNetForSequenceClassification,
+    MPNetForTokenClassification,
+    MPNetModel,
+)
 from ..mt5.modeling_mt5 import MT5ForConditionalGeneration, MT5Model
 from ..openai.modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
 from ..pegasus.modeling_pegasus import PegasusForConditionalGeneration
@@ -212,6 +220,7 @@ from .configuration_auto import (
     MarianConfig,
     MBartConfig,
     MobileBertConfig,
+    MPNetConfig,
     MT5Config,
     OpenAIGPTConfig,
     PegasusConfig,
@@ -267,6 +276,7 @@ MODEL_MAPPING = OrderedDict(
         (DPRConfig, DPRQuestionEncoder),
         (XLMProphetNetConfig, XLMProphetNetModel),
         (ProphetNetConfig, ProphetNetModel),
+        (MPNetConfig, MPNetModel),
     ]
 )
 
@@ -297,6 +307,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForPreTraining),
         (LxmertConfig, LxmertForPreTraining),
         (FunnelConfig, FunnelForPreTraining),
+        (MPNetConfig, MPNetForMaskedLM),
     ]
 )
 
@@ -328,6 +339,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (EncoderDecoderConfig, EncoderDecoderModel),
         (ReformerConfig, ReformerModelWithLMHead),
         (FunnelConfig, FunnelForMaskedLM),
+        (MPNetConfig, MPNetForMaskedLM),
     ]
 )
 
@@ -373,6 +385,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForMaskedLM),
         (ReformerConfig, ReformerForMaskedLM),
         (FunnelConfig, FunnelForMaskedLM),
+        (MPNetConfig, MPNetForMaskedLM),
     ]
 )
 
@@ -417,6 +430,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (ReformerConfig, ReformerForSequenceClassification),
         (CTRLConfig, CTRLForSequenceClassification),
         (TransfoXLConfig, TransfoXLForSequenceClassification),
+        (MPNetConfig, MPNetForSequenceClassification),
     ]
 )
 
@@ -440,6 +454,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (ReformerConfig, ReformerForQuestionAnswering),
         (FunnelConfig, FunnelForQuestionAnswering),
         (LxmertConfig, LxmertForQuestionAnswering),
+        (MPNetConfig, MPNetForQuestionAnswering),
     ]
 )
 
@@ -462,6 +477,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForTokenClassification),
         (FlaubertConfig, FlaubertForTokenClassification),
         (FunnelConfig, FunnelForTokenClassification),
+        (MPNetConfig, MPNetForTokenClassification),
     ]
 )
 
@@ -482,6 +498,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (XLMConfig, XLMForMultipleChoice),
         (FlaubertConfig, FlaubertForMultipleChoice),
         (FunnelConfig, FunnelForMultipleChoice),
+        (MPNetConfig, MPNetForMultipleChoice),
     ]
 )
 

@@ -40,6 +40,7 @@ from ..lxmert.configuration_lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, 
 from ..marian.configuration_marian import MarianConfig
 from ..mbart.configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig
 from ..mobilebert.configuration_mobilebert import MobileBertConfig
+from ..mpnet.configuration_mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig
 from ..mt5.configuration_mt5 import MT5Config
 from ..openai.configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from ..pegasus.configuration_pegasus import PegasusConfig
@@ -93,6 +94,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
         PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -113,6 +115,7 @@ CONFIG_MAPPING = OrderedDict(
         ("pegasus", PegasusConfig),
         ("marian", MarianConfig),
         ("mbart", MBartConfig),
+        ("mpnet", MPNetConfig),
         ("bart", BartConfig),
         ("blenderbot", BlenderbotConfig),
         ("reformer", ReformerConfig),
@@ -181,6 +184,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("xlm-prophetnet", "XLMProphetNet"),
         ("prophetnet", "ProphetNet"),
         ("mt5", "mT5"),
+        ("mpnet", "MPNet"),
     ]
 )
 

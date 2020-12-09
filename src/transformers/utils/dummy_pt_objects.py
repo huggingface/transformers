@@ -1380,6 +1380,77 @@ def load_tf_weights_in_mobilebert(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_mobilebert)
 
 
+MPNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class MPNetForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MPNetForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MPNetForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MPNetForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MPNetForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MPNetLayer:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MPNetModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MPNetPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class MT5EncoderModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)

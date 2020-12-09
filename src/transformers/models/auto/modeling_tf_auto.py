@@ -111,6 +111,14 @@ from ..mobilebert.modeling_tf_mobilebert import (
     TFMobileBertForTokenClassification,
     TFMobileBertModel,
 )
+from ..mpnet.modeling_tf_mpnet import (
+    TFMPNetForMaskedLM,
+    TFMPNetForMultipleChoice,
+    TFMPNetForQuestionAnswering,
+    TFMPNetForSequenceClassification,
+    TFMPNetForTokenClassification,
+    TFMPNetModel,
+)
 from ..mt5.modeling_tf_mt5 import TFMT5ForConditionalGeneration, TFMT5Model
 from ..openai.modeling_tf_openai import TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
 from ..pegasus.modeling_tf_pegasus import TFPegasusForConditionalGeneration
@@ -167,6 +175,7 @@ from .configuration_auto import (
     MarianConfig,
     MBartConfig,
     MobileBertConfig,
+    MPNetConfig,
     MT5Config,
     OpenAIGPTConfig,
     PegasusConfig,
@@ -208,6 +217,7 @@ TF_MODEL_MAPPING = OrderedDict(
         (ElectraConfig, TFElectraModel),
         (FunnelConfig, TFFunnelModel),
         (DPRConfig, TFDPRQuestionEncoder),
+        (MPNetConfig, TFMPNetModel),
     ]
 )
 
@@ -233,6 +243,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (CTRLConfig, TFCTRLLMHeadModel),
         (ElectraConfig, TFElectraForPreTraining),
         (FunnelConfig, TFFunnelForPreTraining),
+        (MPNetConfig, TFMPNetForMaskedLM),
     ]
 )
 
@@ -259,6 +270,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (CTRLConfig, TFCTRLLMHeadModel),
         (ElectraConfig, TFElectraForMaskedLM),
         (FunnelConfig, TFFunnelForMaskedLM),
+        (MPNetConfig, TFMPNetForMaskedLM),
     ]
 )
 
@@ -293,6 +305,7 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (XLMConfig, TFXLMWithLMHeadModel),
         (ElectraConfig, TFElectraForMaskedLM),
         (FunnelConfig, TFFunnelForMaskedLM),
+        (MPNetConfig, TFMPNetForMaskedLM),
     ]
 )
 
@@ -327,6 +340,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (ElectraConfig, TFElectraForSequenceClassification),
         (FunnelConfig, TFFunnelForSequenceClassification),
         (GPT2Config, TFGPT2ForSequenceClassification),
+        (MPNetConfig, TFMPNetForSequenceClassification),
     ]
 )
 
@@ -346,6 +360,7 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (XLMConfig, TFXLMForQuestionAnsweringSimple),
         (ElectraConfig, TFElectraForQuestionAnswering),
         (FunnelConfig, TFFunnelForQuestionAnswering),
+        (MPNetConfig, TFMPNetForQuestionAnswering),
     ]
 )
 
@@ -365,6 +380,7 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (XLNetConfig, TFXLNetForTokenClassification),
         (ElectraConfig, TFElectraForTokenClassification),
         (FunnelConfig, TFFunnelForTokenClassification),
+        (MPNetConfig, TFMPNetForTokenClassification),
     ]
 )
 
@@ -384,6 +400,7 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (AlbertConfig, TFAlbertForMultipleChoice),
         (ElectraConfig, TFElectraForMultipleChoice),
         (FunnelConfig, TFFunnelForMultipleChoice),
+        (MPNetConfig, TFMPNetForMultipleChoice),
     ]
 )
 
