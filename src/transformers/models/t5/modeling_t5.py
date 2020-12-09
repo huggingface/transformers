@@ -813,9 +813,6 @@ class T5Stack(T5PreTrainedModel):
     def get_input_embeddings(self):
         return self.embed_tokens
 
-    def get_output_embeddings(self):
-        return self.embed_tokens
-
     def set_input_embeddings(self, new_embeddings):
         self.embed_tokens = new_embeddings
 

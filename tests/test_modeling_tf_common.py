@@ -344,13 +344,6 @@ class TFModelTesterMixin:
             tf_hidden_states[pt_nans] = 0
 
             max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
-            # Debug info (remove when fixed)
-            if max_diff >= 4e-2:
-                print("===")
-                print(model_class)
-                print(config)
-                print(inputs_dict)
-                print(pt_inputs_dict)
             self.assertLessEqual(max_diff, 4e-2)
 
             # Check we can load pt model in tf and vice-versa with checkpoint => model functions

@@ -105,8 +105,6 @@ BartModel
 .. autoclass:: transformers.BartModel
     :members: forward
 
-.. autofunction:: transformers.models.bart.modeling_bart._prepare_bart_decoder_inputs
-
 
 BartForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

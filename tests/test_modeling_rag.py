@@ -37,7 +37,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from .test_modeling_bart import ModelTester as BartModelTester
+from .test_modeling_bart import BartModelTester
 from .test_modeling_dpr import DPRModelTester
 from .test_modeling_t5 import T5ModelTester
 

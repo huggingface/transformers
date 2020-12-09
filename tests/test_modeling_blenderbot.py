@@ -104,9 +104,6 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
         self.model_tester = BlenderbotModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BlenderbotConfig)
 
-    def test_inputs_embeds(self):
-        pass
-
     def test_initialization_module(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = BlenderbotForConditionalGeneration(config).model
