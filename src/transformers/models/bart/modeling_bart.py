@@ -905,9 +905,11 @@ class BartDecoder(BartPretrainedModel):
 
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        attn_mask = _make_causal_mask(
-            input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
-        ).to(self.device)
+        attn_mask = None
+        if input_shape[-1] > 1:
+            attn_mask = _make_causal_mask(
+                input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
+            ).to(self.device)
 
         # create decoder_padding_mask if not provided and needed
         # 4.12.20 (PVP): Not a fan of this "magical" function that
@@ -926,7 +928,7 @@ class BartDecoder(BartPretrainedModel):
             # never mask leading token, even if it is pad
             attention_mask[:, 0] = attention_mask[:, 1]
 
-        if attention_mask is not None:
+        if attention_mask is not None and attn_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             attn_mask = attn_mask + _expand_mask(
                 attention_mask, inputs_embeds.dtype, past_key_values_length=past_key_values_length
