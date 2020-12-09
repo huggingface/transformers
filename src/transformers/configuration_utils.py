@@ -95,6 +95,12 @@ class PretrainedConfig(object):
           sentences are finished per batch or not.
         - **num_beams** (:obj:`int`, `optional`, defaults to 1) -- Number of beams for beam search that will be used by
           default in the :obj:`generate` method of the model. 1 means no beam search.
+        - **num_beam_groups** (:obj:`int`, `optional`, defaults to 1) -- Number of groups to divide :obj:`num_beams`
+          into in order to ensure diversity among different groups of beams that will be used by default in the
+          :obj:`generate` method of the model. 1 means no group beam search.
+        - **diversity_penalty** (:obj:`float`, `optional`, defaults to 0.0) -- Value to control diversity for group
+          beam search. that will be used by default in the :obj:`generate` method of the model. 0 means no diversity
+          penalty. The higher the penalty, the more diverse are the outputs.
         - **temperature** (:obj:`float`, `optional`, defaults to 1) -- The value used to module the next token
           probabilities that will be used by default in the :obj:`generate` method of the model. Must be strictly
           positive.
@@ -185,6 +191,8 @@ class PretrainedConfig(object):
         self.do_sample = kwargs.pop("do_sample", False)
         self.early_stopping = kwargs.pop("early_stopping", False)
         self.num_beams = kwargs.pop("num_beams", 1)
+        self.num_beam_groups = kwargs.pop("num_beam_groups", 1)
+        self.diversity_penalty = kwargs.pop("diversity_penalty", 0.0)
         self.temperature = kwargs.pop("temperature", 1.0)
         self.top_k = kwargs.pop("top_k", 50)
         self.top_p = kwargs.pop("top_p", 1.0)
