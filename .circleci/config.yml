@@ -11,20 +11,39 @@ commands:
       - run:
           name: docs-only changes skip check
           command: |
-            # pipeline.git.base_revision is not always defined, so only proceed if all external vars are defined
-            if test -n "<< pipeline.git.base_revision >>" && test -n "<< pipeline.git.revision >>" && test -n "$(git diff --name-only << pipeline.git.base_revision >>...<< pipeline.git.revision >>)"
+            if test -n "$CIRCLE_PR_NUMBER"
             then
-                if git diff --name-only << pipeline.git.base_revision >>...<< pipeline.git.revision >> | egrep -qv '\.(md|rst)$'
+                echo $CIRCLE_PR_NUMBER
+                resp=$(curl -Ls https://api.github.com/repos/huggingface/transformers/pulls/${CIRCLE_PR_NUMBER})
+                user=$(jq -r .user.login \<<< $resp)   # PR creator username
+                head_ref=$(jq -r .head.ref \<<< $resp) # PR user's branch name
+                echo head_ref=$head_ref, user=$user
+            fi
+            
+            if test -n "$user" && test -n "$head_ref"
+            then
+                git clone https://github.com/$user/transformers user-clone
+                cd user-clone
+                git checkout $head_ref
+                fork_point_sha=$(git merge-base --fork-point master)
+                cd -
+            fi
+
+            if test -n "$fork_point_sha" && test -n "$(git diff --name-only $fork_point_sha)"
+            then
+                git --no-pager diff --name-only $fork_point_sha
+                if git diff --name-only $fork_point_sha | egrep -qv '\.(md|rst)$'
                 then
                     echo "Non-docs were modified in this PR, proceeding normally"
                 else
                     echo "Only docs were modified in this PR, quitting this job"
-                    # disable skipping for now, as circleCI's base_revision is inconsistent leading to invalid ranges
+                    # enable skipping once we get this sorted out
                     # circleci step halt
                 fi
             else
-                echo "Can't perform skipping check w/o base_revision defined, continuing the job"
+                echo "Not enough data to perform a skipping check - continuing the job"
             fi
+
 
 # TPU REFERENCES
 references:
