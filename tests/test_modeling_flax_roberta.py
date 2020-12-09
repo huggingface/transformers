@@ -57,7 +57,7 @@ class FlaxRobertaModelTest(unittest.TestCase):
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
 
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs.to_tuple()):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 6e-4)
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 5e-3)
 
     def test_multiple_sequences(self):
         tokenizer = RobertaTokenizerFast.from_pretrained("roberta-base")
