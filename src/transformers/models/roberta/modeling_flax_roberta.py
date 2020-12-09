@@ -223,7 +223,6 @@ class FlaxRobertaAttention(nn.Module):
             name="self",
             dtype=self.dtype,
         )(hidden_state, attention_mask)
-        self_att = nn.Dropout(rate=self.dropout_rate)(self_att, deterministic=deterministic)
         layer_norm = FlaxRobertaLayerNorm(name="layer_norm", dtype=self.dtype)(self_att + hidden_state)
         return layer_norm
 
