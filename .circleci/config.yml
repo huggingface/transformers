@@ -15,18 +15,18 @@ commands:
             then
                 echo $CIRCLE_PR_NUMBER
                 resp=$(curl -Ls https://api.github.com/repos/huggingface/transformers/pulls/${CIRCLE_PR_NUMBER})
-                head_ref=$(jq -r .head.ref \<<< $resp)
-                user=$(jq -r .user.login \<<< $resp)
+                user=$(jq -r .user.login \<<< $resp)   # PR creator username
+                head_ref=$(jq -r .head.ref \<<< $resp) # PR user's branch name
                 echo head_ref=$head_ref, user=$user
             fi
             
-            if test -n "$user" and test -n "$head_ref"
+            if test -n "$user" && test -n "$head_ref"
             then
-                git clone https://github.com/$user/transformers user-clone &&
-                cd user-clone &&
-                git checkout $head_ref &&
-                fork_point_sha=$(git merge-base --fork-point master) &&
-                cd - || true
+                git clone https://github.com/$user/transformers user-clone
+                cd user-clone
+                git checkout $head_ref
+                fork_point_sha=$(git merge-base --fork-point master)
+                cd -
             fi
 
             if test -n "$fork_point_sha" && test -n "$(git diff --name-only $fork_point_sha)"
