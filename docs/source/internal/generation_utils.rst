@@ -15,7 +15,8 @@ Utilities for Generation
 
 This page lists all the utility functions used by :meth:`~transformers.PretrainedModel.generate`,
 :meth:`~transformers.PretrainedModel.greedy_search`, :meth:`~transformers.PretrainedModel.sample`,
-:meth:`~transformers.PretrainedModel.beam_search`, and :meth:`~transformers.PretrainedModel.beam_sample`.
+:meth:`~transformers.PretrainedModel.beam_search`, :meth:`~transformers.PretrainedModel.beam_sample`, and
+:meth:`~transformers.PretrainedModel.group_beam_search`.
 
 Most of those are only useful if you are studying the code of the generate methods in the library.
 
