@@ -757,15 +757,16 @@ class BartDecoder(PretrainedBartModel):
 
     def forward(
         self,
-        input_ids,
+        input_ids=None,
+        attention_mask=None,
         encoder_hidden_states=None,
-        encoder_padding_mask=None,
-        decoder_padding_mask=None,
+        encoder_attention_mask=None,
         past_key_values=None,
-        use_cache=False,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        inputs_embeds=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         """
         Includes several features from "Jointly Learning to Align and Translate with Transformer Models" (Garg et al.,
@@ -787,6 +788,11 @@ class BartDecoder(PretrainedBartModel):
                 - hidden states
                 - attentions
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # past_key_values_length
         past_key_values_length = past_key_values[0][0][0].shape[1] if past_key_values is not None else 0
@@ -802,21 +808,25 @@ class BartDecoder(PretrainedBartModel):
         )
 
         # create decoder_padding_mask if not provided and needed
-        # TODO(PVP) - this is very inconsistent with other models, but
-        if decoder_padding_mask is None and input_ids.shape[-1] > 1 and self.config.pad_token_id in input_ids:
+        # 4.12.20 (PVP): Not a fan of this "magical" function that
+        # automatically creates attention_mask for padded tokens
+        # => this is inconsistent with other models
+        # => Pegasus uses the pad_token as decoder_start_token_id, so that this could
+        # pose some problems.
+        if attention_mask is None and input_ids.shape[-1] > 1 and self.config.pad_token_id in input_ids:
             # should be kept for backwards compatibility
-            decoder_padding_mask = input_ids.ne(self.config.pad_token_id).to(torch.long)
+            attention_mask = input_ids.ne(self.config.pad_token_id).to(torch.long)
             # never mask leading token, even if it is pad
-            decoder_padding_mask[:, 0] = decoder_padding_mask[:, 1]
+            attention_mask[:, 0] = attention_mask[:, 1]
 
-        if decoder_padding_mask is not None:
+        if attention_mask is not None:
             attn_mask = attn_mask + _expand_mask(
-                decoder_padding_mask, x.dtype, past_key_values_length=past_key_values_length
+                attention_mask, x.dtype, past_key_values_length=past_key_values_length
             )
 
         # expand encoder attention mask
-        if encoder_hidden_states is not None and encoder_padding_mask is not None:
-            encoder_padding_mask = _expand_mask(encoder_padding_mask, x.dtype, tgt_len=input_ids.shape[-1])
+        if encoder_hidden_states is not None and encoder_attention_mask is not None:
+            encoder_attention_mask = _expand_mask(encoder_attention_mask, x.dtype, tgt_len=input_ids.shape[-1])
 
         if self.do_blenderbot_90_layernorm:
             x = self.layernorm_embedding(x)
@@ -845,7 +855,7 @@ class BartDecoder(PretrainedBartModel):
             x, layer_self_attn, present_key_value, layer_cross_attn = decoder_layer(
                 x,
                 encoder_hidden_states,
-                encoder_attn_mask=encoder_padding_mask,
+                encoder_attn_mask=encoder_attention_mask,
                 attn_mask=attn_mask,
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
@@ -924,13 +934,18 @@ class BartModel(PretrainedBartModel):
         decoder_attention_mask=None,
         encoder_outputs: Optional[Tuple] = None,
         past_key_values=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
 
-        if decoder_input_ids is None:
+        # 4.12.20 (PVP): Not a fan of this "magical" function and
+        # also wonder how often it's actually used ... keep now
+        # for backward compatibility
+        if decoder_input_ids is None and decoder_inputs_embeds is None:
             decoder_input_ids = shift_tokens_right(input_ids, self.config.pad_token_id)
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -944,6 +959,7 @@ class BartModel(PretrainedBartModel):
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -958,11 +974,12 @@ class BartModel(PretrainedBartModel):
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
-            decoder_input_ids,
-            encoder_outputs[0],
-            attention_mask,
-            decoder_attention_mask,
+            inputs_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=encoder_outputs[0],
+            encoder_attention_mask=attention_mask,
             past_key_values=past_key_values,
+            inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1038,6 +1055,8 @@ class BartForConditionalGeneration(PretrainedBartModel):
         decoder_attention_mask=None,
         encoder_outputs=None,
         past_key_values=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
         labels=None,
         use_cache=None,
         output_attentions=None,
@@ -1083,6 +1102,8 @@ class BartForConditionalGeneration(PretrainedBartModel):
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
             past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1185,6 +1206,8 @@ class BartForSequenceClassification(PretrainedBartModel):
         decoder_input_ids=None,
         decoder_attention_mask=None,
         encoder_outputs=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
         labels=None,
         use_cache=None,
         output_attentions=None,
@@ -1206,6 +1229,8 @@ class BartForSequenceClassification(PretrainedBartModel):
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1275,6 +1300,8 @@ class BartForQuestionAnswering(PretrainedBartModel):
         encoder_outputs=None,
         start_positions=None,
         end_positions=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1300,6 +1327,8 @@ class BartForQuestionAnswering(PretrainedBartModel):
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

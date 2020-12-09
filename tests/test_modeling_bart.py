@@ -53,7 +53,7 @@ PGE_ARTICLE = """ PG&E stated it scheduled the blackouts in response to forecast
 
 
 @require_torch
-class ModelTester:
+class BartModelTester:
     def __init__(
         self,
         parent,
@@ -165,7 +165,7 @@ class BARTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     test_missing_keys = False
 
     def setUp(self):
-        self.model_tester = ModelTester(self)
+        self.model_tester = BartModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BartConfig)
 
     def test_config(self):
@@ -232,14 +232,6 @@ class BARTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    @unittest.skip("Passing inputs_embeds not implemented for Bart.")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip("TODO: Decoder embeddings cannot be resized at the moment")
-    def test_resize_embeddings_untied(self):
-        pass
 
     @require_sentencepiece
     @require_tokenizers
