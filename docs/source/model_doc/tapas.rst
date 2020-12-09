@@ -59,7 +59,7 @@ Tips:
 - TAPAS has checkpoints fine-tuned on SQA, which are capable of answering questions related to a table in a
   conversational set-up. This means that you can ask follow-up questions such as "what is his age?" related to the
   previous question. Note that the forward pass of TAPAS is a bit different in case of a conversational set-up: in that
-  case, you have to feed every training example one by one to the model, such that the `prev_label_ids` token type ids
+  case, you have to feed every training example one by one to the model, such that the `prev_labels` token type ids
   can be overwritten by the predicted `label_ids` of the model to the previous question. See "Usage" section for more info.
 - TAPAS is similar to BERT and therefore relies on the masked language modeling (MLM) objective. It is therefore
   efficient at predicting masked tokens and at NLU in general, but is not optimal for text generation. Models trained
@@ -236,7 +236,7 @@ text-only data. Of course, this only shows how to encode a single training examp
 Note that here, we encode each table-question pair independently. This is fine as long as your dataset is **not conversational**. In case your 
 dataset involves conversational questions (such as in SQA), then you should first group together the ``queries``, ``answer_coordinates`` and 
 ``answer_text`` per table (in the order of their ``position`` index) and batch encode each table with its questions. This will make sure that 
-the ``prev_label_ids`` token types (see docs of :class:`~transformers.TapasTokenizer`) are set correctly. 
+the ``prev_labels`` token types (see docs of :class:`~transformers.TapasTokenizer`) are set correctly. 
 
 ===================================================
 STEP 4: Train (fine-tune) TapasForQuestionAnswering
@@ -330,7 +330,7 @@ can be done in parallel on all table-question pairs of a batch. Here's an exampl
         Predicted answer: AVERAGE > 87, 53, 69
 
 In case of a conversational set-up, then each table-question pair must be provided **sequentially** to the model, such that
-the ``prev_label_ids`` token types can be overwritten by the predicted ``label_ids`` of the previous table-question pair. 
+the ``prev_labels`` token types can be overwritten by the predicted ``label_ids`` of the previous table-question pair. 
 
 
 Tapas specific outputs
