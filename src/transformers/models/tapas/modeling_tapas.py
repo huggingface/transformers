@@ -358,7 +358,6 @@ class TapasEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.modeling_bert.BertSelfAttention with Bert->Tapas
 class TapasSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -437,7 +436,7 @@ class TapasSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.modeling_bert.BertSelfOutput
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
 class TapasSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -452,7 +451,7 @@ class TapasSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.modeling_bert.BertAttention with Bert->Tapas
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Tapas
 class TapasAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -500,7 +499,7 @@ class TapasAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.modeling_bert.BertIntermediate
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate
 class TapasIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -516,7 +515,7 @@ class TapasIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.modeling_bert.BertOutput
+# Copied from transformers.models.bert.modeling_bert.BertOutput
 class TapasOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -531,7 +530,7 @@ class TapasOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.modeling_bert.BertLayer with Bert->Tapas
+# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Tapas
 class TapasLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -591,7 +590,6 @@ class TapasLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.modeling_bert.BertEncoder with Bert->Tapas
 class TapasEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -656,7 +654,7 @@ class TapasEncoder(nn.Module):
         )
 
 
-# Copied from transformers.modeling_bert.BertPooler
+# Copied from transformers.models.bert.modeling_bert.BertPooler
 class TapasPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -681,7 +679,7 @@ class TapasPreTrainedModel(PreTrainedModel):
     config_class = TapasConfig
     base_model_prefix = "tapas"
 
-    # Copied from transformers.modeling_bert.BertPreTrainedModel._init_weights
+    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
         """ Initialize the weights """
         if isinstance(module, (nn.Linear, nn.Embedding)):

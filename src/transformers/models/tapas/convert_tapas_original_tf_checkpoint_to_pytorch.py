@@ -19,13 +19,9 @@ import argparse
 
 import torch
 
-from transformers import (
-    TapasConfig,
-    TapasForQuestionAnswering,
-    TapasForSequenceClassification,
-    TapasModel,
-    load_tf_weights_in_tapas,
-)
+from transformers import TapasForQuestionAnswering  # noqa F401
+from transformers import TapasForSequenceClassification  # noqa F401
+from transformers import TapasConfig, TapasModel, load_tf_weights_in_tapas
 from transformers.utils import logging
 
 
