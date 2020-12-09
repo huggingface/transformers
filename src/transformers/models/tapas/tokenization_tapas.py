@@ -59,10 +59,36 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    # large models
+    "nielsr/tapas-large-finetuned-sqa": 512,
+    "nielsr/tapas-large-finetuned-wtq": 512,
+    "nielsr/tapas-large-finetuned-wikisql-supervised": 512,
+    "nielsr/tapas-large-finetuned-tabfact": 512,
+    # base models
     "nielsr/tapas-base-finetuned-sqa": 512,
     "nielsr/tapas-base-finetuned-wtq": 512,
     "nielsr/tapas-base-finetuned-wikisql-supervised": 512,
     "nielsr/tapas-base-finetuned-tabfact": 512,
+    # medium models
+    "nielsr/tapas-medium-finetuned-sqa": 512,
+    "nielsr/tapas-medium-finetuned-wtq": 512,
+    "nielsr/tapas-medium-finetuned-wikisql-supervised": 512,
+    "nielsr/tapas-medium-finetuned-tabfact": 512,
+    # small models
+    "nielsr/tapas-base-finetuned-sqa": 512,
+    "nielsr/tapas-base-finetuned-wtq": 512,
+    "nielsr/tapas-base-finetuned-wikisql-supervised": 512,
+    "nielsr/tapas-base-finetuned-tabfact": 512,
+    # tiny models
+    "nielsr/tapas-tiny-finetuned-sqa": 512,
+    "nielsr/tapas-tiny-finetuned-wtq": 512,
+    "nielsr/tapas-tiny-finetuned-wikisql-supervised": 512,
+    "nielsr/tapas-tiny-finetuned-tabfact": 512,
+    # mini models
+    "nielsr/tapas-mini-finetuned-sqa": 512,
+    "nielsr/tapas-mini-finetuned-wtq": 512,
+    "nielsr/tapas-mini-finetuned-wikisql-supervised": 512,
+    "nielsr/tapas-mini-finetuned-tabfact": 512,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
