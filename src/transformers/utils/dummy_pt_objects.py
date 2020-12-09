@@ -450,6 +450,15 @@ class BartModel:
         requires_pytorch(self)
 
 
+class BartPretrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class PretrainedBartModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
