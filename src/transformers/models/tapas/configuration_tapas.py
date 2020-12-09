@@ -18,10 +18,12 @@
 from ...configuration_utils import PretrainedConfig
 
 
-TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP = {"nielsr/tapas-base-finetuned-sqa": "https://huggingface.co/nielsr/tapas-base-finetuned-sqa/resolve/main/config.json", 
-                                       "nielsr/tapas-base-finetuned-wtq": "https://huggingface.co/nielsr/tapas-base-finetuned-wtq/resolve/main/config.json",
-                                       "nielsr/tapas-base-finetuned-wikisql-supervised": "https://huggingface.co/nielsr/tapas-base-finetuned-wikisql-supervised/resolve/main/config.json",
-                                       "nielsr/tapas-base-finetuned-tabfact": "https://huggingface.co/nielsr/tapas-base-finetuned-tabfact/resolve/main/config.json"}  
+TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "nielsr/tapas-base-finetuned-sqa": "https://huggingface.co/nielsr/tapas-base-finetuned-sqa/resolve/main/config.json",
+    "nielsr/tapas-base-finetuned-wtq": "https://huggingface.co/nielsr/tapas-base-finetuned-wtq/resolve/main/config.json",
+    "nielsr/tapas-base-finetuned-wikisql-supervised": "https://huggingface.co/nielsr/tapas-base-finetuned-wikisql-supervised/resolve/main/config.json",
+    "nielsr/tapas-base-finetuned-tabfact": "https://huggingface.co/nielsr/tapas-base-finetuned-tabfact/resolve/main/config.json",
+}
 
 
 class TapasConfig(PretrainedConfig):
@@ -88,7 +90,7 @@ class TapasConfig(PretrainedConfig):
         use_gumbel_for_aggregation: (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to apply Gumbel-Softmax to aggregation selection.
         average_approximation_function: (:obj:`string`, `optional`, defaults to :obj:`"ratio"`):
-            Method to calculate the expected average of cells in the weak supervision case. One of :obj:`"ratio"`, 
+            Method to calculate the expected average of cells in the weak supervision case. One of :obj:`"ratio"`,
             :obj:`"first_order"` or :obj:`"second_order"`.
         cell_selection_preference: (:obj:`float`, `optional`):
             Preference for cell selection in ambiguous cases. Only applicable in case of weak supervision for

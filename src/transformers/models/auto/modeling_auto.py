@@ -166,10 +166,10 @@ from ..squeezebert.modeling_squeezebert import (
 )
 from ..t5.modeling_t5 import T5ForConditionalGeneration, T5Model
 from ..tapas.modeling_tapas import (
-    TapasModel,
     TapasForMaskedLM,
     TapasForQuestionAnswering,
     TapasForSequenceClassification,
+    TapasModel,
 )
 from ..transfo_xl.modeling_transfo_xl import TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
 from ..xlm.modeling_xlm import (

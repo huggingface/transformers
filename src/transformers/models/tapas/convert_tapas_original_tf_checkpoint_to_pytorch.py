@@ -21,9 +21,9 @@ import torch
 
 from transformers import (
     TapasConfig,
-    TapasModel,
     TapasForQuestionAnswering,
     TapasForSequenceClassification,
+    TapasModel,
     load_tf_weights_in_tapas,
 )
 from transformers.utils import logging
@@ -88,7 +88,7 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, tapas_config_file, pyto
 
     print("Building PyTorch model from configuration: {}".format(str(config)))
     model = TapasModel(config)
-    #model = TapasForQuestionAnswering(config)
+    # model = TapasForQuestionAnswering(config)
     # model = TapasForSequenceClassification(config)
 
     # Load weights from tf checkpoint

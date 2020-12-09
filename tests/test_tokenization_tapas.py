@@ -17,13 +17,12 @@ import os
 import shutil
 import tempfile
 import unittest
-from typing import List, Tuple
-import numpy as np
+from typing import List
 
+import numpy as np
 import pandas as pd
 
 from transformers import AddedToken
-from transformers.testing_utils import require_tokenizers, slow, require_torch, is_pt_tf_cross_test
 from transformers.models.tapas.tokenization_tapas import (
     VOCAB_FILES_NAMES,
     BasicTokenizer,
@@ -33,6 +32,7 @@ from transformers.models.tapas.tokenization_tapas import (
     _is_punctuation,
     _is_whitespace,
 )
+from transformers.testing_utils import is_pt_tf_cross_test, require_tokenizers, require_torch, slow
 
 from .test_tokenization_common import TokenizerTesterMixin, filter_non_english, merge_model_tokenizer_mappings
 
@@ -45,9 +45,9 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_filter = filter_non_english
 
     def get_table(
-            self,
-            tokenizer: TapasTokenizer,
-            length=5,
+        self,
+        tokenizer: TapasTokenizer,
+        length=5,
     ):
         toks = [tokenizer.decode([i], clean_up_tokenization_spaces=False) for i in range(len(tokenizer))]
 
@@ -61,9 +61,9 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return table
 
     def get_table_and_query(
-            self,
-            tokenizer: TapasTokenizer,
-            length=5,
+        self,
+        tokenizer: TapasTokenizer,
+        length=5,
     ):
         toks = [tokenizer.decode([i], clean_up_tokenization_spaces=False) for i in range(len(tokenizer))]
         table = self.get_table(tokenizer, length=length - 3)
@@ -72,14 +72,14 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return table, query
 
     def get_clean_sequence(
-            self,
-            tokenizer: TapasTokenizer,
-            with_prefix_space=False,
-            max_length=20,
-            min_length=5,
-            empty_table: bool = False,
-            add_special_tokens: bool = True,
-            return_table_and_query: bool = False,
+        self,
+        tokenizer: TapasTokenizer,
+        with_prefix_space=False,
+        max_length=20,
+        min_length=5,
+        empty_table: bool = False,
+        add_special_tokens: bool = True,
+        return_table_and_query: bool = False,
     ):
 
         toks = [tokenizer.decode([i], clean_up_tokenization_spaces=False) for i in range(len(tokenizer))]
@@ -290,7 +290,9 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = self.get_tokenizer()
 
         # Example taken from the issue https://github.com/huggingface/tokenizers/issues/340
-        self.assertListEqual([tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], ["[EMPTY]"], ["[UNK]"]])
+        self.assertListEqual(
+            [tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], ["[EMPTY]"], ["[UNK]"]]
+        )
 
     @slow
     def test_sequence_builders(self):
@@ -540,8 +542,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     right_padded_token_type_ids = right_padded_sequence["token_type_ids"]
 
                     assert (
-                            token_type_ids + [
-                        [token_type_padding_idx] * 7] * padding_size == right_padded_token_type_ids
+                        token_type_ids + [[token_type_padding_idx] * 7] * padding_size == right_padded_token_type_ids
                     )
                     assert [[token_type_padding_idx] * 7] * padding_size + token_type_ids == left_padded_token_type_ids
 
@@ -579,8 +580,8 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 table, query = self.get_table_and_query(tokenizer)
 
                 if (
-                        tokenizer.build_inputs_with_special_tokens.__qualname__.split(".")[0] != "PreTrainedTokenizer"
-                        and "token_type_ids" in tokenizer.model_input_names
+                    tokenizer.build_inputs_with_special_tokens.__qualname__.split(".")[0] != "PreTrainedTokenizer"
+                    and "token_type_ids" in tokenizer.model_input_names
                 ):
                     information = tokenizer.encode_plus(table, query, add_special_tokens=True)
                     sequences, mask = information["input_ids"], information["token_type_ids"]
@@ -1057,7 +1058,9 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         if self.test_rust_tokenizer:
             fast_tokenizer = self.get_rust_tokenizer()
             encoded_sequence_fast = fast_tokenizer.encode_plus(table, sequence, return_tensors="np")
-            batch_encoded_sequence_fast = fast_tokenizer.batch_encode_plus(table, [sequence, sequence], return_tensors="np")
+            batch_encoded_sequence_fast = fast_tokenizer.batch_encode_plus(
+                table, [sequence, sequence], return_tensors="np"
+            )
 
             # TODO: add forward through JAX/Flax when PR is merged
             # This is currently here to make flake8 happy !
@@ -1139,7 +1142,9 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tokenizer.encode(table=table, query=queries[0], max_length=i, truncation="drop_rows_to_fit")
 
         for i in range(12, 512):
-            new_encoded_inputs = tokenizer.encode(table=table, query=queries[0], max_length=i, truncation="drop_rows_to_fit")
+            new_encoded_inputs = tokenizer.encode(
+                table=table, query=queries[0], max_length=i, truncation="drop_rows_to_fit"
+            )
 
             # Ensure that the input IDs are less than the max length defined.
             self.assertLessEqual(len(new_encoded_inputs), i)
@@ -1188,7 +1193,9 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     )
                 else:
                     pytorch_tensor = tokenizer.batch_encode_plus(table, sequences, padding=True, return_tensors="pt")
-                    tensorflow_tensor = tokenizer.batch_encode_plus(table, sequences, padding="longest", return_tensors="tf")
+                    tensorflow_tensor = tokenizer.batch_encode_plus(
+                        table, sequences, padding="longest", return_tensors="tf"
+                    )
                     encoded_sequences = tokenizer.batch_encode_plus(table, sequences, padding=True)
 
                     for key in encoded_sequences.keys():

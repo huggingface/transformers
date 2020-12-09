@@ -6,11 +6,12 @@ from ...file_utils import is_torch_available
 from .configuration_tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig
 from .tokenization_tapas import TapasTokenizer
 
+
 if is_torch_available():
     from .modeling_tapas import (
         TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TapasModel,
         TapasForMaskedLM,
         TapasForQuestionAnswering,
         TapasForSequenceClassification,
+        TapasModel,
     )

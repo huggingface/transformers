@@ -606,12 +606,12 @@ if is_torch_available():
         T5PreTrainedModel,
         load_tf_weights_in_t5,
     )
-    from .models.tapas import(
+    from .models.tapas import (
         TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TapasModel,
         TapasForMaskedLM,
         TapasForQuestionAnswering,
         TapasForSequenceClassification,
+        TapasModel,
     )
     from .models.transfo_xl import (
         TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
