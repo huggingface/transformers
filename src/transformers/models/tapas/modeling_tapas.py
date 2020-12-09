@@ -57,6 +57,7 @@ TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "nielsr/tapas-base-finetuned-sqa",
     "nielsr/tapas-base-finetuned-wtq",
     "nielsr/tapas-base-finetuned-wikisql-supervised",
+    "nielsr/tapas-base-finetuned-tabfact",
     # See all TAPAS models at https://huggingface.co/models?filter=tapas
 ]
 
