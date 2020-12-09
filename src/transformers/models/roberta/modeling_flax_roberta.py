@@ -223,6 +223,7 @@ class FlaxRobertaAttention(nn.Module):
             name="self",
             dtype=self.dtype,
         )(hidden_state, attention_mask)
+
         layer_norm = FlaxRobertaLayerNorm(name="layer_norm", dtype=self.dtype)(self_att + hidden_state)
         return layer_norm
 
