@@ -17,21 +17,21 @@ commands:
                 resp=$(curl -Ls https://api.github.com/repos/huggingface/transformers/pulls/${CIRCLE_PR_NUMBER})
                 head_ref=$(jq -r .head.ref \<<< $resp)
                 user=$(jq -r .user.login \<<< $resp)
-                
                 echo head_ref=$head_ref, user=$user
-
-                # CIRCLE_PR_USERNAME (only forked PRs)
-                echo CIRCLE_PR_USERNAME=$CIRCLE_PR_USERNAME, user=$user
-                git clone https://github.com/$user/transformers user-clone
-                cd user-clone
-                git checkout $head_ref
-                fork_point_sha=$(git merge-base --fork-point master)
-                cd -
+            fi
+            
+            if test -n "$user" and test -n "$head_ref"
+            then
+                git clone https://github.com/$user/transformers user-clone &&
+                cd user-clone &&
+                git checkout $head_ref &&
+                fork_point_sha=$(git merge-base --fork-point master) &&
+                cd - || true
             fi
 
             if test -n "$fork_point_sha" && test -n "$(git diff --name-only $fork_point_sha)"
             then
-                git diff --name-only $fork_point_sha
+                git --no-pager diff --name-only $fork_point_sha
                 if git diff --name-only $fork_point_sha | egrep -qv '\.(md|rst)$'
                 then
                     echo "Non-docs were modified in this PR, proceeding normally"
