@@ -577,9 +577,9 @@ class TFBartDecoder(tf.keras.layers.Layer):
             encoder_padding_mask = invert_mask(encoder_padding_mask)
 
         # embed positions
-        positions = self.embed_positions(input_ids, use_cache=use_cache)
+        positions = self.embed_positions(input_ids, use_cache=(use_cache and decoder_cached_states is not None))
 
-        if use_cache:
+        if use_cache and decoder_cached_states is not None:
             input_ids = input_ids[:, -1:]
             positions = positions[:, -1:]
 
@@ -964,7 +964,7 @@ class TFBartModel(TFPretrainedBartModel):
             else self.config.output_hidden_states
         )
 
-        if not inputs["use_cache"]:
+        if not use_cache or inputs["decoder_input_ids"].shape[-1] > 1:
             inputs["decoder_input_ids"], decoder_padding_mask, causal_mask = self._prepare_bart_decoder_inputs(
                 inputs["input_ids"],
                 decoder_input_ids=inputs["decoder_input_ids"],

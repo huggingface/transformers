@@ -107,7 +107,6 @@ class BartModelTester:
         config, inputs_dict = self.prepare_config_and_inputs()
         inputs_dict["decoder_input_ids"] = inputs_dict["input_ids"]
         inputs_dict["decoder_attention_mask"] = inputs_dict["attention_mask"]
-        inputs_dict["use_cache"] = False
         return config, inputs_dict
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
