@@ -1,6 +1,8 @@
 ---
 language: code
 thumbnail: https://cdn-media.huggingface.co/CodeBERTa/CodeBERTa.png
+datasets:
+- code_search_net
 ---
 
 # CodeBERTa
