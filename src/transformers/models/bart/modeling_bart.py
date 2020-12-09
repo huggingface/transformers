@@ -215,7 +215,7 @@ class BartAttention(nn.Module):
             tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
             .transpose(1, 2)
             .contiguous()
-#            .reshape(bsz * self.num_heads, seq_len, self.head_dim)
+            #            .reshape(bsz * self.num_heads, seq_len, self.head_dim)
         )
 
     def forward(
