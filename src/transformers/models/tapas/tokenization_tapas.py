@@ -58,9 +58,10 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "nielsr/tapas-base-finetuned-sqa": 1024,
-    "nielsr/tapas-base-finetuned-wtq": 1024,
-    "nielsr/tapas-base-finetuned-wikisql-supervised": 1024,
+    "nielsr/tapas-base-finetuned-sqa": 512,
+    "nielsr/tapas-base-finetuned-wtq": 512,
+    "nielsr/tapas-base-finetuned-wikisql-supervised": 512,
+    "nielsr/tapas-base-finetuned-tabfact": 512,
 }
 
 
