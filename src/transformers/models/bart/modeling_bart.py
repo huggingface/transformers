@@ -214,7 +214,8 @@ class BartAttention(nn.Module):
         return (
             tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
             .transpose(1, 2)
-            .reshape(bsz * self.num_heads, seq_len, self.head_dim)
+            .contiguous()
+#            .reshape(bsz * self.num_heads, seq_len, self.head_dim)
         )
 
     def forward(
@@ -234,7 +235,6 @@ class BartAttention(nn.Module):
 
         # get query proj
         query_states = self.q_proj(hidden_states) * self.scaling
-
         # get key, value proj
         if is_cross_attention and past_key_value is not None:
             # reuse k,v, cross_attentions
@@ -242,18 +242,18 @@ class BartAttention(nn.Module):
             value_states = past_key_value[1]
         elif is_cross_attention:
             # cross_attentions
-            key_states = self.k_proj(key_value_states)
-            value_states = self.v_proj(key_value_states)
+            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
+            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
         elif past_key_value is not None:
             # reuse k, v, self_attention
-            prev_key_states = past_key_value[0]
-            prev_value_states = past_key_value[1]
-            key_states = torch.cat([prev_key_states, self.k_proj(hidden_states)], dim=1)
-            value_states = torch.cat([prev_value_states, self.v_proj(hidden_states)], dim=1)
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
         else:
             # self_attention
-            key_states = self.k_proj(hidden_states)
-            value_states = self.v_proj(hidden_states)
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
@@ -265,9 +265,10 @@ class BartAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        query_states = self._shape(query_states, tgt_len, bsz)
-        key_states = self._shape(key_states, -1, bsz)
-        value_states = self._shape(value_states, -1, bsz)
+        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
+        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
+        key_states = key_states.view(*proj_shape)
+        value_states = value_states.view(*proj_shape)
 
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
