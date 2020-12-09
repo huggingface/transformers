@@ -384,6 +384,8 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
+        self.config = config
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
         self.return_dict = config.use_return_dict
@@ -516,6 +518,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             mems=mems,
             head_mask=head_mask,
@@ -526,13 +529,6 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
             training=training,
             kwargs_call=kwargs,
         )
-        output_attentions = (
-            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        )
-        output_hidden_states = (
-            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
-        )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
         # the original code for Transformer-XL used shapes [len, bsz] but we want a unified interface in the library
         # so we transpose here from shape [bsz, len] to shape [len, bsz]
@@ -591,7 +587,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         #         word_emb.new_ones((qlen, klen), dtype=torch.uint8), diagonal=1+mlen)[:,:,None]
 
         hids = []
-        attentions = [] if output_attentions else None
+        attentions = [] if inputs["output_attentions"] else None
         if self.attn_type == 0:  # default
             pos_seq = tf.range(klen - 1, -1, -1.0)
             if self.clamp_len > 0:
@@ -610,11 +606,11 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
                     dec_attn_mask,
                     mems_i,
                     inputs["head_mask"][i],
-                    output_attentions,
+                    inputs["output_attentions"],
                     training=inputs["training"],
                 )
                 core_out = layer_outputs[0]
-                if output_attentions:
+                if inputs["output_attentions"]:
                     attentions.append(layer_outputs[1])
         else:  # learnable embeddings and absolute embeddings
             raise NotImplementedError  # Removed these to avoid maintaining dead code - They are not used in our pretrained checkpoint
@@ -626,17 +622,17 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         # We transpose back here to shape [bsz, len, hidden_dim]
         core_out = tf.transpose(core_out, perm=(1, 0, 2))
 
-        if output_hidden_states:
+        if inputs["output_hidden_states"]:
             # Add last layer and transpose to library standard shape [bsz, len, hidden_dim]
             hids.append(core_out)
             hids = tuple(tf.transpose(t, perm=(1, 0, 2)) for t in hids)
         else:
             hids = None
-        if output_attentions:
+        if inputs["output_attentions"]:
             # Transpose to library standard shape [bsz, n_heads, query_seq_len, key_seq_len]
             attentions = tuple(tf.transpose(t, perm=(2, 3, 0, 1)) for t in attentions)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return tuple(v for v in [core_out, new_mems, hids, attentions] if v is not None)
 
         return TFTransfoXLModelOutput(
@@ -824,6 +820,7 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             mems=mems,
             head_mask=head_mask,
@@ -921,6 +918,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             mems=mems,
             head_mask=head_mask,
@@ -931,7 +929,6 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
 
         if inputs["input_ids"] is not None:
             bsz, tgt_len = shape_list(inputs["input_ids"])[:2]
@@ -945,7 +942,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
             inputs["inputs_embeds"],
             inputs["output_attentions"],
             inputs["output_hidden_states"],
-            return_dict,
+            inputs["return_dict"],
             training=inputs["training"],
         )
 
@@ -954,7 +951,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
 
         softmax_output = self.crit(pred_hid, labels, training=inputs["training"])
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return (softmax_output,) + transformer_outputs[1:]
 
         return TFTransfoXLLMHeadModelOutput(

@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - master
-      - model-templates
+      - ci_*
     paths:
       - "src/**"
       - "tests/**"

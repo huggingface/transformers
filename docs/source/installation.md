@@ -1,3 +1,19 @@
+<!---
+Copyright 2020 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
 # Installation
 
 🤗 Transformers is tested on Python 3.6+, and PyTorch 1.1.0+ or TensorFlow 2.0+.
@@ -12,9 +28,10 @@ must install it from source.
 ## Installation with pip
 
 First you need to install one of, or both, TensorFlow 2.0 and PyTorch.
-Please refer to [TensorFlow installation page](https://www.tensorflow.org/install/pip#tensorflow-2.0-rc-is-available) 
-and/or [PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) regarding the specific 
-install command for your platform.
+Please refer to [TensorFlow installation page](https://www.tensorflow.org/install/pip#tensorflow-2.0-rc-is-available), 
+[PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) and/or 
+[Flax installation page](https://github.com/google/flax#quick-install)
+regarding the specific install command for your platform.
 
 When TensorFlow 2.0 and/or PyTorch has been installed, 🤗 Transformers can be installed using pip as follows:
 
@@ -32,6 +49,12 @@ or 🤗 Transformers and TensorFlow 2.0 in one line with:
 
 ```bash
 pip install transformers[tf-cpu]
+```
+
+or 🤗 Transformers and Flax in one line with:
+
+```bash
+pip install transformers[flax]
 ```
 
 To check 🤗 Transformers is properly installed, run the following command:
@@ -65,6 +88,19 @@ python -c "from transformers import pipeline; print(pipeline('sentiment-analysis
 ```
 
 to check 🤗 Transformers is properly installed.
+
+
+## With conda
+
+Since Transformers version v4.0.0, we now have a conda channel: `huggingface`.
+
+🤗 Transformers can be installed using conda as follows:
+
+```
+conda install -c huggingface transformers
+```
+
+Follow the installation pages of TensorFlow, PyTorch or Flax to see how to install them with conda. 
 
 ## Caching models
 
