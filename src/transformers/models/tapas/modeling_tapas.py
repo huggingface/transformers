@@ -54,10 +54,36 @@ _CONFIG_FOR_DOC = "TapasConfig"
 _TOKENIZER_FOR_DOC = "TapasTokenizer"
 
 TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    # large models
+    "nielsr/tapas-large",
+    "nielsr/tapas-large-finetuned-sqa",
+    "nielsr/tapas-large-finetuned-wtq",
+    "nielsr/tapas-large-finetuned-wikisql-supervised",
+    "nielsr/tapas-large-finetuned-tabfact",
+    # base models
+    "nielsr/tapas-base",
     "nielsr/tapas-base-finetuned-sqa",
     "nielsr/tapas-base-finetuned-wtq",
     "nielsr/tapas-base-finetuned-wikisql-supervised",
     "nielsr/tapas-base-finetuned-tabfact",
+    # small models
+    "nielsr/tapas-small",
+    "nielsr/tapas-small-finetuned-sqa",
+    "nielsr/tapas-small-finetuned-wtq",
+    "nielsr/tapas-small-finetuned-wikisql-supervised",
+    "nielsr/tapas-small-finetuned-tabfact",
+    # mini models
+    "nielsr/tapas-mini",
+    "nielsr/tapas-mini-finetuned-sqa",
+    "nielsr/tapas-mini-finetuned-wtq",
+    "nielsr/tapas-mini-finetuned-wikisql-supervised",
+    "nielsr/tapas-mini-finetuned-tabfact",
+    # tiny models
+    "nielsr/tapas-tiny",
+    "nielsr/tapas-tiny-finetuned-sqa",
+    "nielsr/tapas-tiny-finetuned-wtq",
+    "nielsr/tapas-tiny-finetuned-wikisql-supervised",
+    "nielsr/tapas-tiny-finetuned-tabfact",
     # See all TAPAS models at https://huggingface.co/models?filter=tapas
 ]
 
