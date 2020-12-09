@@ -2,7 +2,7 @@
 
 This directory contains examples for finetuning and evaluating transformers on summarization and translation tasks.
 
-Author: San Shleifer (https://github.com/sshleifer)
+Author: Sam Shleifer (https://github.com/sshleifer)
 
 ### Supported Architectures
 

@@ -17,7 +17,7 @@ limitations under the License.
 # Research projects
 
 This folder contains various research projects using 🤗 Transformers. They are not maintained and require a specific
-version of 🤗 Transformers. Updating them to the most recent version of the library will require some work.
+version of 🤗 Transformers that is indicated in the requirements file of each folder. Updating them to the most recent version of the library will require some work.
 
 To use any of them, just run the command
 ```
