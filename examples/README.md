@@ -17,7 +17,7 @@ limitations under the License.
 # Examples
 
 This folder contains examples of use of 🤗 Transformers grouped by task. If you are looking for an example that used to
-be in this folder, it may have moved to our [research examples](.https://github.com/huggingface/transformers/tree/master/research-examples) folder.
+be in this folder, it may have moved to our [research projects](.https://github.com/huggingface/transformers/tree/master/research_projects) folder.
 
 ## Important note
 
