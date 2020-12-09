@@ -152,6 +152,7 @@ from .models.marian import MarianConfig
 from .models.mbart import MBartConfig
 from .models.mmbt import MMBTConfig
 from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
+from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
 from .models.mt5 import MT5Config
 from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
 from .models.pegasus import PegasusConfig
@@ -255,6 +256,7 @@ if is_tokenizers_available():
     from .models.lxmert import LxmertTokenizerFast
     from .models.mbart import MBartTokenizerFast
     from .models.mobilebert import MobileBertTokenizerFast
+    from .models.mpnet import MPNetTokenizerFast
     from .models.mt5 import MT5TokenizerFast
     from .models.openai import OpenAIGPTTokenizerFast
     from .models.pegasus import PegasusTokenizerFast
@@ -529,6 +531,17 @@ if is_torch_available():
         MobileBertModel,
         MobileBertPreTrainedModel,
         load_tf_weights_in_mobilebert,
+    )
+    from .models.mpnet import (
+        MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        MPNetForMaskedLM,
+        MPNetForMultipleChoice,
+        MPNetForQuestionAnswering,
+        MPNetForSequenceClassification,
+        MPNetForTokenClassification,
+        MPNetLayer,
+        MPNetModel,
+        MPNetPreTrainedModel,
     )
     from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
     from .models.openai import (
@@ -829,6 +842,17 @@ if is_tf_available():
         TFMobileBertMainLayer,
         TFMobileBertModel,
         TFMobileBertPreTrainedModel,
+    )
+    from .models.mpnet import (
+        TF_MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFMPNetForMaskedLM,
+        TFMPNetForMultipleChoice,
+        TFMPNetForQuestionAnswering,
+        TFMPNetForSequenceClassification,
+        TFMPNetForTokenClassification,
+        TFMPNetMainLayer,
+        TFMPNetModel,
+        TFMPNetPreTrainedModel,
     )
     from .models.mt5 import TFMT5EncoderModel, TFMT5ForConditionalGeneration, TFMT5Model
     from .models.openai import (
