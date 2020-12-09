@@ -17,7 +17,8 @@ python xla_spawn.py --num_cores $TPU_NUM_CORES \
     --save_steps 500 --eval_steps 500 \
     --logging_first_step --logging_steps 200 \
     --max_source_length $MAX_LEN --max_target_length $MAX_LEN --val_max_target_length $MAX_LEN --test_max_target_length $MAX_LEN \
-    --do_train --do_eval --evaluate_during_training \
+    --do_train --do_eval \
+    --evaluation_strategy steps \
     --prediction_loss_only \
     --task translation --label_smoothing 0.1 \
     "$@"

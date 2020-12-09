@@ -3,6 +3,29 @@ orbs:
     gcp-gke: circleci/gcp-gke@1.0.4
     go: circleci/go@1.3.0
 
+commands:
+  skip-job-on-doc-only-changes:
+    description: "Do not continue this job and exit with success for PRs with only doc changes"
+    steps:
+
+      - run:
+          name: docs-only changes skip check
+          command: |
+            # pipeline.git.base_revision is not always defined, so only proceed if all external vars are defined
+            if test -n "<< pipeline.git.base_revision >>" && test -n "<< pipeline.git.revision >>" && test -n "$(git diff --name-only << pipeline.git.base_revision >>...<< pipeline.git.revision >>)"
+            then
+                if git diff --name-only << pipeline.git.base_revision >>...<< pipeline.git.revision >> | egrep -qv '\.(md|rst)$'
+                then
+                    echo "Non-docs were modified in this PR, proceeding normally"
+                else
+                    echo "Only docs were modified in this PR, quitting this job"
+                    # disable skipping for now, as circleCI's base_revision is inconsistent leading to invalid ranges
+                    # circleci step halt
+                fi
+            else
+                echo "Can't perform skipping check w/o base_revision defined, continuing the job"
+            fi
+
 # TPU REFERENCES
 references:
     checkout_ml_testing: &checkout_ml_testing
@@ -72,21 +95,23 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-torch_and_tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install git+https://github.com/huggingface/datasets
-            - run: pip install .[sklearn,tf-cpu,torch,testing]
+            - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece]
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
-            - run: RUN_PT_TF_CROSS_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ -m is_pt_tf_cross_test --durations=0 | tee output.txt
+            - run: RUN_PT_TF_CROSS_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf ./tests/ -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
             - store_artifacts:
-                  path: ~/transformers/output.txt
-                  destination: test_output.txt
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
     run_tests_torch:
         working_directory: ~/transformers
         docker:
@@ -97,18 +122,18 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install git+https://github.com/huggingface/datasets
-            - run: pip install .[sklearn,torch,testing]
+            - run: pip install .[sklearn,torch,testing,sentencepiece]
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -s --make_reports=tests ./tests/ | tee tests_output.txt
+            - run: python -m pytest -n 8 --dist=loadfile -s --make-reports=tests_torch ./tests/ | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -124,21 +149,23 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install git+https://github.com/huggingface/datasets
-            - run: pip install .[sklearn,tf-cpu,testing]
+            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece]
             - save_cache:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ | tee output.txt
+            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_tf ./tests/ | tee tests_output.txt
             - store_artifacts:
-               path: ~/transformers/output.txt
-               destination: test_output.txt
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
     run_tests_flax:
         working_directory: ~/transformers
         docker:
@@ -149,21 +176,23 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - skip-job-on-doc-only-changes
             - restore_cache:
                 keys:
                     - v0.4-flax-{{ checksum "setup.py" }}
                     - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install git+https://github.com/huggingface/datasets
-            - run: sudo pip install .[flax,sklearn,torch,testing]
+            - run: sudo pip install .[flax,sklearn,torch,testing,sentencepiece]
             - save_cache:
                   key: v0.4-flax-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ | tee output.txt
+            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_flax ./tests/ | tee tests_output.txt
             - store_artifacts:
-                  path: ~/transformers/output.txt
-                  destination: test_output.txt
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
     run_tests_pipelines_torch:
         working_directory: ~/transformers
         docker:
@@ -174,21 +203,23 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install git+https://github.com/huggingface/datasets
-            - run: pip install .[sklearn,torch,testing]
+            - run: pip install .[sklearn,torch,testing,sentencepiece]
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: RUN_PIPELINE_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ -m is_pipeline_test | tee output.txt
+            - run: RUN_PIPELINE_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test ./tests/ | tee tests_output.txt
             - store_artifacts:
-                  path: ~/transformers/output.txt
-                  destination: test_output.txt
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
     run_tests_pipelines_tf:
         working_directory: ~/transformers
         docker:
@@ -199,44 +230,49 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install git+https://github.com/huggingface/datasets
-            - run: pip install .[sklearn,tf-cpu,testing]
+            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece]
             - save_cache:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: RUN_PIPELINE_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s ./tests/ -m is_pipeline_test | tee output.txt
+            - run: RUN_PIPELINE_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf ./tests/ -m is_pipeline_test | tee tests_output.txt
             - store_artifacts:
-               path: ~/transformers/output.txt
-               destination: test_output.txt
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
     run_tests_custom_tokenizers:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.6
+            - image: circleci/python:3.7
         environment:
             RUN_CUSTOM_TOKENIZERS: yes
         steps:
             - checkout
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-custom_tokenizers-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[ja,testing]
+            - run: pip install .[ja,testing,sentencepiece]
             - run: python -m unidic download
             - save_cache:
                   key: v0.4-custom_tokenizers-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -s ./tests/test_tokenization_bert_japanese.py | tee output.txt
+            - run: python -m pytest -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py | tee tests_output.txt
             - store_artifacts:
-                path: ~/transformers/output.txt
-                destination: test_output.txt
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
     run_examples_torch:
         working_directory: ~/transformers
         docker:
@@ -247,22 +283,40 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-torch_examples-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[sklearn,torch,testing]
+            - run: pip install .[sklearn,torch,sentencepiece,testing]
             - run: pip install -r examples/requirements.txt
             - save_cache:
                   key: v0.4-torch_examples-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -s --make_reports=examples ./examples/ | tee examples_output.txt
+            - run: python -m pytest -n 8 --dist=loadfile -s --make-reports=examples_torch ./examples/ | tee examples_output.txt
             - store_artifacts:
                   path: ~/transformers/examples_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
+
+    run_tests_git_lfs:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - run: sudo apt-get install git-lfs
+            - run: |
+                git config --global user.email "ci@dummy.com"
+                git config --global user.name "ci"
+            - run: pip install --upgrade pip
+            - run: pip install .[testing]
+            - run: RUN_GIT_LFS_TESTS=1 python -m pytest -sv ./tests/test_hf_api.py -k "HfLargefilesTest"
+
     build_doc:
         working_directory: ~/transformers
         docker:
@@ -274,7 +328,7 @@ jobs:
                       - v0.4-build_doc-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[tf,torch,sentencepiece,docs]
+            - run: pip install ."[all, docs]"
             - save_cache:
                   key: v0.4-build_doc-{{ checksum "setup.py" }}
                   paths:
@@ -282,6 +336,7 @@ jobs:
             - run: cd docs && make html SPHINXOPTS="-W"
             - store_artifacts:
                 path: ./docs/_build
+
     deploy_doc:
         working_directory: ~/transformers
         docker:
@@ -295,12 +350,13 @@ jobs:
                   keys:
                       - v0.4-deploy_doc-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: pip install .[tf,torch,sentencepiece,docs]
+            - run: pip install ."[all,docs]"
             - save_cache:
                   key: v0.4-deploy_doc-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: ./.circleci/deploy.sh
+
     check_code_quality:
         working_directory: ~/transformers
         docker:
@@ -315,7 +371,7 @@ jobs:
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install isort
-            - run: pip install .[tf,torch,flax,quality]
+            - run: pip install .[all,quality]
             - save_cache:
                   key: v0.4-code_quality-{{ checksum "setup.py" }}
                   paths:
@@ -325,8 +381,10 @@ jobs:
             - run: flake8 examples tests src utils
             - run: python utils/style_doc.py src/transformers docs/source --max_len 119 --check_only
             - run: python utils/check_copies.py
+            - run: python utils/check_table.py
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
+
     check_repository_consistency:
         working_directory: ~/transformers
         docker:
@@ -357,6 +415,7 @@ jobs:
             - setup_remote_docker
             - *build_push_docker
             - *deploy_cluster
+
     cleanup-gke-jobs:
         docker:
             - image: circleci/python:3.6
@@ -366,6 +425,7 @@ jobs:
                   cluster: $GKE_CLUSTER
                   perform-login: true
             - *delete_gke_jobs
+
 workflow_filters: &workflow_filters
     filters:
         branches:
@@ -385,6 +445,7 @@ workflows:
             - run_tests_flax
             - run_tests_pipelines_torch
             - run_tests_pipelines_tf
+            - run_tests_git_lfs
             - build_doc
             - deploy_doc: *workflow_filters
     tpu_testing_jobs:

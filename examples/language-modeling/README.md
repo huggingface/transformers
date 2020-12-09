@@ -10,7 +10,7 @@ These scripts leverage the 🤗 Datasets library and the Trainer API. You can ea
 need extra processing on your datasets.
 
 **Note:** The old script `run_language_modeling.py` is still available
-[here](https://github.com/huggingface/transformers/blob/master/examples/contrib/legacy/language-modeling/run_language_modeling.py).
+[here](https://github.com/huggingface/transformers/blob/master/examples/contrib/legacy/run_language_modeling.py).
 
 The following examples, will run on a datasets hosted on our [hub](https://huggingface.co/datasets) or with your own
 text files for training and validation. We give examples of both below.
@@ -68,13 +68,13 @@ python run_mlm.py \
 To run on your own training and validation files, use the following command:
 
 ```bash
-python run_clm.py \
+python run_mlm.py \
     --model_name_or_path roberta-base \
     --train_file path_to_train_file \
     --validation_file path_to_validation_file \
     --do_train \
     --do_eval \
-    --output_dir /tmp/test-clm
+    --output_dir /tmp/test-mlm
 ```
 
 If your dataset is organized with one sample per line, you can use the `--line_by_line` flag (otherwise the script
@@ -90,7 +90,7 @@ selected tokens (which may be part of words), they mask randomly selected words 
 to that word). This technique has been refined for Chinese in [this paper](https://arxiv.org/abs/1906.08101).
 
 To fine-tune a model using whole word masking, use the following script:
-
+```bash
 python run_mlm_wwm.py \
     --model_name_or_path roberta-base \
     --dataset_name wikitext \
@@ -164,7 +164,7 @@ context length for permutation language modeling.
 The `--max_span_length` flag may also be used to limit the length of a span of masked tokens used 
 for permutation language modeling.
 
-Here is how to fine-tun XLNet on wikitext-2:
+Here is how to fine-tune XLNet on wikitext-2:
 
 ```bash
 python run_plm.py \

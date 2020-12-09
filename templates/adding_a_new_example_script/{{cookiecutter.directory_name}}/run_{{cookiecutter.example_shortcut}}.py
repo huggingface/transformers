@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 {{cookiecutter.authors}} All rights reserved.
+# Copyright {{cookiecutter.authors}} and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -75,7 +75,7 @@ class ModelArguments:
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
     cache_dir: Optional[str] = field(
-        default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
+        default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"}
     )
     use_fast_tokenizer: bool = field(
         default=True,
@@ -98,7 +98,7 @@ class ModelArguments:
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
     cache_dir: Optional[str] = field(
-        default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
+        default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"}
     )
     use_fast_tokenizer: bool = field(
         default=True,
@@ -205,7 +205,7 @@ def main():
         if data_args.train_file is not None:
             data_files["train"] = data_args.train_file
         if data_args.validation_file is not None:
-            data_files["validation"] = data_args.train_file
+            data_files["validation"] = data_args.validation_file
         extension = data_args.train_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
@@ -307,9 +307,18 @@ def main():
 
     # Training
     if training_args.do_train:
+{%- if cookiecutter.can_train_from_scratch == "False" %}
         trainer.train(
             model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
         )
+{%- elif cookiecutter.can_train_from_scratch == "True" %}
+        model_path = (
+            model_args.model_name_or_path
+            if (model_args.model_name_or_path is not None and os.path.isdir(model_args.model_name_or_path))
+            else None
+        )
+        trainer.train(model_path=model_path)
+{% endif %}
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
     # Evaluation

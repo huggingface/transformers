@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # coding=utf-8
-# Copyright (c) Facebook, Inc. and its affiliates.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
-# This source code is licensed under the MIT license found in the;
+# Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -13,14 +13,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# LICENSE file in the root directory of this source tree.
 """Tests for Blenderbot Tokenizers, including common tests for BlenderbotSmallTokenizer."""
 import json
 import os
 import unittest
 
 from transformers.file_utils import cached_property
-from transformers.tokenization_blenderbot import VOCAB_FILES_NAMES, BlenderbotSmallTokenizer, BlenderbotTokenizer
+from transformers.models.blenderbot.tokenization_blenderbot import (
+    VOCAB_FILES_NAMES,
+    BlenderbotSmallTokenizer,
+    BlenderbotTokenizer,
+)
 
 from .test_tokenization_common import TokenizerTesterMixin
 

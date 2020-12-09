@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import torch
 from torch.nn import functional as F
@@ -26,6 +26,7 @@ from .generation_logits_process import (
     MinLengthLogitsProcessor,
     NoBadWordsLogitsProcessor,
     NoRepeatNGramLogitsProcessor,
+    PrefixConstrainedLogitsProcessor,
     RepetitionPenaltyLogitsProcessor,
     TemperatureLogitsWarper,
     TopKLogitsWarper,
@@ -144,6 +145,10 @@ class GenerationMixin:
         )
         input_ids = input_ids.index_select(0, expanded_return_idx)
 
+        if "token_type_ids" in model_kwargs:
+            token_type_ids = model_kwargs["token_type_ids"]
+            model_kwargs["token_type_ids"] = token_type_ids.index_select(0, expanded_return_idx)
+
         if attention_mask is not None:
             model_kwargs["attention_mask"] = attention_mask.index_select(0, expanded_return_idx)
 
@@ -194,6 +199,11 @@ class GenerationMixin:
         else:
             model_kwargs["past"] = None
 
+        # update token_type_ids with last value
+        if "token_type_ids" in model_kwargs:
+            token_type_ids = model_kwargs["token_type_ids"]
+            model_kwargs["token_type_ids"] = torch.cat([token_type_ids, token_type_ids[:, -1].unsqueeze(-1)], dim=-1)
+
         # update attention mask
         if not is_encoder_decoder:
             if "attention_mask" in model_kwargs:
@@ -234,12 +244,12 @@ class GenerationMixin:
 
         # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
         # all samplers can be found in `generation_utils_samplers.py`
+        if temperature is not None and temperature != 1.0:
+            warpers.append(TemperatureLogitsWarper(temperature))
         if top_k is not None and top_k != 0:
             warpers.append(TopKLogitsWarper(top_k=top_k, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
         if top_p is not None and top_p < 1.0:
             warpers.append(TopPLogitsWarper(top_p=top_p, min_tokens_to_keep=(2 if num_beams > 1 else 1)))
-        if temperature is not None and temperature != 1.0:
-            warpers.append(TemperatureLogitsWarper(temperature))
         return warpers
 
     def _get_logits_processor(
@@ -249,6 +259,8 @@ class GenerationMixin:
         bad_words_ids: List[List[int]],
         min_length: int,
         eos_token_id: int,
+        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
+        num_beams: int,
     ) -> LogitsProcessorList:
         """
         This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
@@ -276,6 +288,8 @@ class GenerationMixin:
             processors.append(NoBadWordsLogitsProcessor(bad_words_ids, eos_token_id))
         if min_length is not None and eos_token_id is not None and min_length > -1:
             processors.append(MinLengthLogitsProcessor(min_length, eos_token_id))
+        if prefix_allowed_tokens_fn is not None:
+            processors.append(PrefixConstrainedLogitsProcessor(prefix_allowed_tokens_fn, num_beams))
         return processors
 
     @torch.no_grad()
@@ -300,6 +314,7 @@ class GenerationMixin:
         num_return_sequences: Optional[int] = None,
         decoder_start_token_id: Optional[int] = None,
         use_cache: Optional[bool] = None,
+        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
         **model_kwargs
     ) -> torch.LongTensor:
         r"""
@@ -366,6 +381,13 @@ class GenerationMixin:
             use_cache: (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not the model should use the past last key/values attentions (if applicable to the model) to
                 speed up decoding.
+            prefix_allowed_tokens_fn: (:obj:`Callable[[int, torch.Tensor], List[int]]`, `optional`):
+                If provided, this function constraints the beam search to allowed tokens only at each step. If not
+                provided no constraint is applied. This function takes 2 arguments :obj:`inputs_ids` and the batch ID
+                :obj:`batch_id`. It has to return a list with the allowed tokens for the next generation step
+                conditioned on the previously generated tokens :obj:`inputs_ids` and the batch ID :obj:`batch_id`. This
+                argument is useful for constrained generation conditioned on the prefix, as described in
+                `Autoregressive Entity Retrieval <https://arxiv.org/abs/2010.00904>`__.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
                 model is an Encoder-Decoder model, encoder specific kwargs should not be prefixed and decoder specific
@@ -440,7 +462,6 @@ class GenerationMixin:
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         if input_ids is None:
             # init `input_ids` with bos_token_id
@@ -485,6 +506,8 @@ class GenerationMixin:
             bad_words_ids=bad_words_ids,
             min_length=min_length,
             eos_token_id=eos_token_id,
+            prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+            num_beams=num_beams,
         )
 
         if is_greedy_gen_mode:

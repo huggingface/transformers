@@ -85,7 +85,6 @@ class EncoderDecoderMixin:
             decoder_input_ids=decoder_input_ids,
             attention_mask=attention_mask,
             decoder_attention_mask=decoder_attention_mask,
-            return_dict=True,
         )
 
         self.assertEqual(
@@ -117,7 +116,6 @@ class EncoderDecoderMixin:
             decoder_input_ids=decoder_input_ids,
             attention_mask=attention_mask,
             decoder_attention_mask=decoder_attention_mask,
-            return_dict=True,
         )
         self.assertEqual(
             outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
@@ -132,7 +130,6 @@ class EncoderDecoderMixin:
             decoder_input_ids=decoder_input_ids,
             attention_mask=attention_mask,
             decoder_attention_mask=decoder_attention_mask,
-            return_dict=True,
         )
 
         self.assertEqual(
@@ -278,7 +275,6 @@ class EncoderDecoderMixin:
             attention_mask=attention_mask,
             decoder_attention_mask=decoder_attention_mask,
             labels=labels,
-            return_dict=True,
         )
 
         loss = outputs_encoder_decoder["loss"]
@@ -290,6 +286,63 @@ class EncoderDecoderMixin:
         )
         self.assertEqual(
             outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
+        )
+
+    def check_encoder_decoder_model_output_attentions(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        encoder_hidden_states,
+        decoder_config,
+        decoder_input_ids,
+        decoder_attention_mask,
+        labels,
+        **kwargs
+    ):
+        # make the decoder inputs a different shape from the encoder inputs to harden the test
+        decoder_input_ids = decoder_input_ids[:, :-1]
+        decoder_attention_mask = decoder_attention_mask[:, :-1]
+        encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
+        enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model.to(torch_device)
+        outputs_encoder_decoder = enc_dec_model(
+            input_ids=input_ids,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+            decoder_attention_mask=decoder_attention_mask,
+            output_attentions=True,
+        )
+
+        encoder_attentions = outputs_encoder_decoder["encoder_attentions"]
+        self.assertEqual(len(encoder_attentions), config.num_hidden_layers)
+
+        self.assertEqual(
+            encoder_attentions[0].shape[-3:], (config.num_attention_heads, input_ids.shape[-1], input_ids.shape[-1])
+        )
+
+        decoder_attentions = outputs_encoder_decoder["decoder_attentions"]
+        num_decoder_layers = (
+            decoder_config.num_decoder_layers
+            if hasattr(decoder_config, "num_decoder_layers")
+            else decoder_config.num_hidden_layers
+        )
+        self.assertEqual(len(decoder_attentions), num_decoder_layers)
+
+        self.assertEqual(
+            decoder_attentions[0].shape[-3:],
+            (decoder_config.num_attention_heads, decoder_input_ids.shape[-1], decoder_input_ids.shape[-1]),
+        )
+
+        cross_attentions = outputs_encoder_decoder["cross_attentions"]
+        self.assertEqual(len(cross_attentions), num_decoder_layers)
+
+        cross_attention_input_seq_len = decoder_input_ids.shape[-1] * (
+            1 + (decoder_config.ngram if hasattr(decoder_config, "ngram") else 0)
+        )
+        self.assertEqual(
+            cross_attentions[0].shape[-3:],
+            (decoder_config.num_attention_heads, cross_attention_input_seq_len, input_ids.shape[-1]),
         )
 
     def check_encoder_decoder_model_generate(self, input_ids, config, decoder_config, **kwargs):
@@ -412,6 +465,10 @@ class EncoderDecoderMixin:
     def test_encoder_decoder_model_labels(self):
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_labels(**input_ids_dict)
+
+    def test_encoder_decoder_model_output_attentions(self):
+        input_ids_dict = self.prepare_config_and_inputs()
+        self.check_encoder_decoder_model_output_attentions(**input_ids_dict)
 
     def test_encoder_decoder_model_generate(self):
         input_ids_dict = self.prepare_config_and_inputs()

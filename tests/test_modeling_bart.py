@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 Huggingface
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -48,7 +48,7 @@ if is_torch_available():
         PegasusConfig,
         pipeline,
     )
-    from transformers.modeling_bart import (
+    from transformers.models.bart.modeling_bart import (
         SinusoidalPositionalEmbedding,
         _prepare_bart_decoder_inputs,
         invert_mask,
@@ -208,6 +208,10 @@ class BARTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip("TODO: Decoder embeddings cannot be resized at the moment")
+    def test_resize_embeddings_untied(self):
+        pass
+
     @require_sentencepiece
     @require_tokenizers
     def test_tiny_model(self):
@@ -259,7 +263,6 @@ class BartHeadTests(unittest.TestCase):
             eos_token_id=2,
             pad_token_id=1,
             bos_token_id=0,
-            return_dict=True,
         )
         return config, input_ids, batch_size
 
@@ -310,7 +313,6 @@ class BartHeadTests(unittest.TestCase):
             encoder_ffn_dim=8,
             decoder_ffn_dim=8,
             max_position_embeddings=48,
-            return_dict=True,
         )
         lm_model = BartForConditionalGeneration(config).to(torch_device)
         context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long().to(torch_device)
@@ -476,9 +478,9 @@ class BartModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_bart_large_mask_filling(self):
-        pbase = pipeline(task="fill-mask", model="facebook/bart-large")
+        plarge = pipeline(task="fill-mask", model="facebook/bart-large")
         src_text = [" I went to the <mask>."]
-        results = [x["token_str"] for x in pbase(src_text)]
+        results = [x["token_str"] for x in plarge(src_text)]
         expected_results = ["Ġbathroom", "Ġgym", "Ġwrong", "Ġmovies", "Ġhospital"]
         self.assertListEqual(results, expected_results)
 
@@ -494,7 +496,9 @@ class BartModelIntegrationTests(unittest.TestCase):
         inputs_dict = prepare_bart_inputs_dict(model.config, input_ids)
         # Test that model hasn't changed
         with torch.no_grad():
-            batched_logits, features = model(**inputs_dict)
+            outputs = model(**inputs_dict)
+
+        batched_logits = outputs[0]
         expected_shape = torch.Size((2, 3))
         self.assertEqual(batched_logits.shape, expected_shape)
         expected_slice = torch.Tensor([[0.1907, 1.4342, -1.0289]]).to(torch_device)
@@ -713,6 +717,6 @@ class FastIntegrationTests(unittest.TestCase):
             padding="longest",
             truncation=True,
         )
-        features = self.xsum_1_1_model.get_encoder()(**batch, return_dict=True).last_hidden_state
+        features = self.xsum_1_1_model.get_encoder()(**batch).last_hidden_state
         expected = [[-0.0828, -0.0251, -0.0674], [0.1277, 0.3311, -0.0255], [0.2613, -0.0840, -0.2763]]
         assert_tensors_close(features[0, :3, :3], torch.tensor(expected), atol=1e-3)
