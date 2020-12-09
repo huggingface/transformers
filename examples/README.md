@@ -23,9 +23,14 @@ be in this folder, it may have moved to our [research examples](../research-exam
 
 **Important**
 
-To make sure you can successfully run the latest versions of the example scripts, you have to **install the library from source** and install some example-specific requirements. To do this, cd in the example folder of your choice, then run the following command:
-Execute the following steps in a new virtual environment:
+To make sure you can successfully run the latest versions of the example scripts, you have to **install the library from source** and install some example-specific requirements. To do this, execute the following steps in a new virtual environment:
 ``bash
+git clone https://github.com/huggingface/transformers
+cd transformers
+pip install .
+```
+Then cd in the example folder of your choice and run
+```bash
 pip install -r requirements.txt
 ```
 
@@ -33,10 +38,6 @@ Alternatively, you can run the version of the examples as they were for your cur
 ```bash
 git checkout tags/v3.5.1
 ```
-
-Version 2.9 of 🤗 Transformers introduced a new [`Trainer`](https://github.com/huggingface/transformers/blob/master/src/transformers/trainer.py) class for PyTorch, and its equivalent [`TFTrainer`](https://github.com/huggingface/transformers/blob/master/src/transformers/trainer_tf.py) for TF 2.
-Running the examples requires PyTorch 1.3.1+ or TensorFlow 2.2+.
-
 
 ## The Big Table of Tasks
 

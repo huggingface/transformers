@@ -18,4 +18,3 @@ pytest
 conllu
 sentencepiece != 0.1.92
 protobuf
--e git+https://github.com/huggingface/transformers.git

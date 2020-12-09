@@ -1,3 +1,2 @@
 seqeval
 datasets >= 1.1.3
--e git+https://github.com/huggingface/transformers.git
