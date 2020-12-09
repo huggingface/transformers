@@ -215,7 +215,6 @@ class BartAttention(nn.Module):
             tensor.view(bsz, seq_len, self.num_heads, self.head_dim)
             .transpose(1, 2)
             .contiguous()
-            #            .reshape(bsz * self.num_heads, seq_len, self.head_dim)
         )
 
     def forward(
@@ -292,7 +291,10 @@ class BartAttention(nn.Module):
         attn_weights = F.softmax(attn_weights, dim=-1)
 
         if output_attentions:
-            # make sure that attn_weights are included in graph
+            # this operation is a bit akward, but it's required to
+            # make sure that attn_weights keeps its gradient.
+            # In order to do so, attn_weights have to reshaped
+            # twice and have to be reused in the following
             attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
         else:
@@ -899,7 +901,7 @@ class BartDecoder(BartPretrainedModel):
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0][0].shape[1] if past_key_values is not None else 0
+        past_key_values_length = past_key_values[0][0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
