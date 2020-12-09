@@ -191,7 +191,6 @@ extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "keras2onnx")
 extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "keras2onnx")
 
 extras["torch"] = deps_list("torch")
->>>>>>> origin/master
 
 if os.name == "nt":  # windows
     extras["retrieval"] = deps_list("datasets")  # faiss is not supported on windows
