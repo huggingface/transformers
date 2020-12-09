@@ -118,6 +118,11 @@ class BeamSearchScorer:
         requires_pytorch(self)
 
 
+class HammingDiversityLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class LogitsProcessor:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -144,6 +149,11 @@ class NoBadWordsLogitsProcessor:
 
 
 class NoRepeatNGramLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class PrefixConstrainedLogitsProcessor:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
