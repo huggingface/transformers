@@ -17,14 +17,14 @@ limitations under the License.
 # Examples
 
 This folder contains examples of use of 🤗 Transformers grouped by task. If you are looking for an example that used to
-be in this folder, it may have moved to our [research projects](.https://github.com/huggingface/transformers/tree/master/research_projects) folder.
+be in this folder, it may have moved to our [research projects](https://github.com/huggingface/transformers/tree/master/research_projects) folder.
 
 ## Important note
 
 **Important**
 
 To make sure you can successfully run the latest versions of the example scripts, you have to **install the library from source** and install some example-specific requirements. To do this, execute the following steps in a new virtual environment:
-``bash
+```bash
 git clone https://github.com/huggingface/transformers
 cd transformers
 pip install .
