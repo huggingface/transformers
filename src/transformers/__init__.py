@@ -319,12 +319,14 @@ if is_torch_available():
     )
     from .generation_beam_search import BeamScorer, BeamSearchScorer
     from .generation_logits_process import (
+        HammingDiversityLogitsProcessor,
         LogitsProcessor,
         LogitsProcessorList,
         LogitsWarper,
         MinLengthLogitsProcessor,
         NoBadWordsLogitsProcessor,
         NoRepeatNGramLogitsProcessor,
+        PrefixConstrainedLogitsProcessor,
         RepetitionPenaltyLogitsProcessor,
         TemperatureLogitsWarper,
         TopKLogitsWarper,

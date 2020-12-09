@@ -27,6 +27,7 @@ if is_torch_available():
     import torch.nn.functional as F
 
     from transformers.generation_logits_process import (
+        HammingDiversityLogitsProcessor,
         LogitsProcessorList,
         MinLengthLogitsProcessor,
         NoBadWordsLogitsProcessor,
@@ -301,4 +302,31 @@ class LogitsProcessorTest(unittest.TestCase):
         # batch 2: 3rd, 4th (2, 3) token are allowed
         self.assertListEqual(
             torch.isinf(filtered_scores).tolist(), [[False, False, True, True, True], [True, True, False, False, True]]
+        )
+
+    def test_hamming_diversity(self):
+        vocab_size = 4
+        num_beams = 2
+        num_beam_groups = 2
+
+        scores = self._get_uniform_logits(num_beams, vocab_size)
+        # batch_idx = 0 -> index batch_idx * num_beam_groups -> idx = 0 * 2 = 0 -> penalises tokens 1
+        # batch_idx = 1 -> index batch_idx * num_beam_groups -> idx = 1 * 2 = 2 -> penalises tokens 1
+        current_tokens = torch.tensor([0, 3, 1, 2], device=torch_device, dtype=torch.long)
+
+        diversity_logits_processor = HammingDiversityLogitsProcessor(
+            diversity_penalty=1.0, num_beams=num_beams, num_beam_groups=num_beam_groups
+        )
+
+        processed_scores = diversity_logits_processor(None, scores, current_tokens, 1)
+
+        self.assertTrue(
+            torch.allclose(
+                processed_scores[0], torch.tensor([-0.7500, 0.2500, 0.2500, 0.2500], device=torch_device), atol=1e-3
+            )
+        )
+        self.assertTrue(
+            torch.allclose(
+                processed_scores[1], torch.tensor([0.2500, -0.7500, 0.2500, 0.2500], device=torch_device), atol=1e-3
+            )
         )
