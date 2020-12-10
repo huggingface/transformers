@@ -281,7 +281,7 @@ def main():
     # Add the chinese references if provided
     if data_args.train_ref_file is not None:
         tokenized_datasets["train"] = add_chinese_references(tokenized_datasets["train"], data_args.train_ref_file)
-    if data_args.valid_ref_file is not None:
+    if data_args.validation_ref_file is not None:
         tokenized_datasets["validation"] = add_chinese_references(
             tokenized_datasets["validation"], data_args.validation_ref_file
         )
