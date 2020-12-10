@@ -33,6 +33,7 @@ IGNORE_NON_TESTED = [
     "BertLMHeadModel",  # Needs to be setup as decoder.
     "DPREncoder",  # Building part of bigger (tested) model.
     "DPRSpanPredictor",  # Building part of bigger (tested) model.
+    "ProphetNetDecoderWrapper",  # Building part of bigger (tested) model.
     "ReformerForMaskedLM",  # Needs to be setup as decoder.
     "T5Stack",  # Building part of bigger (tested) model.
     "TFDPREncoder",  # Building part of bigger (tested) model.
@@ -64,6 +65,7 @@ IGNORE_NON_DOCUMENTED = [
     "BartEncoder",  # Building part of bigger (documented) model.
     "DPREncoder",  # Building part of bigger (documented) model.
     "DPRSpanPredictor",  # Building part of bigger (documented) model.
+    "ProphetNetDecoderWrapper",  # Building part of bigger (documented) model.
     "T5Stack",  # Building part of bigger (documented) model.
     "TFDPREncoder",  # Building part of bigger (documented) model.
     "TFDPRSpanPredictor",  # Building part of bigger (documented) model.
@@ -95,6 +97,7 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "OpenAIGPTDoubleHeadsModel",
     "ProphetNetDecoder",
     "ProphetNetEncoder",
+    "ProphetNetDecoderWrapper",
     "RagModel",
     "RagSequenceForGeneration",
     "RagTokenForGeneration",

@@ -1875,20 +1875,6 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         return self.prophetnet.decoder
 
 
-class ProphetNetDecoderWrapper(nn.Module):
-    """
-    This is a wrapper class, so that :class:`~transformers.ProphetNetForCausalLM` can correctly be loaded from
-    pretrained prophetnet classes.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.decoder = ProphetNetDecoder(config)
-
-    def forward(self, *args, **kwargs):
-        return self.decoder(*args, **kwargs)
-
-
 @add_start_docstrings(
     "The standalone decoder part of the ProphetNetModel with a lm head on top. The model can be used for causal language modeling.",
     PROPHETNET_START_DOCSTRING,
@@ -2105,3 +2091,17 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
 
     def get_decoder(self):
         return self.decoder
+
+
+class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
+    """
+    This is a wrapper class, so that :class:`~transformers.ProphetNetForCausalLM` can correctly be loaded from
+    pretrained prophetnet classes.
+    """
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.decoder = ProphetNetDecoder(config)
+
+    def forward(self, *args, **kwargs):
+        return self.decoder(*args, **kwargs)
