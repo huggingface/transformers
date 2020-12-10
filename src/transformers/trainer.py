@@ -1329,7 +1329,7 @@ class Trainer:
         self,
         dataloader: DataLoader,
         description: str,
-        mode: str,
+        mode: str = "eval",
         prediction_loss_only: Optional[bool] = None,
         ignore_keys: Optional[List[str]] = None,
     ) -> PredictionOutput:
