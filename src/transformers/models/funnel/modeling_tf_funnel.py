@@ -73,6 +73,25 @@ TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST = [
 INF = 1e6
 
 
+def tuples_to_ragged_tensors(encoder_output, decoder_output=None):
+    output = list(encoder_output)
+    ref_shape = shape_list(output[0])
+
+    for i, v in enumerate(output):
+        current_shape = shape_list(output[i])
+        padding_shape = []
+    
+        for ref, current in zip(ref_shape, current_shape):
+            padding_shape.append([0, ref - current])
+
+        output[i] = tf.pad(output[i], tf.convert_to_tensor(padding_shape), constant_values=-1)
+    
+    if decoder_output is not None:
+        output.extend(decoder_output)
+
+    return tf.RaggedTensor.from_tensor(output, padding=tf.fill(ref_shape[1:], -1.))
+
+
 class TFFunnelEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word embeddings."""
 
@@ -676,12 +695,6 @@ class TFFunnelEncoder(tf.keras.layers.Layer):
                     if output_hidden_states:
                         all_hidden_states = all_hidden_states + (hidden,)
 
-        if output_hidden_states:
-            all_hidden_states = tf.convert_to_tensor(all_hidden_states)
-
-        if output_attentions:
-            all_attentions = tf.convert_to_tensor(all_attentions)
-
         if not return_dict:
             return tuple(v for v in [hidden, all_hidden_states, all_attentions] if v is not None)
         return TFBaseModelOutput(last_hidden_state=hidden, hidden_states=all_hidden_states, attentions=all_attentions)
@@ -843,7 +856,26 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
             training=inputs["training"],
         )
 
-        return encoder_outputs
+        if not inputs["return_dict"]:
+            idx = 0
+            outputs = (encoder_outputs[0],)
+            if inputs["output_hidden_states"]:
+                idx += 1
+                outputs = outputs + (tuples_to_ragged_tensors(encoder_outputs[idx]),)
+            if inputs["output_attentions"]:
+                idx += 1
+                outputs = outputs + (tuples_to_ragged_tensors(encoder_outputs[idx]),)
+            return outputs
+
+        return TFBaseModelOutput(
+            last_hidden_state=encoder_outputs.last_hidden_state,
+            hidden_states=tuples_to_ragged_tensors(encoder_outputs.hidden_states)
+            if inputs["output_hidden_states"]
+            else None,
+            attentions=tuples_to_ragged_tensors(encoder_outputs.attentions)
+            if inputs["output_attentions"]
+            else None,
+        )
 
 
 @keras_serializable
@@ -945,18 +977,18 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
             outputs = (decoder_outputs[0],)
             if inputs["output_hidden_states"]:
                 idx += 1
-                outputs = outputs + (encoder_outputs[1] + decoder_outputs[idx],)
+                outputs = outputs + (tuples_to_ragged_tensors(encoder_outputs[1], decoder_outputs[idx]),)
             if inputs["output_attentions"]:
                 idx += 1
-                outputs = outputs + (encoder_outputs[2] + decoder_outputs[idx],)
+                outputs = outputs + (tuples_to_ragged_tensors(encoder_outputs[2], decoder_outputs[idx]),)
             return outputs
 
         return TFBaseModelOutput(
             last_hidden_state=decoder_outputs[0],
-            hidden_states=(encoder_outputs.hidden_states + decoder_outputs.hidden_states)
+            hidden_states=tuples_to_ragged_tensors(encoder_outputs.hidden_states, decoder_outputs.hidden_states)
             if inputs["output_hidden_states"]
             else None,
-            attentions=(encoder_outputs.attentions + decoder_outputs.attentions)
+            attentions=tuples_to_ragged_tensors(encoder_outputs.attentions, decoder_outputs.attentions)
             if inputs["output_attentions"]
             else None,
         )

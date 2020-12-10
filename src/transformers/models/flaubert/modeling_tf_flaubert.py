@@ -677,8 +677,8 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
         # tensor = tensor.transpose(0, 1)
 
         # Set to None here if the output booleans are at False
-        hidden_states = hidden_states if inputs["output_hidden_states"] else None
-        attentions = attentions if inputs["output_attentions"] else None
+        hidden_states = tf.convert_to_tensor(hidden_states) if inputs["output_hidden_states"] else None
+        attentions = tf.convert_to_tensor(attentions) if inputs["output_attentions"] else None
 
         if not inputs["return_dict"]:
             return tuple(v for v in [tensor, hidden_states, attentions] if v is not None)

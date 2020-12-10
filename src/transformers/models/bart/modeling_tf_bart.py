@@ -397,6 +397,9 @@ class TFBartEncoder(tf.keras.layers.Layer):
         if output_hidden_states:
             encoder_states.append(x)
             encoder_states = [tf.transpose(hidden_state, perm=(1, 0, 2)) for hidden_state in encoder_states]
+            encoder_states = tf.convert_to_tensor(encoder_states)
+        if output_attentions:
+            all_attentions = tf.convert_to_tensor(all_attentions)
         x = tf.transpose(x, perm=(1, 0, 2))
         if not return_dict:
             return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)

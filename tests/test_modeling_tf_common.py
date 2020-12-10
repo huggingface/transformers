@@ -514,8 +514,8 @@ class TFModelTesterMixin:
             out_len = len(outputs)
             self.assertEqual(out_len % 2, 0)
             decoder_attentions = outputs.decoder_attentions
-            self.assertTrue(isinstance(decoder_attentions, tf.Tensor))
-            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertTrue(isinstance(decoder_attentions, (tf.Tensor, tf.RaggedTensor)))
+            self.assertEqual(decoder_attentions.shape[0], self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
@@ -523,8 +523,9 @@ class TFModelTesterMixin:
 
         def check_encoder_attentions_output(outputs):
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            self.assertTrue(isinstance(attentions, tf.Tensor))
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            
+            self.assertTrue(isinstance(attentions, (tf.Tensor, tf.RaggedTensor)))
+            self.assertEqual(attentions.shape[0], self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
@@ -551,6 +552,7 @@ class TFModelTesterMixin:
             config.output_attentions = True
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
+
             self.assertEqual(config.output_hidden_states, False)
             check_encoder_attentions_output(outputs)
 
@@ -575,9 +577,10 @@ class TFModelTesterMixin:
             )
 
             hidden_states = outputs[-1]
+            
             self.assertEqual(config.output_attentions, False)
-            self.assertTrue(isinstance(hidden_states, tf.Tensor))
-            self.assertEqual(len(hidden_states), expected_num_layers)
+            self.assertTrue(isinstance(hidden_states, (tf.Tensor, tf.RaggedTensor)))
+            self.assertEqual(hidden_states.shape[0], expected_num_layers)
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
                 [self.model_tester.seq_length, self.model_tester.hidden_size],
