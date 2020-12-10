@@ -51,3 +51,9 @@ BarthezTokenizer
 .. autoclass:: transformers.BarthezTokenizer
     :members:
 
+
+BarthezTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BarthezTokenizerFast
+    :members:

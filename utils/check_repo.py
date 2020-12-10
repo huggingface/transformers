@@ -17,6 +17,7 @@ import importlib
 import inspect
 import os
 import re
+from pathlib import Path
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -56,28 +57,6 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "test_modeling_xlm_prophetnet.py",
     "test_modeling_xlm_roberta.py",
 ]
-
-# Update this list for models that are not documented with a comment explaining the reason it should not be.
-# Being in this list is an exception and should **not** be the rule.
-IGNORE_NON_DOCUMENTED = [
-    "BartDecoder",  # Building part of bigger (documented) model.
-    "BartEncoder",  # Building part of bigger (documented) model.
-    "DPREncoder",  # Building part of bigger (documented) model.
-    "DPRSpanPredictor",  # Building part of bigger (documented) model.
-    "T5Stack",  # Building part of bigger (documented) model.
-    "TFDPREncoder",  # Building part of bigger (documented) model.
-    "TFDPRSpanPredictor",  # Building part of bigger (documented) model.
-]
-
-# Update this dict with any special correspondance model name (used in modeling_xxx.py) to doc file.
-MODEL_NAME_TO_DOC_FILE = {
-    "openai": "gpt.rst",
-    "transfo_xl": "transformerxl.rst",
-    "xlm_prophetnet": "xlmprophetnet.rst",
-    "xlm_roberta": "xlmroberta.rst",
-    "bert_generation": "bertgeneration.rst",
-    "marian": "marian.rst",
-}
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
 # should **not** be the rule.
@@ -192,22 +171,6 @@ def get_model_test_files():
     return test_files
 
 
-# If some doc source files should be ignored when checking models are all documented, they should be added in the
-# nested list _ignore_modules of this function.
-def get_model_doc_files():
-    """ Get the model doc files."""
-    _ignore_modules = [
-        "auto",
-        "dialogpt",
-        "retribert",
-    ]
-    doc_files = []
-    for filename in os.listdir(PATH_TO_DOC):
-        if os.path.isfile(f"{PATH_TO_DOC}/{filename}") and not os.path.splitext(filename)[0] in _ignore_modules:
-            doc_files.append(filename)
-    return doc_files
-
-
 # This is a bit hacky but I didn't find a way to import the test_file as a module and read inside the tester class
 # for the all_model_classes variable.
 def find_tested_models(test_file):
@@ -263,58 +226,6 @@ def check_all_models_are_tested():
         if test_file not in test_files:
             failures.append(f"{module.__name__} does not have its corresponding test file {test_file}.")
         new_failures = check_models_are_tested(module, test_file)
-        if new_failures is not None:
-            failures += new_failures
-    if len(failures) > 0:
-        raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
-
-
-def find_documented_classes(doc_file):
-    """ Parse the content of doc_file to detect which classes it documents"""
-    with open(os.path.join(PATH_TO_DOC, doc_file), "r", encoding="utf-8", newline="\n") as f:
-        content = f.read()
-    return re.findall(r"autoclass:: transformers.(\S+)\s+", content)
-
-
-def check_models_are_documented(module, doc_file):
-    """ Check models defined in module are documented in doc_file."""
-    defined_models = get_models(module)
-    documented_classes = find_documented_classes(doc_file)
-    failures = []
-    for model_name, _ in defined_models:
-        if model_name not in documented_classes and model_name not in IGNORE_NON_DOCUMENTED:
-            failures.append(
-                f"{model_name} is defined in {module.__name__} but is not documented in "
-                + f"{os.path.join(PATH_TO_DOC, doc_file)}. Add it to that file."
-                + "If this model should not be documented, add its name to `IGNORE_NON_DOCUMENTED`"
-                + "in the file `utils/check_repo.py`."
-            )
-    return failures
-
-
-def _get_model_name(module):
-    """ Get the model name for the module defining it."""
-    module_name = module.__name__.split(".")[-1]
-    splits = module_name.split("_")
-    splits = splits[(2 if splits[1] in ["flax", "tf"] else 1) :]
-    return "_".join(splits)
-
-
-def check_all_models_are_documented():
-    """ Check all models are properly documented."""
-    modules = get_model_modules()
-    doc_files = get_model_doc_files()
-    failures = []
-    for module in modules:
-        model_name = _get_model_name(module)
-        doc_file = MODEL_NAME_TO_DOC_FILE.get(model_name, f"{model_name}.rst")
-        if doc_file not in doc_files:
-            failures.append(
-                f"{module.__name__} does not have its corresponding doc file {doc_file}. "
-                + f"If the doc file exists but isn't named {doc_file}, update `MODEL_NAME_TO_DOC_FILE` "
-                + "in the file `utils/check_repo.py`."
-            )
-        new_failures = check_models_are_documented(module, doc_file)
         if new_failures is not None:
             failures += new_failures
     if len(failures) > 0:
@@ -396,13 +307,154 @@ def check_all_decorator_order():
         )
 
 
+def find_all_documented_objects():
+    """ Parse the content of all doc files to detect which classes and functions it documents"""
+    documented_obj = []
+    for doc_file in Path(PATH_TO_DOC).glob("**/*.rst"):
+        with open(doc_file) as f:
+            content = f.read()
+        raw_doc_objs = re.findall(r"(?:autoclass|autofunction):: transformers.(\S+)\s+", content)
+        documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
+    return documented_obj
+
+
+# One good reason for not being documented is to be deprecated. Put in this list deprecated objects.
+DEPRECATED_OBJECTS = [
+    "AutoModelWithLMHead",
+    "GlueDataset",
+    "GlueDataTrainingArguments",
+    "LineByLineTextDataset",
+    "LineByLineWithRefDataset",
+    "LineByLineWithSOPTextDataset",
+    "PretrainedBartModel",
+    "PretrainedFSMTModel",
+    "SingleSentenceClassificationProcessor",
+    "SquadDataTrainingArguments",
+    "SquadDataset",
+    "SquadExample",
+    "SquadFeatures",
+    "SquadV1Processor",
+    "SquadV2Processor",
+    "TFAutoModelWithLMHead",
+    "TextDataset",
+    "TextDatasetForNextSentencePrediction",
+    "glue_compute_metrics",
+    "glue_convert_examples_to_features",
+    "glue_output_modes",
+    "glue_processors",
+    "glue_tasks_num_labels",
+    "squad_convert_examples_to_features",
+    "xnli_compute_metrics",
+    "xnli_output_modes",
+    "xnli_processors",
+    "xnli_tasks_num_labels",
+]
+
+# Exceptionally, some objects should not be documented after all rules passed.
+# ONLY PUT SOMETHING IN THIS LIST AS A LAST RESORT!
+UNDOCUMENTED_OBJECTS = [
+    "AddedToken",  # This is a tokenizers class.
+    "BasicTokenizer",  # Internal, should never have been in the main init.
+    "DPRPretrainedReader",  # Like an Encoder.
+    "ModelCard",  # Internal type.
+    "SqueezeBertModule",  # Internal building block (should have been called SqueezeBertLayer)
+    "TFDPRPretrainedReader",  # Like an Encoder.
+    "TransfoXLCorpus",  # Internal type.
+    "WordpieceTokenizer",  # Internal, should never have been in the main init.
+    "absl",  # External module
+    "add_end_docstrings",  # Internal, should never have been in the main init.
+    "add_start_docstrings",  # Internal, should never have been in the main init.
+    "cached_path",  # Internal used for downloading models.
+    "convert_tf_weight_name_to_pt_weight_name",  # Internal used to convert model weights
+    "logger",  # Internal logger
+    "logging",  # External module
+]
+
+# This list should be empty. Objects in it should get their own doc page.
+SHOULD_HAVE_THEIR_OWN_PAGE = [
+    # bert-japanese
+    "BertJapaneseTokenizer",
+    "CharacterTokenizer",
+    "MecabTokenizer",
+    # Bertweet
+    "BertweetTokenizer",
+    # Herbert
+    "HerbertTokenizer",
+    "HerbertTokenizerFast",
+    # Phoebus
+    "PhobertTokenizer",
+    # Benchmarks
+    "PyTorchBenchmark",
+    "PyTorchBenchmarkArguments",
+    "TensorFlowBenchmark",
+    "TensorFlowBenchmarkArguments",
+]
+
+
+def ignore_undocumented(name):
+    """Rules to determine if `name` should be undocumented."""
+    # NOT DOCUMENTED ON PURPOSE.
+    # Magic attributes are not documented.
+    if name.startswith("__"):
+        return True
+    # Constants uppercase are not documented.
+    if name.isupper():
+        return True
+    # PreTrainedModels / Encoders / Decoders / Layers / Embeddings / Attention are not documented.
+    if (
+        name.endswith("PreTrainedModel")
+        or name.endswith("Decoder")
+        or name.endswith("Encoder")
+        or name.endswith("Layer")
+        or name.endswith("Embeddings")
+        or name.endswith("Attention")
+    ):
+        return True
+    # Submodules are not documented.
+    if os.path.isdir(os.path.join(PATH_TO_TRANSFORMERS, name)) or os.path.isfile(
+        os.path.join(PATH_TO_TRANSFORMERS, f"{name}.py")
+    ):
+        return True
+    # All load functions are not documented.
+    if name.startswith("load_tf") or name.startswith("load_pytorch"):
+        return True
+    # is_xxx_available functions are not documented.
+    if name.startswith("is_") and name.endswith("_available"):
+        return True
+    # Deprecated objects are not documented.
+    if name in DEPRECATED_OBJECTS or name in UNDOCUMENTED_OBJECTS:
+        return True
+    # MMBT model does not really work.
+    if name.startswith("MMBT"):
+        return True
+
+    # NOT DOCUMENTED BUT NOT ON PURPOSE, SHOULD BE FIXED!
+    # All data collators should be documented
+    if name.startswith("DataCollator") or name.endswith("data_collator"):
+        return True
+    if name in SHOULD_HAVE_THEIR_OWN_PAGE:
+        return True
+    return False
+
+
+def check_all_objects_are_documented():
+    """ Check all models are properly documented."""
+    documented_objs = find_all_documented_objects()
+    undocumented_objs = [c for c in dir(transformers) if c not in documented_objs and not ignore_undocumented(c)]
+    if len(undocumented_objs) > 0:
+        raise Exception(
+            "The following objects are in the public init so should be documented:\n - "
+            + "\n - ".join(undocumented_objs)
+        )
+
+
 def check_repo_quality():
     """ Check all models are properly tested and documented."""
     print("Checking all models are properly tested.")
     check_all_decorator_order()
     check_all_models_are_tested()
-    print("Checking all models are properly documented.")
-    check_all_models_are_documented()
+    print("Checking all objects are properly documented.")
+    check_all_objects_are_documented
     print("Checking all models are in at least one auto class.")
     check_all_models_are_auto_configured()
 

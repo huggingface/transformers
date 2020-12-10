@@ -105,3 +105,11 @@ TFTransfoXLLMHeadModel
 
 .. autoclass:: transformers.TFTransfoXLLMHeadModel
     :members: call
+
+
+Internal Layers
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.AdaptiveEmbedding
+
+.. autoclass:: transformers.TFAdaptiveEmbedding

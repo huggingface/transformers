@@ -73,8 +73,9 @@ FillMaskPipeline
 NerPipeline
 =======================================================================================================================
 
-This class is an alias of the :class:`~transformers.TokenClassificationPipeline` defined below. Please refer to that
-pipeline for documentation and usage examples.
+.. autoclass:: transformers.NerPipeline
+
+See :class:`~transformers.TokenClassificationPipeline` for all details.
 
 QuestionAnsweringPipeline
 =======================================================================================================================
@@ -115,6 +116,13 @@ TokenClassificationPipeline
 =======================================================================================================================
 
 .. autoclass:: transformers.TokenClassificationPipeline
+    :special-members: __call__
+    :members:
+
+TranslationPipeline
+=======================================================================================================================
+
+.. autoclass:: transformers.TranslationPipeline
     :special-members: __call__
     :members:
 

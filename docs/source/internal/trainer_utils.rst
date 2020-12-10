@@ -22,6 +22,8 @@ Utilities
 
 .. autoclass:: transformers.EvalPrediction
 
+.. autoclass:: transformers.EvaluationStrategy
+
 .. autofunction:: transformers.set_seed
 
 .. autofunction:: transformers.torch_distributed_zero_first
@@ -32,8 +34,15 @@ Callbacks internals
 
 .. autoclass:: transformers.trainer_callback.CallbackHandler
 
+
 Distributed Evaluation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.trainer_pt_utils.DistributedTensorGatherer
     :members:
+
+
+Distributed Evaluation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.HfArgumentParser
