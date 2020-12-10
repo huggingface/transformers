@@ -1899,13 +1899,19 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         return self.prophetnet.decoder.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.decoder.word_embeddings = value
+        self.prophetnet.decoder.word_embeddings = value
 
     def get_output_embeddings(self):
         return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.prophetnet.decoder = decoder
+
+    def get_decoder(self):
+        return self.prophetnet.decoder
 
     @add_start_docstrings_to_model_forward(PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ProphetNetDecoderLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -2085,12 +2091,6 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
             }
             reordered_past.append(layer_past_new)
         return reordered_past
-
-    def set_decoder(self, decoder):
-        self.prophetnet.decoder = decoder
-
-    def get_decoder(self):
-        return self.decoder
 
 
 class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
