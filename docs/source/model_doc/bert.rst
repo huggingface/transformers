@@ -207,3 +207,10 @@ FlaxBertModel
 
 .. autoclass:: transformers.FlaxBertModel
     :members: __call__
+
+
+FlaxBertForMaskedLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxBertForMaskedLM
+    :members: __call__
