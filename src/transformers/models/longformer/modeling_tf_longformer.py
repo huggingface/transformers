@@ -1548,10 +1548,6 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
         if output_hidden_states:
             hidden_states_to_add = hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
             all_hidden_states = all_hidden_states + (hidden_states_to_add,)
-            all_hidden_states = tf.convert_to_tensor(all_hidden_states)
-
-        if output_hidden_states:
-            all_attentions = tf.convert_to_tensor(all_attentions)
 
         if not return_dict:
             return tuple(
@@ -1720,19 +1716,36 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         if padding_len > 0:
             # unpad `sequence_output` because the calling function is expecting a length == input_ids.size(1)
             sequence_output = sequence_output[:, :-padding_len]
-
+        
         if not inputs["return_dict"]:
-            return (
-                sequence_output,
-                pooled_output,
-            ) + encoder_outputs[1:]
-
+            idx = 0
+            outputs = (sequence_output, pooled_output)
+            if inputs["output_hidden_states"]:
+                idx += 1
+                outputs = outputs + (tf.convert_to_tensor(encoder_outputs[idx]),)
+            if inputs["output_attentions"]:
+                idx += 1
+                outputs = outputs + (tf.convert_to_tensor(encoder_outputs[idx]),)
+            
+            idx += 1
+            gl_attn = encoder_outputs[idx:]
+            
+            if len(gl_attn) > 0:
+                outputs = outputs + (tf.convert_to_tensor(encoder_outputs[idx]),)
+            return outputs
+        
         return TFLongformerBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
-            global_attentions=encoder_outputs.global_attentions,
+            hidden_states=tf.convert_to_tensor(encoder_outputs.hidden_states)
+            if inputs["output_hidden_states"]
+            else None,
+            attentions=tf.convert_to_tensor(encoder_outputs.attentions)
+            if inputs["output_attentions"]
+            else None,
+            global_attentions=tf.convert_to_tensor(encoder_outputs.global_attentions)
+            if encoder_outputs.global_attentions is not None
+            else None
         )
 
     def _pad_to_window_size(

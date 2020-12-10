@@ -761,6 +761,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         # Add last layer
         if inputs["output_hidden_states"]:
             all_hidden_states = all_hidden_states + (hidden_states,)
+            all_hidden_states = tf.convert_to_tensor(all_hidden_states)
 
         outputs = (hidden_states,)
         # need to check if is decoder here as well for special cases when using keras compile
@@ -769,6 +770,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         if inputs["output_hidden_states"]:
             outputs = outputs + (all_hidden_states,)
         if inputs["output_attentions"]:
+            all_attentions = tf.convert_to_tensor(all_attentions)
             outputs = outputs + (all_attentions,)
         return outputs  # last-layer hidden state, (all hidden states), (all attentions)
 
