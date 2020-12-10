@@ -32,12 +32,13 @@ from transformers.models.tapas.tokenization_tapas import (
     _is_punctuation,
     _is_whitespace,
 )
-from transformers.testing_utils import is_pt_tf_cross_test, require_tokenizers, require_torch, slow
+from transformers.testing_utils import is_pt_tf_cross_test, require_pandas, require_tokenizers, require_torch, slow
 
 from .test_tokenization_common import TokenizerTesterMixin, filter_non_english, merge_model_tokenizer_mappings
 
 
 @require_tokenizers
+@require_pandas
 class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = TapasTokenizer
     test_rust_tokenizer = False
@@ -3418,3 +3419,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(segment_ids.tolist(), expected_results["segment_ids"])
         self.assertListEqual(column_ids.tolist(), expected_results["column_ids"])
         self.assertListEqual(row_ids.tolist(), expected_results["row_ids"])
+
+    @unittest.skip("Skip this test while all models are still to be uploaded.")
+    def test_pretrained_model_lists(self):
+        pass

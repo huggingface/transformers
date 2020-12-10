@@ -26,11 +26,11 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Callable, Dict, Generator, List, Optional, Text, Tuple, Union
 
-import pandas as pd
-import torch
+import numpy as np
 
 from transformers import add_end_docstrings
 
+from ...file_utils import is_pandas_available
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
@@ -44,6 +44,9 @@ from ...tokenization_utils_base import (
 )
 from ...utils import logging
 
+
+if is_pandas_available():
+    import pandas as pd
 
 logger = logging.get_logger(__name__)
 
@@ -307,6 +310,9 @@ class TapasTokenizer(PreTrainedTokenizer):
         additional_special_tokens: Optional[List[str]] = None,
         **kwargs
     ):
+        if not is_pandas_available():
+            raise ImportError("Pandas is required for the TAPAS tokenizer.")
+
         if additional_special_tokens is not None:
             if empty_token not in additional_special_tokens:
                 additional_special_tokens.append(empty_token)
@@ -539,7 +545,7 @@ class TapasTokenizer(PreTrainedTokenizer):
     @add_end_docstrings(TAPAS_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
         self,
-        table: pd.DataFrame,
+        table: "pd.DataFrame",
         queries: Optional[
             Union[
                 TextInput,
@@ -663,7 +669,7 @@ class TapasTokenizer(PreTrainedTokenizer):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, TAPAS_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def batch_encode_plus(
         self,
-        table: pd.DataFrame,
+        table: "pd.DataFrame",
         queries: Optional[
             Union[
                 List[TextInput],
@@ -812,7 +818,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
     def _batch_prepare_for_model(
         self,
-        raw_table: pd.DataFrame,
+        raw_table: "pd.DataFrame",
         raw_queries: Union[
             List[TextInput],
             List[PreTokenizedInput],
@@ -884,7 +890,7 @@ class TapasTokenizer(PreTrainedTokenizer):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING)
     def encode(
         self,
-        table: pd.DataFrame,
+        table: "pd.DataFrame",
         query: Optional[
             Union[
                 TextInput,
@@ -927,7 +933,7 @@ class TapasTokenizer(PreTrainedTokenizer):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, TAPAS_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def encode_plus(
         self,
-        table: pd.DataFrame,
+        table: "pd.DataFrame",
         query: Optional[
             Union[
                 TextInput,
@@ -1010,7 +1016,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
     def _encode_plus(
         self,
-        table: pd.DataFrame,
+        table: "pd.DataFrame",
         query: Union[
             TextInput,
             PreTokenizedInput,
@@ -1066,7 +1072,7 @@ class TapasTokenizer(PreTrainedTokenizer):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, TAPAS_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def prepare_for_model(
         self,
-        raw_table: pd.DataFrame,
+        raw_table: "pd.DataFrame",
         raw_query: Union[
             TextInput,
             PreTokenizedInput,
@@ -1884,7 +1890,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             col = column_ids[i] - 1
             row = row_ids[i] - 1
             coords_to_probs[(col, row)].append(prob)
-        return {coords: torch.as_tensor(cell_probs).mean() for coords, cell_probs in coords_to_probs.items()}
+        return {coords: np.array(cell_probs).mean() for coords, cell_probs in coords_to_probs.items()}
 
     def convert_logits_to_predictions(self, data, logits, logits_agg=None, cell_classification_threshold=0.5):
         """
@@ -1912,11 +1918,8 @@ class TapasTokenizer(PreTrainedTokenizer):
             of length ``batch_size``: Predicted aggregation operator indices of the aggregation head.
         """
         # compute probabilities from token logits
-        dist_per_token = torch.distributions.Bernoulli(logits=logits)
-        probabilities = dist_per_token.probs * data["attention_mask"].type(torch.float32).to(
-            dist_per_token.probs.device
-        )
-
+        # DO sigmoid here
+        probabilities = 1 / (1 + np.exp(-logits)) * data["attention_mask"]
         token_types = [
             "segment_ids",
             "column_ids",
