@@ -24,6 +24,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from transformers.modeling_outputs import BaseModelOutput
 
 
 if is_torch_available():
@@ -467,6 +468,26 @@ class ProphetNetModelTester:
             )
         )
 
+    def check_causal_lm_from_pretrained(self, config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask, *args):
+        model = ProphetNetForConditionalGeneration(config).to(torch_device).eval()
+
+        with tempfile.TemporaryDirectory() as tmp_dirname:
+            model.save_pretrained(tmp_dirname)
+            decoder = ProphetNetForCausalLM.from_pretrained(tmp_dirname).to(torch_device)
+
+        encoder_hidden_states = model.prophetnet.encoder(input_ids).last_hidden_state
+
+        model_outputs = model(encoder_outputs=BaseModelOutput(last_hidden_state=encoder_hidden_states), decoder_input_ids=decoder_input_ids)
+        dec_outputs = decoder(encoder_hidden_states=encoder_hidden_states, input_ids=decoder_input_ids)
+
+        self.parent.assertTrue(
+            torch.allclose(
+                model_outputs.logits[0, :5],
+                dec_outputs.logits[0, :5],
+                atol=1e-3,
+            )
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -897,6 +918,10 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             config = ProphetNetConfig.from_pretrained(tmp_dirname)
 
         self.assertFalse(config.add_cross_attention)
+
+    def test_causal_lm_from_pretrained(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_causal_lm_from_pretrained(*config_and_inputs)
 
     @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
     def test_fp16_forward(self):

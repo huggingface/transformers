@@ -1875,6 +1875,18 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         return self.prophetnet.decoder
 
 
+class ProphetNetDecoderWrapper(nn.Module):
+    """ This is a wrapper class, so that :class:`~transformers.ProphetNetForCausalLM`
+        can correctly be loaded from pretrained prophetnet classes.
+    """
+    def __init__(self, config):
+        super().__init__()
+        self.decoder = ProphetNetDecoder(config)
+
+    def forward(self, *args, **kwargs):
+        return self.decoder(*args, **kwargs)
+
+
 @add_start_docstrings(
     "The standalone decoder part of the ProphetNetModel with a lm head on top. The model can be used for causal language modeling.",
     PROPHETNET_START_DOCSTRING,
@@ -1886,7 +1898,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
-        self.decoder = ProphetNetDecoder(config)
+        self.prophetnet = ProphetNetDecoderWrapper(config)
 
         self.padding_idx = config.pad_token_id
         self.disable_ngram_loss = config.disable_ngram_loss
@@ -1896,7 +1908,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         self.init_weights()
 
     def get_input_embeddings(self):
-        return self.decoder.word_embeddings
+        return self.prophetnet.decoder.word_embeddings
 
     def set_input_embeddings(self, value):
         self.decoder.word_embeddings = value
@@ -1985,7 +1997,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.decoder(
+        outputs = self.prophetnet.decoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
@@ -2087,7 +2099,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         return reordered_past
 
     def set_decoder(self, decoder):
-        self.decoder = decoder
+        self.prophetnet.decoder = decoder
 
     def get_decoder(self):
         return self.decoder
