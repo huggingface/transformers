@@ -79,16 +79,6 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, eos_token_id: in
     return shifted_input_ids
 
 
-def create_position_ids_from_input_ids(input_ids, padding_idx):
-    """
-    Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
-    are ignored. This is modified from fairseq's `utils.make_positions`.
-    """
-    mask = input_ids.ne(padding_idx).int()
-    incremental_indices = tf.cumsum(mask, axis=1).type_as(mask) * mask
-    return incremental_indices.long() + padding_idx
-
-
 def causal_attention_mask(nd, ns, dtype):
     """
     1's in the lower triangle, counting from the lower right corner. Same as tf.matrix_band_part(tf.ones([nd, ns]), -1,
