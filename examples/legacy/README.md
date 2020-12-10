@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Community contributed examples
+# Legacy examples
 
 This folder contains examples which are not actively maintained (mostly contributed by the community).
 
