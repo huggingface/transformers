@@ -1085,7 +1085,9 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         if inputs["labels"] is not None:
             inputs["use_cache"] = False
             if inputs["decoder_input_ids"] is None:
-                inputs["decoder_input_ids"] = shift_tokens_right(inputs["labels"], self.config.pad_token_id, self.config.eos_token_id)
+                inputs["decoder_input_ids"] = shift_tokens_right(
+                    inputs["labels"], self.config.pad_token_id, self.config.eos_token_id
+                )
 
         outputs = self.model(
             inputs["input_ids"],
