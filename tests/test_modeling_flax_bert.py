@@ -34,6 +34,11 @@ if is_torch_available():
     from transformers.models.bert.modeling_bert import BertModel
 
 
+class FlaxModelTest(unittest.TestCase):
+
+    def test_rnd_model(self):
+
+@slow
 @require_flax
 @require_torch
 class FlaxBertModelTest(unittest.TestCase):
