@@ -79,30 +79,42 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, eos_token_id: in
     return shifted_input_ids
 
 
-def causal_attention_mask(nd, ns, dtype):
+def _make_causal_mask(input_ids_shape: tf.TensorShape, dtype: tf.DType, past_key_values_length: int = 0):
     """
-    1's in the lower triangle, counting from the lower right corner. Same as tf.matrix_band_part(tf.ones([nd, ns]), -1,
-    ns-nd), but doesn't produce garbage on TPUs.
+    Make causal mask used for bi-directional self-attention.
     """
-    i = tf.range(nd)[:, None]
-    j = tf.range(ns)
-    m = i < j - ns + nd
-    return tf.cast(m, dtype) * LARGE_NEGATIVE
+    bsz, tgt_len = input_ids_shape
+    mask = tf.ones((tgt_len, tgt_len), dtype=dtype) * LARGE_NEGATIVE
+    mask_cond = tf.range(shape_list(mask)[-1])
+
+    mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (shape_list(mask)[-1], 1)), 0.0, mask)
+    mask = tf.cast(mask, dtype)
+
+    if past_key_values_length > 0:
+        mask = tf.concat([tf.zeros(tgt_len, past_key_values_length, dtype=dtype), mask], axis=-1)
+    return tf.broadcast_to(mask[None, None, :, :], (bsz, 1, tgt_len, tgt_len + past_key_values_length))
 
 
-def invert_mask(attention_mask: tf.Tensor):
-    """Turns 1->0, 0->1, False->True, True-> False"""
-    tf.debugging.assert_rank(attention_mask, 2)
-    attention_mask = tf.cast(attention_mask, tf.bool)
-    ret = tf.math.logical_not(attention_mask)  # dtype is tf.bool
-    return ret
+def _expand_mask(mask: tf.Tensor, dtype: tf.DType, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
+    """
+    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    """
+    bsz, src_len = shape_list(mask)
+    tgt_len = tgt_len if tgt_len is not None else src_len
 
+    expanded_mask = tf.cast(tf.broadcast_to(mask[:, None, None, :], (bsz, 1, tgt_len, src_len)), dtype)
 
-# Helper Functions, mostly for making masks
-def make_padding_mask(input_ids, padding_idx=1):
-    """True for pad tokens"""
-    padding_mask = tf.math.equal(input_ids, padding_idx)  # bool tensor
-    return padding_mask
+    if past_key_values_length > 0:
+        # concat fully attendend attention_mask to the beginning if `past_key_values` are used
+        expanded_mask = tf.concat(
+            [
+                tf.ones((bsz, 1, tgt_len, past_key_values_length), dtype=dtype),
+                expanded_mask,
+            ],
+            axis=-1,
+        )
+
+    return (1.0 - expanded_mask) * LARGE_NEGATIVE
 
 
 def _reorder_buffer(attn_cache, new_order):
@@ -227,7 +239,6 @@ class TFAttention(tf.keras.layers.Layer):
         self,
         query: tf.Tensor,
         key: tf.Tensor,
-        key_padding_mask: Optional[tf.Tensor] = None,
         layer_state: Optional[Dict[str, tf.Tensor]] = None,
         attn_mask: Optional[tf.Tensor] = None,
         training=False,
@@ -236,10 +247,7 @@ class TFAttention(tf.keras.layers.Layer):
         Input shape: Time(SeqLen) x Batch x Channel
 
         Args:
-
-            key_padding_mask (ByteTensor, optional): mask to exclude
-                keys that are pads, of shape `(batch, src_len)`, where padding elements are indicated by 1s.
-            attn_mask (ByteTensor, optional): typically used to
+            attn_mask (FloatTensor, optional): typically used to
                 implement causal attention, where the mask prevents the attention from looking forward in time
                 (default: None).
         """
@@ -294,14 +302,6 @@ class TFAttention(tf.keras.layers.Layer):
             attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attn_mask
             attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
 
-        if key_padding_mask is not None:  # don't attend to padding symbols
-            attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
-            if key_padding_mask.dtype == tf.bool:
-                key_padding_mask = tf.cast(key_padding_mask, attn_weights.dtype) * -1e9
-            extended_mask = tf.expand_dims(tf.expand_dims(key_padding_mask, 1), 2)
-            attn_weights = attn_weights + extended_mask
-            attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
-
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
         attn_probs = tf.nn.dropout(attn_weights, rate=self.dropout if training else 0.0)
 
@@ -337,7 +337,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
 
-    def call(self, x, encoder_padding_mask, training=False):
+    def call(self, x, attention_mask, training=False):
         """
         Args:
             x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
@@ -352,7 +352,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         residual = x
         if self.normalize_before:
             x = self.self_attn_layer_norm(x)
-        x, self_attn_weights = self.self_attn(query=x, key=x, key_padding_mask=encoder_padding_mask)
+        x, self_attn_weights = self.self_attn(query=x, key=x, attn_mask=attention_mask)
         assert shape_list(x) == shape_list(
             residual
         ), f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(x)}"
@@ -408,11 +408,8 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         x,
         attention_mask: tf.Tensor,
         encoder_hidden_states: tf.Tensor = None,
-        encoder_attn_mask: tf.Tensor,
-#        encoder_attn_mask=None,
+        encoder_attn_mask: tf.Tensor = None,
         layer_state=None,
-#        causal_mask=None,
-#        decoder_padding_mask=None,
         training=False,
     ) -> Tuple[tf.Tensor, tf.Tensor, Dict[str, tf.Tensor]]:
         """
@@ -438,8 +435,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             query=x,
             key=x,
             layer_state=layer_state,
-            attn_mask=causal_mask,
-            key_padding_mask=decoder_padding_mask,
+            attn_mask=attention_mask,
         )
         x = tf.nn.dropout(x, rate=self.dropout if training else 0)
         x = residual + x
@@ -452,7 +448,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         x, _ = self.encoder_attn(
             query=x,
             key=encoder_hidden_states,
-            key_padding_mask=encoder_attn_mask,
+            attn_mask=encoder_attn_mask,
             layer_state=layer_state,  # mutates layer state
         )
         x = tf.nn.dropout(x, rate=self.dropout if training else 0)
@@ -516,7 +512,7 @@ BART_START_DOCSTRING = r"""
         If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
         the first positional argument :
 
-        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
+        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(input_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
           :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
         - a dictionary with one or several input Tensors associated to the input names given in the docstring:
@@ -660,13 +656,6 @@ class TFBartEncoder(tf.keras.layers.Layer):
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.return_dict
 
-        # check attention mask and invert
-        if attention_mask is not None:
-            assert (
-                attention_mask._rank() == 2
-            ), f"expected attention_mask._rank() to be a 2D tensor got {attention_mask._rank()}"
-            attention_mask = tf.cast(attention_mask, dtype=tf.float32)
-            attention_mask = (1.0 - attention_mask) * LARGE_NEGATIVE
         inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
         embed_pos = self.embed_positions(input_ids)
         x = inputs_embeds + embed_pos
@@ -675,6 +664,11 @@ class TFBartEncoder(tf.keras.layers.Layer):
 
         # B x T x C -> T x B x C
         x = tf.transpose(x, perm=[1, 0, 2])
+
+        # check attention mask and invert
+        if attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = [] if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -715,9 +709,8 @@ class TFBartDecoder(tf.keras.layers.Layer):
 
     def __init__(self, config: BartConfig, embed_tokens, **kwargs):
         super().__init__(**kwargs)
-        self.layerdrop = config.decoder_layerdrop
+        self.config = config
         self.padding_idx = config.pad_token_id
-        self.max_target_positions = config.max_position_embeddings
         self.embed_tokens = embed_tokens
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         if config.static_position_embeddings:
@@ -758,11 +751,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-#        encoder_padding_mask,
-#        decoder_padding_mask,
-#        decoder_causal_mask,
         past_key_values=None,
-#        decoder_cached_states=None,
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -778,17 +767,47 @@ class TFBartDecoder(tf.keras.layers.Layer):
             assert not training, "Training + use cache are incompatible"
         # check attention mask and invert
         use_cache = cast_bool_to_primitive(use_cache)
-        if encoder_padding_mask is not None:
-            encoder_padding_mask = invert_mask(encoder_padding_mask)
 
         # embed positions
-        positions = self.embed_positions(input_ids, use_cache=(use_cache and decoder_cached_states is not None))
+        positions = self.embed_positions(input_ids, use_cache=(use_cache and past_key_values is not None))
 
-        if use_cache and decoder_cached_states is not None:
+        if use_cache and past_key_values is not None:
             input_ids = input_ids[:, -1:]
             positions = positions[:, -1:]
 
         x = self.embed_tokens(input_ids) * self.embed_scale
+
+        past_key_values_length = (
+            shape_list(past_key_values[0]["self"]["prev_value"])[2] if past_key_values is not None else 0
+        )
+
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        attn_mask = None
+        if shape_list(input_ids)[-1] > 1:
+            attn_mask = _make_causal_mask(
+                shape_list(input_ids), x.dtype, past_key_values_length=past_key_values_length
+            )
+
+        if (
+            attention_mask is None
+            and input_ids is not None
+            and shape_list(input_ids)[-1] > 1
+            and tf.reduce_any(self.config.pad_token_id == input_ids)
+        ):
+            attention_mask = tf.cast(tf.math.not_equal(input_ids, self.config.pad_token_id), input_ids.dtype)
+        else:
+            attention_mask = tf.ones_like(input_ids, dtype=input_ids.dtype)
+
+        if attention_mask is not None and attn_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            attn_mask = attn_mask + _expand_mask(
+                attention_mask, x.dtype, past_key_values_length=past_key_values_length
+            )
+
+        if encoder_hidden_states is not None and encoder_attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            encoder_attention_mask = _expand_mask(encoder_attention_mask, x.dtype, tgt_len=shape_list(input_ids)[-1])
+
         if self.do_blenderbot_90_layernorm:
             x = self.layernorm_embedding(x) + positions
         else:
@@ -809,20 +828,17 @@ class TFBartDecoder(tf.keras.layers.Layer):
             if output_hidden_states:
                 all_hidden_states += (x,)
             dropout_probability = random.uniform(0, 1)
-            if training and (dropout_probability < self.layerdrop):
+            if training and (dropout_probability < self.config.layerdrop):
                 continue
 
-            layer_state = decoder_cached_states[idx] if decoder_cached_states is not None else None
+            layer_state = past_key_values[idx] if past_key_values is not None else None
 
             x, layer_self_attn, layer_past = decoder_layer(
                 x,
-                attention_mask=attention_mask,
+                attention_mask=attn_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attn_mask=encoder_attention_mask,
-#                encoder_attn_mask=encoder_padding_mask,
-#                decoder_padding_mask=decoder_padding_mask,
                 layer_state=layer_state,
-#                causal_mask=decoder_causal_mask,
             )
 
             if use_cache:
@@ -881,29 +897,6 @@ class TFBartModel(TFPretrainedBartModel):
         self.encoder = TFBartEncoder(config, embed_tokens, name="encoder")
         self.decoder = TFBartDecoder(config, embed_tokens, name="decoder")
 
-    def _prepare_bart_decoder_inputs(
-        self,
-        inputs,
-        decoder_input_ids=None,
-        decoder_attn_mask=None,
-        mask_dtype=None,
-    ):
-        """
-        Prepare masks that ignore padding tokens decoder and a causal lm mask for the decoder if none are provided.
-        This mimics the default behavior in fairseq. To override it pass in masks.
-        """
-        pad_token_id = self.config.pad_token_id
-        if decoder_input_ids is None:
-            decoder_input_ids = self.shift_tokens_right(inputs, pad_token_id, self.config.eos_token_id)
-        bsz, tgt_len = shape_list(decoder_input_ids)[:2]
-        if decoder_attn_mask is None:
-            decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
-        else:
-            decoder_padding_mask = invert_mask(decoder_attn_mask)
-
-        causal_lm_mask = causal_attention_mask(tgt_len, tgt_len, mask_dtype)
-        return decoder_input_ids, decoder_padding_mask, causal_lm_mask
-
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -952,15 +945,11 @@ class TFBartModel(TFPretrainedBartModel):
             else self.config.output_hidden_states
         )
 
-        if not use_cache or past_key_values is None:
-            inputs["decoder_input_ids"], decoder_padding_mask, causal_mask = self._prepare_bart_decoder_inputs(
-                inputs["input_ids"],
-                decoder_input_ids=inputs["decoder_input_ids"],
-                decoder_attn_mask=inputs["decoder_attention_mask"],
-                mask_dtype=self.shared.dtype,
+        if inputs["decoder_input_ids"] is None:
+            inputs["decoder_input_ids"] = shift_tokens_right(
+                inputs["input_ids"], self.config.pad_token_id, self.config.eos_token_id
             )
-        else:
-            decoder_padding_mask, causal_mask = None, None
+
         if inputs["encoder_outputs"] is None:
             inputs["encoder_outputs"] = self.encoder(
                 input_ids=inputs["input_ids"],
@@ -983,11 +972,10 @@ class TFBartModel(TFPretrainedBartModel):
 
         decoder_outputs = self.decoder(
             inputs["decoder_input_ids"],
-            inputs["encoder_outputs"][0],
-            inputs["attention_mask"],
-            decoder_padding_mask,
-            decoder_causal_mask=causal_mask,
-            decoder_cached_states=inputs["past_key_values"],
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=inputs["encoder_outputs"][0],
+            encoder_attention_mask=inputs["attention_mask"],
+            past_key_values=inputs["past_key_values"],
             use_cache=inputs["use_cache"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
@@ -1132,18 +1120,18 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         if len(past) == 1:
             assert isinstance(past[0], tf.Tensor)
             encoder_outputs = TFBaseModelOutput(last_hidden_state=past[0])
-            decoder_cached_states = None
+            past_key_values = None
         else:
             assert len(past) == 2
-            encoder_outputs, decoder_cached_states = past
+            encoder_outputs, past_key_values = past
             if isinstance(encoder_outputs, tuple):
                 assert isinstance(encoder_outputs[0], tf.Tensor)
                 encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs[0])
             elif isinstance(encoder_outputs, tf.Tensor):
                 encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs)
             assert (
-                decoder_cached_states
-            ), f"decoder cached states must be truthy. got {decoder_cached_states} from the 2nd element of past"
+                past_key_values
+            ), f"decoder cached states must be truthy. got {past_key_values} from the 2nd element of past"
 
         assert isinstance(
             encoder_outputs, TFBaseModelOutput
@@ -1151,7 +1139,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "past_key_values": decoder_cached_states,
+            "past_key_values": past_key_values,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
@@ -1160,9 +1148,9 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
     @staticmethod
     def _reorder_cache(past, beam_idx):
         assert len(past) == 2
-        (encoder_out, decoder_cached_states) = past
+        (encoder_out, past_key_values) = past
         reordered_past = []
-        for layer_past in decoder_cached_states:
+        for layer_past in past_key_values:
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
             layer_past_new = {
                 attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
