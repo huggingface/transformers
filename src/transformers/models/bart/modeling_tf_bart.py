@@ -79,36 +79,36 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, eos_token_id: in
     return shifted_input_ids
 
 
-def _make_causal_mask(input_ids_shape: tf.TensorShape, dtype: tf.DType, past_key_values_length: int = 0):
+def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: int = 0):
     """
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = tf.ones((tgt_len, tgt_len), dtype=dtype) * LARGE_NEGATIVE
+    mask = tf.ones((tgt_len, tgt_len), dtype=tf.float32) * LARGE_NEGATIVE
     mask_cond = tf.range(shape_list(mask)[-1])
 
     mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (shape_list(mask)[-1], 1)), 0.0, mask)
-    mask = tf.cast(mask, dtype)
+    mask = tf.cast(mask, tf.float32)
 
     if past_key_values_length > 0:
-        mask = tf.concat([tf.zeros(tgt_len, past_key_values_length, dtype=dtype), mask], axis=-1)
+        mask = tf.concat([tf.zeros((tgt_len, past_key_values_length), dtype=tf.float32), mask], axis=-1)
     return tf.broadcast_to(mask[None, None, :, :], (bsz, 1, tgt_len, tgt_len + past_key_values_length))
 
 
-def _expand_mask(mask: tf.Tensor, dtype: tf.DType, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
+def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
     bsz, src_len = shape_list(mask)
     tgt_len = tgt_len if tgt_len is not None else src_len
 
-    expanded_mask = tf.cast(tf.broadcast_to(mask[:, None, None, :], (bsz, 1, tgt_len, src_len)), dtype)
+    expanded_mask = tf.cast(tf.broadcast_to(mask[:, None, None, :], (bsz, 1, tgt_len, src_len)), tf.float32)
 
     if past_key_values_length > 0:
         # concat fully attendend attention_mask to the beginning if `past_key_values` are used
         expanded_mask = tf.concat(
             [
-                tf.ones((bsz, 1, tgt_len, past_key_values_length), dtype=dtype),
+                tf.ones((bsz, 1, tgt_len, past_key_values_length), dtype=tf.float32),
                 expanded_mask,
             ],
             axis=-1,
@@ -139,15 +139,13 @@ class TFLearnedPositionalEmbedding(TFSharedEmbeddings):
         num_embeddings += offset
         super().__init__(num_embeddings, embedding_dim, **kwargs)
 
-    def call(self, input_ids: tf.Tensor, use_cache=False):
+    def call(self, input_ids: tf.Tensor, past_key_values_length=0):
         """Input is expected to be of size [bsz x seqlen]."""
         bsz, seq_len = shape_list(input_ids)[:2]
 
-        if use_cache:
-            positions = tf.fill((1, 1), seq_len - 1)
-        else:
-            # starts at 0, ends at 1-seq_len
-            positions = tf.range(0, seq_len, delta=1, dtype=tf.int32, name="range")
+        positions = tf.range(
+            past_key_values_length, seq_len + past_key_values_length, delta=1, dtype=tf.int32, name="range"
+        )
         return super().call(positions + self.offset)  # super object is not callable for some reason
 
 
@@ -441,20 +439,23 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         x = residual + x
         if not self.normalize_before:
             x = self.self_attn_layer_norm(x)
+
         # Cross-Attention Block
-        residual = x
-        if self.normalize_before:
-            x = self.encoder_attn_layer_norm(x)
-        x, _ = self.encoder_attn(
-            query=x,
-            key=encoder_hidden_states,
-            attn_mask=encoder_attn_mask,
-            layer_state=layer_state,  # mutates layer state
-        )
-        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
-        x = residual + x
-        if not self.normalize_before:
-            x = self.encoder_attn_layer_norm(x)
+        if encoder_hidden_states is not None:
+            residual = x
+            if self.normalize_before:
+                x = self.encoder_attn_layer_norm(x)
+            x, _ = self.encoder_attn(
+                query=x,
+                key=encoder_hidden_states,
+                attn_mask=encoder_attn_mask,
+                layer_state=layer_state,  # mutates layer state
+            )
+            x = tf.nn.dropout(x, rate=self.dropout if training else 0)
+            x = residual + x
+            if not self.normalize_before:
+                x = self.encoder_attn_layer_norm(x)
+
         # Fully Connected
         residual = x
         if self.normalize_before:
@@ -631,8 +632,8 @@ class TFBartEncoder(tf.keras.layers.Layer):
         self,
         input_ids=None,
         attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
+        output_attentions=None,
+        output_hidden_states=None,
         return_dict=None,
         training=False,
     ):
@@ -668,7 +669,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
         # check attention mask and invert
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = _expand_mask(attention_mask)
 
         encoder_states = [] if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -768,25 +769,19 @@ class TFBartDecoder(tf.keras.layers.Layer):
         # check attention mask and invert
         use_cache = cast_bool_to_primitive(use_cache)
 
-        # embed positions
-        positions = self.embed_positions(input_ids, use_cache=(use_cache and past_key_values is not None))
-
-        if use_cache and past_key_values is not None:
-            input_ids = input_ids[:, -1:]
-            positions = positions[:, -1:]
-
-        x = self.embed_tokens(input_ids) * self.embed_scale
-
         past_key_values_length = (
             shape_list(past_key_values[0]["self"]["prev_value"])[2] if past_key_values is not None else 0
         )
 
+        # embed positions
+        positions = self.embed_positions(input_ids, past_key_values_length)
+
+        x = self.embed_tokens(input_ids) * self.embed_scale
+
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         attn_mask = None
         if shape_list(input_ids)[-1] > 1:
-            attn_mask = _make_causal_mask(
-                shape_list(input_ids), x.dtype, past_key_values_length=past_key_values_length
-            )
+            attn_mask = _make_causal_mask(shape_list(input_ids), past_key_values_length=past_key_values_length)
 
         if (
             attention_mask is None
@@ -800,13 +795,11 @@ class TFBartDecoder(tf.keras.layers.Layer):
 
         if attention_mask is not None and attn_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attn_mask = attn_mask + _expand_mask(
-                attention_mask, x.dtype, past_key_values_length=past_key_values_length
-            )
+            attn_mask = attn_mask + _expand_mask(attention_mask, past_key_values_length=past_key_values_length)
 
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _expand_mask(encoder_attention_mask, x.dtype, tgt_len=shape_list(input_ids)[-1])
+            encoder_attention_mask = _expand_mask(encoder_attention_mask, tgt_len=shape_list(input_ids)[-1])
 
         if self.do_blenderbot_90_layernorm:
             x = self.layernorm_embedding(x) + positions
@@ -816,8 +809,10 @@ class TFBartDecoder(tf.keras.layers.Layer):
 
         # Convert to Bart output format: (BS, seq_len, model_dim) ->  (seq_len, BS, model_dim)
         x = tf.transpose(x, perm=(1, 0, 2))
-        assert len(shape_list(encoder_hidden_states)) == 3, "encoder_hidden_states must be a 3D tensor"
-        encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))
+
+        if encoder_hidden_states is not None:
+            assert len(shape_list(encoder_hidden_states)) == 3, "encoder_hidden_states must be a 3D tensor"
+            encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))
 
         # decoder layers
         all_hidden_states = ()
@@ -860,9 +855,11 @@ class TFBartDecoder(tf.keras.layers.Layer):
         all_self_attns = list(all_self_attns) if output_attentions else None
 
         x = tf.transpose(x, perm=(1, 0, 2))
-        encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))  # could maybe be avoided.
+        if encoder_hidden_states is not None:
+            encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))  # could maybe be avoided.
 
         next_cache = (encoder_hidden_states, next_decoder_cache) if use_cache else None
+
         if not return_dict:
             return x, next_cache, all_hidden_states, all_self_attns
         else:
@@ -896,6 +893,9 @@ class TFBartModel(TFPretrainedBartModel):
 
         self.encoder = TFBartEncoder(config, embed_tokens, name="encoder")
         self.decoder = TFBartDecoder(config, embed_tokens, name="decoder")
+
+    def get_decoder(self):
+        return self.decoder
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1025,6 +1025,9 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             name="/final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )
 
+    def get_decoder(self):
+        return self.model.decoder
+
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -1132,6 +1135,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             assert (
                 past_key_values
             ), f"decoder cached states must be truthy. got {past_key_values} from the 2nd element of past"
+            decoder_input_ids = decoder_input_ids[:, -1:]
 
         assert isinstance(
             encoder_outputs, TFBaseModelOutput

@@ -85,6 +85,38 @@ class TFBartModelTester:
         inputs_dict = prepare_bart_inputs_dict(config, input_ids)
         return config, inputs_dict
 
+    def check_decoder_model_past_large_inputs(self, config, inputs_dict):
+        model = TFBartModel(config=config).get_decoder()
+        input_ids = inputs_dict["input_ids"]
+
+        input_ids = input_ids[:1, :]
+        self.batch_size = 1
+
+        # first forward pass
+        outputs = model(input_ids, use_cache=True)
+
+        output, past_key_values = outputs.to_tuple()
+        past_key_values = past_key_values[1]
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+
+        # append to next input_ids and
+        next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
+
+        output_from_no_past = model(next_input_ids)[0]
+        output_from_past = model(next_tokens, past_key_values=past_key_values)[0]
+
+        self.parent.assertEqual(next_tokens.shape[1], output_from_past.shape[1])
+
+        # select random slice
+        random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx]
+        output_from_past_slice = output_from_past[:, :, random_slice_idx]
+
+        # test that outputs are equal for slice
+        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
+
 
 def prepare_bart_inputs_dict(
     config,
@@ -125,6 +157,10 @@ class TFBartModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_saved_model_with_attentions_output(self):
         # Should be uncommented during patrick TF refactor
         pass
+
+    def test_decoder_model_past_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
 
 
 @require_tf
