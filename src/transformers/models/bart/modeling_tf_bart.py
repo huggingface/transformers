@@ -50,95 +50,33 @@ from ...utils import logging
 from .configuration_bart import BartConfig
 
 
+logger = logging.get_logger(__name__)
+
 _CONFIG_FOR_DOC = "BartConfig"
 _TOKENIZER_FOR_DOC = "BartTokenizer"
 
-BART_START_DOCSTRING = r"""
-
-    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
-    generic methods the library implements for all its model (such as downloading or saving, resizing the input
-    embeddings, pruning heads etc.)
-
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
-    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
-    and behavior.
-
-    .. note::
-
-        TF 2.0 models accepts two formats as inputs:
-
-        - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments.
-
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
-        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
-
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
-        the first positional argument :
-
-        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
-        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
-          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
-        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
-          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
-
-    Args:
-        config (:class:`~transformers.BartConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the
-            model weights.
-"""
-
-
-BART_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (:obj:`tf.Tensor` of shape :obj:`({0})`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
-
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            `What are attention masks? <../glossary.html#attention-mask>`__
-        decoder_input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Provide for translation and summarization training. By default, the model will create this tensor by
-            shifting the input_ids right, following the paper.
-        decoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
-            will be made by default and ignore pad tokens. It is not recommended to set this for most use cases.
-        encoder_outputs (:obj:`tf.FloatTensor`, `optional`):
-            hidden states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
-            of shape :obj:`(batch_size, sequence_length, hidden_size)` is a sequence of
-        past_key_values (:obj:`Tuple[Dict[str: tf.Tensor]]` of length :obj:`config.n_layers`)
-            contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
-            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
-            decoding (see :obj:`past_key_values`). Set to :obj:`False` during training, :obj:`True` during generation
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
-        output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
-        return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.TFModelOutput` instead of a plain tuple.
-        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to use the model in training mode (some modules like dropout modules have different
-            behaviors between training and evaluation).
-"""
 LARGE_NEGATIVE = -1e8
 
 
-logger = logging.get_logger(__name__)
+def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, eos_token_id: int):
+    # Should maybe be decoder_start_token_id. Change for torch and TF in one PR
+    shifted_input_ids = tf.cast(input_ids, tf.int32)
+    shifted_input_ids = tf.roll(shifted_input_ids, 1, axis=-1)
+    start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), eos_token_id)
+    shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, 1:]], -1)
+    # replace possible -100 values in labels by `pad_token_id`
+    shifted_input_ids = tf.where(
+        shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
+    )
+
+    # "Verify that `labels` has only positive values and -100"
+    assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.cast(0, tf.int32))
+
+    # Make sure the assertion op is called by wrapping the result in an identity no-op
+    with tf.control_dependencies([assert_gte0]):
+        shifted_input_ids = tf.identity(shifted_input_ids)
+
+    return shifted_input_ids
 
 
 def create_position_ids_from_input_ids(input_ids, padding_idx):
@@ -170,60 +108,227 @@ def invert_mask(attention_mask: tf.Tensor):
     return ret
 
 
-class TFPretrainedBartModel(TFPreTrainedModel):
-    config_class = BartConfig
-    base_model_prefix = "model"
-
-    @property
-    def dummy_inputs(self):
-        pad_token = 1
-        input_ids = tf.cast(tf.constant(DUMMY_INPUTS), tf.int32)
-        decoder_input_ids = tf.cast(tf.constant(DUMMY_INPUTS), tf.int32)
-        dummy_inputs = {
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": tf.math.not_equal(input_ids, pad_token),
-            "input_ids": input_ids,
-        }
-        return dummy_inputs
-
-    def _shift_right(self, input_ids):
-        # Should maybe be decoder_start_token_id. Change for torch and TF in one PR
-        position_0_id = self.config.eos_token_id
-        pad_token_id = self.config.pad_token_id
-        shifted_input_ids = tf.cast(input_ids, tf.int32)
-        shifted_input_ids = tf.roll(shifted_input_ids, 1, axis=-1)
-        start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), position_0_id)
-        shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, 1:]], -1)
-        # replace possible -100 values in labels by `pad_token_id`
-        shifted_input_ids = tf.where(
-            shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
-        )
-
-        # "Verify that `labels` has only positive values and -100"
-        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.cast(0, tf.int32))
-
-        # Make sure the assertion op is called by wrapping the result in an identity no-op
-        with tf.control_dependencies([assert_gte0]):
-            shifted_input_ids = tf.identity(shifted_input_ids)
-
-        return shifted_input_ids
-
-
 # Helper Functions, mostly for making masks
-
-
 def make_padding_mask(input_ids, padding_idx=1):
     """True for pad tokens"""
     padding_mask = tf.math.equal(input_ids, padding_idx)  # bool tensor
     return padding_mask
 
 
-# Helper Modules
+def _reorder_buffer(attn_cache, new_order):
+    for k, input_buffer_k in attn_cache.items():
+        if input_buffer_k is not None:
+            attn_cache[k] = tf.gather(input_buffer_k, new_order, axis=0)
+    return attn_cache
 
-PAST_KV_DEPRECATION_WARNING = (
-    "The `past_key_value_states` argument is deprecated and will be removed in a future "
-    "version, use `past_key_values` instead."
-)
+
+class TFLearnedPositionalEmbedding(TFSharedEmbeddings):
+    """
+    This module learns positional embeddings up to a fixed maximum size. Padding ids are ignored by either offsetting
+    based on padding_idx or by setting padding_idx to None and ensuring that the appropriate position ids are passed to
+    the forward function.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, offset, **kwargs):
+        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # and adjust num_embeddings appropriately. Other models dont have this hack
+        self.offset = offset
+        assert padding_idx is not None, "padding_idx cannot be None"
+        num_embeddings += offset
+        super().__init__(num_embeddings, embedding_dim, **kwargs)
+
+    def call(self, input_ids: tf.Tensor, use_cache=False):
+        """Input is expected to be of size [bsz x seqlen]."""
+        bsz, seq_len = shape_list(input_ids)[:2]
+
+        if use_cache:
+            positions = tf.fill((1, 1), seq_len - 1)
+        else:
+            # starts at 0, ends at 1-seq_len
+            positions = tf.range(0, seq_len, delta=1, dtype=tf.int32, name="range")
+        return super().call(positions + self.offset)  # super object is not callable for some reason
+
+
+class TFSinusoidalPositionalEmbedding(tf.keras.layers.Embedding):
+    """This module produces sinusoidal positional embeddings of any length."""
+
+    def __init__(self, num_positions, embedding_dim, **kwargs):
+
+        if embedding_dim % 2 != 0:
+            raise NotImplementedError(f"odd embedding_dim {embedding_dim} not supported")
+        super().__init__(
+            num_positions,
+            embedding_dim,
+            **kwargs,
+        )
+
+    def build(self, input_shape):
+        """
+        Build shared token embedding layer Shared weights logic adapted from
+        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
+        """
+        super().build(input_shape)  # Instantiates self.weight so it can be loaded
+        weight: np.ndarray = self._init_weight(self.input_dim, self.output_dim)
+        self.set_weights([weight])  # overwrite self.weight to correct value
+
+    @staticmethod
+    def _init_weight(n_pos, dim):
+        """
+        Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
+        the 2nd half of the vector. [dim // 2:]
+        """
+        position_enc = np.array(
+            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
+        )
+        # index 0 is all zero
+        position_enc[:, 0 : dim // 2] = np.sin(position_enc[:, 0::2])
+        position_enc[:, dim // 2 :] = np.cos(position_enc[:, 1::2])
+        # convert to tensor
+        table = tf.convert_to_tensor(position_enc, dtype=tf.float32)
+        tf.stop_gradient(table)
+        return table
+
+    def call(self, input_ids, use_cache=False):
+        """Input is expected to be of size [bsz x seqlen]."""
+        bsz, seq_len = shape_list(input_ids)[:2]
+        if use_cache:
+            positions = tf.fill((1, 1), seq_len - 1)
+        else:
+            # starts at 0, ends at 1-seq_len
+            positions = tf.range(0, seq_len, delta=1, dtype=tf.int32, name="range")
+        return super().call(positions)
+
+
+class TFAttention(tf.keras.layers.Layer):
+    """Multi-headed attention from "Attention Is All You Need"""
+
+    def __init__(
+        self,
+        embed_dim,
+        num_heads,
+        dropout=0.0,
+        bias=True,
+        encoder_decoder_attention=False,  # otherwise self_attention
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.embed_dim = embed_dim
+
+        self.num_heads = num_heads
+        self.dropout = dropout
+        self.head_dim = embed_dim // num_heads
+        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
+        self.scaling = self.head_dim ** -0.5
+
+        self.encoder_decoder_attention = encoder_decoder_attention
+
+        self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
+        self.q_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
+        self.v_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
+        self.out_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
+
+        self.cache_key = "encoder_decoder" if self.encoder_decoder_attention else "self"
+
+    def _shape(self, tensor: tf.Tensor, dim_0, bsz) -> tf.Tensor:
+        reshaped_T_B_D = tf.reshape(tensor, (dim_0, bsz * self.num_heads, self.head_dim))
+        return tf.transpose(reshaped_T_B_D, perm=(1, 0, 2))
+
+    def call(
+        self,
+        query: tf.Tensor,
+        key: tf.Tensor,
+        key_padding_mask: Optional[tf.Tensor] = None,
+        layer_state: Optional[Dict[str, tf.Tensor]] = None,
+        attn_mask: Optional[tf.Tensor] = None,
+        training=False,
+    ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
+        """
+        Input shape: Time(SeqLen) x Batch x Channel
+
+        Args:
+
+            key_padding_mask (ByteTensor, optional): mask to exclude
+                keys that are pads, of shape `(batch, src_len)`, where padding elements are indicated by 1s.
+            attn_mask (ByteTensor, optional): typically used to
+                implement causal attention, where the mask prevents the attention from looking forward in time
+                (default: None).
+        """
+        static_kv = self.encoder_decoder_attention  # value=key=encoder_hidden_states,
+        tgt_len, bsz, embed_dim = shape_list(query)
+        assert (
+            embed_dim == self.embed_dim
+        ), f"query must be shaped {(tgt_len, bsz, self.embed_dim)} got {shape_list(query)}"
+        # get here for encoder decoder cause of static_kv
+        if layer_state is not None:  # get the last k and v for reuse
+            saved_state = layer_state.get(self.cache_key, {})
+            if "prev_key" in saved_state:
+                # previous time steps are cached - no need to recompute key and value if they are static
+                if static_kv:
+                    key = None
+        else:
+            # this branch is hit by encoder
+            saved_state = None
+
+        # Project query key values using weights q_proj, k_proj, v_proj
+        q = self.q_proj(query) * self.scaling
+        if static_kv and key is None:  # cross-attention with cache
+            k = v = None
+        elif static_kv and key is not None:  # cross-attention no prev_key found in cache
+            k = self.k_proj(key)
+            v = self.v_proj(key)
+        else:  # self-attention
+            k = self.k_proj(query)
+            v = self.v_proj(query)
+
+        # Reshape
+        q = self._shape(q, tgt_len, bsz)
+        if k is not None:
+            k = self._shape(k, -1, bsz)
+            v = self._shape(v, -1, bsz)
+
+        if saved_state:  # read from cache
+            k, v = self._concat_saved_state(k, v, saved_state, static_kv, bsz)
+
+        if layer_state is not None:  # Write to cache every decoder call
+            cached_shape = (bsz, self.num_heads, -1, self.head_dim)  # bsz must be first for reorder_cache
+            layer_state[self.cache_key] = dict(
+                prev_key=tf.reshape(k, cached_shape), prev_value=tf.reshape(v, cached_shape)
+            )
+
+        # Compute multi-headed attention
+        src_len = shape_list(k)[1]
+        attn_weights = tf.matmul(q, k, transpose_b=True)  # shape (bsz * self.num_heads, tgt_len, src_len)
+
+        if attn_mask is not None:
+            assert attn_mask.dtype == tf.float32, f"expected dtype tf.float32 got {attn_mask.dtype}"
+            attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attn_mask
+            attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
+
+        if key_padding_mask is not None:  # don't attend to padding symbols
+            attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
+            if key_padding_mask.dtype == tf.bool:
+                key_padding_mask = tf.cast(key_padding_mask, attn_weights.dtype) * -1e9
+            extended_mask = tf.expand_dims(tf.expand_dims(key_padding_mask, 1), 2)
+            attn_weights = attn_weights + extended_mask
+            attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
+
+        attn_weights = tf.nn.softmax(attn_weights, axis=-1)
+        attn_probs = tf.nn.dropout(attn_weights, rate=self.dropout if training else 0.0)
+
+        attn_output = tf.matmul(attn_probs, v)  # shape: (bsz * self.num_heads, tgt_len, self.head_dim)
+        attn_output = tf.transpose(attn_output, perm=(1, 0, 2))
+        attn_output = tf.reshape(attn_output, (tgt_len, bsz, embed_dim))
+        attn_output = self.out_proj(attn_output)
+        attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
+        return attn_output, attn_weights
+
+    def _concat_saved_state(self, k, v, saved_state, static_kv, bsz) -> Tuple[tf.Tensor]:
+        # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
+        prev_key = tf.reshape(saved_state["prev_key"], (bsz * self.num_heads, -1, self.head_dim))
+        k = prev_key if static_kv else tf.concat([prev_key, k], axis=1)
+        prev_value = tf.reshape(saved_state["prev_value"], (bsz * self.num_heads, -1, self.head_dim))
+        v = prev_value if static_kv else tf.concat([prev_value, v], axis=1)
+        return k, v
 
 
 class TFEncoderLayer(tf.keras.layers.Layer):
@@ -278,6 +383,210 @@ class TFEncoderLayer(tf.keras.layers.Layer):
             x = self.final_layer_norm(x)
 
         return x, self_attn_weights
+
+
+class TFDecoderLayer(tf.keras.layers.Layer):
+    def __init__(self, config: BartConfig, **kwargs):
+        super().__init__(**kwargs)
+        self.embed_dim = config.d_model
+        self.self_attn = TFAttention(
+            embed_dim=self.embed_dim,
+            num_heads=config.decoder_attention_heads,
+            dropout=config.attention_dropout,
+            name="self_attn",
+        )
+        self.dropout = config.dropout
+        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_dropout = config.activation_dropout
+        self.normalize_before = config.normalize_before
+
+        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
+        self.encoder_attn = TFAttention(
+            self.embed_dim,
+            config.decoder_attention_heads,
+            dropout=config.attention_dropout,
+            encoder_decoder_attention=True,
+            name="encoder_attn",
+        )
+        self.encoder_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
+        self.fc1 = tf.keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
+        self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
+        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+
+    def call(
+        self,
+        x,
+        encoder_hidden_states: tf.Tensor,
+        encoder_attn_mask=None,
+        layer_state=None,
+        causal_mask=None,
+        decoder_padding_mask=None,
+        training=False,
+    ) -> Tuple[tf.Tensor, tf.Tensor, Dict[str, tf.Tensor]]:
+        """
+        Args:
+            x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
+            encoder_attn_mask (ByteTensor, optional): binary
+                ByteTensor of shape `(batch, src_len)` where padding elements are indicated by ``1``.
+            need_attn_weights (bool, optional): return attention weights
+                for each head (default: return average over heads).
+
+        Returns:
+
+            Tuple containing, encoded output of shape `(seq_len, batch, embed_dim)`, self_attn_weights, layer_state
+        """
+        residual = x  # Make a copy of the input tensor to add later.
+        if layer_state is None:
+            layer_state = {}
+        if self.normalize_before:
+            x = self.self_attn_layer_norm(x)
+
+        # next line mutates layer state and we need a copy of it
+        x, self_attn_weights = self.self_attn(
+            query=x,
+            key=x,
+            layer_state=layer_state,
+            attn_mask=causal_mask,
+            key_padding_mask=decoder_padding_mask,
+        )
+        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
+        x = residual + x
+        if not self.normalize_before:
+            x = self.self_attn_layer_norm(x)
+        # Cross-Attention Block
+        residual = x
+        if self.normalize_before:
+            x = self.encoder_attn_layer_norm(x)
+        x, _ = self.encoder_attn(
+            query=x,
+            key=encoder_hidden_states,
+            key_padding_mask=encoder_attn_mask,
+            layer_state=layer_state,  # mutates layer state
+        )
+        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
+        x = residual + x
+        if not self.normalize_before:
+            x = self.encoder_attn_layer_norm(x)
+        # Fully Connected
+        residual = x
+        if self.normalize_before:
+            x = self.final_layer_norm(x)
+        x = self.activation_fn(self.fc1(x))
+        x = tf.nn.dropout(x, rate=self.activation_dropout if training else 0)
+        x = self.fc2(x)
+        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
+        x = residual + x
+        if not self.normalize_before:
+            x = self.final_layer_norm(x)
+        return (
+            x,
+            self_attn_weights,
+            layer_state,
+        )  # just self_attn weights for now, following t5, layer_state = cache for decoding
+
+
+class TFPretrainedBartModel(TFPreTrainedModel):
+    config_class = BartConfig
+    base_model_prefix = "model"
+
+    @property
+    def dummy_inputs(self):
+        pad_token = 1
+        input_ids = tf.cast(tf.constant(DUMMY_INPUTS), tf.int32)
+        decoder_input_ids = tf.cast(tf.constant(DUMMY_INPUTS), tf.int32)
+        dummy_inputs = {
+            "decoder_input_ids": decoder_input_ids,
+            "attention_mask": tf.math.not_equal(input_ids, pad_token),
+            "input_ids": input_ids,
+        }
+        return dummy_inputs
+
+
+BART_START_DOCSTRING = r"""
+    This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
+    generic methods the library implements for all its model (such as downloading or saving, resizing the input
+    embeddings, pruning heads etc.)
+
+    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
+    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
+    and behavior.
+
+    .. note::
+
+        TF 2.0 models accepts two formats as inputs:
+
+        - having all inputs as keyword arguments (like PyTorch models), or
+        - having all inputs as a list, tuple or dict in the first positional arguments.
+
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
+        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
+        the first positional argument :
+
+        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
+        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
+        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    Args:
+        config (:class:`~transformers.BartConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the
+            model weights.
+"""
+
+BART_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (:obj:`tf.Tensor` of shape :obj:`({0})`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+        attention_mask (:obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
+            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+        decoder_input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
+            Provide for translation and summarization training. By default, the model will create this tensor by
+            shifting the input_ids right, following the paper.
+        decoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
+            will be made by default and ignore pad tokens. It is not recommended to set this for most use cases.
+        encoder_outputs (:obj:`tf.FloatTensor`, `optional`):
+            hidden states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+            of shape :obj:`(batch_size, sequence_length, hidden_size)` is a sequence of
+        past_key_values (:obj:`Tuple[Dict[str: tf.Tensor]]` of length :obj:`config.n_layers`)
+            contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
+            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
+            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
+            decoding (see :obj:`past_key_values`). Set to :obj:`False` during training, :obj:`True` during generation
+        output_attentions (:obj:`bool`, `optional`):
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail.
+        output_hidden_states (:obj:`bool`, `optional`):
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail.
+        return_dict (:obj:`bool`, `optional`):
+            Whether or not to return a :class:`~transformers.file_utils.TFModelOutput` instead of a plain tuple.
+        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
+"""
+
+PAST_KV_DEPRECATION_WARNING = (
+    "The `past_key_value_states` argument is deprecated and will be removed in a future "
+    "version, use `past_key_values` instead."
+)
 
 
 class TFBartEncoder(tf.keras.layers.Layer):
@@ -401,106 +710,6 @@ class TFBartEncoder(tf.keras.layers.Layer):
         if not return_dict:
             return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
         return TFBaseModelOutput(last_hidden_state=x, hidden_states=encoder_states, attentions=all_attentions)
-
-
-class TFDecoderLayer(tf.keras.layers.Layer):
-    def __init__(self, config: BartConfig, **kwargs):
-        super().__init__(**kwargs)
-        self.embed_dim = config.d_model
-        self.self_attn = TFAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            name="self_attn",
-        )
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
-        self.normalize_before = config.normalize_before
-
-        self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
-        self.encoder_attn = TFAttention(
-            self.embed_dim,
-            config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            encoder_decoder_attention=True,
-            name="encoder_attn",
-        )
-        self.encoder_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
-        self.fc1 = tf.keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
-        self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
-        self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
-
-    def call(
-        self,
-        x,
-        encoder_hidden_states: tf.Tensor,
-        encoder_attn_mask=None,
-        layer_state=None,
-        causal_mask=None,
-        decoder_padding_mask=None,
-        training=False,
-    ) -> Tuple[tf.Tensor, tf.Tensor, Dict[str, tf.Tensor]]:
-        """
-        Args:
-            x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
-            encoder_attn_mask (ByteTensor, optional): binary
-                ByteTensor of shape `(batch, src_len)` where padding elements are indicated by ``1``.
-            need_attn_weights (bool, optional): return attention weights
-                for each head (default: return average over heads).
-
-        Returns:
-
-            Tuple containing, encoded output of shape `(seq_len, batch, embed_dim)`, self_attn_weights, layer_state
-        """
-        residual = x  # Make a copy of the input tensor to add later.
-        if layer_state is None:
-            layer_state = {}
-        if self.normalize_before:
-            x = self.self_attn_layer_norm(x)
-
-        # next line mutates layer state and we need a copy of it
-        x, self_attn_weights = self.self_attn(
-            query=x,
-            key=x,
-            layer_state=layer_state,
-            attn_mask=causal_mask,
-            key_padding_mask=decoder_padding_mask,
-        )
-        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
-        x = residual + x
-        if not self.normalize_before:
-            x = self.self_attn_layer_norm(x)
-        # Cross-Attention Block
-        residual = x
-        if self.normalize_before:
-            x = self.encoder_attn_layer_norm(x)
-        x, _ = self.encoder_attn(
-            query=x,
-            key=encoder_hidden_states,
-            key_padding_mask=encoder_attn_mask,
-            layer_state=layer_state,  # mutates layer state
-        )
-        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
-        x = residual + x
-        if not self.normalize_before:
-            x = self.encoder_attn_layer_norm(x)
-        # Fully Connected
-        residual = x
-        if self.normalize_before:
-            x = self.final_layer_norm(x)
-        x = self.activation_fn(self.fc1(x))
-        x = tf.nn.dropout(x, rate=self.activation_dropout if training else 0)
-        x = self.fc2(x)
-        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
-        x = residual + x
-        if not self.normalize_before:
-            x = self.final_layer_norm(x)
-        return (
-            x,
-            self_attn_weights,
-            layer_state,
-        )  # just self_attn weights for now, following t5, layer_state = cache for decoding
 
 
 class TFBartDecoder(tf.keras.layers.Layer):
@@ -651,225 +860,6 @@ class TFBartDecoder(tf.keras.layers.Layer):
             )
 
 
-def _reorder_buffer(attn_cache, new_order):
-    for k, input_buffer_k in attn_cache.items():
-        if input_buffer_k is not None:
-            attn_cache[k] = tf.gather(input_buffer_k, new_order, axis=0)
-    return attn_cache
-
-
-class TFAttention(tf.keras.layers.Layer):
-    """Multi-headed attention from "Attention Is All You Need"""
-
-    def __init__(
-        self,
-        embed_dim,
-        num_heads,
-        dropout=0.0,
-        bias=True,
-        encoder_decoder_attention=False,  # otherwise self_attention
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.embed_dim = embed_dim
-
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
-        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
-        self.scaling = self.head_dim ** -0.5
-
-        self.encoder_decoder_attention = encoder_decoder_attention
-
-        self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
-        self.q_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
-        self.v_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
-        self.out_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
-
-        self.cache_key = "encoder_decoder" if self.encoder_decoder_attention else "self"
-
-    def _shape(self, tensor: tf.Tensor, dim_0, bsz) -> tf.Tensor:
-        reshaped_T_B_D = tf.reshape(tensor, (dim_0, bsz * self.num_heads, self.head_dim))
-        return tf.transpose(reshaped_T_B_D, perm=(1, 0, 2))
-
-    def call(
-        self,
-        query: tf.Tensor,
-        key: tf.Tensor,
-        key_padding_mask: Optional[tf.Tensor] = None,
-        layer_state: Optional[Dict[str, tf.Tensor]] = None,
-        attn_mask: Optional[tf.Tensor] = None,
-        training=False,
-    ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
-        """
-        Input shape: Time(SeqLen) x Batch x Channel
-
-        Args:
-
-            key_padding_mask (ByteTensor, optional): mask to exclude
-                keys that are pads, of shape `(batch, src_len)`, where padding elements are indicated by 1s.
-            attn_mask (ByteTensor, optional): typically used to
-                implement causal attention, where the mask prevents the attention from looking forward in time
-                (default: None).
-        """
-        static_kv = self.encoder_decoder_attention  # value=key=encoder_hidden_states,
-        tgt_len, bsz, embed_dim = shape_list(query)
-        assert (
-            embed_dim == self.embed_dim
-        ), f"query must be shaped {(tgt_len, bsz, self.embed_dim)} got {shape_list(query)}"
-        # get here for encoder decoder cause of static_kv
-        if layer_state is not None:  # get the last k and v for reuse
-            saved_state = layer_state.get(self.cache_key, {})
-            if "prev_key" in saved_state:
-                # previous time steps are cached - no need to recompute key and value if they are static
-                if static_kv:
-                    key = None
-        else:
-            # this branch is hit by encoder
-            saved_state = None
-
-        # Project query key values using weights q_proj, k_proj, v_proj
-        q = self.q_proj(query) * self.scaling
-        if static_kv and key is None:  # cross-attention with cache
-            k = v = None
-        elif static_kv and key is not None:  # cross-attention no prev_key found in cache
-            k = self.k_proj(key)
-            v = self.v_proj(key)
-        else:  # self-attention
-            k = self.k_proj(query)
-            v = self.v_proj(query)
-
-        # Reshape
-        q = self._shape(q, tgt_len, bsz)
-        if k is not None:
-            k = self._shape(k, -1, bsz)
-            v = self._shape(v, -1, bsz)
-
-        if saved_state:  # read from cache
-            k, v = self._concat_saved_state(k, v, saved_state, static_kv, bsz)
-
-        if layer_state is not None:  # Write to cache every decoder call
-            cached_shape = (bsz, self.num_heads, -1, self.head_dim)  # bsz must be first for reorder_cache
-            layer_state[self.cache_key] = dict(
-                prev_key=tf.reshape(k, cached_shape), prev_value=tf.reshape(v, cached_shape)
-            )
-
-        # Compute multi-headed attention
-        src_len = shape_list(k)[1]
-        attn_weights = tf.matmul(q, k, transpose_b=True)  # shape (bsz * self.num_heads, tgt_len, src_len)
-
-        if attn_mask is not None:
-            assert attn_mask.dtype == tf.float32, f"expected dtype tf.float32 got {attn_mask.dtype}"
-            attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attn_mask
-            attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
-
-        if key_padding_mask is not None:  # don't attend to padding symbols
-            attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
-            if key_padding_mask.dtype == tf.bool:
-                key_padding_mask = tf.cast(key_padding_mask, attn_weights.dtype) * -1e9
-            extended_mask = tf.expand_dims(tf.expand_dims(key_padding_mask, 1), 2)
-            attn_weights = attn_weights + extended_mask
-            attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
-
-        attn_weights = tf.nn.softmax(attn_weights, axis=-1)
-        attn_probs = tf.nn.dropout(attn_weights, rate=self.dropout if training else 0.0)
-
-        attn_output = tf.matmul(attn_probs, v)  # shape: (bsz * self.num_heads, tgt_len, self.head_dim)
-        attn_output = tf.transpose(attn_output, perm=(1, 0, 2))
-        attn_output = tf.reshape(attn_output, (tgt_len, bsz, embed_dim))
-        attn_output = self.out_proj(attn_output)
-        attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
-        return attn_output, attn_weights
-
-    def _concat_saved_state(self, k, v, saved_state, static_kv, bsz) -> Tuple[tf.Tensor]:
-        # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
-        prev_key = tf.reshape(saved_state["prev_key"], (bsz * self.num_heads, -1, self.head_dim))
-        k = prev_key if static_kv else tf.concat([prev_key, k], axis=1)
-        prev_value = tf.reshape(saved_state["prev_value"], (bsz * self.num_heads, -1, self.head_dim))
-        v = prev_value if static_kv else tf.concat([prev_value, v], axis=1)
-        return k, v
-
-
-class TFLearnedPositionalEmbedding(TFSharedEmbeddings):
-    """
-    This module learns positional embeddings up to a fixed maximum size. Padding ids are ignored by either offsetting
-    based on padding_idx or by setting padding_idx to None and ensuring that the appropriate position ids are passed to
-    the forward function.
-    """
-
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, offset, **kwargs):
-        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models dont have this hack
-        self.offset = offset
-        assert padding_idx is not None, "padding_idx cannot be None"
-        num_embeddings += offset
-        super().__init__(num_embeddings, embedding_dim, **kwargs)
-
-    def call(self, input_ids: tf.Tensor, use_cache=False):
-        """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = shape_list(input_ids)[:2]
-
-        if use_cache:
-            positions = tf.fill((1, 1), seq_len - 1)
-        else:
-            # starts at 0, ends at 1-seq_len
-            positions = tf.range(0, seq_len, delta=1, dtype=tf.int32, name="range")
-        return super().call(positions + self.offset)  # super object is not callable for some reason
-
-
-class TFSinusoidalPositionalEmbedding(tf.keras.layers.Embedding):
-    """This module produces sinusoidal positional embeddings of any length."""
-
-    def __init__(self, num_positions, embedding_dim, **kwargs):
-
-        if embedding_dim % 2 != 0:
-            raise NotImplementedError(f"odd embedding_dim {embedding_dim} not supported")
-        super().__init__(
-            num_positions,
-            embedding_dim,
-            **kwargs,
-        )
-
-    def build(self, input_shape):
-        """
-        Build shared token embedding layer Shared weights logic adapted from
-        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
-        """
-        super().build(input_shape)  # Instantiates self.weight so it can be loaded
-        weight: np.ndarray = self._init_weight(self.input_dim, self.output_dim)
-        self.set_weights([weight])  # overwrite self.weight to correct value
-
-    @staticmethod
-    def _init_weight(n_pos, dim):
-        """
-        Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
-        the 2nd half of the vector. [dim // 2:]
-        """
-        position_enc = np.array(
-            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
-        )
-        # index 0 is all zero
-        position_enc[:, 0 : dim // 2] = np.sin(position_enc[:, 0::2])
-        position_enc[:, dim // 2 :] = np.cos(position_enc[:, 1::2])
-        # convert to tensor
-        table = tf.convert_to_tensor(position_enc, dtype=tf.float32)
-        tf.stop_gradient(table)
-        return table
-
-    def call(self, input_ids, use_cache=False):
-        """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = shape_list(input_ids)[:2]
-        if use_cache:
-            positions = tf.fill((1, 1), seq_len - 1)
-        else:
-            # starts at 0, ends at 1-seq_len
-            positions = tf.range(0, seq_len, delta=1, dtype=tf.int32, name="range")
-        return super().call(positions)
-
-
-# Public API
-
-
 @add_start_docstrings(
     "The bare BART Model outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
@@ -906,7 +896,7 @@ class TFBartModel(TFPretrainedBartModel):
         """
         pad_token_id = self.config.pad_token_id
         if decoder_input_ids is None:
-            decoder_input_ids = self._shift_right(inputs)
+            decoder_input_ids = self.shift_tokens_right(inputs, pad_token_id, self.config.eos_token_id)
         bsz, tgt_len = shape_list(decoder_input_ids)[:2]
         if decoder_attn_mask is None:
             decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
@@ -1105,7 +1095,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         if inputs["labels"] is not None:
             inputs["use_cache"] = False
             if inputs["decoder_input_ids"] is None:
-                inputs["decoder_input_ids"] = self._shift_right(inputs["labels"])
+                inputs["decoder_input_ids"] = shift_tokens_right(inputs["labels"], self.config.pad_token_id, self.config.eos_token_id)
 
         outputs = self.model(
             inputs["input_ids"],
