@@ -20,7 +20,6 @@ from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
 import tensorflow as tf
-from tensorflow.python.framework.ops import convert_to_tensor
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
