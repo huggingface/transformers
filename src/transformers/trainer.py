@@ -1274,7 +1274,6 @@ class Trainer:
         output = self.prediction_loop(
             eval_dataloader,
             description="Evaluation",
-            mode="eval",
             # No point gathering the predictions if there are no metrics, otherwise we defer to
             # self.args.prediction_loss_only
             prediction_loss_only=True if self.compute_metrics is None else None,
@@ -1323,13 +1322,12 @@ class Trainer:
 
         test_dataloader = self.get_test_dataloader(test_dataset)
 
-        return self.prediction_loop(test_dataloader, description="Prediction", mode="test", ignore_keys=ignore_keys)
+        return self.prediction_loop(test_dataloader, description="Prediction", ignore_keys=ignore_keys)
 
     def prediction_loop(
         self,
         dataloader: DataLoader,
         description: str,
-        mode: str = "eval",
         prediction_loss_only: Optional[bool] = None,
         ignore_keys: Optional[List[str]] = None,
     ) -> PredictionOutput:
@@ -1422,17 +1420,13 @@ class Trainer:
         else:
             metrics = {}
 
-        # set the mode correctly
-        metrics = {k.replace("eval", mode): v for k, v in metrics.items()}
-
         if eval_loss is not None:
-            metrics[f"{mode}_loss"] = eval_loss.mean().item()
+            metrics["eval_loss"] = eval_loss.mean().item()
 
         # Prefix all keys with eval_
         for key in list(metrics.keys()):
-
-            if not key.startswith(f"{mode}_"):
-                metrics[f"{mode}_{key}"] = metrics.pop(key)
+            if not key.startswith("eval_"):
+                metrics[f"eval_{key}"] = metrics.pop(key)
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
