@@ -15,7 +15,7 @@ commands:
             then
                 echo $CIRCLE_PR_NUMBER
                 resp=$(curl -Ls https://api.github.com/repos/huggingface/transformers/pulls/${CIRCLE_PR_NUMBER})
-                user=$(jq -r .user.login \<<< $resp)   # PR creator username
+                user=$(jq -r .head.user.login \<<< $resp)   # PR creator username
                 head_ref=$(jq -r .head.ref \<<< $resp) # PR user's branch name
                 echo head_ref=$head_ref, user=$user
             fi
