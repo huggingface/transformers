@@ -583,16 +583,26 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
 
         sequence_output = encoder_outputs[0]
 
-        if not return_dict:
-            return (
-                sequence_output,
-            ) + encoder_outputs[1:]
+        if not inputs["return_dict"]:
+            idx = 0
+            outputs = (sequence_output,)
+            if inputs["output_hidden_states"]:
+                idx += 1
+                outputs = outputs + (tf.convert_to_tensor(encoder_outputs[idx]),)
+            if inputs["output_attentions"]:
+                idx += 1
+                outputs = outputs + (tf.convert_to_tensor(encoder_outputs[idx]),)
+            return outputs
 
-        return TFBaseModelOutput(
+        return TFBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+            hidden_states=tf.convert_to_tensor(encoder_outputs.hidden_states)
+            if inputs["output_hidden_states"]
+            else None,
+            attentions=tf.convert_to_tensor(encoder_outputs.attentions) if inputs["output_attentions"] else None,
         )
+
+
 
 
 class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
