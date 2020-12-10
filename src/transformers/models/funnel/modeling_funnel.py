@@ -25,7 +25,6 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from torch.nn import functional as F
 
 from ...activations import ACT2FN
-from ...configuration_performer_attention import PerformerAttentionConfig
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -33,7 +32,6 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_performer_attention import PerformerAttention
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -112,7 +110,7 @@ def load_tf_weights_in_funnel(model, config, tf_checkpoint_path):
 
     for name, array in zip(names, arrays):
         name = name.split("/")
-        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculate m and v
+        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model
         if any(
             n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
@@ -161,8 +159,7 @@ def load_tf_weights_in_funnel(model, config, tf_checkpoint_path):
 class FunnelEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size,
-                                            padding_idx=config.pad_token_id)
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
 
@@ -230,35 +227,20 @@ class FunnelAttentionStructure(nn.Module):
         if self.config.attention_type == "factorized":
             # Notations from the paper, appending A.2.2, final formula.
             # We need to create and return the matrices phi, psi, pi and omega.
-            d_model_half = d_model // 2
-            freq_seq = torch.arange(0, d_model_half, 1.0, dtype=dtype, device=device)
-            inv_freq = 1 / (10000 ** (freq_seq / d_model_half))
-            
             pos_seq = torch.arange(0, seq_len, 1.0, dtype=dtype, device=device)
-            pos_seq_q, pos_seq_k = pos_seq, pos_seq
-            
-            sinusoid_q = torch.einsum("...i,d->...id", pos_seq_q, inv_freq)
-            sinusoid_k = torch.einsum("...i,d->...id", pos_seq_k, inv_freq)
-            
-            sin_q, cos_q = torch.sin(sinusoid_q), torch.cos(sinusoid_q)
-            sin_k, cos_k = torch.sin(sinusoid_k), torch.cos(sinusoid_k)
-            
-            # Applying dropout to the query positional embeddings and not the keys is sufficient
-            sin_q, cos_q = self.sin_drop(sin_q), self.cos_drop(cos_q)
-            
-            # How it's described in the paper
-            phi = torch.cat([sin_q, cos_q], dim=-1)
-            pi = torch.cat([-cos_q, sin_q], dim=-1)
-            psi = torch.cat([cos_k, cos_k], dim=-1)
-            omega = torch.cat([sin_k, sin_k], dim=-1)
-            return phi, pi, psi, omega
-            
-            # How it's implemented in the code
-            #enc_q_1 = torch.cat([sin_q, sin_q], dim=-1)
-            #enc_k_1 = torch.cat([cos_k, sin_k], dim=-1)
-            #enc_q_2 = torch.cat([cos_q, cos_q], dim=-1)
-            #enc_k_2 = torch.cat([-sin_k, cos_k], dim=-1)
-            #return [enc_q_1, enc_q_2, enc_k_1, enc_k_2]
+            freq_seq = torch.arange(0, d_model // 2, 1.0, dtype=dtype, device=device)
+            inv_freq = 1 / (10000 ** (freq_seq / (d_model // 2)))
+            sinusoid = pos_seq[:, None] * inv_freq[None]
+            sin_embed = torch.sin(sinusoid)
+            sin_embed_d = self.sin_dropout(sin_embed)
+            cos_embed = torch.cos(sinusoid)
+            cos_embed_d = self.cos_dropout(cos_embed)
+            # This is different from the formula on the paper...
+            phi = torch.cat([sin_embed_d, sin_embed_d], dim=-1)
+            psi = torch.cat([cos_embed, sin_embed], dim=-1)
+            pi = torch.cat([cos_embed_d, cos_embed_d], dim=-1)
+            omega = torch.cat([-sin_embed, cos_embed], dim=-1)
+            return (phi, pi, psi, omega)
         else:
             # Notations from the paper, appending A.2.1, final formula.
             # We need to create and return all the possible vectors R for all blocks and shifts.
@@ -453,7 +435,6 @@ def _relative_shift_gather(positional_attn, context_len, shift):
 class FunnelRelMultiheadAttention(nn.Module):
     def __init__(self, config, block_index):
         super().__init__()
-        
         self.config = config
         self.block_index = block_index
         d_model, n_head, d_head = config.d_model, config.n_head, config.d_head
@@ -474,13 +455,6 @@ class FunnelRelMultiheadAttention(nn.Module):
         self.post_proj = nn.Linear(n_head * d_head, d_model)
         self.layer_norm = nn.LayerNorm(d_model, eps=config.layer_norm_eps)
         self.scale = 1.0 / (d_head ** 0.5)
-        
-        if config.use_performer_attention:
-            performer_config = self.performer_attention_config or PerformerAttentionConfig()
-            performer_config.kernel_type = 'exp' # We don't support generalized attention
-            performer_config.use_qkv_layers = False # We already have our own, so this is redundant
-            
-            self.performer_attention = PerformerAttention(performer_config)
 
     def relative_positional_attention(self, position_embeds, q_head, context_len, cls_mask=None):
         """ Relative attention score for the positional encodings """
@@ -535,13 +509,10 @@ class FunnelRelMultiheadAttention(nn.Module):
 
         # Shape batch_size x n_head x seq_len x 2
         token_type_bias = torch.einsum("bind,snd->bnis", q_head + r_s_bias, self.seg_embed)
-        
         # Shape batch_size x n_head x seq_len x context_len
         token_type_mat = token_type_mat[:, None].expand([batch_size, q_head.shape[2], seq_len, context_len])
-        
         # Shapes batch_size x n_head x seq_len
         diff_token_type, same_token_type = torch.split(token_type_bias, 1, dim=-1)
-        
         # Shape batch_size x n_head x seq_len x context_len
         token_type_attn = torch.where(
             token_type_mat, same_token_type.expand(token_type_mat.shape), diff_token_type.expand(token_type_mat.shape)
@@ -559,39 +530,14 @@ class FunnelRelMultiheadAttention(nn.Module):
         batch_size, seq_len, _ = query.shape
         context_len = key.shape[1]
         n_head, d_head = self.config.n_head, self.config.d_head
-        
+
         # Shape batch_size x seq_len x n_head x d_head
         q_head = self.q_head(query).view(batch_size, seq_len, n_head, d_head)
         # Shapes batch_size x context_len x n_head x d_head
         k_head = self.k_head(key).view(batch_size, context_len, n_head, d_head)
         v_head = self.v_head(value).view(batch_size, context_len, n_head, d_head)
-        
-        if self.config.use_performer_attention:
-            if token_type_mat is not None:
-                raise ValueError("Token-type attention is not supported when use_performer_attention == True.")
-            
-            # Content-based attention
-            performer = self.performer_attention
-            q_prime, k_prime = performer.get_projected_queries_and_keys(q_head, k_head)
-            
-            # Relative positional attention
-            phi, pi, psi, omega = position_embeds
-            u = self.r_r_bias * self.scale # Shape n_head x d_head
-            w_r = self.r_kernel # Shape d_model x n_head x d_head
-            
-            q_i = torch.einsum("binh,dnh->bind", q_head + u, w_r) # Shape batch_size x seq_len x n_head x d_model
-            q_pos_1 = q_i * phi[:, None]
-            q_pos_2 = q_i * pi[:, None]
-            
-            q_prime_pos_1, k_prime_pos_1 = performer.get_projected_queries_and_keys(q_pos_1, psi)
-            q_prime_pos_2, k_prime_pos_2 = performer.get_projected_queries_and_keys(q_pos_2, omega)
-            
-            q_prime *= q_prime_pos_1 * q_prime_pos_2
-            k_prime *= k_prime_pos_1 * k_prime_pos_2
-            
-            output = performer.compute_attention_with_projected_queries_and_keys(q_prime, k_prime, value)
-            return (output,)
-        
+
+        q_head = q_head * self.scale
         # Shape n_head x d_head
         r_w_bias = self.r_w_bias * self.scale
         # Shapes batch_size x n_head x seq_len x context_len
@@ -673,7 +619,6 @@ class FunnelEncoder(nn.Module):
         token_type_ids=None,
         output_attentions=False,
         output_hidden_states=False,
-        block_end_hidden_states_only=False,
         return_dict=True,
     ):
         # The pooling is not implemented on long tensors, so we convert this mask.
@@ -710,11 +655,8 @@ class FunnelEncoder(nn.Module):
 
                     if output_attentions:
                         all_attentions = all_attentions + layer_output[1:]
-                    if output_hidden_states and not block_end_hidden_states_only:
+                    if output_hidden_states:
                         all_hidden_states = all_hidden_states + (hidden,)
-            
-            if output_hidden_states and block_end_hidden_states_only:
-                all_hidden_states = all_hidden_states + (hidden,)
 
         if not return_dict:
             return tuple(v for v in [hidden, all_hidden_states, all_attentions] if v is not None)
@@ -837,6 +779,7 @@ class FunnelPreTrainedModel(PreTrainedModel):
         elif classname == "FunnelEmbeddings":
             std = 1.0 if self.config.initializer_std is None else self.config.initializer_std
             nn.init.normal_(module.word_embeddings.weight, std=std)
+
 
 class FunnelClassificationHead(nn.Module):
     def __init__(self, config, n_labels):
@@ -1223,6 +1166,9 @@ class FunnelForMaskedLM(FunnelPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
 
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

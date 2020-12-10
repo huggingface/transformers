@@ -19,7 +19,6 @@ import argparse
 import logging
 import pickle
 from collections import Counter
-from tqdm.auto import tqdm
 
 
 logging.basicConfig(
@@ -41,20 +40,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     logger.info(f"Loading data from {args.data_file}")
-    
-    data = []
     with open(args.data_file, "rb") as fp:
-        # If the user used the '--write_incrementally true' option when binarizing the data, then the file
-        # will be made up of a series of separate lists that we need to concatenate together
-        while True:
-            try:
-                data.extend(pickle.load(fp))
-            except EOFError:
-                break
+        data = pickle.load(fp)
 
     logger.info("Counting occurences for MLM.")
     counter = Counter()
-    for tk_ids in tqdm(data):
+    for tk_ids in data:
         counter.update(tk_ids)
     counts = [0] * args.vocab_size
     for k, v in counter.items():

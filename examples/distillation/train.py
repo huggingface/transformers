@@ -68,12 +68,8 @@ def sanity_checks(args):
         args.student_type == "distilbert" and args.teacher_type == "bert"
     )
     assert os.path.isfile(args.student_config)
-    
-    # This sanity check is actually a bit unhelpful since we end up simply passing the value of args.student_pretrained_weights
-    # to the .from_pretrained method, which can deal with non-local pretrained models that need to be downloaded. We don't
-    # want to rule out that use case.
-    #if args.student_pretrained_weights is not None:
-    #    assert os.path.isfile(args.student_pretrained_weights)
+    if args.student_pretrained_weights is not None:
+        assert os.path.isfile(args.student_pretrained_weights)
 
     if args.freeze_token_type_embds:
         assert args.student_type in ["roberta"]
@@ -127,7 +123,6 @@ def main():
     parser.add_argument(
         "--teacher_type", choices=["bert", "roberta", "gpt2"], required=True, help="Teacher type (BERT, RoBERTa)."
     )
-    parser.add_argument("--teacher_config", type=str, required=False, help="Path to the teacher configuration.")
     parser.add_argument("--teacher_name", type=str, required=True, help="The teacher model.")
 
     parser.add_argument("--temperature", default=2.0, type=float, help="Temperature for the softmax temperature.")
@@ -215,7 +210,7 @@ def main():
         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
         "See details at https://nvidia.github.io/apex/amp.html",
     )
-    parser.add_argument("--n_gpu", type=int, default=1, help="Number of GPUs in the node.")
+    parser.add_argument("--gpus", type=int, default=1, help="Number of GPUs in the node.")
     parser.add_argument("--local_rank", type=int, default=-1, help="Distributed training - Local rank")
     parser.add_argument("--seed", type=int, default=56, help="Random seed")
 
@@ -242,6 +237,7 @@ def main():
         logger.info(f"Experiment will be dumped and logged in {args.dump_path}")
 
         # SAVE PARAMS #
+        logger.info(f"Param: {args}")
         with open(os.path.join(args.dump_path, "parameters.json"), "w") as f:
             json.dump(vars(args), f, indent=4)
         git_log(args.dump_path)
@@ -262,15 +258,7 @@ def main():
     # DATA LOADER #
     logger.info(f"Loading data from {args.data_file}")
     with open(args.data_file, "rb") as fp:
-        data = []
-        
-        # If the user used the '--write_incrementally true' option when binarizing the data, then the file
-        # will be made up of a series of separate lists that we need to concatenate together
-        while True:
-            try:
-                data.extend(pickle.load(fp))
-            except EOFError:
-                break
+        data = pickle.load(fp)
 
     if args.mlm:
         logger.info(f"Loading token counts from {args.token_counts} (already pre-computed)")
@@ -303,15 +291,7 @@ def main():
     logger.info("Student loaded.")
 
     # TEACHER #
-    if args.teacher_config is not None:
-        logger.info(f"Loading teacher config from {args.teacher_config}")
-        teacher_architecture_config = teacher_config_class.from_pretrained(args.teacher_config)
-        teacher_architecture_config.output_hidden_states = True
-    else:
-        teacher_architecture_config = None
-    
-    teacher = teacher_model_class.from_pretrained(args.teacher_name, config=teacher_architecture_config,
-                                                  output_hidden_states=True)
+    teacher = teacher_model_class.from_pretrained(args.teacher_name, output_hidden_states=True)
     if args.n_gpu > 0:
         teacher.to(f"cuda:{args.local_rank}")
     logger.info(f"Teacher loaded from {args.teacher_name}.")
