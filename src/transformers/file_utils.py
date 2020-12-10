@@ -217,6 +217,15 @@ except ImportError:
 
 
 try:
+    import pandas  # noqa: F401
+
+    _pandas_available = True
+
+except ImportError:
+    _pandas_available = False
+
+
+try:
     import torch_scatter
 
     # Check we're not importing a "torch_scatter" directory somewhere
@@ -341,6 +350,10 @@ def is_in_notebook():
 
 def is_scatter_available():
     return _scatter_available
+
+
+def is_pandas_available():
+    return _pandas_available
 
 
 def torch_only_method(fn):
