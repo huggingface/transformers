@@ -829,7 +829,7 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
 
     def get_output_embeddings(self):
         return self.mpnet.embeddings
-    
+
     def get_output_layer_with_bias(self):
         return self.lm_head
 
