@@ -80,7 +80,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
         normalization (:obj:`bool`, `optional`, defaults to :obj:`False`)
             Whether or not to apply a normalization preprocess.
         bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
-            The beginning of sequence token that was used during pre-training. Can be used a sequence classifier token.
+            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
             .. note::
 

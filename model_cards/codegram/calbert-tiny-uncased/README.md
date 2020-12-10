@@ -1,7 +1,6 @@
 ---
 language: "ca"
 tags:
-  - lm-head
   - masked-lm
   - catalan
   - exbert

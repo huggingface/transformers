@@ -152,7 +152,7 @@ class TFModelTesterMixin:
 
             if model.config.is_encoder_decoder:
                 expected_arg_names = [
-                    "inputs",
+                    "input_ids",
                     "attention_mask",
                     "decoder_input_ids",
                     "decoder_attention_mask",
@@ -161,7 +161,7 @@ class TFModelTesterMixin:
                 self.assertListEqual(arg_names[:5], expected_arg_names)
 
             else:
-                expected_arg_names = ["inputs"]
+                expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
     @slow
@@ -344,13 +344,6 @@ class TFModelTesterMixin:
             tf_hidden_states[pt_nans] = 0
 
             max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
-            # Debug info (remove when fixed)
-            if max_diff >= 4e-2:
-                print("===")
-                print(model_class)
-                print(config)
-                print(inputs_dict)
-                print(pt_inputs_dict)
             self.assertLessEqual(max_diff, 4e-2)
 
             # Check we can load pt model in tf and vice-versa with checkpoint => model functions
@@ -753,7 +746,7 @@ class TFModelTesterMixin:
 
     def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]
+        input_ids = inputs_dict["input_ids"]
 
         # iterate over all generative models
         for model_class in self.all_generative_model_classes:
