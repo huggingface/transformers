@@ -411,7 +411,7 @@ class TapasModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TapasModel,
-            # TapasForMaskedLM,
+            TapasForMaskedLM,
             TapasForQuestionAnswering,
             TapasForSequenceClassification,
         )
