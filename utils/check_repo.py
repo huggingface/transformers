@@ -28,6 +28,8 @@ PATH_TO_DOC = "docs/source/model_doc"
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = [
+    "BartDecoder",  # Building part of bigger (tested) model.
+    "BartEncoder",  # Building part of bigger (tested) model.
     "BertLMHeadModel",  # Needs to be setup as decoder.
     "DPREncoder",  # Building part of bigger (tested) model.
     "DPRSpanPredictor",  # Building part of bigger (tested) model.
@@ -58,9 +60,11 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # Update this list for models that are not documented with a comment explaining the reason it should not be.
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_DOCUMENTED = [
+    "BartDecoder",  # Building part of bigger (documented) model.
+    "BartEncoder",  # Building part of bigger (documented) model.
     "DPREncoder",  # Building part of bigger (documented) model.
     "DPRSpanPredictor",  # Building part of bigger (documented) model.
-    "T5Stack",  # Building part of bigger (tested) model.
+    "T5Stack",  # Building part of bigger (documented) model.
     "TFDPREncoder",  # Building part of bigger (documented) model.
     "TFDPRSpanPredictor",  # Building part of bigger (documented) model.
 ]
@@ -78,6 +82,8 @@ MODEL_NAME_TO_DOC_FILE = {
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = [
+    "BartDecoder",
+    "BartEncoder",
     "DPRContextEncoder",
     "DPREncoder",
     "DPRReader",
