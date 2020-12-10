@@ -1876,9 +1876,11 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
 
 
 class ProphetNetDecoderWrapper(nn.Module):
-    """ This is a wrapper class, so that :class:`~transformers.ProphetNetForCausalLM`
-        can correctly be loaded from pretrained prophetnet classes.
     """
+    This is a wrapper class, so that :class:`~transformers.ProphetNetForCausalLM` can correctly be loaded from
+    pretrained prophetnet classes.
+    """
+
     def __init__(self, config):
         super().__init__()
         self.decoder = ProphetNetDecoder(config)
@@ -1968,7 +1970,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
-            >>> model = ProphetNetForCausalLM.from_pretrained('patrickvonplaten/prophetnet-decoder-clm-large-uncased')
+            >>> model = ProphetNetForCausalLM.from_pretrained('microsoft/prophetnet-large-uncased')
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -1981,7 +1983,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
 
             >>> tokenizer_enc = BertTokenizer.from_pretrained('bert-large-uncased')
             >>> tokenizer_dec = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
-            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-large-uncased", "patrickvonplaten/prophetnet-decoder-clm-large-uncased")
+            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-large-uncased", "microsoft/prophetnet-large-uncased")
 
             >>> ARTICLE = (
             ... "the us state department said wednesday it had received no "
