@@ -1,7 +1,7 @@
 .PHONY: deps_table_update modified_only_fixup extra_quality_checks quality style fixup fix-copies test test-examples docs
 
 
-check_dirs := examples research_projects tests src utils
+check_dirs := examples tests src utils
 
 modified_only_fixup:
 	$(eval modified_py_files := $(shell python utils/get_modified_files.py $(check_dirs)))
