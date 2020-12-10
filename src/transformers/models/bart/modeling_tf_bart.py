@@ -397,9 +397,6 @@ class TFBartEncoder(tf.keras.layers.Layer):
         if output_hidden_states:
             encoder_states.append(x)
             encoder_states = [tf.transpose(hidden_state, perm=(1, 0, 2)) for hidden_state in encoder_states]
-            encoder_states = tf.convert_to_tensor(encoder_states)
-        if output_attentions:
-            all_attentions = tf.convert_to_tensor(all_attentions)
         x = tf.transpose(x, perm=(1, 0, 2))
         if not return_dict:
             return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
@@ -635,10 +632,8 @@ class TFBartDecoder(tf.keras.layers.Layer):
             all_hidden_states += (x,)
             # T x B x C -> B x T x C
             all_hidden_states = tuple(tf.transpose(hs, perm=(1, 0, 2)) for hs in all_hidden_states)
-            all_hidden_states = tf.convert_to_tensor(all_hidden_states)
         else:
             all_hidden_states = None
-        all_self_attns = tf.convert_to_tensor(list(all_self_attns)) if output_attentions else None
 
         x = tf.transpose(x, perm=(1, 0, 2))
         encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))  # could maybe be avoided.
@@ -1012,16 +1007,37 @@ class TFBartModel(TFPretrainedBartModel):
         )
 
         if not inputs["return_dict"]:
-            return decoder_outputs + inputs["encoder_outputs"]
+            outputs = (decoder_outputs[0], decoder_outputs[1])
+            if inputs["output_hidden_states"]:
+                outputs = outputs + (tf.convert_to_tensor(decoder_outputs[2]),)
+            if inputs["output_attentions"]:
+                outputs = outputs + (tf.convert_to_tensor(decoder_outputs[3]),)
+            outputs = outputs + (inputs["encoder_outputs"][0],)
+            idx = 0
+            if inputs["output_hidden_states"]:
+                idx += 1
+                outputs = outputs + (tf.convert_to_tensor(inputs["encoder_outputs"][idx]),)
+            if inputs["output_attentions"]:
+                idx += 1
+                outputs = outputs + (tf.convert_to_tensor(inputs["encoder_outputs"][idx]),)
+            return outputs
 
         return TFSeq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
+            decoder_hidden_states=tf.convert_to_tensor(decoder_outputs.hidden_states)
+            if inputs["output_hidden_states"]
+            else None,
+            decoder_attentions=tf.convert_to_tensor(decoder_outputs.attentions)
+            if inputs["output_attentions"]
+            else None,
             encoder_last_hidden_state=inputs["encoder_outputs"].last_hidden_state,
-            encoder_hidden_states=inputs["encoder_outputs"].hidden_states,
-            encoder_attentions=inputs["encoder_outputs"].attentions,
+            encoder_hidden_states=tf.convert_to_tensor(inputs["encoder_outputs"].hidden_states)
+            if inputs["output_hidden_states"]
+            else None,
+            encoder_attentions=tf.convert_to_tensor(inputs["encoder_outputs"].attentions)
+            if inputs["output_attentions"]
+            else None,
         )
 
     def get_input_embeddings(self):

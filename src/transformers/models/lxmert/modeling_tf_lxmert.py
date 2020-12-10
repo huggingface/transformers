@@ -813,29 +813,44 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
             vision_attentions = visual_encoder_outputs[1]
             cross_encoder_attentions = encoder_outputs[2]
             all_attentions = (
-                language_attentions,
-                vision_attentions,
-                cross_encoder_attentions,
+                tf.convert_to_tensor(language_attentions),
+                tf.convert_to_tensor(vision_attentions),
+                tf.convert_to_tensor(cross_encoder_attentions),
             )
 
-        hidden_states = (language_hidden_states, vision_hidden_states) if inputs["output_hidden_states"] else ()
+        hidden_states = (
+            (tf.convert_to_tensor(language_hidden_states), tf.convert_to_tensor(vision_hidden_states))
+            if inputs["output_hidden_states"]
+            else ()
+        )
 
         visual_output = vision_hidden_states[-1]
         lang_output = language_hidden_states[-1]
         pooled_output = self.pooler(lang_output)
 
         if not inputs["return_dict"]:
-            return (lang_output, visual_output, pooled_output) + hidden_states + all_attentions
+            outputs = (lang_output, visual_output, pooled_output)
+            if inputs["output_hidden_states"]:
+                outputs = outputs + hidden_states
+            if inputs["output_attentions"]:
+                outputs = outputs + all_attentions
+            return outputs
 
         return TFLxmertModelOutput(
             pooled_output=pooled_output,
             language_output=lang_output,
             vision_output=visual_output,
-            language_hidden_states=language_hidden_states if inputs["output_hidden_states"] else None,
-            vision_hidden_states=vision_hidden_states if inputs["output_hidden_states"] else None,
-            language_attentions=language_attentions if inputs["output_attentions"] else None,
-            vision_attentions=vision_attentions if inputs["output_attentions"] else None,
-            cross_encoder_attentions=cross_encoder_attentions if inputs["output_attentions"] else None,
+            language_hidden_states=tf.convert_to_tensor(language_hidden_states)
+            if inputs["output_hidden_states"]
+            else None,
+            vision_hidden_states=tf.convert_to_tensor(vision_hidden_states)
+            if inputs["output_hidden_states"]
+            else None,
+            language_attentions=tf.convert_to_tensor(language_attentions) if inputs["output_attentions"] else None,
+            vision_attentions=tf.convert_to_tensor(vision_attentions) if inputs["output_attentions"] else None,
+            cross_encoder_attentions=tf.convert_to_tensor(cross_encoder_attentions)
+            if inputs["output_attentions"]
+            else None,
         )
 
 

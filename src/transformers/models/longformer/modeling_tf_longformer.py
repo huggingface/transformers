@@ -1716,7 +1716,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         if padding_len > 0:
             # unpad `sequence_output` because the calling function is expecting a length == input_ids.size(1)
             sequence_output = sequence_output[:, :-padding_len]
-        
+
         if not inputs["return_dict"]:
             idx = 0
             outputs = (sequence_output, pooled_output)
@@ -1726,26 +1726,24 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
             if inputs["output_attentions"]:
                 idx += 1
                 outputs = outputs + (tf.convert_to_tensor(encoder_outputs[idx]),)
-            
+
             idx += 1
             gl_attn = encoder_outputs[idx:]
-            
+
             if len(gl_attn) > 0:
                 outputs = outputs + (tf.convert_to_tensor(encoder_outputs[idx]),)
             return outputs
-        
+
         return TFLongformerBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=tf.convert_to_tensor(encoder_outputs.hidden_states)
             if inputs["output_hidden_states"]
             else None,
-            attentions=tf.convert_to_tensor(encoder_outputs.attentions)
-            if inputs["output_attentions"]
-            else None,
+            attentions=tf.convert_to_tensor(encoder_outputs.attentions) if inputs["output_attentions"] else None,
             global_attentions=tf.convert_to_tensor(encoder_outputs.global_attentions)
             if encoder_outputs.global_attentions is not None
-            else None
+            else None,
         )
 
     def _pad_to_window_size(

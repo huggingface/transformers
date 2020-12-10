@@ -624,9 +624,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
             hidden_states=tf.convert_to_tensor(encoder_outputs.hidden_states)
             if inputs["output_hidden_states"]
             else None,
-            attentions=tf.convert_to_tensor(encoder_outputs.attentions)
-            if inputs["output_attentions"]
-            else None,
+            attentions=tf.convert_to_tensor(encoder_outputs.attentions) if inputs["output_attentions"] else None,
         )
 
 

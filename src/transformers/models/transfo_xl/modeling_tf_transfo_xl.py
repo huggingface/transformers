@@ -624,13 +624,15 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
 
         if inputs["output_hidden_states"]:
             # Add last layer and transpose to library standard shape [bsz, len, hidden_dim]
-            hids.append(core_out)
             hids = tuple(tf.transpose(t, perm=(1, 0, 2)) for t in hids)
+            hids = hids + (core_out,)
+            hids = tf.convert_to_tensor(hids)
         else:
             hids = None
         if inputs["output_attentions"]:
             # Transpose to library standard shape [bsz, n_heads, query_seq_len, key_seq_len]
             attentions = tuple(tf.transpose(t, perm=(2, 3, 0, 1)) for t in attentions)
+            attentions = tf.convert_to_tensor(attentions)
 
         if not inputs["return_dict"]:
             return tuple(v for v in [core_out, new_mems, hids, attentions] if v is not None)

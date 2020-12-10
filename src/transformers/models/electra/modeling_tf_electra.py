@@ -277,10 +277,6 @@ class TFElectraEncoder(tf.keras.layers.Layer):
         # Add last layer
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-            all_hidden_states = tf.convert_to_tensor(all_hidden_states)
-
-        if output_attentions:
-            all_attentions = tf.convert_to_tensor(all_attentions)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
@@ -609,7 +605,24 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
             training=inputs["training"],
         )
 
-        return hidden_states
+        if not inputs["return_dict"]:
+            idx = 0
+            outputs = (hidden_states[0],)
+            if inputs["output_hidden_states"]:
+                idx += 1
+                outputs = outputs + (tf.convert_to_tensor(hidden_states[idx]),)
+            if inputs["output_attentions"]:
+                idx += 1
+                outputs = outputs + (tf.convert_to_tensor(hidden_states[idx]),)
+            return outputs
+
+        return TFBaseModelOutput(
+            last_hidden_state=hidden_states.last_hidden_state,
+            hidden_states=tf.convert_to_tensor(hidden_states.hidden_states)
+            if inputs["output_hidden_states"]
+            else None,
+            attentions=tf.convert_to_tensor(hidden_states.attentions) if inputs["output_attentions"] else None,
+        )
 
 
 @dataclass

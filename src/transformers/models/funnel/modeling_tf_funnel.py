@@ -80,16 +80,16 @@ def tuples_to_ragged_tensors(encoder_output, decoder_output=None):
     for i, v in enumerate(output):
         current_shape = shape_list(output[i])
         padding_shape = []
-    
+
         for ref, current in zip(ref_shape, current_shape):
             padding_shape.append([0, ref - current])
 
         output[i] = tf.pad(output[i], tf.convert_to_tensor(padding_shape), constant_values=-1)
-    
+
     if decoder_output is not None:
         output.extend(decoder_output)
 
-    return tf.RaggedTensor.from_tensor(output, padding=tf.fill(ref_shape[1:], -1.))
+    return tf.RaggedTensor.from_tensor(output, padding=tf.fill(ref_shape[1:], -1.0))
 
 
 class TFFunnelEmbeddings(tf.keras.layers.Layer):
@@ -872,9 +872,7 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
             hidden_states=tuples_to_ragged_tensors(encoder_outputs.hidden_states)
             if inputs["output_hidden_states"]
             else None,
-            attentions=tuples_to_ragged_tensors(encoder_outputs.attentions)
-            if inputs["output_attentions"]
-            else None,
+            attentions=tuples_to_ragged_tensors(encoder_outputs.attentions) if inputs["output_attentions"] else None,
         )
 
 

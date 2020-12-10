@@ -620,16 +620,23 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
         pooled_output = self.pooler(sequence_output)
 
         if not inputs["return_dict"]:
-            return (
-                sequence_output,
-                pooled_output,
-            ) + encoder_outputs[1:]
+            idx = 0
+            outputs = (sequence_output, pooled_output)
+            if inputs["output_hidden_states"]:
+                idx += 1
+                outputs = outputs + (tf.convert_to_tensor(encoder_outputs[idx]),)
+            if inputs["output_attentions"]:
+                idx += 1
+                outputs = outputs + (tf.convert_to_tensor(encoder_outputs[idx]),)
+            return outputs
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+            hidden_states=tf.convert_to_tensor(encoder_outputs.hidden_states)
+            if inputs["output_hidden_states"]
+            else None,
+            attentions=tf.convert_to_tensor(encoder_outputs.attentions) if inputs["output_attentions"] else None,
         )
 
 

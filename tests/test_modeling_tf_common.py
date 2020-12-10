@@ -523,7 +523,7 @@ class TFModelTesterMixin:
 
         def check_encoder_attentions_output(outputs):
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
-            
+
             self.assertTrue(isinstance(attentions, (tf.Tensor, tf.RaggedTensor)))
             self.assertEqual(attentions.shape[0], self.model_tester.num_hidden_layers)
             self.assertListEqual(
@@ -577,7 +577,7 @@ class TFModelTesterMixin:
             )
 
             hidden_states = outputs[-1]
-            
+
             self.assertEqual(config.output_attentions, False)
             self.assertTrue(isinstance(hidden_states, (tf.Tensor, tf.RaggedTensor)))
             self.assertEqual(hidden_states.shape[0], expected_num_layers)

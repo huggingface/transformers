@@ -374,10 +374,6 @@ class TFTransformer(tf.keras.layers.Layer):
         # Add last layer
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_state,)
-            all_hidden_states = tf.convert_to_tensor(all_hidden_states)
-
-        if output_attentions:
-            all_attentions = tf.convert_to_tensor(all_attentions)
 
         if not return_dict:
             return tuple(v for v in [hidden_state, all_hidden_states, all_attentions] if v is not None)
@@ -475,7 +471,22 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
             training=inputs["training"],
         )
 
-        return tfmr_output  # last-layer hidden-state, (all hidden_states), (all attentions)
+        if not inputs["return_dict"]:
+            idx = 0
+            outputs = (tfmr_output[0],)
+            if inputs["output_hidden_states"]:
+                idx += 1
+                outputs = outputs + (tf.convert_to_tensor(tfmr_output[idx]),)
+            if inputs["output_attentions"]:
+                idx += 1
+                outputs = outputs + (tf.convert_to_tensor(tfmr_output[idx]),)
+            return outputs
+
+        return TFBaseModelOutput(
+            last_hidden_state=tfmr_output.last_hidden_state,
+            hidden_states=tf.convert_to_tensor(tfmr_output.hidden_states) if inputs["output_hidden_states"] else None,
+            attentions=tf.convert_to_tensor(tfmr_output.attentions) if inputs["output_attentions"] else None,
+        )
 
 
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
