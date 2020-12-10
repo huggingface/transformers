@@ -406,11 +406,13 @@ class TFDecoderLayer(tf.keras.layers.Layer):
     def call(
         self,
         x,
-        encoder_hidden_states: tf.Tensor,
-        encoder_attn_mask=None,
+        attention_mask: tf.Tensor,
+        encoder_hidden_states: tf.Tensor = None,
+        encoder_attn_mask: tf.Tensor,
+#        encoder_attn_mask=None,
         layer_state=None,
-        causal_mask=None,
-        decoder_padding_mask=None,
+#        causal_mask=None,
+#        decoder_padding_mask=None,
         training=False,
     ) -> Tuple[tf.Tensor, tf.Tensor, Dict[str, tf.Tensor]]:
         """
@@ -752,15 +754,18 @@ class TFBartDecoder(tf.keras.layers.Layer):
 
     def call(
         self,
-        input_ids,
-        encoder_hidden_states,
-        encoder_padding_mask,
-        decoder_padding_mask,
-        decoder_causal_mask,
-        decoder_cached_states=None,
-        use_cache=False,
-        output_attentions=False,
-        output_hidden_states=False,
+        input_ids=None,
+        attention_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+#        encoder_padding_mask,
+#        decoder_padding_mask,
+#        decoder_causal_mask,
+        past_key_values=None,
+#        decoder_cached_states=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
         return_dict=None,
         training=False,
     ):
@@ -768,6 +773,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
         use_cache = use_cache if use_cache is not None else self.use_cache
         return_dict = return_dict if return_dict is not None else self.config.return_dict
+
         if use_cache:
             assert not training, "Training + use cache are incompatible"
         # check attention mask and invert
@@ -810,11 +816,13 @@ class TFBartDecoder(tf.keras.layers.Layer):
 
             x, layer_self_attn, layer_past = decoder_layer(
                 x,
-                encoder_hidden_states,
-                encoder_attn_mask=encoder_padding_mask,
-                decoder_padding_mask=decoder_padding_mask,
+                attention_mask=attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attn_mask=encoder_attention_mask,
+#                encoder_attn_mask=encoder_padding_mask,
+#                decoder_padding_mask=decoder_padding_mask,
                 layer_state=layer_state,
-                causal_mask=decoder_causal_mask,
+#                causal_mask=decoder_causal_mask,
             )
 
             if use_cache:

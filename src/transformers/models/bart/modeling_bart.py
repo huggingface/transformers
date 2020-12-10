@@ -405,7 +405,7 @@ class BartDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor = None,
         encoder_attn_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         attn_mask: Optional[torch.Tensor] = None,
