@@ -259,10 +259,8 @@ class TFModelTesterMixin:
             if "T5" in main_layer_class.__name__:
                 # Take the same values than in TFT5ModelTester for this shared layer
                 shared = TFSharedEmbeddings(99, 32, name="shared")
-                config.use_cache = False
+                config.use_cache = inputs_dict.pop("use_cache", None)
                 main_layer = main_layer_class(config, embed_tokens=shared)
-                # We already set use_cache in the config above
-                inputs_dict.pop("use_cache")
             else:
                 main_layer = main_layer_class(config)
 
@@ -307,7 +305,7 @@ class TFModelTesterMixin:
         max_diff = np.amax(np.abs(out_1 - out_2))
         self.assertLessEqual(max_diff, 1e-5)
 
-    @is_pt_tf_cross_test
+    # @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
 
         import torch
@@ -334,10 +332,13 @@ class TFModelTesterMixin:
 
             # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
             pt_model.eval()
+            pt_inputs_dict = {}
             for name, key in self._prepare_for_class(inputs_dict, model_class).items():
-                if not type(key) == bool:
-                    key = key.numpy()
-                pt_inputs_dict = dict((name, torch.from_numpy(key).to(torch.long)))
+                if type(key) == bool:
+                    key = np.array(key, dtype=bool)
+                    pt_inputs_dict[name] = torch.from_numpy(key).to(torch.long)
+                else:
+                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
 
             # need to rename encoder-decoder "inputs" for PyTorch
             if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
@@ -372,10 +373,13 @@ class TFModelTesterMixin:
 
             # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
             pt_model.eval()
-            pt_inputs_dict = dict(
-                (name, torch.from_numpy(key.numpy()).to(torch.long))
-                for name, key in self._prepare_for_class(inputs_dict, model_class).items()
-            )
+            pt_inputs_dict = {}
+            for name, key in self._prepare_for_class(inputs_dict, model_class).items():
+                if type(key) == bool:
+                    key = np.array(key, dtype=bool)
+                    pt_inputs_dict[name] = torch.from_numpy(key).to(torch.long)
+                else:
+                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
             # need to rename encoder-decoder "inputs" for PyTorch
             if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
                 pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
