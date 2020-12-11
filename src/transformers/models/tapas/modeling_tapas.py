@@ -821,8 +821,8 @@ class TapasModel(TapasPreTrainedModel):
             >>> from transformers import TapasTokenizer, TapasModel
             >>> import pandas as pd
 
-            >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base-uncased')
-            >>> model = TapasModel.from_pretrained('google/tapas-base-uncased')
+            >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base')
+            >>> model = TapasModel.from_pretrained('google/tapas-base')
 
             >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
             ...         'Age': ["56", "45", "59"],
@@ -959,8 +959,8 @@ class TapasForMaskedLM(TapasPreTrainedModel):
             >>> from transformers import TapasTokenizer, TapasForMaskedLM
             >>> import pandas as pd
 
-            >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base-uncased')
-            >>> model = TapasForMaskedLM.from_pretrained('google/tapas-base-uncased')
+            >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base')
+            >>> model = TapasForMaskedLM.from_pretrained('google/tapas-base')
 
             >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
             ...         'Age': ["56", "45", "59"],
@@ -1105,8 +1105,8 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
             >>> from transformers import TapasTokenizer, TapasForQuestionAnswering
             >>> import pandas as pd
 
-            >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base-uncased-finetuned-wtq')
-            >>> model = TapasForQuestionAnswering.from_pretrained('google/tapas-base-uncased-finetuned-wtq')
+            >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base-finetuned-wtq')
+            >>> model = TapasForQuestionAnswering.from_pretrained('google/tapas-base-finetuned-wtq')
 
             >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
             ...         'Age': ["56", "45", "59"],
@@ -1400,8 +1400,8 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
             >>> import torch
             >>> import pandas as pd
 
-            >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base-uncased-finetuned-tabfact')
-            >>> model = TapasForSequenceClassification.from_pretrained('google/tapas-base-uncased-finetuned-tabfact')
+            >>> tokenizer = TapasTokenizer.from_pretrained('google/tapas-base-finetuned-tabfact')
+            >>> model = TapasForSequenceClassification.from_pretrained('google/tapas-base-finetuned-tabfact')
 
             >>> data = {'Actors': ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
             ...         'Age': ["56", "45", "59"],
@@ -2199,6 +2199,9 @@ def _calculate_expected_result(
         average_result = sum_result / (count_result + EPSILON_ZERO_DIVISION)
     elif avg_approximation == AverageApproximationFunction.FIRST_ORDER:
         # The sum of all probabilities except that correspond to other cells
+        # Ex here stands for expectation, more explicitly the expectation of the sum of N-1 Bernoulli random variables plus
+        # the constant 1, which is computed as adding all N expected values and subtracting the extra one. It corresponds to X_c
+        # in Appendix D of the original TAPAS paper which is trying to approximate the average of a random set.
         ex = torch.sum(scaled_probability_per_cell, dim=1, keepdim=True) - scaled_probability_per_cell + 1
         average_result = torch.sum(numeric_values_masked * scaled_probability_per_cell / ex, dim=1)
     elif avg_approximation == AverageApproximationFunction.SECOND_ORDER:
