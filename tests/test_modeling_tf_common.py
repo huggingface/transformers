@@ -305,7 +305,7 @@ class TFModelTesterMixin:
         max_diff = np.amax(np.abs(out_1 - out_2))
         self.assertLessEqual(max_diff, 1e-5)
 
-    # @is_pt_tf_cross_test
+    @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
 
         import torch
