@@ -1264,6 +1264,9 @@ class Trainer:
             ignore_keys (:obj:`Lst[str]`, `optional`):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
+            metric_key_prefix (:obj:`str`, `optional`):
+                An optional prefix to be used as the metrics key prefix - by default "eval" is used. For example
+                "eval_bleu".
 
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
@@ -1309,6 +1312,9 @@ class Trainer:
             ignore_keys (:obj:`Lst[str]`, `optional`):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
+            metric_key_prefix (:obj:`str`, `optional`):
+                An optional prefix to be used as the metrics key prefix - by default "eval" is used. For example
+                "eval_bleu".
 
         .. note::
 
