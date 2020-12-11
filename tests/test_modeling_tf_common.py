@@ -165,7 +165,7 @@ class TFModelTesterMixin:
                 expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    # @slow
+    @slow
     def test_saved_model_with_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
@@ -262,8 +262,11 @@ class TFModelTesterMixin:
                 shared = TFSharedEmbeddings(99, 32, name="shared")
                 config.use_cache = False
                 main_layer = main_layer_class(config, embed_tokens=shared)
+                # We already set use_cache in the config above
+                inputs_dict.pop("use_cache")
             else:
                 main_layer = main_layer_class(config)
+
             symbolic_inputs = {
                 name: tf.keras.Input(tensor.shape[1:], dtype=tensor.dtype) for name, tensor in inputs_dict.items()
             }
@@ -570,7 +573,7 @@ class TFModelTesterMixin:
             config.output_hidden_states = True
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
-            
+
             self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
             self.assertEqual(model.config.output_hidden_states, True)
             check_encoder_attentions_output(outputs)

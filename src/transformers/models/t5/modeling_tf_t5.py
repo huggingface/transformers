@@ -27,17 +27,21 @@ from transformers.modeling_tf_utils import TFWrappedEmbeddings
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
     DUMMY_INPUTS,
-    DUMMY_MASK, ModelOutput,
+    DUMMY_MASK,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPast, TFSeq2SeqLMOutput, TFSeq2SeqModelOutput
+from ...modeling_tf_outputs import (
+    TFBaseModelOutput,
+    TFBaseModelOutputWithPast,
+    TFSeq2SeqLMOutput,
+    TFSeq2SeqModelOutput,
+)
 from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
     TFSharedEmbeddings,
-    cast_bool_to_primitive,
     input_processing,
     keras_serializable,
     shape_list,
@@ -311,7 +315,7 @@ class TFT5Attention(tf.keras.layers.Layer):
         )
 
         # to cope with keras serialization
-        if self.is_decoder and cast_bool_to_primitive(use_cache, self.use_cache) is True:
+        if self.is_decoder and use_cache:
             present_key_value_state = (key_states, value_states)
         else:
             present_key_value_state = None
@@ -1143,11 +1147,7 @@ class TFT5Model(TFT5PreTrainedModel):
             training=inputs["training"],
         )
 
-        past = (
-            (inputs["encoder_outputs"], decoder_outputs[1])
-            if inputs["use_cache"]
-            else None
-        )
+        past = (inputs["encoder_outputs"], decoder_outputs[1]) if inputs["use_cache"] else None
 
         if not inputs["return_dict"]:
             if past is not None:
@@ -1340,11 +1340,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        past = (
-            (inputs["encoder_outputs"], decoder_outputs[1])
-            if inputs["use_cache"]
-            else None
-        )
+        past = (inputs["encoder_outputs"], decoder_outputs[1]) if inputs["use_cache"] else None
         if not inputs["return_dict"]:
             if past is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
