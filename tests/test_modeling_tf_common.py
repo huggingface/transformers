@@ -335,8 +335,7 @@ class TFModelTesterMixin:
             pt_inputs_dict = {}
             for name, key in self._prepare_for_class(inputs_dict, model_class).items():
                 if type(key) == bool:
-                    key = np.array(key, dtype=bool)
-                    pt_inputs_dict[name] = torch.from_numpy(key).to(torch.long)
+                    pt_inputs_dict[name] = key
                 else:
                     pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
 
