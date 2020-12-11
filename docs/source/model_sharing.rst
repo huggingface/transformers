@@ -98,10 +98,12 @@ with any other git repo.
     echo "hello" >> README.md
     git add . && git commit -m "Update from $USER"
 
-We are intentionally not wrapping git too much, so that you can go on with the workflow you're used to and the tools you already know.
+We are intentionally not wrapping git too much, so that you can go on with the workflow you're used to and the tools
+you already know.
 
 The only learning curve you might have compared to regular git is the one for git-lfs. The documentation at
-`git-lfs.github.com <https://git-lfs.github.com/>`__ is decent, but we'll work on a tutorial with some tips and tricks in the coming weeks!
+`git-lfs.github.com <https://git-lfs.github.com/>`__ is decent, but we'll work on a tutorial with some tips and tricks
+in the coming weeks!
 
 Make your model work on all frameworks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -214,8 +216,9 @@ Add a model card
 
 To make sure everyone knows what your model can do, what its limitations, potential bias or ethical considerations are,
 please add a README.md model card to your model repo. You can just create it, or there's also a convenient button
-titled "Add a README.md" on your model page. A model card template can be found  `here <https://github.com/huggingface/model_card>`__ (meta-suggestions are welcome).
-model card template (meta-suggestions are welcome).
+titled "Add a README.md" on your model page. A model card template can be found `here
+<https://github.com/huggingface/model_card>`__ (meta-suggestions are welcome). model card template (meta-suggestions
+are welcome).
 
 .. note::
 
@@ -260,8 +263,8 @@ First you need to install `git-lfs` in the environment used by the notebook:
 
     sudo apt-get install git-lfs
 
-Then you can use either create a repo directly from  `huggingface.co <https://huggingface.co/>`__ , or use the :obj:`transformers-cli` to
-create it:
+Then you can use either create a repo directly from `huggingface.co <https://huggingface.co/>`__ , or use the
+:obj:`transformers-cli` to create it:
 
 
 .. code-block:: bash
