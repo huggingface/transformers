@@ -19,7 +19,7 @@ Transfer learning, where a model is first pre-trained on a data-rich task before
 
 ## Details of the Dataset 📚 
 
-Dataset ID: ```wikisql``` from  [HugginFace/NLP](https://huggingface.co/nlp/viewer/?dataset=wikisql)
+Dataset ID: ```wikisql``` from  [Huggingface/NLP](https://huggingface.co/nlp/viewer/?dataset=wikisql)
 
 | Dataset  | Split | # samples |
 | -------- | ----- | --------- |
@@ -50,7 +50,7 @@ tokenizer = AutoTokenizer.from_pretrained("mrm8488/t5-base-finetuned-wikiSQL-sql
 model = AutoModelWithLMHead.from_pretrained("mrm8488/t5-base-finetuned-wikiSQL-sql-to-en")
 
 def get_explanation(query):
-  input_text = "translante Sql to English: %s </s>" % query
+  input_text = "translate Sql to English: %s </s>" % query
   features = tokenizer([input_text], return_tensors='pt')
 
   output = model.generate(input_ids=features['input_ids'], 

@@ -1,8 +1,23 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import json
 import os
 import pickle
 import random
 import time
+import warnings
 from typing import Dict, List, Optional
 
 import torch
@@ -15,6 +30,12 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
+
+
+DEPRECATION_WARNING = (
+    "This dataset will be removed from the library soon, preprocessing should be handled with the 🤗 Datasets "
+    "library. You can have a look at this example script for pointers: {0}"
+)
 
 
 class TextDataset(Dataset):
@@ -30,6 +51,12 @@ class TextDataset(Dataset):
         overwrite_cache=False,
         cache_dir: Optional[str] = None,
     ):
+        warnings.warn(
+            DEPRECATION_WARNING.format(
+                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm.py"
+            ),
+            FutureWarning,
+        )
         assert os.path.isfile(file_path), f"Input file path {file_path} not found"
 
         block_size = block_size - tokenizer.num_special_tokens_to_add(pair=False)
@@ -71,7 +98,7 @@ class TextDataset(Dataset):
                         tokenizer.build_inputs_with_special_tokens(tokenized_text[i : i + block_size])
                     )
                 # Note that we are losing the last truncated example here for the sake of simplicity (no padding)
-                # If your dataset is small, first you should loook for a bigger one :-) and second you
+                # If your dataset is small, first you should look for a bigger one :-) and second you
                 # can change this behavior by adding (model specific) padding.
 
                 start = time.time()
@@ -94,6 +121,12 @@ class LineByLineTextDataset(Dataset):
     """
 
     def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int):
+        warnings.warn(
+            DEPRECATION_WARNING.format(
+                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm.py"
+            ),
+            FutureWarning,
+        )
         assert os.path.isfile(file_path), f"Input file path {file_path} not found"
         # Here, we do not cache the features, operating under the assumption
         # that we will soon use fast multithreaded tokenizers from the
@@ -120,6 +153,12 @@ class LineByLineWithRefDataset(Dataset):
     """
 
     def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int, ref_path: str):
+        warnings.warn(
+            DEPRECATION_WARNING.format(
+                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm_wwm.py"
+            ),
+            FutureWarning,
+        )
         assert os.path.isfile(file_path), f"Input file path {file_path} not found"
         assert os.path.isfile(ref_path), f"Ref file path {file_path} not found"
         # Here, we do not cache the features, operating under the assumption
@@ -128,15 +167,17 @@ class LineByLineWithRefDataset(Dataset):
         logger.info("Creating features from dataset file at %s", file_path)
         logger.info("Use ref segment results at %s", ref_path)
         with open(file_path, encoding="utf-8") as f:
-            data = [line for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
-        batch_encoding = tokenizer(data, add_special_tokens=True, truncation=True, max_length=block_size)
-        self.examples = batch_encoding["input_ids"]
-        self.examples = [{"input_ids": torch.tensor(e, dtype=torch.long)} for e in self.examples]
-
+            data = f.readlines()  # use this method to avoid delimiter '\u2029' to split a line
+        data = [line.strip() for line in data if len(line) > 0 and not line.isspace()]
         # Get ref inf from file
         with open(ref_path, encoding="utf-8") as f:
             ref = [json.loads(line) for line in f.read().splitlines() if (len(line) > 0 and not line.isspace())]
         assert len(data) == len(ref)
+
+        batch_encoding = tokenizer(data, add_special_tokens=True, truncation=True, max_length=block_size)
+        self.examples = batch_encoding["input_ids"]
+        self.examples = [{"input_ids": torch.tensor(e, dtype=torch.long)} for e in self.examples]
+
         n = len(self.examples)
         for i in range(n):
             self.examples[i]["chinese_ref"] = torch.tensor(ref[i], dtype=torch.long)
@@ -154,6 +195,12 @@ class LineByLineWithSOPTextDataset(Dataset):
     """
 
     def __init__(self, tokenizer: PreTrainedTokenizer, file_dir: str, block_size: int):
+        warnings.warn(
+            DEPRECATION_WARNING.format(
+                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm.py"
+            ),
+            FutureWarning,
+        )
         assert os.path.isdir(file_dir)
         logger.info(f"Creating features from dataset file folder at {file_dir}")
         self.examples = []
@@ -196,7 +243,7 @@ class LineByLineWithSOPTextDataset(Dataset):
         # to `block_size` anyways, so short sequences are generally wasted
         # computation. However, we *sometimes*
         # (i.e., short_seq_prob == 0.1 == 10% of the time) want to use shorter
-        # sequences to minimize the mismatch between pre-training and fine-tuning.
+        # sequences to minimize the mismatch between pretraining and fine-tuning.
         # The `target_seq_length` is just a rough target however, whereas
         # `block_size` is a hard limit.
         target_seq_length = max_num_tokens
@@ -303,6 +350,12 @@ class TextDatasetForNextSentencePrediction(Dataset):
         short_seq_probability=0.1,
         nsp_probability=0.5,
     ):
+        warnings.warn(
+            DEPRECATION_WARNING.format(
+                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm.py"
+            ),
+            FutureWarning,
+        )
         assert os.path.isfile(file_path), f"Input file path {file_path} not found"
 
         self.block_size = block_size - tokenizer.num_special_tokens_to_add(pair=True)
@@ -386,7 +439,7 @@ class TextDatasetForNextSentencePrediction(Dataset):
         # to `block_size` anyways, so short sequences are generally wasted
         # computation. However, we *sometimes*
         # (i.e., short_seq_prob == 0.1 == 10% of the time) want to use shorter
-        # sequences to minimize the mismatch between pre-training and fine-tuning.
+        # sequences to minimize the mismatch between pretraining and fine-tuning.
         # The `target_seq_length` is just a rough target however, whereas
         # `block_size` is a hard limit.
         target_seq_length = max_num_tokens
@@ -447,9 +500,18 @@ class TextDatasetForNextSentencePrediction(Dataset):
                     assert len(tokens_a) >= 1
                     assert len(tokens_b) >= 1
 
-                    self.examples.append(
-                        {"tokens_a": tokens_a, "tokens_b": tokens_b, "is_random_next": is_random_next}
-                    )
+                    # add special tokens
+                    input_ids = self.tokenizer.build_inputs_with_special_tokens(tokens_a, tokens_b)
+                    # add token type ids, 0 for sentence a, 1 for sentence b
+                    token_type_ids = self.tokenizer.create_token_type_ids_from_sequences(tokens_a, tokens_b)
+
+                    example = {
+                        "input_ids": torch.tensor(input_ids, dtype=torch.long),
+                        "token_type_ids": torch.tensor(token_type_ids, dtype=torch.long),
+                        "next_sentence_label": torch.tensor(1 if is_random_next else 0, dtype=torch.long),
+                    }
+
+                    self.examples.append(example)
 
                 current_chunk = []
                 current_length = 0

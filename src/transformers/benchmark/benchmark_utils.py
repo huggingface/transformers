@@ -1,5 +1,18 @@
 # This file is adapted from the AllenNLP library at https://github.com/allenai/allennlp
-# Copyright by the AllenNLP authors.
+
+# Copyright 2020 The HuggingFace Team and the AllenNLP authors. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """
 Utilities for working with the local dataset cache.
 """
@@ -172,7 +185,7 @@ class MemorySummary(NamedTuple):
     `MemorySummary` namedtuple otherwise with the fields:
 
         - `sequential`: a list of `MemoryState` namedtuple (see below) computed from the provided `memory_trace` by
-          substracting the memory after executing each line from the memory before executing said line.
+          subtracting the memory after executing each line from the memory before executing said line.
         - `cumulative`: a list of `MemoryState` namedtuple (see below) with cumulative increase in memory for each line
           obtained by summing repeated memory increase for a line if it's executed several times. The list is sorted
           from the frame with the largest memory consumption to the frame with the smallest (can be negative if memory
@@ -208,7 +221,7 @@ def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5, device_i
 
     Returns:
 
-        - `max_memory`: (`int`) cosumed memory peak in Bytes
+        - `max_memory`: (`int`) consumed memory peak in Bytes
     """
 
     def get_cpu_memory(process_id: int) -> int:
@@ -221,7 +234,7 @@ def measure_peak_memory_cpu(function: Callable[[], None], interval=0.5, device_i
 
         Returns
 
-            - `memory`: (`int`) cosumed memory in Bytes
+            - `memory`: (`int`) consumed memory in Bytes
         """
         process = psutil.Process(process_id)
         try:
@@ -327,7 +340,7 @@ def start_memory_tracing(
 
         - `modules_to_trace`: (None, string, list/tuple of string) if None, all events are recorded if string or list
           of strings: only events from the listed module/sub-module will be recorded (e.g. 'fairseq' or
-          'transformers.modeling_gpt2')
+          'transformers.models.gpt2.modeling_gpt2')
         - `modules_not_to_trace`: (None, string, list/tuple of string) if None, no module is avoided if string or list
           of strings: events from the listed module/sub-module will not be recorded (e.g. 'torch')
         - `events_to_trace`: string or list of string of events to be recorded (see official python doc for
@@ -367,7 +380,7 @@ def start_memory_tracing(
             devices = list(range(nvml.nvmlDeviceGetCount())) if gpus_to_trace is None else gpus_to_trace
             nvml.nvmlShutdown()
         except (OSError, nvml.NVMLError):
-            logger.warning("Error while initializing comunication with GPU. " "We won't perform GPU memory tracing.")
+            logger.warning("Error while initializing communication with GPU. " "We won't perform GPU memory tracing.")
             log_gpu = False
         else:
             log_gpu = is_torch_available() or is_tf_available()
@@ -472,9 +485,10 @@ def stop_memory_tracing(
 
     Args:
 
-        - `memory_trace` (optional output of start_memory_tracing, default: None): memory trace to convert in summary
-        - `ignore_released_memory` (boolean, default: None): if True we only sum memory increase to compute total
-          memory
+        `memory_trace` (optional output of start_memory_tracing, default: None):
+            memory trace to convert in summary
+        `ignore_released_memory` (boolean, default: None):
+            if True we only sum memory increase to compute total memory
 
     Return:
 
@@ -482,7 +496,7 @@ def stop_memory_tracing(
         - `MemorySummary` namedtuple otherwise with the fields:
 
             - `sequential`: a list of `MemoryState` namedtuple (see below) computed from the provided `memory_trace` by
-              substracting the memory after executing each line from the memory before executing said line.
+              subtracting the memory after executing each line from the memory before executing said line.
             - `cumulative`: a list of `MemoryState` namedtuple (see below) with cumulative increase in memory for each
               line obtained by summing repeated memory increase for a line if it's executed several times. The list is
               sorted from the frame with the largest memory consumption to the frame with the smallest (can be negative

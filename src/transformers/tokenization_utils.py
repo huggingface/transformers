@@ -19,7 +19,6 @@
 import itertools
 import re
 import unicodedata
-import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union, overload
 
 from .file_utils import add_end_docstrings
@@ -53,7 +52,7 @@ TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 
 def _is_whitespace(char):
     """Checks whether `char` is a whitespace character."""
-    # \t, \n, and \r are technically contorl characters but we treat them
+    # \t, \n, and \r are technically control characters but we treat them
     # as whitespace since they are generally considered as such.
     if char == " " or char == "\t" or char == "\n" or char == "\r":
         return True
@@ -246,12 +245,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Returns:
             :obj:`List[str]`: The list of tokens.
         """
-        if "is_pretokenized" in kwargs:
-            warnings.warn(
-                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
-                FutureWarning,
-            )
-            kwargs["is_split_into_words"] = kwargs.pop("is_pretokenized")
         # Simple mapping string => AddedToken for special tokens with specific tokenization behaviors
         all_special_tokens_extended = dict(
             (str(t), t) for t in self.all_special_tokens_extended if isinstance(t, AddedToken)
@@ -291,7 +284,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                             full_word += sub_text + tok
                         elif full_word:
                             full_word += sub_text
-                            result += [full_word]
+                            result.append(full_word)
                             full_word = ""
                             continue
                     # Strip white spaces on the right
@@ -310,16 +303,16 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                         sub_text = sub_text.lstrip()
 
                 if i == 0 and not sub_text:
-                    result += [tok]
+                    result.append(tok)
                 elif i == len(split_text) - 1:
                     if sub_text:
-                        result += [sub_text]
+                        result.append(sub_text)
                     else:
                         pass
                 else:
                     if sub_text:
-                        result += [sub_text]
-                    result += [tok]
+                        result.append(sub_text)
+                    result.append(tok)
             return result
 
         def split_on_tokens(tok_list, text):
@@ -334,9 +327,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 tokenized_text = []
                 for sub_text in text_list:
                     if sub_text not in self.unique_no_split_tokens:
-                        tokenized_text += split_on_token(tok, sub_text)
+                        tokenized_text.extend(split_on_token(tok, sub_text))
                     else:
-                        tokenized_text += [sub_text]
+                        tokenized_text.append(sub_text)
                 text_list = tokenized_text
 
             return list(
@@ -367,7 +360,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         vocabulary.
 
         Args:
-            token (:obj:`str` or :obj:`List[str]`): One or several token(s) to convert to token id(s).
+            tokens (:obj:`str` or :obj:`List[str]`): One or several token(s) to convert to token id(s).
 
         Returns:
             :obj:`int` or :obj:`List[int]`: The token id or list of token ids.
@@ -448,13 +441,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 "https://github.com/huggingface/transformers/pull/2674"
             )
 
-        if "is_pretokenized" in kwargs:
-            warnings.warn(
-                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
-                FutureWarning,
-            )
-            is_split_into_words = kwargs.pop("is_pretokenized")
-
         first_ids = get_input_ids(text)
         second_ids = get_input_ids(text_pair) if text_pair is not None else None
 
@@ -529,13 +515,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 "To use this feature, change your tokenizer to one deriving from "
                 "transformers.PreTrainedTokenizerFast."
             )
-
-        if "is_pretokenized" in kwargs:
-            warnings.warn(
-                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
-                FutureWarning,
-            )
-            is_split_into_words = kwargs.pop("is_pretokenized")
 
         input_ids = []
         for ids_or_pair_ids in batch_text_or_text_pairs:
@@ -644,7 +623,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         :obj:`kwargs` at the end of the encoding process to be sure all the arguments have been used.
 
         Args:
-            test (:obj:`str`):
+            text (:obj:`str`):
                 The text to prepare.
             is_split_into_words (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not the text has been pretokenized.
@@ -669,7 +648,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             token_ids_1 (:obj:`List[int]`, `optional`):
                 List of ids of the second sequence.
             already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the token list is already formated with special tokens for the model.
+                Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
             A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
@@ -732,7 +711,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 
         # To avoid mixing byte-level and unicode for byte-level BPT
-        # we need to build string separatly for added tokens and byte-level tokens
+        # we need to build string separately for added tokens and byte-level tokens
         # cf. https://github.com/huggingface/transformers/issues/1133
         sub_texts = []
         current_sub_text = []
@@ -797,7 +776,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                   maximum acceptable input length for the model if that argument is not provided.
                 * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
                   different lengths).
-            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`, defaults to "pt"):
+            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.

@@ -16,7 +16,7 @@
 """Masked Version of BERT. It replaces the `torch.nn.Linear` layers with
 :class:`~emmental.MaskedLinear` and add an additional parameters in the forward pass to
 compute the adaptive mask.
-Built on top of `transformers.modeling_bert`"""
+Built on top of `transformers.models.bert.modeling_bert`"""
 
 
 import logging
@@ -29,8 +29,8 @@ from torch.nn import CrossEntropyLoss, MSELoss
 from emmental import MaskedBertConfig
 from emmental.modules import MaskedLinear
 from transformers.file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
-from transformers.modeling_bert import ACT2FN, BertLayerNorm, load_tf_weights_in_bert
 from transformers.modeling_utils import PreTrainedModel, prune_linear_layer
+from transformers.models.bert.modeling_bert import ACT2FN, BertLayerNorm, load_tf_weights_in_bert
 
 
 logger = logging.getLogger(__name__)
@@ -591,7 +591,7 @@ class MaskedBertModel(MaskedBertPreTrainedModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
 
         # If a 2D ou 3D attention mask is provided for the cross-attention
-        # we need to make broadcastabe to [batch_size, num_heads, seq_length, seq_length]
+        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.is_decoder and encoder_hidden_states is not None:
             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
@@ -631,7 +631,7 @@ class MaskedBertModel(MaskedBertPreTrainedModel):
                 )  # We can specify head_mask for each layer
             head_mask = head_mask.to(
                 dtype=next(self.parameters()).dtype
-            )  # switch to fload if need + fp16 compatibility
+            )  # switch to float if need + fp16 compatibility
         else:
             head_mask = [None] * self.config.num_hidden_layers
 

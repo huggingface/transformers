@@ -24,6 +24,7 @@ from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
+from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
@@ -31,7 +32,7 @@ if is_torch_available():
     import torch
 
     from transformers import FSMTConfig, FSMTForConditionalGeneration, FSMTModel, FSMTTokenizer
-    from transformers.modeling_fsmt import (
+    from transformers.models.fsmt.modeling_fsmt import (
         SinusoidalPositionalEmbedding,
         _prepare_fsmt_decoder_inputs,
         invert_mask,
@@ -120,7 +121,7 @@ def prepare_fsmt_inputs_dict(
 
 
 @require_torch
-class FSMTModelTest(ModelTesterMixin, unittest.TestCase):
+class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (FSMTModel, FSMTForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (FSMTForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
@@ -225,15 +226,9 @@ class FSMTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_tie_model_weights(self):
         pass
 
-    # def test_auto_model(self):
-    #     # XXX: add a tiny model to s3?
-    #     model_name = "facebook/wmt19-ru-en-tiny"
-    #     tiny = AutoModel.from_pretrained(model_name)  # same vocab size
-    #     tok = AutoTokenizer.from_pretrained(model_name)  # same tokenizer
-    #     inputs_dict = tok.batch_encode_plus(["Hello my friends"], return_tensors="pt")
-
-    #     with torch.no_grad():
-    #         tiny(**inputs_dict)
+    @unittest.skip("TODO: Decoder embeddings cannot be resized at the moment")
+    def test_resize_embeddings_untied(self):
+        pass
 
 
 @require_torch
@@ -258,7 +253,6 @@ class FSMTHeadTests(unittest.TestCase):
             eos_token_id=2,
             pad_token_id=1,
             bos_token_id=0,
-            return_dict=True,
         )
 
     def _get_config_and_data(self):

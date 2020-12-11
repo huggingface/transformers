@@ -1,8 +1,22 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import unittest
 
 from transformers import AutoConfig, AutoTokenizer, is_torch_available
-from transformers.configuration_pegasus import task_specific_params
 from transformers.file_utils import cached_property
+from transformers.models.pegasus.configuration_pegasus import task_specific_params
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 from transformers.utils.logging import ERROR, set_verbosity
 
@@ -33,7 +47,6 @@ class ModelTester:
             decoder_ffn_dim=32,
             max_position_embeddings=48,
             add_final_layer_norm=True,
-            return_dict=True,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -44,7 +57,7 @@ class ModelTester:
 class SelectiveCommonTest(unittest.TestCase):
     all_model_classes = (PegasusForConditionalGeneration,) if is_torch_available() else ()
 
-    test_save_load_keys_to_never_save = ModelTesterMixin.test_save_load_keys_to_never_save
+    test_save_load__keys_to_ignore_on_save = ModelTesterMixin.test_save_load__keys_to_ignore_on_save
 
     def setUp(self):
         self.model_tester = ModelTester(self)

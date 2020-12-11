@@ -2,9 +2,16 @@ import os
 import sys
 from unittest.mock import patch
 
-from transformers import BertTokenizer, EncoderDecoderModel, is_torch_available
+from transformers import BertTokenizer, EncoderDecoderModel
 from transformers.file_utils import is_datasets_available
-from transformers.testing_utils import TestCasePlus, execute_subprocess_async, slow
+from transformers.testing_utils import (
+    TestCasePlus,
+    execute_subprocess_async,
+    get_gpu_count,
+    require_torch_multi_gpu,
+    require_torch_non_multi_gpu,
+    slow,
+)
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import set_seed
 
@@ -13,25 +20,37 @@ from .seq2seq_trainer import Seq2SeqTrainer
 from .test_seq2seq_examples import MBART_TINY
 
 
-if is_torch_available():
-    import torch
-
 set_seed(42)
 MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
 
 
 class TestFinetuneTrainer(TestCasePlus):
-    def test_finetune_trainer(self):
-        output_dir = self.run_trainer(1, "12", MBART_TINY, 1)
+    def finetune_trainer_quick(self, distributed=None):
+        output_dir = self.run_trainer(1, "12", MBART_TINY, 1, distributed)
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
         eval_metrics = [log for log in logs if "eval_loss" in log.keys()]
         first_step_stats = eval_metrics[0]
         assert "eval_bleu" in first_step_stats
 
+    @require_torch_non_multi_gpu
+    def test_finetune_trainer_no_dist(self):
+        self.finetune_trainer_quick()
+
+    # the following 2 tests verify that the trainer can handle distributed and non-distributed with n_gpu > 1
+    @require_torch_multi_gpu
+    def test_finetune_trainer_dp(self):
+        self.finetune_trainer_quick(distributed=False)
+
+    @require_torch_multi_gpu
+    def test_finetune_trainer_ddp(self):
+        self.finetune_trainer_quick(distributed=True)
+
     @slow
     def test_finetune_trainer_slow(self):
         # There is a missing call to __init__process_group somewhere
-        output_dir = self.run_trainer(eval_steps=2, max_len="128", model_name=MARIAN_MODEL, num_train_epochs=10)
+        output_dir = self.run_trainer(
+            eval_steps=2, max_len="128", model_name=MARIAN_MODEL, num_train_epochs=10, distributed=False
+        )
 
         # Check metrics
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
@@ -141,7 +160,7 @@ class TestFinetuneTrainer(TestCasePlus):
             per_device_train_batch_size=batch_size,
             per_device_eval_batch_size=batch_size,
             predict_with_generate=True,
-            evaluate_during_training=True,
+            evaluation_strategy="steps",
             do_train=True,
             do_eval=True,
             warmup_steps=0,
@@ -161,7 +180,9 @@ class TestFinetuneTrainer(TestCasePlus):
         # start training
         trainer.train()
 
-    def run_trainer(self, eval_steps: int, max_len: str, model_name: str, num_train_epochs: int):
+    def run_trainer(
+        self, eval_steps: int, max_len: str, model_name: str, num_train_epochs: int, distributed: bool = False
+    ):
         data_dir = self.examples_dir / "seq2seq/test_data/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()
         args = f"""
@@ -180,9 +201,9 @@ class TestFinetuneTrainer(TestCasePlus):
             --num_train_epochs {str(num_train_epochs)}
             --per_device_train_batch_size 4
             --per_device_eval_batch_size 4
-            --learning_rate 3e-4
+            --learning_rate 3e-3
             --warmup_steps 8
-            --evaluate_during_training
+            --evaluation_strategy steps
             --predict_with_generate
             --logging_steps 0
             --save_steps {str(eval_steps)}
@@ -196,8 +217,8 @@ class TestFinetuneTrainer(TestCasePlus):
         """.split()
         # --eval_beams  2
 
-        n_gpu = torch.cuda.device_count()
-        if n_gpu > 1:
+        if distributed:
+            n_gpu = get_gpu_count()
             distributed_args = f"""
                 -m torch.distributed.launch
                 --nproc_per_node={n_gpu}
@@ -206,7 +227,6 @@ class TestFinetuneTrainer(TestCasePlus):
             cmd = [sys.executable] + distributed_args + args
             execute_subprocess_async(cmd, env=self.get_env())
         else:
-            # 0 or 1 gpu
             testargs = ["finetune_trainer.py"] + args
             with patch.object(sys, "argv", testargs):
                 main()

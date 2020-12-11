@@ -53,6 +53,7 @@ def gelu(x):
 ACT2FN = {
     "gelu": nn.gelu,
     "relu": nn.relu,
+    "silu": nn.swish,
     "swish": nn.swish,
     "gelu_new": gelu,
 }
@@ -64,12 +65,11 @@ class FlaxPreTrainedModel(ABC):
     base_model_prefix = ""
     model_class = None
 
-    def __init__(self, config: PretrainedConfig, module: nn.Module, params: Dict, seed: int = 0):
+    def __init__(
+        self, config: PretrainedConfig, module: nn.Module, params: Dict, seed: int = 0, dtype: jnp.dtype = jnp.float32
+    ):
         if config is None:
             raise ValueError("config cannot be None")
-
-        if module is None:
-            raise ValueError("module cannot be None")
 
         if params is None:
             raise ValueError("state cannot be None")
@@ -81,11 +81,15 @@ class FlaxPreTrainedModel(ABC):
         # Those are public as their type is generic to every derived classes.
         self.key = PRNGKey(seed)
         self.params = params
-        self.model = module
+        self.dtype = dtype
 
     @property
     def config(self) -> PretrainedConfig:
         return self._config
+
+    @property
+    def module(self) -> nn.Module:
+        return self._module
 
     @staticmethod
     @abstractmethod
@@ -93,7 +97,7 @@ class FlaxPreTrainedModel(ABC):
         raise NotImplementedError()
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path, dtype: jnp.dtype = jnp.float32, *model_args, **kwargs):
         r"""
         Instantiate a pretrained Flax model from a pre-trained model configuration.
         """
@@ -106,7 +110,7 @@ class FlaxPreTrainedModel(ABC):
         proxies = kwargs.pop("proxies", None)
         # output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
-        use_cdn = kwargs.pop("use_cdn", True)
+        revision = kwargs.pop("revision", None)
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
@@ -120,17 +124,21 @@ class FlaxPreTrainedModel(ABC):
                 resume_download=resume_download,
                 proxies=proxies,
                 local_files_only=local_files_only,
+                revision=revision,
                 **kwargs,
             )
         else:
             model_kwargs = kwargs
+
+        # Add the dtype to model_kwargs
+        model_kwargs["dtype"] = dtype
 
         # Load model
         if pretrained_model_name_or_path is not None:
             if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
             else:
-                archive_file = hf_bucket_url(pretrained_model_name_or_path, filename=WEIGHTS_NAME, use_cdn=use_cdn)
+                archive_file = hf_bucket_url(pretrained_model_name_or_path, filename=WEIGHTS_NAME, revision=revision)
 
             # redirect to the cache, if necessary
             try:
@@ -142,16 +150,13 @@ class FlaxPreTrainedModel(ABC):
                     resume_download=resume_download,
                     local_files_only=local_files_only,
                 )
-            except EnvironmentError:
-                if pretrained_model_name_or_path in cls.pretrained_model_archive_map:
-                    msg = f"Couldn't reach server at '{archive_file}' to download pretrained weights."
-                else:
-                    msg = (
-                        f"Model name '{pretrained_model_name_or_path}' "
-                        f"was not found in model name list ({', '.join(cls.pretrained_model_archive_map.keys())}). "
-                        f"We assumed '{archive_file}' was a path or url to model weight files but "
-                        "couldn't find any such file at this path or url."
-                    )
+            except EnvironmentError as err:
+                logger.error(err)
+                msg = (
+                    f"Can't load weights for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
+                    f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                    f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing a file named {WEIGHTS_NAME}.\n\n"
+                )
                 raise EnvironmentError(msg)
 
             if resolved_archive_file == archive_file:

@@ -61,7 +61,7 @@ class LmSeqsDataset(Dataset):
 
     def remove_long_sequences(self):
         """
-        Sequences that are too long are splitted by chunk of max_model_input_size.
+        Sequences that are too long are split by chunk of max_model_input_size.
         """
         max_len = self.params.max_model_input_size
         indices = self.lengths > max_len
@@ -138,8 +138,8 @@ class LmSeqsDataset(Dataset):
         # logger.info(f'{data_len} tokens ({nb_unique_tokens} unique)')
 
         # unk_idx = self.params.special_tok_ids['unk_token']
-        # nb_unkown = sum([(t==unk_idx).sum() for t in self.token_ids])
-        # logger.info(f'{nb_unkown} unknown tokens (covering {100*nb_unkown/data_len:.2f}% of the data)')
+        # nb_unknown = sum([(t==unk_idx).sum() for t in self.token_ids])
+        # logger.info(f'{nb_unknown} unknown tokens (covering {100*nb_unknown/data_len:.2f}% of the data)')
 
     def batch_sequences(self, batch):
         """

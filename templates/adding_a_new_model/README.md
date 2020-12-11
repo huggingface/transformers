@@ -1,89 +1,120 @@
-# How to add a new model in 🤗 Transformers
+<!---
+Copyright 2020 The HuggingFace Team. All rights reserved.
 
-This folder describes the process to add a new model in 🤗 Transformers and provide templates for the required files.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-The library is designed to incorporate a variety of models and code bases. As such the process for adding a new model
-usually mostly consists in copy-pasting to relevant original code in the various sections of the templates included in
-the present repository.
+    http://www.apache.org/licenses/LICENSE-2.0
 
-One important point though is that the library has the following goals impacting the way models are incorporated:
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
 
-- One specific feature of the API is the capability to run the model and tokenizer inline. The tokenization code thus
-  often have to be slightly adapted to allow for running in the python interpreter.
-- the package is also designed to be as self-consistent and with a small and reliable set of packages dependencies. In
-  consequence, additional dependencies are usually not allowed when adding a model but can be allowed for the
-  inclusion of a new tokenizer (recent examples of dependencies added for tokenizer specificities include
-  `sentencepiece` and `sacremoses`). Please make sure to check the existing dependencies when possible before adding a
-  new one.
+# Using `cookiecutter` to generate models
 
-For a quick overview of the general philosphy of the library and its organization, please check the
-[QuickStart section of the documentation](https://huggingface.co/transformers/philosophy.html).
+This folder contains templates to generate new models that fit the current API and pass all tests. It generates
+models in both PyTorch and TensorFlow, completes the `__init__.py` and auto-modeling files, and creates the
+documentation.
 
-# Typical workflow for including a model
+## Usage
 
-Here an overview of the general workflow:
+Using the `cookiecutter` utility requires to have all the `dev` dependencies installed. Let's first clone the 
+repository and install it in our environment:
 
-- [ ] Add model/configuration/tokenization classes.
-- [ ] Add conversion scripts.
-- [ ] Add tests and a @slow integration test.
-- [ ] Document your model.
-- [ ] Finalize.
+```shell script
+git clone https://github.com/huggingface/transformers
+cd transformers
+pip install -e ".[dev]"
+```
 
-Let's detail what should be done at each step.
+Once the installation is done, you can use the CLI command `add-new-model` to generate your models:
 
-## Adding model/configuration/tokenization classes
+```shell script
+transformers-cli add-new-model
+```
 
-Here is the workflow for adding model/configuration/tokenization classes:
+This should launch the `cookiecutter` package which should prompt you to fill in the configuration.
 
-- [ ] Copy the python files from the present folder to the main folder and rename them, replacing `xxx` with your model
-  name.
-- [ ] Edit the files to replace `XXX` (with various casing) with your model name.
-- [ ] Copy-paste or create a simple configuration class for your model in the `configuration_...` file.
-- [ ] Copy-paste or create the code for your model in the `modeling_...` files (PyTorch and TF 2.0).
-- [ ] Copy-paste or create a tokenizer class for your model in the `tokenization_...` file.
+The `modelname` should be cased according to the plain text casing, i.e., BERT, RoBERTa, DeBERTa.
+```
+modelname [<ModelNAME>]:
+uppercase_modelname [<MODEL_NAME>]: 
+lowercase_modelname [<model_name>]: 
+camelcase_modelname [<ModelName>]: 
+```
 
-## Adding conversion scripts
+Fill in the `authors` with your team members:
+```
+authors [The HuggingFace Team]: 
+```
 
-Here is the workflow for the conversion scripts:
+The checkpoint identifier is the checkpoint that will be used in the examples across the files. Put the name you wish,
+as it will appear on the modelhub. Do not forget to include the organisation.
+```
+checkpoint_identifier [organisation/<model_name>-base-cased]: 
+```
 
-- [ ] Copy the conversion script (`convert_...`) from the present folder to the main folder.
-- [ ] Edit this script to convert your original checkpoint weights to the current pytorch ones.
+The tokenizer should either be based on BERT if it behaves exactly like the BERT tokenizer, or a standalone otherwise.
+```
+Select tokenizer_type:
+1 - Based on BERT
+2 - Standalone
+Choose from 1, 2 [1]: 
+```
+<!---
+Choose if your model is an encoder-decoder, or an encoder-only architecture.
 
-## Adding tests:
+If your model is an encoder-only architecture, the generated architecture will be based on the BERT model. 
+If your model is an encoder-decoder architecture, the generated architecture will be based on the BART model. You can,
+of course, edit the files once the generation is complete.
+```
+Select is_encoder_decoder_model:
+1 - True
+2 - False
+Choose from 1, 2 [1]: 
+```
+-->
 
-Here is the workflow for the adding tests:
+Once the command has finished, you should have a total of 7 new files spread across the repository:
+```
+docs/source/model_doc/<model_name>.rst
+src/transformers/models/<model_name>/configuration_<model_name>.py
+src/transformers/models/<model_name>/modeling_<model_name>.py
+src/transformers/models/<model_name>/modeling_tf_<model_name>.py
+src/transformers/models/<model_name>/tokenization_<model_name>.py
+tests/test_modeling_<model_name>.py
+tests/test_modeling_tf_<model_name>.py
+```
 
-- [ ] Copy the python files from the `tests` sub-folder of the present folder to the `tests` subfolder of the main
-  folder and rename them, replacing `xxx` with your model name.
-- [ ] Edit the tests files to replace `XXX` (with various casing) with your model name.
-- [ ] Edit the tests code as needed.
+You can run the tests to ensure that they all pass:
 
-## Documenting your model:
+```
+python -m pytest ./tests/test_*<model_name>*.py
+```
 
-Here is the workflow for documentation:
+Feel free to modify each file to mimic the behavior of your model. 
 
-- [ ] Make sure all your arguments are properly documented in your configuration and tokenizer.
-- [ ] Most of the documentation of the models is automatically generated, you just have to make sure that
-  `XXX_START_DOCSTRING` contains an introduction to the model you're adding and a link to the original
-  article and that `XXX_INPUTS_DOCSTRING` contains all the inputs of your model.
-- [ ] Create a new page `xxx.rst` in the folder `docs/source/model_doc` and add this file in `docs/source/index.rst`.
+⚠ You should be careful about the classes preceded by the following line:️ 
 
-Make sure to check you have no sphinx warnings when building the documentation locally and follow our
-[documentation guide](https://github.com/huggingface/transformers/tree/master/docs#writing-documentation---specification).
+```python
+# Copied from transformers.[...]
+```
 
-## Final steps
+This line ensures that the copy does not diverge from the source. If it *should* diverge, because the implementation
+is different, this line needs to be deleted. If you don't delete this line and run `make fix-copies`,
+your changes will be overwritten.
 
-You can then finish the addition step by adding imports for your classes in the common files:
+Once you have edited the files to fit your architecture, simply re-run the tests (and edit them if a change 
+is needed!) afterwards to make sure everything works as expected. 
 
-- [ ] Add import for all the relevant classes in `__init__.py`.
-- [ ] Add your configuration in `configuration_auto.py`.
-- [ ] Add your PyTorch and TF 2.0 model respectively in `modeling_auto.py` and `modeling_tf_auto.py`.
-- [ ] Add your tokenizer in `tokenization_auto.py`.
-- [ ] Add a link to your conversion script in the main conversion utility (in `commands/convert.py`)
-- [ ] Edit the PyTorch to TF 2.0 conversion script to add your model in the `convert_pytorch_checkpoint_to_tf2.py`
-  file.
-- [ ] Add a mention of your model in the doc: `README.md` and the documentation itself
-  in `docs/source/pretrained_models.rst`. Rune `make fix-copies` to update `docs/source/index.rst` with your changes.
-- [ ] Upload the pretrained weights, configurations and vocabulary files.
-- [ ] Create model card(s) for your models on huggingface.co. For those last two steps, check the
-  [model sharing documentation](https://huggingface.co/transformers/model_sharing.html).
+Once the files are generated and you are happy with your changes, here's a checklist to ensure that your contribution
+will be merged quickly:
+
+- You should run the `make fixup` utility to fix the style of the files and to ensure the code quality meets the
+  library's standards.
+- You should complete the documentation file (`docs/source/model_doc/<model_name>.rst`) so that your model may be
+  usable.

@@ -1,20 +1,17 @@
+#!/usr/bin/env python
+
 import logging
 import os
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
-from seq2seq_trainer import Seq2SeqTrainer, arg_to_scheduler_choices
-from transformers import (
-    AutoConfig,
-    AutoModelForSeq2SeqLM,
-    AutoTokenizer,
-    HfArgumentParser,
-    MBartTokenizer,
-    TrainingArguments,
-    set_seed,
-)
-from transformers.trainer_utils import EvaluationStrategy
+import transformers
+from seq2seq_trainer import Seq2SeqTrainer
+from seq2seq_training_args import Seq2SeqTrainingArguments
+from transformers import AutoConfig, AutoModelForSeq2SeqLM, AutoTokenizer, HfArgumentParser, MBartTokenizer, set_seed
+from transformers.trainer_utils import EvaluationStrategy, is_main_process
+from transformers.training_args import ParallelMode
 from utils import (
     Seq2SeqDataCollator,
     Seq2SeqDataset,
@@ -34,41 +31,6 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class Seq2SeqTrainingArguments(TrainingArguments):
-    """
-    Parameters:
-        label_smoothing (:obj:`float`, `optional`, defaults to 0):
-            The label smoothing epsilon to apply (if not zero).
-        sortish_sampler (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to SortishSamler or not. It sorts the inputs according to lenghts in-order to minimizing the padding size.
-        predict_with_generate (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to use generate to calculate generative metrics (ROUGE, BLEU).
-    """
-
-    label_smoothing: Optional[float] = field(
-        default=0.0, metadata={"help": "The label smoothing epsilon to apply (if not zero)."}
-    )
-    sortish_sampler: bool = field(default=False, metadata={"help": "Whether to SortishSamler or not."})
-    predict_with_generate: bool = field(
-        default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
-    )
-    adafactor: bool = field(default=False, metadata={"help": "whether to use adafactor"})
-    encoder_layerdrop: Optional[float] = field(
-        default=None, metadata={"help": "Encoder layer dropout probability. Goes into model.config."}
-    )
-    decoder_layerdrop: Optional[float] = field(
-        default=None, metadata={"help": "Decoder layer dropout probability. Goes into model.config."}
-    )
-    dropout: Optional[float] = field(default=None, metadata={"help": "Dropout probability. Goes into model.config."})
-    attention_dropout: Optional[float] = field(
-        default=None, metadata={"help": "Attention dropout probability. Goes into model.config."}
-    )
-    lr_scheduler: Optional[str] = field(
-        default="linear", metadata={"help": f"Which lr scheduler to use. Selected in {arg_to_scheduler_choices}"}
-    )
-
-
-@dataclass
 class ModelArguments:
     """
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
@@ -84,7 +46,8 @@ class ModelArguments:
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
     cache_dir: Optional[str] = field(
-        default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
+        default=None,
+        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
     )
     freeze_encoder: bool = field(default=False, metadata={"help": "Whether tp freeze the encoder."})
     freeze_embeds: bool = field(default=False, metadata={"help": "Whether  to freeze the embeddings."})
@@ -170,9 +133,14 @@ def main():
         training_args.local_rank,
         training_args.device,
         training_args.n_gpu,
-        bool(training_args.local_rank != -1),
+        bool(training_args.parallel_mode == ParallelMode.DISTRIBUTED),
         training_args.fp16,
     )
+    # Set the verbosity to info of the Transformers logger (on main process only):
+    if is_main_process(training_args.local_rank):
+        transformers.utils.logging.set_verbosity_info()
+        transformers.utils.logging.enable_default_handler()
+        transformers.utils.logging.enable_explicit_format()
     logger.info("Training/evaluation parameters %s", training_args)
 
     # Set seed

@@ -1,12 +1,12 @@
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
 from torch.utils.data import DistributedSampler, RandomSampler
 
 from transformers import PreTrainedModel, Trainer, logging
-from transformers.configuration_fsmt import FSMTConfig
 from transformers.file_utils import is_torch_tpu_available
+from transformers.models.fsmt.configuration_fsmt import FSMTConfig
 from transformers.optimization import (
     Adafactor,
     AdamW,
@@ -18,12 +18,7 @@ from transformers.optimization import (
     get_polynomial_decay_schedule_with_warmup,
 )
 from transformers.trainer_pt_utils import get_tpu_sampler
-
-
-try:
-    from .utils import label_smoothed_nll_loss
-except ImportError:
-    from utils import label_smoothed_nll_loss
+from transformers.training_args import ParallelMode
 
 
 logger = logging.get_logger(__name__)
@@ -36,7 +31,6 @@ arg_to_scheduler = {
     "constant": get_constant_schedule,
     "constant_w_warmup": get_constant_schedule_with_warmup,
 }
-arg_to_scheduler_choices = sorted(arg_to_scheduler.keys())
 
 
 class Seq2SeqTrainer(Trainer):
@@ -63,6 +57,14 @@ class Seq2SeqTrainer(Trainer):
             logger.warn(
                 f"The `config.pad_token_id` is `None`. Using `config.eos_token_id` = {self.config.eos_token_id} for padding.."
             )
+
+        if self.args.label_smoothing == 0:
+            self.loss_fn = torch.nn.CrossEntropyLoss(ignore_index=self.config.pad_token_id)
+        else:
+            # dynamically import label_smoothed_nll_loss
+            from utils import label_smoothed_nll_loss
+
+            self.loss_fn = label_smoothed_nll_loss
 
     def create_optimizer_and_scheduler(self, num_training_steps: int):
         """
@@ -121,7 +123,8 @@ class Seq2SeqTrainer(Trainer):
         else:
             if self.args.sortish_sampler:
                 self.train_dataset.make_sortish_sampler(
-                    self.args.per_device_train_batch_size, distributed=self.args.n_gpu > 1
+                    self.args.per_device_train_batch_size,
+                    distributed=(self.args.parallel_mode == ParallelMode.DISTRIBUTED),
                 )
 
             return (
@@ -135,9 +138,7 @@ class Seq2SeqTrainer(Trainer):
             if self.data_args is not None and self.data_args.ignore_pad_token_for_loss:
                 # force training to ignore pad token
                 logits = model(**inputs, use_cache=False)[0]
-
-                loss_fct = torch.nn.CrossEntropyLoss(ignore_index=self.config.pad_token_id)
-                loss = loss_fct(logits.view(-1, logits.shape[-1]), labels.view(-1))
+                loss = self.loss_fn(logits.view(-1, logits.shape[-1]), labels.view(-1))
             else:
                 # compute usual loss via models
                 loss, logits = model(**inputs, labels=labels, use_cache=False)[:2]
@@ -145,9 +146,7 @@ class Seq2SeqTrainer(Trainer):
             # compute label smoothed loss
             logits = model(**inputs, use_cache=False)[0]
             lprobs = torch.nn.functional.log_softmax(logits, dim=-1)
-            loss, _ = label_smoothed_nll_loss(
-                lprobs, labels, self.args.label_smoothing, ignore_index=self.config.pad_token_id
-            )
+            loss, _ = self.loss_fn(lprobs, labels, self.args.label_smoothing, ignore_index=self.config.pad_token_id)
         return loss, logits
 
     def compute_loss(self, model, inputs):
@@ -156,7 +155,11 @@ class Seq2SeqTrainer(Trainer):
         return loss
 
     def prediction_step(
-        self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], prediction_loss_only: bool
+        self,
+        model: nn.Module,
+        inputs: Dict[str, Union[torch.Tensor, Any]],
+        prediction_loss_only: bool,
+        ignore_keys: Optional[List[str]] = None,
     ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
         Perform an evaluation step on :obj:`model` using obj:`inputs`.
@@ -188,7 +191,7 @@ class Seq2SeqTrainer(Trainer):
         }
 
         if self.args.predict_with_generate and not self.args.prediction_loss_only:
-            generated_tokens = model.generate(
+            generated_tokens = self.model.generate(
                 inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
                 **gen_kwargs,

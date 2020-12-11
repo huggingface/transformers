@@ -53,8 +53,8 @@ from torch.utils.data.sampler import RandomSampler, SequentialSampler
 
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .file_utils import WEIGHTS_NAME, is_datasets_available, is_in_notebook, is_torch_tpu_available
-from .modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from .modeling_utils import PreTrainedModel
+from .models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from .optimization import AdamW, get_linear_schedule_with_warmup
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
@@ -213,8 +213,6 @@ class Trainer:
             containing the optimizer and the scheduler to use. Will default to an instance of
             :class:`~transformers.AdamW` on your model and a scheduler given by
             :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
-        kwargs:
-            Deprecated keyword arguments.
     """
 
     def __init__(
@@ -229,7 +227,6 @@ class Trainer:
         compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         callbacks: Optional[List[TrainerCallback]] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
-        **kwargs,
     ):
         if args is None:
             logger.info("No `TrainingArguments` passed, using the current path as `output_dir`.")
@@ -244,7 +241,12 @@ class Trainer:
         self.hp_name = None
         if model is None and model_init is not None:
             model = self.call_model_init()
-        self.model = model.to(args.device) if model is not None else None
+
+        # Model parallel
+        if model is not None and not self.args.model_parallel:
+            model = model.to(args.device)
+
+        self.model = model
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
@@ -262,27 +264,6 @@ class Trainer:
         self.callback_handler = CallbackHandler(callbacks, self.model, self.optimizer, self.lr_scheduler)
         self.add_callback(PrinterCallback if self.args.disable_tqdm else DEFAULT_PROGRESS_CALLBACK)
 
-        # Deprecated arguments
-        if "tb_writer" in kwargs:
-            warnings.warn(
-                "Passing `tb_writer` as a keyword argument is deprecated and won't be possible in a "
-                + "future version. Use `TensorBoardCallback(tb_writer=...)` instead and pass it to the `callbacks`"
-                + "argument",
-                FutureWarning,
-            )
-            tb_writer = kwargs.pop("tb_writer")
-            self.remove_callback(TensorBoardCallback)
-            self.add_callback(TensorBoardCallback(tb_writer=tb_writer))
-        if "prediction_loss_only" in kwargs:
-            warnings.warn(
-                "Passing `prediction_loss_only` as a keyword argument is deprecated and won't be possible in a "
-                + "future version. Use `args.prediction_loss_only` instead. Setting "
-                + f"`args.prediction_loss_only={kwargs['prediction_loss_only']}",
-                FutureWarning,
-            )
-            self.args.prediction_loss_only = kwargs.pop("prediction_loss_only")
-        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
-
         # Will be set to True by `self._setup_loggers()` on first call to `self.log()`.
         self._loggers_initialized = False
 
@@ -294,14 +275,7 @@ class Trainer:
             # We'll find a more elegant and not need to do this in the future.
             self.model.config.xla_device = True
         if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
-            self.data_collator = self.data_collator.collate_batch
-            warnings.warn(
-                (
-                    "The `data_collator` should now be a simple callable (function, class with `__call__`), classes "
-                    + "with a `collate_batch` are deprecated and won't be supported in a future version."
-                ),
-                FutureWarning,
-            )
+            raise ValueError("The `data_collator` should be a simple callable (function, class with `__call__`).")
 
         if args.max_steps > 0:
             logger.info("max_steps is given, it will override any value given in num_train_epochs")
@@ -328,7 +302,7 @@ class Trainer:
         self.hp_search_backend = None
         self.use_tune_checkpoints = False
         default_label_names = (
-            ["start_positions, end_positions"]
+            ["start_positions", "end_positions"]
             if type(self.model) in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values()
             else ["labels"]
         )
@@ -569,7 +543,7 @@ class Trainer:
             self.args.output_dir = checkpoint_dir
             output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
             self.save_model(output_dir)
-            if self.is_world_master():
+            if self.is_world_process_zero():
                 self.state.save_to_json(os.path.join(output_dir, "trainer_state.json"))
                 torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
@@ -609,7 +583,8 @@ class Trainer:
 
             model = self.call_model_init(trial)
 
-            self.model = model.to(self.args.device)
+            if not self.args.model_parallel:
+                self.model = model.to(self.args.device)
 
             # Reinitializes optimizer and scheduler
             self.optimizer, self.lr_scheduler = None, None
@@ -656,7 +631,7 @@ class Trainer:
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
 
         # Multi-gpu training (should be after apex fp16 initialization)
-        if self.args.n_gpu > 1:
+        if self.args.n_gpu > 1 and not self.args.model_parallel:
             model = torch.nn.DataParallel(model)
 
         # Distributed training (should be after apex fp16 initialization)
@@ -691,12 +666,12 @@ class Trainer:
         )
 
         logger.info("***** Running training *****")
-        logger.info("  Num examples = %d", num_examples)
-        logger.info("  Num Epochs = %d", num_train_epochs)
-        logger.info("  Instantaneous batch size per device = %d", self.args.per_device_train_batch_size)
-        logger.info("  Total train batch size (w. parallel, distributed & accumulation) = %d", total_train_batch_size)
-        logger.info("  Gradient Accumulation steps = %d", self.args.gradient_accumulation_steps)
-        logger.info("  Total optimization steps = %d", max_steps)
+        logger.info(f"  Num examples = {num_examples}")
+        logger.info(f"  Num Epochs = {num_train_epochs}")
+        logger.info(f"  Instantaneous batch size per device = {self.args.per_device_train_batch_size}")
+        logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size}")
+        logger.info(f"  Gradient Accumulation steps = {self.args.gradient_accumulation_steps}")
+        logger.info(f"  Total optimization steps = {max_steps}")
 
         self.state.epoch = 0
         epochs_trained = 0
@@ -706,12 +681,20 @@ class Trainer:
         if model_path and os.path.isfile(os.path.join(model_path, "trainer_state.json")):
             self.state = TrainerState.load_from_json(os.path.join(model_path, "trainer_state.json"))
             epochs_trained = self.state.global_step // num_update_steps_per_epoch
-            steps_trained_in_current_epoch = self.state.global_step % (num_update_steps_per_epoch)
+            if not self.args.ignore_data_skip:
+                steps_trained_in_current_epoch = self.state.global_step % (num_update_steps_per_epoch)
+                steps_trained_in_current_epoch *= self.args.gradient_accumulation_steps
+            else:
+                steps_trained_in_current_epoch = 0
 
             logger.info("  Continuing training from checkpoint, will skip to saved global_step")
-            logger.info("  Continuing training from epoch %d", epochs_trained)
-            logger.info("  Continuing training from global step %d", self.state.global_step)
-            logger.info("  Will skip the first %d steps in the first epoch", steps_trained_in_current_epoch)
+            logger.info(f"  Continuing training from epoch {epochs_trained}")
+            logger.info(f"  Continuing training from global step {self.state.global_step}")
+            if not self.args.ignore_data_skip:
+                logger.info(
+                    f"  Will skip the first {epochs_trained} epochs then the first {steps_trained_in_current_epoch} "
+                    "batches in the first epoch."
+                )
 
         # Update the references
         self.callback_handler.model = self.model
@@ -727,12 +710,22 @@ class Trainer:
         self.state.is_local_process_zero = self.is_local_process_zero()
         self.state.is_world_process_zero = self.is_world_process_zero()
 
+        # tr_loss is a tensor to avoid synchronization of TPUs through .item()
         tr_loss = torch.tensor(0.0).to(self.args.device)
-        self._logging_loss_scalar = 0
+        # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
+        self._total_loss_scalar = 0.0
+        self._globalstep_last_logged = 0
         self._total_flos = self.state.total_flos
         model.zero_grad()
 
         self.control = self.callback_handler.on_train_begin(self.args, self.state, self.control)
+
+        # Skip the first epochs_trained epochs to get the random state of the dataloader at the right point.
+        if not self.args.ignore_data_skip:
+            for epoch in range(epochs_trained):
+                # We just need to begin an iteration to create the randomization of the sampler.
+                for _ in train_dataloader:
+                    break
 
         for epoch in range(epochs_trained, num_train_epochs):
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
@@ -830,9 +823,10 @@ class Trainer:
             logger.info(
                 f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric})."
             )
-            if isinstance(model, PreTrainedModel):
-                self.model = model.from_pretrained(self.state.best_model_checkpoint)
-                self.model = self.model.to(self.args.device)
+            if isinstance(self.model, PreTrainedModel):
+                self.model = self.model.from_pretrained(self.state.best_model_checkpoint)
+                if not self.args.model_parallel:
+                    self.model = self.model.to(self.args.device)
             else:
                 state_dict = torch.load(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME))
                 self.model.load_state_dict(state_dict)
@@ -842,21 +836,27 @@ class Trainer:
             self.log({"total_flos": self.state.total_flos})
 
         self.control = self.callback_handler.on_train_end(self.args, self.state, self.control)
+        # add remaining tr_loss
+        self._total_loss_scalar += tr_loss.item()
 
-        return TrainOutput(self.state.global_step, tr_loss.item() / self.state.global_step)
+        return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step)
 
     def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch):
         if self.control.should_log:
             logs: Dict[str, float] = {}
             tr_loss_scalar = tr_loss.item()
-            logs["loss"] = (tr_loss_scalar - self._logging_loss_scalar) / self.args.logging_steps
+            # reset tr_loss to zero
+            tr_loss -= tr_loss
+
+            logs["loss"] = tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged)
             # backward compatibility for pytorch schedulers
             logs["learning_rate"] = (
                 self.lr_scheduler.get_last_lr()[0]
                 if version.parse(torch.__version__) >= version.parse("1.4")
                 else self.lr_scheduler.get_lr()[0]
             )
-            self._logging_loss_scalar = tr_loss_scalar
+            self._total_loss_scalar += tr_loss_scalar
+            self._globalstep_last_logged = self.state.global_step
 
             self.log(logs)
 
@@ -1046,12 +1046,6 @@ class Trainer:
             logs (:obj:`Dict[str, float]`):
                 The values to log.
         """
-        if hasattr(self, "_log"):
-            warnings.warn(
-                "The `_log` method is deprecated and won't be called in a future version, define `log` in your subclass.",
-                FutureWarning,
-            )
-            return self._log(logs)
         if self.state.epoch is not None:
             logs["epoch"] = self.state.epoch
 
@@ -1091,12 +1085,6 @@ class Trainer:
         Return:
             :obj:`torch.Tensor`: The tensor with training loss on this batch.
         """
-        if hasattr(self, "_training_step"):
-            warnings.warn(
-                "The `_training_step` method is deprecated and won't be called in a future version, define `training_step` in your subclass.",
-                FutureWarning,
-            )
-            return self._training_step(model, inputs, self.optimizer)
 
         model.train()
         inputs = self._prepare_inputs(inputs)
@@ -1131,22 +1119,11 @@ class Trainer:
         """
         outputs = model(**inputs)
         # Save past state if it exists
+        # TODO: this needs to be fixed and made cleaner later.
         if self.args.past_index >= 0:
             self._past = outputs[self.args.past_index]
         # We don't use .loss here since the model may return tuples instead of ModelOutput.
-        return outputs[0]
-
-    def is_local_master(self) -> bool:
-        """
-        Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on several
-        machines) main process.
-
-        .. warning::
-
-            This method is deprecated, use :meth:`~transformers.Trainer.is_local_process_zero` instead.
-        """
-        warnings.warn("This method is deprecated, use `Trainer.is_local_process_zero()` instead.", FutureWarning)
-        return self.is_local_process_zero()
+        return outputs["loss"] if isinstance(outputs, dict) else outputs[0]
 
     def is_local_process_zero(self) -> bool:
         """
@@ -1157,18 +1134,6 @@ class Trainer:
             return xm.is_master_ordinal(local=True)
         else:
             return self.args.local_rank in [-1, 0]
-
-    def is_world_master(self) -> bool:
-        """
-        Whether or not this process is the global main process (when training in a distributed fashion on several
-        machines, this is only going to be :obj:`True` for one process).
-
-        .. warning::
-
-            This method is deprecated, use :meth:`~transformers.Trainer.is_world_process_zero` instead.
-        """
-        warnings.warn("This method is deprecated, use `Trainer.is_world_process_zero()` instead.", FutureWarning)
-        return self.is_world_process_zero()
 
     def is_world_process_zero(self) -> bool:
         """
@@ -1277,7 +1242,9 @@ class Trainer:
             logger.info("Deleting older checkpoint [{}] due to args.save_total_limit".format(checkpoint))
             shutil.rmtree(checkpoint)
 
-    def evaluate(self, eval_dataset: Optional[Dataset] = None) -> Dict[str, float]:
+    def evaluate(
+        self, eval_dataset: Optional[Dataset] = None, ignore_keys: Optional[List[str]] = None
+    ) -> Dict[str, float]:
         """
         Run evaluation and returns metrics.
 
@@ -1291,16 +1258,27 @@ class Trainer:
                 Pass a dataset if you wish to override :obj:`self.eval_dataset`. If it is an :obj:`datasets.Dataset`,
                 columns not accepted by the ``model.forward()`` method are automatically removed. It must implement the
                 :obj:`__len__` method.
+            ignore_keys (:obj:`Lst[str]`, `optional`):
+                A list of keys in the output of your model (if it is a dictionary) that should be ignored when
+                gathering predictions.
 
         Returns:
-            A dictionary containing the evaluation loss and the potential metrics computed from the predictions.
+            A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
+            dictionary also contains the epoch number which comes from the training state.
         """
         if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
             raise ValueError("eval_dataset must implement __len__")
 
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
 
-        output = self.prediction_loop(eval_dataloader, description="Evaluation")
+        output = self.prediction_loop(
+            eval_dataloader,
+            description="Evaluation",
+            # No point gathering the predictions if there are no metrics, otherwise we defer to
+            # self.args.prediction_loss_only
+            prediction_loss_only=True if self.compute_metrics is None else None,
+            ignore_keys=ignore_keys,
+        )
 
         self.log(output.metrics)
 
@@ -1311,7 +1289,7 @@ class Trainer:
         self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
         return output.metrics
 
-    def predict(self, test_dataset: Dataset) -> PredictionOutput:
+    def predict(self, test_dataset: Dataset, ignore_keys: Optional[List[str]] = None) -> PredictionOutput:
         """
         Run prediction and returns predictions and potential metrics.
 
@@ -1322,6 +1300,15 @@ class Trainer:
             test_dataset (:obj:`Dataset`):
                 Dataset to run the predictions on. If it is an :obj:`datasets.Dataset`, columns not accepted by the
                 ``model.forward()`` method are automatically removed. Has to implement the method :obj:`__len__`
+            ignore_keys (:obj:`Lst[str]`, `optional`):
+                A list of keys in the output of your model (if it is a dictionary) that should be ignored when
+                gathering predictions.
+
+        .. note::
+
+            If your predictions or labels have different sequence length (for instance because you're doing dynamic
+            padding in a token classification task) the predictions will be padded (on the right) to allow for
+            concatenation into one array. The padding index is -100.
 
         Returns: `NamedTuple` A namedtuple with the following keys:
 
@@ -1335,23 +1322,20 @@ class Trainer:
 
         test_dataloader = self.get_test_dataloader(test_dataset)
 
-        return self.prediction_loop(test_dataloader, description="Prediction")
+        return self.prediction_loop(test_dataloader, description="Prediction", ignore_keys=ignore_keys)
 
     def prediction_loop(
-        self, dataloader: DataLoader, description: str, prediction_loss_only: Optional[bool] = None
+        self,
+        dataloader: DataLoader,
+        description: str,
+        prediction_loss_only: Optional[bool] = None,
+        ignore_keys: Optional[List[str]] = None,
     ) -> PredictionOutput:
         """
         Prediction/evaluation loop, shared by :obj:`Trainer.evaluate()` and :obj:`Trainer.predict()`.
 
         Works both with or without labels.
         """
-        if hasattr(self, "_prediction_loop"):
-            warnings.warn(
-                "The `_prediction_loop` method is deprecated and won't be called in a future version, define `prediction_loop` in your subclass.",
-                FutureWarning,
-            )
-            return self._prediction_loop(dataloader, description, prediction_loss_only=prediction_loss_only)
-
         if not isinstance(dataloader.dataset, collections.abc.Sized):
             raise ValueError("dataset must implement __len__")
         prediction_loss_only = (
@@ -1360,7 +1344,7 @@ class Trainer:
 
         model = self.model
         # multi-gpu eval
-        if self.args.n_gpu > 1:
+        if self.args.n_gpu > 1 and not self.args.model_parallel:
             model = torch.nn.DataParallel(model)
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
@@ -1382,8 +1366,9 @@ class Trainer:
         world_size = max(1, world_size)
 
         eval_losses_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=batch_size)
-        preds_gatherer = DistributedTensorGatherer(world_size, num_examples)
-        labels_gatherer = DistributedTensorGatherer(world_size, num_examples)
+        if not prediction_loss_only:
+            preds_gatherer = DistributedTensorGatherer(world_size, num_examples)
+            labels_gatherer = DistributedTensorGatherer(world_size, num_examples)
 
         model.eval()
 
@@ -1396,21 +1381,22 @@ class Trainer:
         self.callback_handler.eval_dataloader = dataloader
 
         for step, inputs in enumerate(dataloader):
-            loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only)
+            loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
             if loss is not None:
                 losses = loss.repeat(batch_size)
                 losses_host = losses if losses_host is None else torch.cat((losses_host, losses), dim=0)
             if logits is not None:
-                preds_host = logits if preds_host is None else nested_concat(preds_host, logits, dim=0)
+                preds_host = logits if preds_host is None else nested_concat(preds_host, logits, padding_index=-100)
             if labels is not None:
-                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, dim=0)
+                labels_host = labels if labels_host is None else nested_concat(labels_host, labels, padding_index=-100)
             self.control = self.callback_handler.on_prediction_step(self.args, self.state, self.control)
 
             # Gather all tensors and put them back on the CPU if we have done enough accumulation steps.
             if self.args.eval_accumulation_steps is not None and (step + 1) % self.args.eval_accumulation_steps == 0:
                 eval_losses_gatherer.add_arrays(self._gather_and_numpify(losses_host, "eval_losses"))
-                preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
-                labels_gatherer.add_arrays(self._gather_and_numpify(labels_host, "eval_label_ids"))
+                if not prediction_loss_only:
+                    preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
+                    labels_gatherer.add_arrays(self._gather_and_numpify(labels_host, "eval_label_ids"))
 
                 # Set back to None to begin a new accumulation
                 losses_host, preds_host, labels_host = None, None, None
@@ -1421,12 +1407,13 @@ class Trainer:
 
         # Gather all remaining tensors and put them back on the CPU
         eval_losses_gatherer.add_arrays(self._gather_and_numpify(losses_host, "eval_losses"))
-        preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
-        labels_gatherer.add_arrays(self._gather_and_numpify(labels_host, "eval_label_ids"))
+        if not prediction_loss_only:
+            preds_gatherer.add_arrays(self._gather_and_numpify(preds_host, "eval_preds"))
+            labels_gatherer.add_arrays(self._gather_and_numpify(labels_host, "eval_label_ids"))
 
         eval_loss = eval_losses_gatherer.finalize()
-        preds = preds_gatherer.finalize()
-        label_ids = labels_gatherer.finalize()
+        preds = preds_gatherer.finalize() if not prediction_loss_only else None
+        label_ids = labels_gatherer.finalize() if not prediction_loss_only else None
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
@@ -1458,7 +1445,11 @@ class Trainer:
         return nested_numpify(tensors)
 
     def prediction_step(
-        self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], prediction_loss_only: bool
+        self,
+        model: nn.Module,
+        inputs: Dict[str, Union[torch.Tensor, Any]],
+        prediction_loss_only: bool,
+        ignore_keys: Optional[List[str]] = None,
     ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
         Perform an evaluation step on :obj:`model` using obj:`inputs`.
@@ -1475,6 +1466,9 @@ class Trainer:
                 argument :obj:`labels`. Check your model's documentation for all accepted arguments.
             prediction_loss_only (:obj:`bool`):
                 Whether or not to return the loss only.
+            ignore_keys (:obj:`Lst[str]`, `optional`):
+                A list of keys in the output of your model (if it is a dictionary) that should be ignored when
+                gathering predictions.
 
         Return:
             Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]: A tuple with the loss, logits and
@@ -1482,6 +1476,11 @@ class Trainer:
         """
         has_labels = all(inputs.get(k) is not None for k in self.label_names)
         inputs = self._prepare_inputs(inputs)
+        if ignore_keys is None:
+            if hasattr(self.model, "config"):
+                ignore_keys = getattr(self.model.config, "keys_to_ignore_at_inference", [])
+            else:
+                ignore_keys = []
 
         with torch.no_grad():
             if self.args.fp16 and _use_native_amp:
@@ -1490,16 +1489,21 @@ class Trainer:
             else:
                 outputs = model(**inputs)
             if has_labels:
-                loss = outputs[0].mean().detach()
-                logits = outputs[1:]
+                if isinstance(outputs, dict):
+                    loss = outputs["loss"].mean().detach()
+                    logits = tuple(v for k, v in outputs.items() if k not in ignore_keys + ["loss"])
+                else:
+                    loss = outputs[0].mean().detach()
+                    logits = outputs[1:]
             else:
                 loss = None
-                # Slicing so we get a tuple even if `outputs` is a `ModelOutput`.
-                logits = outputs[:]
+                if isinstance(outputs, dict):
+                    logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)
+                else:
+                    logits = outputs
+            # TODO: this needs to be fixed and made cleaner later.
             if self.args.past_index >= 0:
                 self._past = outputs[self.args.past_index if has_labels else self.args.past_index - 1]
-                # Remove the past from the logits.
-                logits = logits[: self.args.past_index - 1] + logits[self.args.past_index :]
 
         if prediction_loss_only:
             return (loss, None, None)
@@ -1524,8 +1528,6 @@ class Trainer:
         method in the model or subclass and override this method.
 
         Args:
-            model (:obj:`nn.Module`):
-                The model to evaluate.
             inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
                 The inputs and targets of the model.
 

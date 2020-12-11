@@ -19,7 +19,7 @@ Transfer learning, where a model is first pre-trained on a data-rich task before
 
 ## Details of the downstream task (Question Paraphrasing) - Dataset 📚❓↔️❓
 
-Dataset ID: ```quora``` from  [HugginFace/NLP](https://github.com/huggingface/nlp)
+Dataset ID: ```quora``` from  [Huggingface/NLP](https://github.com/huggingface/nlp)
 
 | Dataset  | Split | # samples |
 | -------- | ----- | --------- |

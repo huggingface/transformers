@@ -89,6 +89,7 @@ CHEAP_ARGS = {
     "freeze_encoder": False,
     "auto_scale_batch_size": False,
     "overwrite_output_dir": False,
+    "student": None,
 }
 
 
@@ -100,6 +101,7 @@ def _dump_articles(path: Path, articles: list):
 ARTICLES = [" Sam ate lunch today.", "Sams lunch ingredients."]
 SUMMARIES = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
 T5_TINY = "patrickvonplaten/t5-tiny-random"
+T5_TINIER = "sshleifer/t5-tinier-random"
 BART_TINY = "sshleifer/bart-tiny-random"
 MBART_TINY = "sshleifer/tiny-mbart"
 MARIAN_TINY = "sshleifer/tiny-marian-en-de"
@@ -172,7 +174,7 @@ class TestSummarizationDistiller(TestCasePlus):
         assert os.path.exists(os.path.join(out_path_new, "pytorch_model.bin"))
 
     def test_loss_fn(self):
-        model = AutoModelForSeq2SeqLM.from_pretrained(BART_TINY, return_dict=True)
+        model = AutoModelForSeq2SeqLM.from_pretrained(BART_TINY)
         input_ids, mask = model.dummy_inputs["input_ids"], model.dummy_inputs["attention_mask"]
         target_ids = torch.tensor([[0, 4, 8, 2], [0, 8, 2, 1]], dtype=torch.long, device=model.device)
         decoder_input_ids = target_ids[:, :-1].contiguous()  # Why this line?
@@ -223,6 +225,15 @@ class TestSummarizationDistiller(TestCasePlus):
             teacher=T5_TINY,
             model_name_or_path=T5_TINY,
             tokenizer_name=T5_TINY,
+        )
+        self._test_distiller_cli(updates)
+
+    def test_distill_different_base_models(self):
+        updates = dict(
+            teacher=T5_TINY,
+            student=T5_TINIER,
+            model_name_or_path=T5_TINIER,
+            tokenizer_name=T5_TINIER,
         )
         self._test_distiller_cli(updates)
 

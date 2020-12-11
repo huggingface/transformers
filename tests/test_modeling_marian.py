@@ -28,12 +28,12 @@ if is_torch_available():
     import torch
 
     from transformers import AutoModelWithLMHead, MarianMTModel
-    from transformers.convert_marian_to_pytorch import (
+    from transformers.models.bart.modeling_bart import shift_tokens_right
+    from transformers.models.marian.convert_marian_to_pytorch import (
         ORG_NAME,
         convert_hf_name_to_opus_name,
         convert_opus_name_to_hf_name,
     )
-    from transformers.modeling_bart import shift_tokens_right
     from transformers.pipelines import TranslationPipeline
 
 
@@ -50,7 +50,6 @@ class ModelTester:
             decoder_ffn_dim=32,
             max_position_embeddings=48,
             add_final_layer_norm=True,
-            return_dict=True,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -61,7 +60,7 @@ class ModelTester:
 class SelectiveCommonTest(unittest.TestCase):
     all_model_classes = (MarianMTModel,) if is_torch_available() else ()
 
-    test_save_load_keys_to_never_save = ModelTesterMixin.test_save_load_keys_to_never_save
+    test_save_load__keys_to_ignore_on_save = ModelTesterMixin.test_save_load__keys_to_ignore_on_save
 
     def setUp(self):
         self.model_tester = ModelTester(self)
@@ -69,6 +68,7 @@ class SelectiveCommonTest(unittest.TestCase):
 
 class ModelManagementTests(unittest.TestCase):
     @slow
+    @require_torch
     def test_model_names(self):
         model_list = HfApi().model_list()
         model_ids = [x.modelId for x in model_list if x.modelId.startswith(ORG_NAME)]
@@ -132,12 +132,12 @@ class MarianIntegrationTest(unittest.TestCase):
         self.assertListEqual(self.expected_text, generated_words)
 
     def translate_src_text(self, **tokenizer_kwargs):
-        model_inputs = self.tokenizer.prepare_seq2seq_batch(src_texts=self.src_text, **tokenizer_kwargs).to(
-            torch_device
-        )
+        model_inputs = self.tokenizer.prepare_seq2seq_batch(
+            src_texts=self.src_text, return_tensors="pt", **tokenizer_kwargs
+        ).to(torch_device)
         self.assertEqual(self.model.device, model_inputs.input_ids.device)
         generated_ids = self.model.generate(
-            model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2
+            model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2, max_length=128
         )
         generated_words = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         return generated_words
@@ -151,7 +151,9 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
         src, tgt = ["I am a small frog"], ["Ich bin ein kleiner Frosch."]
         expected_ids = [38, 121, 14, 697, 38848, 0]
 
-        model_inputs: dict = self.tokenizer.prepare_seq2seq_batch(src, tgt_texts=tgt).to(torch_device)
+        model_inputs: dict = self.tokenizer.prepare_seq2seq_batch(src, tgt_texts=tgt, return_tensors="pt").to(
+            torch_device
+        )
 
         self.assertListEqual(expected_ids, model_inputs.input_ids[0].tolist())
 
@@ -171,12 +173,16 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
 
     def test_unk_support(self):
         t = self.tokenizer
-        ids = t.prepare_seq2seq_batch(["||"]).to(torch_device).input_ids[0].tolist()
+        ids = t.prepare_seq2seq_batch(["||"], return_tensors="pt").to(torch_device).input_ids[0].tolist()
         expected = [t.unk_token_id, t.unk_token_id, t.eos_token_id]
         self.assertEqual(expected, ids)
 
     def test_pad_not_split(self):
-        input_ids_w_pad = self.tokenizer.prepare_seq2seq_batch(["I am a small frog <pad>"]).input_ids[0].tolist()
+        input_ids_w_pad = (
+            self.tokenizer.prepare_seq2seq_batch(["I am a small frog <pad>"], return_tensors="pt")
+            .input_ids[0]
+            .tolist()
+        )
         expected_w_pad = [38, 121, 14, 697, 38848, self.tokenizer.pad_token_id, 0]  # pad
         self.assertListEqual(expected_w_pad, input_ids_w_pad)
 
@@ -243,6 +249,8 @@ class TestMarian_RU_FR(MarianIntegrationTest):
 @require_sentencepiece
 @require_tokenizers
 class TestMarian_MT_EN(MarianIntegrationTest):
+    """Cover low resource/high perplexity setting. This breaks without adjust_logits_generation overwritten"""
+
     src = "mt"
     tgt = "en"
     src_text = ["Billi messu b'mod ġentili, Ġesù fejjaq raġel li kien milqut bil - marda kerha tal - ġdiem."]
@@ -292,7 +300,7 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
         normalized = self.tokenizer.normalize("")
         self.assertIsInstance(normalized, str)
         with self.assertRaises(ValueError):
-            self.tokenizer.prepare_seq2seq_batch([""])
+            self.tokenizer.prepare_seq2seq_batch([""], return_tensors="pt")
 
     @slow
     def test_pipeline(self):

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ import os
 import unittest
 
 from transformers import GPT2Tokenizer, GPT2TokenizerFast
+from transformers.models.gpt2.tokenization_gpt2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
-from transformers.tokenization_gpt2 import VOCAB_FILES_NAMES
 
 from .test_tokenization_common import TokenizerTesterMixin
 

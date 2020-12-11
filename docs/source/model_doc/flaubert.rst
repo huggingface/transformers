@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 FlauBERT
 -----------------------------------------------------------------------------------------------------------------------
 
@@ -19,7 +31,7 @@ representations (Dai and Le, 2015; Peters et al., 2018; Howard and Ruder, 2018; 
 heterogeneous French corpus. Models of different sizes are trained using the new CNRS (French National Centre for
 Scientific Research) Jean Zay supercomputer. We apply our French language models to diverse NLP tasks (text
 classification, paraphrasing, natural language inference, parsing, word sense disambiguation) and show that most of the
-time they outperform other pre-training approaches. Different versions of FlauBERT as well as a unified evaluation
+time they outperform other pretraining approaches. Different versions of FlauBERT as well as a unified evaluation
 protocol for the downstream tasks, called FLUE (French Language Understanding Evaluation), are shared to the research
 community for further reproducible experiments in French NLP.*
 
