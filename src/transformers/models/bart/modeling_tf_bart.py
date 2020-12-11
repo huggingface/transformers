@@ -215,7 +215,7 @@ class TFAttention(tf.keras.layers.Layer):
         self.embed_dim = embed_dim
 
         self.num_heads = num_heads
-        self.dropout = dropout
+        self.dropout = tf.keras.layers.Dropout(dropout)
         self.head_dim = embed_dim // num_heads
         assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
         self.scaling = self.head_dim ** -0.5
