@@ -1,3 +1,6 @@
+---
+language: et
+---
 ## Model Description
 
 This model is based off **Sentence-Transformer's** `distiluse-base-multilingual-cased` multilingual model that has been extended to understand sentence embeddings in Estonian.
@@ -23,4 +26,3 @@ The fine-tuning and training processes were inspired by [sbert's](https://www.sb
 ### Resources
 
 The model was fine-tuned on English-Estonian parallel sentences taken from [OPUS](http://opus.nlpl.eu/) and [ParaCrawl](https://paracrawl.eu/).
-
