@@ -17,6 +17,8 @@ Integrations with other Python libraries.
 import math
 import os
 import re
+import tempfile
+from pathlib import Path
 
 from .trainer_utils import EvaluationStrategy
 from .utils import logging
@@ -396,22 +398,21 @@ class WandbCallback(TrainerCallback):
             self.setup(args, state, model, reinit=hp_search, **kwargs)
 
     def on_train_end(self, args, state, control, **kwargs):
-        if self._log_model and self._initialized and state.is_world_process_zero:
-            # TODO: simplify
-            class FakeTrainer:
-                def __init__(self, state, args):
-                    self.state = state
-                    self.args = args
-            fake_trainer = FakeTrainer(state = state, args = args)
-            checkpoints_sorted = _sorted_checkpoints(fake_trainer, use_mtime=True)
-            if not len(checkpoints_sorted):
-                logger.warning('No model to save to W&B, make sure you use TrainingArguments.save_steps')
-            else:
-                model_dir = checkpoints_sorted[-1]
+        if self._log_model and self._initialized and state.is_world_process_zero and 'model' in kwargs:
+            from .trainer import Trainer
+            fake_trainer = Trainer(args=args, model=kwargs['model'], tokenizer=kwargs.get('tokenizer'))
+            with tempfile.TemporaryDirectory() as temp_dir:
+                fake_trainer.save_model(temp_dir)
                 # use run name and ensure it's a valid Artifact name
                 artifact_name = re.sub(r"[^a-zA-Z0-9_\.\-]", "", wandb.run.name)
-                artifact = wandb.Artifact(name=f"run-{artifact_name}", type="model", metadata={"score": 0})
-                artifact.add_dir(model_dir)
+                state = dict(vars(state))
+                state.pop('log_history', None)
+
+                artifact = wandb.Artifact(name=f"run-{artifact_name}", type="model", metadata={'state': state})
+                for f in Path(temp_dir).glob('*'):
+                    if f.is_file():
+                        with artifact.new_file(f.name, mode='wb') as fa:
+                            fa.write(f.read_bytes())
                 wandb.run.log_artifact(artifact)
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
