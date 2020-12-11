@@ -363,50 +363,6 @@ class FlaxBertPooler(nn.Module):
         return nn.tanh(out)
 
 
-class FlaxBertModule(nn.Module):
-    vocab_size: int
-    hidden_size: int
-    type_vocab_size: int
-    max_length: int
-    num_encoder_layers: int
-    num_heads: int
-    head_size: int
-    intermediate_size: int
-    dropout_rate: float = 0.0
-    kernel_init_scale: float = 0.2
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-
-    @nn.compact
-    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True):
-
-        # Embedding
-        embeddings = FlaxBertEmbeddings(
-            self.vocab_size,
-            self.hidden_size,
-            self.type_vocab_size,
-            self.max_length,
-            kernel_init_scale=self.kernel_init_scale,
-            dropout_rate=self.dropout_rate,
-            name="embeddings",
-            dtype=self.dtype,
-        )(input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic)
-
-        # N stacked encoding layers
-        encoder = FlaxBertEncoder(
-            self.num_encoder_layers,
-            self.num_heads,
-            self.head_size,
-            self.intermediate_size,
-            kernel_init_scale=self.kernel_init_scale,
-            dropout_rate=self.dropout_rate,
-            name="encoder",
-            dtype=self.dtype,
-        )(embeddings, attention_mask, deterministic=deterministic)
-
-        pooled = FlaxBertPooler(kernel_init_scale=self.kernel_init_scale, name="pooler", dtype=self.dtype)(encoder)
-        return encoder, pooled
-
-
 class FlaxBertPredictionHeadTransform(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
@@ -433,56 +389,12 @@ class FlaxBertLMPredictionHead(nn.Module):
         return hidden_states
 
 
-class FlaxBertOnlyMLMHead(nn.Module):
-    vocab_size: int
-    hidden_size: int
-    intermediate_size: int
-    head_size: int
-    num_heads: int
-    num_encoder_layers: int
-    type_vocab_size: int
-    max_length: int
-    dropout_rate: float = 0.0
-    dtype: jnp.dtype = jnp.float32
-
-    @nn.compact
-    def __call__(
-        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
-    ):
-        # Model
-        encoder, pooled = FlaxBertModule(
-            vocab_size=self.vocab_size,
-            type_vocab_size=self.type_vocab_size,
-            hidden_size=self.hidden_size,
-            intermediate_size=self.intermediate_size,
-            head_size=self.hidden_size,
-            num_heads=self.num_heads,
-            num_encoder_layers=self.num_encoder_layers,
-            max_length=self.max_length,
-            dropout_rate=self.dropout_rate,
-            dtype=self.dtype,
-        )(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic)
-
-        # Compute the prediction scores
-        encoder = nn.Dropout(rate=self.dropout_rate)(encoder, deterministic=deterministic)
-        logits = FlaxBertLMPredictionHead(vocab_size=self.vocab_size, name="predictions", dtype=self.dtype)(encoder)
-
-        return logits, pooled
-
-
-@add_start_docstrings(
-    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
-    BERT_START_DOCSTRING,
-)
-class FlaxBertModel(FlaxPreTrainedModel):
+class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
     """
-    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
-    cross-attention is added between the self-attention layers, following the architecture described in `Attention is
-    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
-    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
-    model_class = FlaxBertModule
     config_class = BertConfig
     base_model_prefix = "bert"
 
@@ -555,6 +467,19 @@ class FlaxBertModel(FlaxPreTrainedModel):
 
         return jax_state
 
+
+@add_start_docstrings(
+    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
+    BERT_START_DOCSTRING,
+)
+class FlaxBertModel(FlaxBertPreTrainedModel):
+    """
+    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
+    cross-attention is added between the self-attention layers, following the architecture described in `Attention is
+    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
+    """
+
     def __init__(self, config: BertConfig, state: dict, seed: int = 0, dtype: jnp.dtype = jnp.float32):
         module = FlaxBertModule(
             vocab_size=config.vocab_size,
@@ -624,11 +549,55 @@ class FlaxBertModel(FlaxPreTrainedModel):
         self.params = self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids)["params"]
 
 
-class FlaxBertForMaskedLM(FlaxBertModel):
+class FlaxBertModule(nn.Module):
+    vocab_size: int
+    hidden_size: int
+    type_vocab_size: int
+    max_length: int
+    num_encoder_layers: int
+    num_heads: int
+    head_size: int
+    intermediate_size: int
+    dropout_rate: float = 0.0
+    kernel_init_scale: float = 0.2
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    @nn.compact
+    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True):
+
+        # Embedding
+        embeddings = FlaxBertEmbeddings(
+            self.vocab_size,
+            self.hidden_size,
+            self.type_vocab_size,
+            self.max_length,
+            kernel_init_scale=self.kernel_init_scale,
+            dropout_rate=self.dropout_rate,
+            name="embeddings",
+            dtype=self.dtype,
+        )(input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic)
+
+        # N stacked encoding layers
+        encoder = FlaxBertEncoder(
+            self.num_encoder_layers,
+            self.num_heads,
+            self.head_size,
+            self.intermediate_size,
+            kernel_init_scale=self.kernel_init_scale,
+            dropout_rate=self.dropout_rate,
+            name="encoder",
+            dtype=self.dtype,
+        )(embeddings, attention_mask, deterministic=deterministic)
+
+        pooled = FlaxBertPooler(kernel_init_scale=self.kernel_init_scale, name="pooler", dtype=self.dtype)(encoder)
+        return encoder, pooled
+
+
+class FlaxBertForMaskedLM(FlaxBertPreTrainedModel):
     def __init__(self, config: BertConfig, state: dict, seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):
         super().__init__(config, state, seed, dtype)
 
-        self._module = FlaxBertOnlyMLMHead(
+        self._module = FlaxBertForMaskedLMModule(
             vocab_size=config.vocab_size,
             type_vocab_size=config.type_vocab_size,
             hidden_size=config.hidden_size,
@@ -668,5 +637,42 @@ class FlaxBertForMaskedLM(FlaxBertModel):
             not train,
             rngs=rngs,
         )
+
+        return logits, pooled
+
+
+class FlaxBertForMaskedLMModule(nn.Module):
+    vocab_size: int
+    hidden_size: int
+    intermediate_size: int
+    head_size: int
+    num_heads: int
+    num_encoder_layers: int
+    type_vocab_size: int
+    max_length: int
+    dropout_rate: float = 0.0
+    dtype: jnp.dtype = jnp.float32
+
+    @nn.compact
+    def __call__(
+        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
+    ):
+        # Model
+        encoder, pooled = FlaxBertModule(
+            vocab_size=self.vocab_size,
+            type_vocab_size=self.type_vocab_size,
+            hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
+            head_size=self.hidden_size,
+            num_heads=self.num_heads,
+            num_encoder_layers=self.num_encoder_layers,
+            max_length=self.max_length,
+            dropout_rate=self.dropout_rate,
+            dtype=self.dtype,
+        )(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic)
+
+        # Compute the prediction scores
+        encoder = nn.Dropout(rate=self.dropout_rate)(encoder, deterministic=deterministic)
+        logits = FlaxBertLMPredictionHead(vocab_size=self.vocab_size, name="predictions", dtype=self.dtype)(encoder)
 
         return logits, pooled

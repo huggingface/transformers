@@ -102,11 +102,6 @@ class FlaxBertModelTester(unittest.TestCase):
         return config, inputs_dict
 
 
-class FlaxModelTest(unittest.TestCase):
-
-    def test_rnd_model(self):
-
-@slow
 @require_flax
 class FlaxBertModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
