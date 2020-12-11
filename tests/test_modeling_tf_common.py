@@ -45,7 +45,6 @@ if is_tf_available():
         TFSharedEmbeddings,
         tf_top_k_top_p_filtering,
     )
-    from transformers.modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling
 
     if _tf_gpu_memory_limit is not None:
         gpus = tf.config.list_physical_devices("GPU")
