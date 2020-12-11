@@ -296,6 +296,7 @@ def main():
     all_metrics = {}
     # Training
     if training_args.do_train:
+        logger.info("*** Train ***")
 
         start_time = time.time()
         trainer.train(
@@ -329,7 +330,7 @@ def main():
             all_metrics.update(metrics)
 
     if training_args.do_predict:
-        logging.info("*** Predict ***")
+        logger.info("*** Predict ***")
 
         start_time = time.time()
         test_output = trainer.predict(test_dataset=test_dataset, metric_key_prefix="test")
