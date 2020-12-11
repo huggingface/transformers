@@ -407,9 +407,7 @@ class WandbCallback(TrainerCallback):
                 fake_trainer.save_model(temp_dir)
                 # use run name and ensure it's a valid Artifact name
                 artifact_name = re.sub(r"[^a-zA-Z0-9_\.\-]", "", wandb.run.name)
-                state = dict(vars(state))
-                state.pop("log_history", None)
-                artifact = wandb.Artifact(name=f"run-{artifact_name}", type="model", metadata={"state": state})
+                artifact = wandb.Artifact(name=f"run-{artifact_name}", type="model", metadata=wandb.run.history._data)
                 for f in Path(temp_dir).glob("*"):
                     if f.is_file():
                         with artifact.new_file(f.name, mode="wb") as fa:
