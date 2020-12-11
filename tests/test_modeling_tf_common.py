@@ -338,7 +338,7 @@ class TFModelTesterMixin:
             for name, key in self._prepare_for_class(inputs_dict, model_class).items():
                 if not type(key) == bool:
                     key = key.numpy()
-                pt_inputs_dict = dict((name, torch.from_numpy(key.numpy()).to(torch.long)))
+                pt_inputs_dict = dict((name, torch.from_numpy(key).to(torch.long)))
 
             # need to rename encoder-decoder "inputs" for PyTorch
             if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
