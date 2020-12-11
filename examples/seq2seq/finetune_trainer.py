@@ -107,7 +107,7 @@ class DataTrainingArguments:
     )
 
 
-def speed_metrics(mode, t0, n_objs):
+def speed_metrics(mode, start_time, num_samples):
     """
     Measure and return speed performance metrics.
 
@@ -143,7 +143,7 @@ def handle_metrics(mode, metrics, output_dir):
 
     logger.info(f"***** {mode} metrics *****")
     for key, value in metrics.items():
-        logger.info("  %s = %s", key, value)
+        logger.info(f"  {key} = {value}")
     save_json(metrics, os.path.join(output_dir, f"{mode}_results.json"))
 
 
@@ -297,7 +297,7 @@ def main():
     # Training
     if training_args.do_train:
 
-        t0 = time.time()
+        start_time = time.time()
         trainer.train(
             model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
         )
@@ -318,7 +318,7 @@ def main():
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
-        t0 = time.time()
+        start_time = time.time()
         metrics = trainer.evaluate(metric_key_prefix="val")
         metrics.update(speed_metrics("val", t0, data_args.n_val))
         metrics["val_loss"] = round(metrics["val_loss"], 4)
