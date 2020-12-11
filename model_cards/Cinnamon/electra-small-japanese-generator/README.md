@@ -1,3 +1,6 @@
+---
+language: ja
+---
 ## Japanese ELECTRA-small
 
 We provide a Japanese **ELECTRA-Small** model, as described in [ELECTRA: Pre-training Text Encoders as Discriminators Rather Than Generators](https://openreview.net/pdf?id=r1xMH1BtvB).
