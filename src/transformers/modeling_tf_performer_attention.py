@@ -100,7 +100,7 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         self._generate_feature_matrix()
         
         if self.training and self.redraw_verbose:
-            logging.info(f"PerformerAttention: Just redrew random features.")
+            logging.info("PerformerAttention: Just redrew random features.")
         
         self.calls_since_last_redraw = 0
 

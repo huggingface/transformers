@@ -101,7 +101,7 @@ class PerformerAttention(nn.Module):
         self._generate_feature_matrix(device)
         
         if self.training and self.redraw_verbose:
-            logging.info(f"PerformerAttention: Just redrew random features.")
+            logging.info("PerformerAttention: Just redrew random features.")
         
         self.calls_since_last_redraw = 0
 
@@ -186,11 +186,10 @@ class PerformerAttention(nn.Module):
             
             # Compute the numerical stabilizer that we subtract from the input to exp(). For some reason the original
             # Jax implementation uses different types of stabilizers for queries vs. keys, and we follow that here.
-            ## This is a workaround for very slow performance of torch.max(dim=N) on PyTorch 1.4 and earlier;
-            ## see this GitHub discussion: https://github.com/pytorch/pytorch/issues/36900
+            # This is a workaround for very slow performance of torch.max(dim=N) on PyTorch 1.4 and earlier;
+            # see this GitHub discussion: https://github.com/pytorch/pytorch/issues/36900
             q_indices = h_of_q.argmax(-1).unsqueeze(-1)
-            q_stabilizer = h_of_q.gather(-1, q_indices) # Note this is a (d_model, 1) matrix that gets broadcasted
-            #q_stabilizer = torch.max(h_of_q, axis=-1, keepdim=True).values
+            q_stabilizer = h_of_q.gather(-1, q_indices)  # Note this is a (d_model, 1) matrix that gets broadcasted
             
             # This is just a scalar
             k_stabilizer = torch.max(h_of_k)

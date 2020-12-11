@@ -17,20 +17,16 @@ class PerformerAttentionConfig:
             in better performance than :obj:`'exp'` and :obj:`'cosh'` in certain circumstances, but it is not an unbiased
             estimator of softmax attention and thus should not be used with pretrained models that were pretrained with
             softmax attention.
-        short_sequence_behavior (:obj:`str` or :obj:`tuple`, `optional`, defaults to :obj:`'use_softmax_eval_only'`):
+        short_sequence_behavior (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`'use_softmax_eval_only'`):
             This parameter determines if and when the module should fall back to regular softmax attention. Softmax attention
             is generally faster than FAVOR+ when the sequence length is not significantly larger than the number of random
             features used— which is equal to round(d*log(d)), where d is the number of dimensions per attention head. The
             default behavior is to use FAVOR+ regardless of sequence length while training, but to use softmax attention at
-            test time when the sequence length is less than twice the number of random features. Note that this means that for
-            BERT-based models, where :obj:`'d_model'` = 768 and :obj:`'num_heads'` = 12, PerformerAttention will use softmax
-            attention at test time when sequences do not exceed the usual maximum sequence length of 512 tokens.
+            test time when the sequence length is less than twice the number of random features.
             Possible values for this parameter are :obj:`'use_softmax_eval_only'`, :obj:`'use_softmax_eval_and_train'`,
             :obj:`'never_use_softmax'`. The option :obj:`'use_softmax_eval_and_train'` should probably only be used if the
             training set has a significant number of long sequences; otherwise, the model may not learn to deal with the
-            random noise inherent in the FAVOR+ algorithm. If a :obj:`tuple`, should be of the form (:obj:`type`,
-            :obj:`mem_tradeoff`), where :obj:`type` is either :obj:`'use_softmax_eval_only'` or
-            :obj:`'use_softmax_eval_and_train'`, and :obj:`mem_tradeoff` is a :obj:`float` which determines how
+            random noise inherent in the FAVOR+ algorithm.
         kernel_epsilon (:obj:`float`, `optional`, defaults to 1e-4):
             Stabilizer term added to the output of the kernel function to avoid dividing by very small numbers.
         normalize_output (:obj:`bool`, `optional`, defaults to True):
@@ -71,7 +67,7 @@ class PerformerAttentionConfig:
     kernel_type: str = 'exp'
     
     # Default determined in PerformerAttention.__init__()
-    short_sequence_behavior: Optional[Union[str, dict]] = None
+    short_sequence_behavior: Optional[Union[str, Callable]] = None
     
     kernel_epsilon: float = 1e-4
     normalize_output: bool = True
