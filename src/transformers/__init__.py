@@ -378,6 +378,7 @@ if is_torch_available():
         BartForQuestionAnswering,
         BartForSequenceClassification,
         BartModel,
+        BartPretrainedModel,
         PretrainedBartModel,
     )
     from .models.bert import (

@@ -175,3 +175,10 @@ TFAutoModelForQuestionAnswering
 
 .. autoclass:: transformers.TFAutoModelForQuestionAnswering
     :members:
+
+
+FlaxAutoModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxAutoModel
+    :members:

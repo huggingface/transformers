@@ -32,6 +32,9 @@ generation.
 .. autoclass:: transformers.LogitsProcessorList
     :members: __call__
 
+.. autoclass:: transformers.LogitsWarper
+    :members: __call__
+
 .. autoclass:: transformers.MinLengthLogitsProcessor
     :members: __call__
 
@@ -67,3 +70,10 @@ BeamSearch
 
 .. autoclass:: transformers.BeamSearchScorer
     :members: process, finalize
+
+Utilities
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autofunction:: transformers.top_k_top_p_filtering
+
+.. autofunction:: transformers.tf_top_k_top_p_filtering

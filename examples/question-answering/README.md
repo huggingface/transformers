@@ -1,8 +1,29 @@
+<!---
+Copyright 2020 The HuggingFace Team. All rights reserved.
 
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
 
 ## SQuAD
 
-Based on the script [`run_squad.py`](https://github.com/huggingface/transformers/blob/master/examples/question-answering/run_squad.py).
+Based on the script [`run_qa.py`](https://github.com/huggingface/transformers/blob/master/examples/question-answering/run_qa.py).
+
+**Note:** This script only works with models that have a fast tokenizer (backed by the 🤗 Tokenizers library) as it
+uses special features of those tokenizers. You can check if your favorite model has a fast tokenizer in
+[this table](https://huggingface.co/transformers/index.html#bigtable), if it doesn't you can still use the old version
+of the script.
+
+The old version of this script can be found [here](https://github.com/huggingface/transformers/blob/master/examples/contrib/legacy/question-answering/run_squad.py).
 
 #### Fine-tuning BERT on SQuAD1.0
 
