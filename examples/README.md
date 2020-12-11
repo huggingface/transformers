@@ -17,7 +17,7 @@ limitations under the License.
 # Examples
 
 This folder contains actively maintained examples of use of 🤗 Transformers organized along NLP tasks. If you are looking for an example that used to
-be in this folder, it may have moved to our [research projects](https://github.com/huggingface/transformers/tree/master/research_projects) folder which contain archived examples which contains frozen snapshots of research projects.
+be in this folder, it may have moved to our [research projects](https://github.com/huggingface/transformers/tree/master/examples/research_projects) subfolder (which contains frozen snapshots of research projects).
 
 ## Important note
 
