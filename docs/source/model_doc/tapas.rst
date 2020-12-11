@@ -11,10 +11,11 @@ answering questions about tabular data. Compared to BERT, TAPAS uses relative po
 that encode tabular structure. TAPAS is pre-trained on the masked language modeling (MLM) objective on a large dataset
 comprising millions of tables from English Wikipedia and corresponding texts. For question answering, TAPAS has 2 heads
 on top: a cell selection head and an aggregation head, for (optionally) performing aggregations (such as counting or
-summing) among selected cells. TAPAS has been fine-tuned on several datasets: `SQA <https://www.microsoft.com/en-us/download/details.aspx?id=54253>`_ 
-(Sequential Question Answering by Microsoft), `WTQ <https://github.com/ppasupat/WikiTableQuestions>`__ (Wiki Table Questions by Stanford University) and
-`WikiSQL <https://github.com/salesforce/WikiSQL>`__ (by Salesforce). It achieves state-of-the-art on both SQA and WTQ,
-while having comparable performance to SOTA on WikiSQL, with a much simpler architecture.
+summing) among selected cells. TAPAS has been fine-tuned on several datasets: `SQA
+<https://www.microsoft.com/en-us/download/details.aspx?id=54253>`_ (Sequential Question Answering by Microsoft), `WTQ
+<https://github.com/ppasupat/WikiTableQuestions>`__ (Wiki Table Questions by Stanford University) and `WikiSQL
+<https://github.com/salesforce/WikiSQL>`__ (by Salesforce). It achieves state-of-the-art on both SQA and WTQ, while
+having comparable performance to SOTA on WikiSQL, with a much simpler architecture.
 
 The abstract from the paper is the following:
 
@@ -41,7 +42,7 @@ entailment (a binary classification task). For more details, see their follow-up
 intermediate pre-training <https://www.aclweb.org/anthology/2020.findings-emnlp.27/>`__ by Julian Martin Eisenschlos,
 Syrine Krichene and Thomas Müller.
 
-The original code can be found `here <https://github.com/google-research/tapas>`__. 
+The original code can be found `here <https://github.com/google-research/tapas>`__.
 
 Tips:
 
@@ -103,8 +104,8 @@ To summarize:
 +------------------------------------+----------------------+-------------------------------------------------------------------------------------------------------------------+
 
 Initializing a model with a pre-trained base and randomly initialized classification heads from the model hub can be
-done as follows (be sure to have installed the `torch-scatter dependency <https://github.com/rusty1s/pytorch_scatter>`_ for your 
-environment):
+done as follows (be sure to have installed the `torch-scatter dependency <https://github.com/rusty1s/pytorch_scatter>`_
+for your environment):
 
 .. code-block::
 
@@ -287,6 +288,7 @@ the weak supervision for aggregation case):
 
         >>> from transformers import TapasConfig, TapasForQuestionAnswering, AdamW
 
+        >>> # this is the default WTQ configuration
         >>> config = TapasConfig(
         ...            num_aggregation_labels = 4,
         ...            use_answer_as_supervision = True,
@@ -298,10 +300,10 @@ the weak supervision for aggregation case):
         ...            allow_empty_column_selection = False,
         ...            temperature = 0.0352513,
         ... )
-        >>> model = TapasForQuestionAnswering.from_pretrained("google/tapas-base")
- 
+        >>> model = TapasForQuestionAnswering.from_pretrained("google/tapas-base", config=config)
+
         >>> optimizer = AdamW(model.parameters(), lr=5e-5)
-        
+
         >>> for epoch in range(2):  # loop over the dataset multiple times
         ...    for idx, batch in enumerate(train_dataloader):
         ...         # get the inputs; 
@@ -390,7 +392,7 @@ of that:
 
 In case of a conversational set-up, then each table-question pair must be provided **sequentially** to the model, such
 that the ``prev_labels`` token types can be overwritten by the predicted ``labels`` of the previous table-question
-pair. 
+pair.
 
 
 Tapas specific outputs
