@@ -1,0 +1,5 @@
+transformers == 3.5.1
+
+# For ROUGE
+nltk
+py-rouge

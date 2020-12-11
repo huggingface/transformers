@@ -45,7 +45,6 @@ if SRC_DIRS is not None:
     import run_glue
     import run_mlm
     import run_ner
-    import run_pl_glue
     import run_qa as run_squad
 
 
@@ -99,44 +98,6 @@ class ExamplesTests(TestCasePlus):
             del result["eval_loss"]
             for value in result.values():
                 self.assertGreaterEqual(value, 0.75)
-
-    @require_torch_non_multi_gpu_but_fix_me
-    def test_run_pl_glue(self):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
-        tmp_dir = self.get_auto_remove_tmp_dir()
-        testargs = f"""
-            run_pl_glue.py
-            --model_name_or_path bert-base-cased
-            --data_dir ./tests/fixtures/tests_samples/MRPC/
-            --output_dir {tmp_dir}
-            --task mrpc
-            --do_train
-            --do_predict
-            --train_batch_size=32
-            --learning_rate=1e-4
-            --num_train_epochs=1
-            --seed=42
-            --max_seq_length=128
-            """.split()
-        if torch.cuda.is_available():
-            testargs += ["--gpus=1"]
-        if is_cuda_and_apex_available():
-            testargs.append("--fp16")
-
-        with patch.object(sys, "argv", testargs):
-            result = run_pl_glue.main()[0]
-            # for now just testing that the script can run to completion
-            self.assertGreater(result["acc"], 0.25)
-            #
-            # TODO: this fails on CI - doesn't get acc/f1>=0.75:
-            #
-            #     # remove all the various *loss* attributes
-            #     result = {k: v for k, v in result.items() if "loss" not in k}
-            #     for k, v in result.items():
-            #         self.assertGreaterEqual(v, 0.75, f"({k})")
-            #
 
     @require_torch_non_multi_gpu_but_fix_me
     def test_run_clm(self):

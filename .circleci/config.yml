@@ -309,7 +309,7 @@ jobs:
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing]
-            - run: pip install -r examples/requirements.txt
+            - run: pip install -r examples/_tests_requirements.txt
             - save_cache:
                   key: v0.4-torch_examples-{{ checksum "setup.py" }}
                   paths:
