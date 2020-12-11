@@ -40,8 +40,8 @@ ROBERTA_START_DOCSTRING = r"""
     generic methods the library implements for all its model (such as downloading, saving and converting weights from
     PyTorch models)
 
-    This model is also a Flax Linen `flax.nn.Module
-    <https://flax.readthedocs.io/en/latest/_autosummary/flax.nn.module.html>`__ subclass. Use it as a regular Flax
+    This model is also a Flax Linen `flax.linen.Module
+    <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`__ subclass. Use it as a regular Flax
     Module and refer to the Flax documentation for all matter related to general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
