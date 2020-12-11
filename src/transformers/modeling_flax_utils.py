@@ -59,14 +59,14 @@ ACT2FN = {
 }
 
 
-class FlaxPreTrainedModel(nn.Module):
+class FlaxPreTrainedModel(ABC):
     config = None
     config_class = None
     pretrained_model_archive_map = {}
     base_model_prefix = ""
 
     def __init__(
-        self, config: PretrainedConfig, params: Optional[Dict] = None, seed: int = 0, dtype: jnp.dtype = jnp.float32
+        self, config: PretrainedConfig, module: nn.Module, params: Optional[Dict] = None, seed: int = 0, dtype: jnp.dtype = jnp.float32
     ):
         if config is None:
             raise ValueError("config cannot be None")
@@ -76,15 +76,20 @@ class FlaxPreTrainedModel(nn.Module):
 
         # Those are private to be exposed as typed property on derived classes.
         self._config = config
+        self._module = module
 
         # Those are public as their type is generic to every derived classes.
         self.key = PRNGKey(seed)
-        self.params = params or {}
+        self.params = params
         self.dtype = dtype
 
     @property
     def config(self) -> PretrainedConfig:
         return self._config
+
+    @property
+    def module(self) -> nn.Module:
+        return self._module
 
     @staticmethod
     @abstractmethod
