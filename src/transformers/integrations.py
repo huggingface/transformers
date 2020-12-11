@@ -407,7 +407,15 @@ class WandbCallback(TrainerCallback):
                 fake_trainer.save_model(temp_dir)
                 # use run name and ensure it's a valid Artifact name
                 artifact_name = re.sub(r"[^a-zA-Z0-9_\.\-]", "", wandb.run.name)
-                artifact = wandb.Artifact(name=f"run-{artifact_name}", type="model", metadata=wandb.run.history._data)
+                metadata = (
+                    wandb.run.history._data
+                    if not args.load_best_model_at_end
+                    else {
+                        f"eval/{args.metric_for_best_model}": state.best_metric,
+                        "train/total_floss": state.total_flos,
+                    }
+                )
+                artifact = wandb.Artifact(name=f"run-{artifact_name}", type="model", metadata=metadata)
                 for f in Path(temp_dir).glob("*"):
                     if f.is_file():
                         with artifact.new_file(f.name, mode="wb") as fa:
