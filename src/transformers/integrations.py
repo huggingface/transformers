@@ -20,9 +20,9 @@ import re
 import tempfile
 from pathlib import Path
 
+from .file_utils import ENV_VARS_TRUE_VALUES
 from .trainer_utils import EvaluationStrategy
 from .utils import logging
-from .file_utils import ENV_VARS_TRUE_VALUES
 
 
 logger = logging.get_logger(__name__)
