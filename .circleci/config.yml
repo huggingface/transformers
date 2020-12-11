@@ -354,6 +354,16 @@ jobs:
             - run: python utils/check_table.py
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
+            - run:
+                command: |
+                    echo "my experiment is here"
+                    echo "it can safely fail"
+                    # emulate failure
+                    false
+            - run:
+                when: always
+                command: |
+                    echo "forcing success for this experiment"
 
     check_repository_consistency:
         working_directory: ~/transformers
