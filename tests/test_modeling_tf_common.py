@@ -45,7 +45,7 @@ if is_tf_available():
         TFSharedEmbeddings,
         tf_top_k_top_p_filtering,
     )
-    from transformers.modeling_tf_outputs import TFBaseModelOutput
+    from transformers.modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling
 
     if _tf_gpu_memory_limit is not None:
         gpus = tf.config.list_physical_devices("GPU")
@@ -335,10 +335,11 @@ class TFModelTesterMixin:
 
             # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
             pt_model.eval()
-            pt_inputs_dict = dict(
-                (name, torch.from_numpy(key.numpy()).to(torch.long))
-                for name, key in self._prepare_for_class(inputs_dict, model_class).items()
-            )
+            for name, key in self._prepare_for_class(inputs_dict, model_class).items():
+                if not type(key) == bool:
+                    key = key.numpy()
+                pt_inputs_dict = dict((name, torch.from_numpy(key.numpy()).to(torch.long)))
+
             # need to rename encoder-decoder "inputs" for PyTorch
             if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
                 pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
@@ -588,8 +589,7 @@ class TFModelTesterMixin:
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
             )
 
-            if isinstance(outputs, TFBaseModelOutput):
-                # Special case here for TFT5EncoderModel
+            if hasattr(outputs, "hidden_states"):
                 hidden_states = outputs.hidden_states
             else:
                 hidden_states = outputs.decoder_hidden_states
