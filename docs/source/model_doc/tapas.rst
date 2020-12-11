@@ -11,9 +11,9 @@ answering questions about tabular data. Compared to BERT, TAPAS uses relative po
 that encode tabular structure. TAPAS is pre-trained on the masked language modeling (MLM) objective on a large dataset
 comprising millions of tables from English Wikipedia and corresponding texts. For question answering, TAPAS has 2 heads
 on top: a cell selection head and an aggregation head, for (optionally) performing aggregations (such as counting or
-summing) among selected cells. TAPAS has been fine-tuned on several datasets: `SQA (Sequential Question Answering by
-Microsoft), `WTQ <https://github.com/ppasupat/WikiTableQuestions>`__ (Wiki Table Questions by Stanford University) and
-`WikiSQL (by Salesforce) <https://github.com/salesforce/WikiSQL>`__. It achieves state-of-the-art on both SQA and WTQ,
+summing) among selected cells. TAPAS has been fine-tuned on several datasets: `SQA <https://www.microsoft.com/en-us/download/details.aspx?id=54253>`_ 
+(Sequential Question Answering by Microsoft), `WTQ <https://github.com/ppasupat/WikiTableQuestions>`__ (Wiki Table Questions by Stanford University) and
+`WikiSQL <https://github.com/salesforce/WikiSQL>`__ (by Salesforce). It achieves state-of-the-art on both SQA and WTQ,
 while having comparable performance to SOTA on WikiSQL, with a much simpler architecture.
 
 The abstract from the paper is the following:
@@ -41,8 +41,7 @@ entailment (a binary classification task). For more details, see their follow-up
 intermediate pre-training <https://www.aclweb.org/anthology/2020.findings-emnlp.27/>`__ by Julian Martin Eisenschlos,
 Syrine Krichene and Thomas Müller.
 
-The original code can be found `here <https://github.com/google-research/tapas>`__. This page also includes links to
-the datasets (SQA, WTQ, WikiSQL and TabFact).
+The original code can be found `here <https://github.com/google-research/tapas>`__. 
 
 Tips:
 
