@@ -1,64 +1,18 @@
-# Sentiment Classification for hinglish text
-
-
-The canonical documentation about model cards is at https://huggingface.co/docs
-
-
-## Link to model repo on huggingface
-
-https://huggingface.co/ganeshkharad/gk-hinglish-sentiment
-
-```
 ---
 language:
 - hi-en
 
 tags:
 - sentiment
-- bert
-license: apache-2.0
-datasets:
-- https://huggingface.co/datasets/SAIL%202017
----
-```
-
-
-### language
-
-`multilingual`
-`hinglish`
-
-
-### tags:
-- bert
 - multilingual
 - hindi codemix
 - hinglish 
+license: apache-2.0
+datasets:
+- sail
+---
 
-### license
-
-One of the valid license identifiers. e.g.:
-
-```
-- apache-2.0
-- mit 
-```
-
-
-### datasets
-
-Example:
-
-```
-- https://huggingface.co/datasets/SAIL%202017
-
-```
-
-You will find the supported list at https://huggingface.co/datasets
-
-
-
-# gk-hinglish-sentiment
+# Sentiment Classification for hinglish text: `gk-hinglish-sentiment`
 
 ## Model description
 
@@ -114,6 +68,5 @@ https://huggingface.co/rohanrajpal/bert-base-multilingual-codemixed-cased-sentim
     publisher = "Association for Computational Linguistics",
     url = "https://www.aclweb.org/anthology/2020.acl-main.329",
     pages = "3575--3585"
-}
 }
 ```
