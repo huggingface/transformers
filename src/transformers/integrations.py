@@ -22,6 +22,7 @@ from pathlib import Path
 
 from .trainer_utils import EvaluationStrategy
 from .utils import logging
+from .file_utils import ENV_VARS_TRUE_VALUES
 
 
 logger = logging.get_logger(__name__)
@@ -390,18 +391,18 @@ class WandbCallback(TrainerCallback):
                 wandb.watch(model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, args.logging_steps))
 
             # log outputs
-            self._log_model = os.getenv("WANDB_LOG_MODEL", "FALSE").upper() == "TRUE"
+            self._log_model = os.getenv("WANDB_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         hp_search = state.is_hyper_param_search
         if not self._initialized or hp_search:
             self.setup(args, state, model, reinit=hp_search, **kwargs)
 
-    def on_train_end(self, args, state, control, **kwargs):
-        if self._log_model and self._initialized and state.is_world_process_zero and "model" in kwargs:
+    def on_train_end(self, args, state, control, model=None, **kwargs):
+        if self._log_model and self._initialized and state.is_world_process_zero:
             from .trainer import Trainer
 
-            fake_trainer = Trainer(args=args, model=kwargs["model"], tokenizer=kwargs.get("tokenizer"))
+            fake_trainer = Trainer(args=args, model=model, tokenizer=kwargs.get("tokenizer"))
             with tempfile.TemporaryDirectory() as temp_dir:
                 fake_trainer.save_model(temp_dir)
                 # use run name and ensure it's a valid Artifact name
