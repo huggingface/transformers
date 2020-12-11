@@ -310,9 +310,11 @@ def main():
             handle_metrics("train", metrics, training_args.output_dir)
             all_metrics.update(metrics)
 
+            # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
+            trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
+
             # For convenience, we also re-save the tokenizer to the same directory,
             # so that you can share your model easily on huggingface.co/models =)
-            trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
             tokenizer.save_pretrained(training_args.output_dir)
 
     # Evaluation
