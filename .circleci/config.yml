@@ -92,6 +92,7 @@ jobs:
             - run: python utils/check_repo.py
             - run:
                 command: |
+                    set +e
                     echo "my experiment is here"
                     echo "it can safely fail"
                     # emulate failure
