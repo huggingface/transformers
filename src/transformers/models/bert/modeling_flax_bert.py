@@ -35,7 +35,6 @@ _TOKENIZER_FOR_DOC = "BertTokenizer"
 
 
 BERT_START_DOCSTRING = r"""
-
     This model inherits from :class:`~transformers.FlaxPreTrainedModel`. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading, saving and converting weights from
     PyTorch models)
@@ -433,39 +432,39 @@ class FlaxBertLMPredictionHead(nn.Module):
         return hidden_states
 
 
-# class FlaxBertOnlyMLMHead(nn.Module):
-#    vocab_size: int
-#    hidden_size: int
-#    intermediate_size: int
-#    head_size: int
-#    num_heads: int
-#    num_encoder_layers: int
-#    type_vocab_size: int
-#    max_length: int
-#    dropout_rate: float = 0.0
-#    dtype: jnp.dtype = jnp.float32
-#
-#    @nn.compact
-#    def __call__(
-#        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
-#    ):
-# Model
-#        encoder, pooled = FlaxBertModule(
-#            vocab_size=self.vocab_size,
-#            type_vocab_size=self.type_vocab_size,
-#            hidden_size=self.hidden_size,
-#            intermediate_size=self.intermediate_size,
-#            head_size=self.hidden_size,
-#            num_heads=self.num_heads,
-#            num_encoder_layers=self.num_encoder_layers,
-#            max_length=self.max_length,
-#            dropout_rate=self.dropout_rate,
-#            dtype=self.dtype,
-#        )(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic)
-#
-# Compute the prediction scores
-#        encoder = nn.Dropout(rate=self.dropout_rate)(encoder, deterministic=deterministic)
-#        return logits, pooled
+ class FlaxBertOnlyMLMHead(nn.Module):
+    vocab_size: int
+    hidden_size: int
+    intermediate_size: int
+    head_size: int
+    num_heads: int
+    num_encoder_layers: int
+    type_vocab_size: int
+    max_length: int
+    dropout_rate: float = 0.0
+    dtype: jnp.dtype = jnp.float32
+
+    @nn.compact
+    def __call__(
+        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
+    ):
+        # Model
+        encoder, pooled = FlaxBertModule(
+            vocab_size=self.vocab_size,
+            type_vocab_size=self.type_vocab_size,
+            hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
+            head_size=self.hidden_size,
+            num_heads=self.num_heads,
+            num_encoder_layers=self.num_encoder_layers,
+            max_length=self.max_length,
+            dropout_rate=self.dropout_rate,
+            dtype=self.dtype,
+        )(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic)
+
+        # Compute the prediction scores
+        encoder = nn.Dropout(rate=self.dropout_rate)(encoder, deterministic=deterministic)
+        return logits, pooled
 
 
 class FlaxBertPretrainedModel(FlaxPreTrainedModel):
@@ -559,9 +558,22 @@ class FlaxBertModel(FlaxBertPretrainedModel):
     Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
     """
 
-    dropout_rate: float = 0.0
-    kernel_init_scale: float = 0.2
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    def __init__(self, config: BertConfig, state: dict, seed: int = 0, dtype: jnp.dtype = jnp.float32):
+        module = FlaxBertModule(
+            vocab_size=config.vocab_size,
+            hidden_size=config.hidden_size,
+            type_vocab_size=config.type_vocab_size,
+            max_length=config.max_position_embeddings,
+            num_encoder_layers=config.num_hidden_layers,
+            num_heads=config.num_attention_heads,
+            head_size=config.hidden_size,
+            intermediate_size=config.intermediate_size,
+            dropout_rate=config.hidden_dropout_prob,
+            dtype=dtype,
+        )
+
+        super().__init__(config, module, state, seed)
+        
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @nn.compact
