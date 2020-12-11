@@ -24,7 +24,6 @@ from importlib import import_module
 from typing import List, Tuple
 
 from transformers import is_tf_available
-from transformers.modeling_tf_outputs import TFBaseModelOutput
 from transformers.testing_utils import _tf_gpu_memory_limit, is_pt_tf_cross_test, require_tf, slow
 
 
@@ -46,6 +45,7 @@ if is_tf_available():
         TFSharedEmbeddings,
         tf_top_k_top_p_filtering,
     )
+    from transformers.modeling_tf_outputs import TFBaseModelOutput
 
     if _tf_gpu_memory_limit is not None:
         gpus = tf.config.list_physical_devices("GPU")
