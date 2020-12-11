@@ -1897,6 +1897,9 @@ class TapasTokenizer(PreTrainedTokenizer):
         Converts logits of :class:`~transformers.TapasForQuestionAnswering` to actual predicted answer coordinates and
         optional aggregation indices.
 
+        The original implementation, on which this function is based, can be found `here
+        <https://github.com/google-research/tapas/blob/4908213eb4df7aa988573350278b44c4dbe3f71b/tapas/experiments/prediction_utils.py#L288>`__.
+
         Args:
             data (:obj:`dict`):
                 Dictionary mapping features to actual values. Should be created using
