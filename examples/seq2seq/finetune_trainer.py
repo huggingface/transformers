@@ -304,7 +304,7 @@ def main():
         )
         metrics = speed_metrics("train", start_time, data_args.n_train)
 
-        trainer.save_model() # this also saves the tokenizer
+        trainer.save_model()  # this also saves the tokenizer
 
         if trainer.is_world_process_zero():
             handle_metrics("train", metrics, training_args.output_dir)
