@@ -66,7 +66,7 @@ class FlaxModelTesterMixin:
     all_model_classes = ()
 
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
-        diff = np.abs((a - b)).sum()
+        diff = np.abs((a - b)).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
 
     @require_torch
@@ -89,14 +89,16 @@ class FlaxModelTesterMixin:
                 fx_outputs = fx_model(**inputs_dict)
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 5e-3)
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-3)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     pt_model.save_pretrained(tmpdirname)
                     fx_model_loaded = model_class.from_pretrained(tmpdirname, from_pt=True)
 
                 fx_outputs_loaded = fx_model_loaded(**inputs_dict)
-                self.assertEqual(len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
+                self.assertEqual(
+                    len(fx_outputs_loaded), len(pt_outputs), "Output lengths differ between Flax and PyTorch"
+                )
                 for fx_output_loaded, pt_output in zip(fx_outputs_loaded, pt_outputs):
                     self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 5e-3)
 
@@ -145,7 +147,9 @@ class FlaxModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model_class_name = model_class.__class__.__name__
-            module_class_name = model_class_name[:-5] + "Module" if model_class_name[-5:] == "Model" else model_class_name + "Module"
+            module_class_name = (
+                model_class_name[:-5] + "Module" if model_class_name[-5:] == "Model" else model_class_name + "Module"
+            )
             module = __import__("transformers", fromlist=[module_class_name])
 
             self.assertIsNotNone(module)

@@ -21,7 +21,7 @@ from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_
 
 
 if is_flax_available():
-    from transformers.models.bert.modeling_flax_bert import FlaxBertModel, FlaxBertForMaskedLM
+    from transformers.models.bert.modeling_flax_bert import FlaxBertForMaskedLM, FlaxBertModel
 
 
 class FlaxBertModelTester(unittest.TestCase):

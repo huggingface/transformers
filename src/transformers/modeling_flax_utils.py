@@ -194,6 +194,7 @@ class FlaxPreTrainedModel(ABC):
             try:
                 if from_pt:
                     import torch
+
                     state = torch.load(state_f)
 
                     state = convert_state_dict_from_pt(cls, state, config)
