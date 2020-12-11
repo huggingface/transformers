@@ -74,6 +74,10 @@ Learning Rate Schedules (Pytorch)
     :target: /imgs/warmup_linear_schedule.png
     :alt:
 
+
+.. autofunction:: transformers.get_polynomial_decay_schedule_with_warmup
+
+
 Warmup (TensorFlow)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
