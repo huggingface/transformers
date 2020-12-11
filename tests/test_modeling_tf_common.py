@@ -24,6 +24,7 @@ from importlib import import_module
 from typing import List, Tuple
 
 from transformers import is_tf_available
+from transformers.modeling_tf_outputs import TFBaseModelOutput
 from transformers.testing_utils import _tf_gpu_memory_limit, is_pt_tf_cross_test, require_tf, slow
 
 
@@ -164,13 +165,18 @@ class TFModelTesterMixin:
                 expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
-    @slow
+    # @slow
     def test_saved_model_with_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
 
         for model_class in self.all_model_classes:
             class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            # A saved model is always executed in graph mode, since we merged the PR #8777
+            # the booleans in graph mode are always the ones in the config, then we update
+            # the use_cache property if it exists in order to have similar booleans with the inputs
+            if "use_cache" in class_inputs_dict:
+                config.use_cache = class_inputs_dict.pop("use_cache")
             model = model_class(config)
             num_out = len(model(class_inputs_dict))
             model._saved_model_inputs_spec = None
@@ -207,6 +213,11 @@ class TFModelTesterMixin:
 
         for model_class in self.all_model_classes:
             class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            # A saved model is always executed in graph mode, since we merged the PR #8777
+            # the booleans in graph mode are always the ones in the config, then we update
+            # the use_cache property if it exists in order to have similar booleans with the inputs
+            if "use_cache" in class_inputs_dict:
+                config.use_cache = class_inputs_dict.pop("use_cache")
             model = model_class(config)
             num_out = len(model(class_inputs_dict))
             model._saved_model_inputs_spec = None
@@ -559,7 +570,7 @@ class TFModelTesterMixin:
             config.output_hidden_states = True
             model = model_class(config)
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
-
+            
             self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
             self.assertEqual(model.config.output_hidden_states, True)
             check_encoder_attentions_output(outputs)
@@ -574,7 +585,11 @@ class TFModelTesterMixin:
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
             )
 
-            hidden_states = outputs[-1]
+            if isinstance(outputs, TFBaseModelOutput):
+                # Special case here for TFT5EncoderModel
+                hidden_states = outputs.hidden_states
+            else:
+                hidden_states = outputs.decoder_hidden_states
             self.assertEqual(config.output_attentions, False)
             self.assertEqual(len(hidden_states), expected_num_layers)
             self.assertListEqual(
@@ -796,7 +811,7 @@ class TFModelTesterMixin:
 
     def test_lm_head_model_random_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"] if "input_ids" in inputs_dict else inputs_dict["inputs"]
+        input_ids = inputs_dict["input_ids"]
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config)

@@ -354,7 +354,8 @@ def input_processing(func, config, input_ids, **kwargs):
         if isinstance(v, allowed_types) or v is None:
             output[k] = v
         else:
-            raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
+            print(k, v)
+            raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
 
     if isinstance(input_ids, (tuple, list)):
         for i, input in enumerate(input_ids):
@@ -372,7 +373,7 @@ def input_processing(func, config, input_ids, **kwargs):
                 output[parameter_names[i]] = input
             else:
                 raise ValueError(
-                    f"Data of type {type(input)} is not allowed only tf.Tensor is accepted for {parameter_names[i]}."
+                    f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for {parameter_names[i]}."
                 )
     elif isinstance(input_ids, (dict, BatchEncoding)):
         if "inputs" in input_ids:
@@ -399,13 +400,13 @@ def input_processing(func, config, input_ids, **kwargs):
                 )
                 continue
             else:
-                raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
+                raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
     else:
         if isinstance(input_ids, tf.Tensor) or input_ids is None:
             output[parameter_names[0]] = input_ids
         else:
             raise ValueError(
-                f"Data of type {type(input_ids)} is not allowed only tf.Tensor is accepted for {parameter_names[0]}."
+                f"Data of type {type(input_ids)} is not allowed only {allowed_types} is accepted for {parameter_names[0]}."
             )
 
     for name in parameter_names:
