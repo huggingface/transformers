@@ -1588,15 +1588,12 @@ class T5EncoderModel(T5PreTrainedModel):
         )
         assert_device_map(self.device_map, len(self.encoder.block))
         self.encoder.parallelize(self.device_map)
-        self.decoder.parallelize(self.device_map)
         self.model_parallel = True
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
     def deparallelize(self):
         self.encoder.deparallelize()
-        self.decoder.deparallelize()
         self.encoder = self.encoder.to("cpu")
-        self.decoder = self.decoder.to("cpu")
         self.model_parallel = False
         self.device_map = None
         torch.cuda.empty_cache()    
