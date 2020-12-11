@@ -2664,10 +2664,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         # If we have PyTorch/TF/NumPy tensors/arrays as inputs, we cast them as python objects
         # and rebuild them afterwards if no return_tensors is specified
         # Note that we lose the specific device the tensor may be on for PyTorch
+
         first_element = encoded_inputs["input_ids"][0]
-        if isinstance(first_element, (list, tuple)) and first_element:
-            first_element = first_element[0]
-        if not isinstance(first_element, int):
+        if isinstance(first_element, (list, tuple)):
+            # first_element might be an empty list/tuple in some edge cases so we grab the first non empty element.
+            index = 0
+            while len(encoded_inputs["input_ids"][index]) == 0:
+                index += 1
+            if index < len(encoded_inputs["input_ids"]):
+                first_element = encoded_inputs["input_ids"][index][0]
+        # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
+        if not isinstance(first_element, (int, list, tuple)):
             if is_tf_available() and isinstance(first_element, tf.Tensor):
                 return_tensors = "tf" if return_tensors is None else return_tensors
             elif is_torch_available() and isinstance(first_element, torch.Tensor):
