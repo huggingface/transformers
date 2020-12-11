@@ -20,6 +20,7 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from jax.random import PRNGKey
+from flax.core import freeze
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_utils import FlaxPreTrainedModel, gelu
@@ -541,7 +542,7 @@ class FlaxRobertaModel(FlaxPreTrainedModel):
             rngs["dropout"] = dropout_rng
 
         return self.module.apply(
-            {"params": params or self.params},
+            freeze({"params": params or self.params}),
             jnp.array(input_ids, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(token_type_ids, dtype="i4"),
