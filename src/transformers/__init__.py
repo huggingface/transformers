@@ -938,7 +938,7 @@ else:
 if is_flax_available():
     from .models.auto import FLAX_MODEL_MAPPING, FlaxAutoModel
     from .models.bert import FlaxBertForMaskedLM, FlaxBertForMaskedLMModule, FlaxBertModel, FlaxBertModule
-    from .models.roberta import FlaxRobertaModel
+    from .models.roberta import FlaxRobertaModel, FlaxRobertaModule
 else:
     # Import the same objects as dummies to get them in the namespace.
     # They will raise an import error if the user tries to instantiate / use them.

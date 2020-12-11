@@ -564,6 +564,7 @@ class FlaxRobertaModule(nn.Module):
     dropout_rate: float = 0.0
     kernel_init_scale: float = 0.2
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    add_pooling_layer: bool = True
 
     @nn.compact
     def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True):
@@ -591,6 +592,9 @@ class FlaxRobertaModule(nn.Module):
             name="encoder",
             dtype=self.dtype,
         )(embeddings, attention_mask, deterministic=deterministic)
+
+        if not self.add_pooling_layer:
+            return encoder
 
         pooled = FlaxRobertaPooler(kernel_init_scale=self.kernel_init_scale, name="pooler", dtype=self.dtype)(encoder)
         return encoder, pooled
