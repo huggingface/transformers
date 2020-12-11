@@ -107,44 +107,44 @@ class DataTrainingArguments:
     )
 
 
-def speed_metrics(mode, start_time, num_samples):
+def speed_metrics(split, start_time, num_samples):
     """
     Measure and return speed performance metrics.
 
-    This function requires a time snapshot `t0` before the operation to be measured starts and this
+    This function requires a time snapshot `start_time` before the operation to be measured starts and this
     function should be run immediately after the operation to be measured has completed.
 
     Args:
-    - mode: one of train, eval, test
-    - t0: operation start time
-    - n_objs: number of samples processed
+    - split: one of train, val, test
+    - start_time: operation start time
+    - num_samples: number of samples processed
 
     """
-    runtime = time.time() - t0
+    runtime = time.time() - start_time
     result = {}
 
-    samples_per_second = 1 / (runtime / n_objs)
-    result[f"{mode}_samples_per_second"] = round(samples_per_second, 3)
-    result[f"{mode}_runtime"] = round(runtime, 4)
+    samples_per_second = 1 / (runtime / num_samples)
+    result[f"{split}_samples_per_second"] = round(samples_per_second, 3)
+    result[f"{split}_runtime"] = round(runtime, 4)
 
-    result[f"{mode}_n_ojbs"] = n_objs
+    result[f"{split}_n_ojbs"] = num_samples
     return result
 
 
-def handle_metrics(mode, metrics, output_dir):
+def handle_metrics(split, metrics, output_dir):
     """
     Log and save metrics
 
     Args:
-    - mode: one of train, eval, test
+    - split: one of train, val, test
     - metrics: metrics dict
     - output_dir: where to save the metrics
     """
 
-    logger.info(f"***** {mode} metrics *****")
+    logger.info(f"***** {split} metrics *****")
     for key, value in metrics.items():
         logger.info(f"  {key} = {value}")
-    save_json(metrics, os.path.join(output_dir, f"{mode}_results.json"))
+    save_json(metrics, os.path.join(output_dir, f"{split}_results.json"))
 
 
 def main():
@@ -301,7 +301,7 @@ def main():
         trainer.train(
             model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
         )
-        metrics = speed_metrics("train", t0, data_args.n_train)
+        metrics = speed_metrics("train", start_time, data_args.n_train)
 
         trainer.save_model()
 
@@ -320,7 +320,7 @@ def main():
 
         start_time = time.time()
         metrics = trainer.evaluate(metric_key_prefix="val")
-        metrics.update(speed_metrics("val", t0, data_args.n_val))
+        metrics.update(speed_metrics("val", start_time, data_args.n_val))
         metrics["val_loss"] = round(metrics["val_loss"], 4)
 
         if trainer.is_world_process_zero():
@@ -329,12 +329,12 @@ def main():
             all_metrics.update(metrics)
 
     if training_args.do_predict:
-        logging.info("*** Test ***")
+        logging.info("*** Predict ***")
 
-        t0 = time.time()
+        start_time = time.time()
         test_output = trainer.predict(test_dataset=test_dataset, metric_key_prefix="test")
         metrics = test_output.metrics
-        metrics.update(speed_metrics("test", t0, data_args.n_test))
+        metrics.update(speed_metrics("test", start_time, data_args.n_test))
 
         if trainer.is_world_process_zero():
             metrics["test_loss"] = round(metrics["test_loss"], 4)
