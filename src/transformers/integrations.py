@@ -398,11 +398,11 @@ class WandbCallback(TrainerCallback):
         if not self._initialized or hp_search:
             self.setup(args, state, model, reinit=hp_search, **kwargs)
 
-    def on_train_end(self, args, state, control, model=None, **kwargs):
+    def on_train_end(self, args, state, control, model=None, tokenizer=None, **kwargs):
         if self._log_model and self._initialized and state.is_world_process_zero:
             from .trainer import Trainer
 
-            fake_trainer = Trainer(args=args, model=model, tokenizer=kwargs.get("tokenizer"))
+            fake_trainer = Trainer(args=args, model=model, tokenizer=tokenizer)
             with tempfile.TemporaryDirectory() as temp_dir:
                 fake_trainer.save_model(temp_dir)
                 # use run name and ensure it's a valid Artifact name
