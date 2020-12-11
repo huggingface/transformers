@@ -76,8 +76,8 @@ class FlaxPreTrainedModel(ABC):
         if config is None:
             raise ValueError("config cannot be None")
 
-        if params is None:
-            raise ValueError("state cannot be None")
+        if module is None:
+            raise ValueError("module cannot be None")
 
         # Those are private to be exposed as typed property on derived classes.
         self._config = config
@@ -194,11 +194,9 @@ class FlaxPreTrainedModel(ABC):
             try:
                 if from_pt:
                     import torch
-
                     state = torch.load(state_f)
-                    state = {k: v.numpy() for k, v in state.items()}
-                    state = cls.convert_from_pytorch(state, config)
-                    state = unflatten_dict({tuple(k.split(".")[1:]): v for k, v in state.items()})
+
+                    state = convert_state_dict_from_pt(cls, state, config)
                 else:
                     state = from_bytes(cls, state_f.read())
             except UnpicklingError:
@@ -230,3 +228,13 @@ class FlaxPreTrainedModel(ABC):
         with open(os.path.join(save_directory, FLAX_WEIGHTS_NAME), "wb") as f:
             model_bytes = to_bytes(self.params)
             f.write(model_bytes)
+
+
+def convert_state_dict_from_pt(model_class: ABC, state: Dict, config: PretrainedConfig):
+    """
+    Converts a PyTorch parameter state dict to an equivalent Flax parameter state dict
+    """
+    state = {k: v.numpy() for k, v in state.items()}
+    state = model_class.convert_from_pytorch(state, config)
+    state = unflatten_dict({tuple(k.split(".")): v for k, v in state.items()})
+    return state

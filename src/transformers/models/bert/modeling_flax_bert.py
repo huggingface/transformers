@@ -398,6 +398,87 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
     config_class = BertConfig
     base_model_prefix = "bert"
 
+    def _check_inputs(self, input_ids, attention_mask, token_type_ids, position_ids):
+        if token_type_ids is None:
+            token_type_ids = jnp.ones_like(input_ids)
+
+        if position_ids is None:
+            position_ids = jnp.arange(jnp.atleast_2d(input_ids).shape[-1])
+
+        if attention_mask is None:
+            attention_mask = jnp.ones_like(input_ids)
+
+        return input_ids, attention_mask, token_type_ids, position_ids
+
+    def init(self, rng: jax.random.PRNGKey, input_shape: Tuple):
+        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
+            jnp.zeros(input_shape, dtype="i4"), None, None, None
+        )
+
+        params_rng, dropout_rng = jax.random.split(rng)
+        rngs = {"params": params_rng, "dropout": dropout_rng}
+
+        self.params = self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids)["params"]
+
+
+@add_start_docstrings(
+    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
+    BERT_START_DOCSTRING,
+)
+class FlaxBertModel(FlaxBertPreTrainedModel):
+    """
+    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
+    cross-attention is added between the self-attention layers, following the architecture described in `Attention is
+    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
+    """
+
+    def __init__(self, config: BertConfig, state: dict = None, seed: int = 0, dtype: jnp.dtype = jnp.float32):
+        module = FlaxBertModule(
+            vocab_size=config.vocab_size,
+            hidden_size=config.hidden_size,
+            type_vocab_size=config.type_vocab_size,
+            max_length=config.max_position_embeddings,
+            num_encoder_layers=config.num_hidden_layers,
+            num_heads=config.num_attention_heads,
+            head_size=config.hidden_size,
+            intermediate_size=config.intermediate_size,
+            dropout_rate=config.hidden_dropout_prob,
+            dtype=dtype,
+        )
+
+        super().__init__(config, module, state, seed)
+
+    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    def __call__(
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        params: dict = None,
+        dropout_rng: PRNGKey = None,
+        train: bool = False,
+    ):
+        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
+            input_ids, attention_mask, token_type_ids, position_ids
+        )
+
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        return self.module.apply(
+            {"params": params or self.params},
+            jnp.array(input_ids, dtype="i4"),
+            jnp.array(attention_mask, dtype="i4"),
+            jnp.array(token_type_ids, dtype="i4"),
+            jnp.array(position_ids, dtype="i4"),
+            not train,
+            rngs=rngs,
+        )
+
     @staticmethod
     def convert_from_pytorch(pt_state: Dict, config: BertConfig) -> Dict:
         jax_state = dict(pt_state)
@@ -468,87 +549,6 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         return jax_state
 
 
-@add_start_docstrings(
-    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
-    BERT_START_DOCSTRING,
-)
-class FlaxBertModel(FlaxBertPreTrainedModel):
-    """
-    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
-    cross-attention is added between the self-attention layers, following the architecture described in `Attention is
-    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
-    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
-    """
-
-    def __init__(self, config: BertConfig, state: dict, seed: int = 0, dtype: jnp.dtype = jnp.float32):
-        module = FlaxBertModule(
-            vocab_size=config.vocab_size,
-            hidden_size=config.hidden_size,
-            type_vocab_size=config.type_vocab_size,
-            max_length=config.max_position_embeddings,
-            num_encoder_layers=config.num_hidden_layers,
-            num_heads=config.num_attention_heads,
-            head_size=config.hidden_size,
-            intermediate_size=config.intermediate_size,
-            dropout_rate=config.hidden_dropout_prob,
-            dtype=dtype,
-        )
-
-        super().__init__(config, module, state, seed)
-
-    @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    def __call__(
-        self,
-        input_ids,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        params: dict = None,
-        dropout_rng: PRNGKey = None,
-        train: bool = False,
-    ):
-        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
-            input_ids, attention_mask, token_type_ids, position_ids
-        )
-
-        # Handle any PRNG if needed
-        rngs = {}
-        if dropout_rng is not None:
-            rngs["dropout"] = dropout_rng
-
-        return self.module.apply(
-            {"params": params or self.params},
-            jnp.array(input_ids, dtype="i4"),
-            jnp.array(attention_mask, dtype="i4"),
-            jnp.array(token_type_ids, dtype="i4"),
-            jnp.array(position_ids, dtype="i4"),
-            not train,
-            rngs=rngs,
-        )
-
-    def _check_inputs(self, input_ids, attention_mask, token_type_ids, position_ids):
-        if token_type_ids is None:
-            token_type_ids = jnp.ones_like(input_ids)
-
-        if position_ids is None:
-            position_ids = jnp.arange(jnp.atleast_2d(input_ids).shape[-1])
-
-        if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
-
-        return input_ids, attention_mask, token_type_ids, position_ids
-
-    def init(self, rng: jax.random.PRNGKey, input_shape: Tuple):
-        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
-            jnp.zeros(input_shape, dtype="i4"), None, None, None
-        )
-
-        params_rng, dropout_rng = jax.random.split(rng)
-        rngs = {"params": params_rng, "dropout": dropout_rng}
-
-        self.params = self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids)["params"]
-
-
 class FlaxBertModule(nn.Module):
     vocab_size: int
     hidden_size: int
@@ -594,10 +594,8 @@ class FlaxBertModule(nn.Module):
 
 
 class FlaxBertForMaskedLM(FlaxBertPreTrainedModel):
-    def __init__(self, config: BertConfig, state: dict, seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):
-        super().__init__(config, state, seed, dtype)
-
-        self._module = FlaxBertForMaskedLMModule(
+    def __init__(self, config: BertConfig, state: dict = None, seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):
+        module = FlaxBertForMaskedLMModule(
             vocab_size=config.vocab_size,
             type_vocab_size=config.type_vocab_size,
             hidden_size=config.hidden_size,
@@ -608,6 +606,8 @@ class FlaxBertForMaskedLM(FlaxBertPreTrainedModel):
             max_length=config.max_length,
             **kwargs,
         )
+
+        super().__init__(config, module, state, seed)
 
     def __call__(
         self,
@@ -640,6 +640,75 @@ class FlaxBertForMaskedLM(FlaxBertPreTrainedModel):
 
         return logits, pooled
 
+    @staticmethod
+    def convert_from_pytorch(pt_state: Dict, config: BertConfig) -> Dict:
+        jax_state = dict(pt_state)
+
+        # Need to change some parameters name to match Flax names so that we don't have to fork any layer
+        for key, tensor in pt_state.items():
+            # Key parts
+            key_parts = set(key.split("."))
+
+            # Every dense layer has "kernel" parameters instead of "weight"
+            if "dense.weight" in key:
+                del jax_state[key]
+                key = key.replace("weight", "kernel")
+                jax_state[key] = tensor
+
+            # SelfAttention needs also to replace "weight" by "kernel"
+            if {"query", "key", "value"} & key_parts:
+
+                # Flax SelfAttention decomposes the heads (num_head, size // num_heads)
+                if "bias" in key:
+                    jax_state[key] = tensor.reshape((config.num_attention_heads, -1))
+                elif "weight":
+                    del jax_state[key]
+                    key = key.replace("weight", "kernel")
+                    tensor = tensor.reshape((config.num_attention_heads, -1, config.hidden_size)).transpose((2, 0, 1))
+                    jax_state[key] = tensor
+
+            # SelfAttention output is not a separate layer, remove one nesting
+            if "attention.output.dense" in key:
+                del jax_state[key]
+                key = key.replace("attention.output.dense", "attention.self.out")
+                jax_state[key] = tensor
+
+            # SelfAttention output is not a separate layer, remove nesting on layer norm
+            if "attention.output.LayerNorm" in key:
+                del jax_state[key]
+                key = key.replace("attention.output.LayerNorm", "attention.LayerNorm")
+                jax_state[key] = tensor
+
+            # There are some transposed parameters w.r.t their PyTorch counterpart
+            if "intermediate.dense.kernel" in key or "output.dense.kernel" in key:
+                jax_state[key] = tensor.T
+
+            # Self Attention output projection needs to be transposed
+            if "out.kernel" in key:
+                jax_state[key] = tensor.reshape((config.hidden_size, config.num_attention_heads, -1)).transpose(
+                    1, 2, 0
+                )
+
+            # Pooler needs to transpose its kernel
+            if "pooler.dense.kernel" in key:
+                jax_state[key] = tensor.T
+
+            # Handle LayerNorm conversion
+            if "LayerNorm" in key:
+                del jax_state[key]
+
+                # Replace LayerNorm by layer_norm
+                new_key = key.replace("LayerNorm", "layer_norm")
+
+                if "weight" in key:
+                    new_key = new_key.replace("weight", "gamma")
+                elif "bias" in key:
+                    new_key = new_key.replace("bias", "beta")
+
+                jax_state[new_key] = tensor
+
+        return jax_state
+
 
 class FlaxBertForMaskedLMModule(nn.Module):
     vocab_size: int
@@ -669,6 +738,7 @@ class FlaxBertForMaskedLMModule(nn.Module):
             max_length=self.max_length,
             dropout_rate=self.dropout_rate,
             dtype=self.dtype,
+            name="bert"
         )(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic)
 
         # Compute the prediction scores

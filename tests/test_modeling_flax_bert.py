@@ -15,13 +15,13 @@
 import unittest
 
 from transformers import BertConfig, is_flax_available
-from transformers.testing_utils import require_flax
+from transformers.testing_utils import require_flax, slow
 
 from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_flax_available():
-    from transformers.models.bert.modeling_flax_bert import FlaxBertModel
+    from transformers.models.bert.modeling_flax_bert import FlaxBertModel, FlaxBertForMaskedLM
 
 
 class FlaxBertModelTester(unittest.TestCase):
@@ -105,7 +105,13 @@ class FlaxBertModelTester(unittest.TestCase):
 @require_flax
 class FlaxBertModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (FlaxBertModel,) if is_flax_available() else ()
+    all_model_classes = (FlaxBertModel, FlaxBertForMaskedLM) if is_flax_available() else ()
 
     def setUp(self):
         self.model_tester = FlaxBertModelTester(self)
+
+    @slow
+    def test_model_from_pretrained(self):
+        for model_class_name in self.all_model_classes:
+            model = model_class_name.from_pretrained("bert-base-cased")
+            self.assertIsNotNone(model)
