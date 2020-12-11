@@ -60,7 +60,6 @@ ACT2FN = {
 
 
 class FlaxPreTrainedModel(ABC):
-    config = None
     config_class = None
     pretrained_model_archive_map = {}
     base_model_prefix = ""
