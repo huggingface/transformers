@@ -83,6 +83,10 @@ jobs:
                     # emulate failure
                     false
                     echo "it can safely fail"
+                    some non existing command
+                    echo "should still reach here"
+                    some non existing command again
+                    echo "should still reach here too"
                     
             - run:
                 when: always
