@@ -60,7 +60,7 @@ Basic steps
 In order to upload a model, you'll need to first create a git repo. This repo will live on the model hub, allowing
 users to clone it and you (and your organization members) to push to it.
 
-You can create a model repo **directly from `the website <https://huggingface.co/new>`__.**
+You can create a model repo **directly from `the /new page on the website <https://huggingface.co/new>`__.**
 
 Alternatively, you can use the ``transformers-cli``. The next steps describe that process:
 
@@ -98,10 +98,10 @@ with any other git repo.
     echo "hello" >> README.md
     git add . && git commit -m "Update from $USER"
 
-We are intentionally not wrapping git too much, so that you can pick the workflow that you already know.
+We are intentionally not wrapping git too much, so that you can go on with the workflow you're used to and the tools you already know.
 
 The only learning curve you might have compared to regular git is the one for git-lfs. The documentation at
-https://git-lfs.github.com/ is decent, but we'll work on a tutorial with some tips and tricks in the coming weeks!
+`git-lfs.github.com <https://git-lfs.github.com/>`__ is decent, but we'll work on a tutorial with some tips and tricks in the coming weeks!
 
 Make your model work on all frameworks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -212,9 +212,9 @@ This will upload the folder containing the weights, tokenizer and configuration 
 Add a model card
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To make sure everyone knows what your model can do, what its limitations and potential bias or ethical considerations,
+To make sure everyone knows what your model can do, what its limitations, potential bias or ethical considerations are,
 please add a README.md model card to your model repo. You can just create it, or there's also a convenient button
-titled "Add a README.md" on your model page. If you need one, `here <https://github.com/huggingface/model_card>`__ is a
+titled "Add a README.md" on your model page. A model card template can be found  `here <https://github.com/huggingface/model_card>`__ (meta-suggestions are welcome).
 model card template (meta-suggestions are welcome).
 
 .. note::
@@ -260,7 +260,7 @@ First you need to install `git-lfs` in the environment used by the notebook:
 
     sudo apt-get install git-lfs
 
-Then you can use either create a repo directly from the huggingface.co website, or use the :obj:`transformers-cli` to
+Then you can use either create a repo directly from  `huggingface.co <https://huggingface.co/>`__ , or use the :obj:`transformers-cli` to
 create it:
 
 
