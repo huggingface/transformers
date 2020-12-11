@@ -802,9 +802,7 @@ class ProphetNetEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
         }
 
     def get_pretrained_model(self):
-        return EncoderDecoderModel.from_encoder_decoder_pretrained(
-            "bert-large-uncased", "patrickvonplaten/prophetnet-decoder-clm-large-uncased"
-        )
+        return EncoderDecoderModel.from_encoder_decoder_pretrained("bert-large-uncased", "prophetnet-large-uncased")
 
     def test_encoder_decoder_model_shared_weights(self):
         pass
