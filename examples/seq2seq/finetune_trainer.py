@@ -319,9 +319,9 @@ def main():
         logger.info("*** Evaluate ***")
 
         t0 = time.time()
-        metrics = trainer.evaluate()
+        metrics = trainer.evaluate(metric_key_prefix="val")
         metrics.update(speed_metrics("val", t0, data_args.n_val))
-        metrics["eval_loss"] = round(metrics["eval_loss"], 4)
+        metrics["val_loss"] = round(metrics["val_loss"], 4)
 
         if trainer.is_world_process_zero():
 
@@ -332,12 +332,11 @@ def main():
         logging.info("*** Test ***")
 
         t0 = time.time()
-        test_output = trainer.predict(test_dataset=test_dataset)
+        test_output = trainer.predict(test_dataset=test_dataset, metric_key_prefix="test")
         metrics = test_output.metrics
         metrics.update(speed_metrics("test", t0, data_args.n_test))
 
         if trainer.is_world_process_zero():
-            metrics = {k.replace("eval", "test"): v for k, v in metrics.items()}
             metrics["test_loss"] = round(metrics["test_loss"], 4)
             handle_metrics("test", metrics, training_args.output_dir)
             all_metrics.update(metrics)

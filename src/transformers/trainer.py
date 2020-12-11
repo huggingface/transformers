@@ -1243,7 +1243,10 @@ class Trainer:
             shutil.rmtree(checkpoint)
 
     def evaluate(
-        self, eval_dataset: Optional[Dataset] = None, ignore_keys: Optional[List[str]] = None
+        self,
+        eval_dataset: Optional[Dataset] = None,
+        ignore_keys: Optional[List[str]] = None,
+        metric_key_prefix: Optional[str] = None,
     ) -> Dict[str, float]:
         """
         Run evaluation and returns metrics.
@@ -1278,6 +1281,7 @@ class Trainer:
             # self.args.prediction_loss_only
             prediction_loss_only=True if self.compute_metrics is None else None,
             ignore_keys=ignore_keys,
+            metric_key_prefix=metric_key_prefix,
         )
 
         self.log(output.metrics)
@@ -1289,7 +1293,9 @@ class Trainer:
         self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
         return output.metrics
 
-    def predict(self, test_dataset: Dataset, ignore_keys: Optional[List[str]] = None) -> PredictionOutput:
+    def predict(
+        self, test_dataset: Dataset, ignore_keys: Optional[List[str]] = None, metric_key_prefix: Optional[str] = None
+    ) -> PredictionOutput:
         """
         Run prediction and returns predictions and potential metrics.
 
@@ -1322,7 +1328,9 @@ class Trainer:
 
         test_dataloader = self.get_test_dataloader(test_dataset)
 
-        return self.prediction_loop(test_dataloader, description="Prediction", ignore_keys=ignore_keys)
+        return self.prediction_loop(
+            test_dataloader, description="Prediction", ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix
+        )
 
     def prediction_loop(
         self,
@@ -1330,6 +1338,7 @@ class Trainer:
         description: str,
         prediction_loss_only: Optional[bool] = None,
         ignore_keys: Optional[List[str]] = None,
+        metric_key_prefix: Optional[str] = None,
     ) -> PredictionOutput:
         """
         Prediction/evaluation loop, shared by :obj:`Trainer.evaluate()` and :obj:`Trainer.predict()`.
@@ -1420,13 +1429,16 @@ class Trainer:
         else:
             metrics = {}
 
-        if eval_loss is not None:
-            metrics["eval_loss"] = eval_loss.mean().item()
+        if metric_key_prefix is None:
+            metric_key_prefix = "eval"
 
-        # Prefix all keys with eval_
+        if eval_loss is not None:
+            metrics[f"{metric_key_prefix}_loss"] = eval_loss.mean().item()
+
+        # Prefix all keys with metric_key_prefix + '_'
         for key in list(metrics.keys()):
-            if not key.startswith("eval_"):
-                metrics[f"eval_{key}"] = metrics.pop(key)
+            if not key.startswith(f"{metric_key_prefix}_"):
+                metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
