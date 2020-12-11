@@ -87,7 +87,7 @@ jobs:
                     echo "should still reach here"
                     some non existing command again
                     echo "should still reach here too"
-                    
+                    false
             - run:
                 when: always
                 command: |
