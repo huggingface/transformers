@@ -16,12 +16,12 @@
 import os
 from abc import ABC, abstractmethod
 from pickle import UnpicklingError
-from typing import Dict, Union, Optional
+from typing import Dict, Optional, Union
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.serialization import to_bytes, from_bytes
+from flax.serialization import from_bytes, to_bytes
 from flax.traverse_util import unflatten_dict
 from jax.random import PRNGKey
 
@@ -66,7 +66,12 @@ class FlaxPreTrainedModel(ABC):
     base_model_prefix = ""
 
     def __init__(
-        self, config: PretrainedConfig, module: nn.Module, params: Optional[Dict] = None, seed: int = 0, dtype: jnp.dtype = jnp.float32
+        self,
+        config: PretrainedConfig,
+        module: nn.Module,
+        params: Optional[Dict] = None,
+        seed: int = 0,
+        dtype: jnp.dtype = jnp.float32,
     ):
         if config is None:
             raise ValueError("config cannot be None")
@@ -205,7 +210,8 @@ class FlaxPreTrainedModel(ABC):
     def save_pretrained(self, save_directory: Union[str, os.PathLike]):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
-        `:func:`~transformers.FlaxPreTrainedModel.from_pretrained`` class method.
+        `:func:`~transformers.FlaxPreTrainedModel.from_pretrained`` class method
+
         Arguments:
             save_directory (:obj:`str` or :obj:`os.PathLike`):
                 Directory to which to save. Will be created if it doesn't exist.
