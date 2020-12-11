@@ -7,7 +7,7 @@ license: apache-2.0
 datasets:
 - Arabic GigaWord
 - Abulkhair Arabic Corpus
-- [OPUS](http://opus.nlpl.eu/)
+- opus
 - Twitter data
 ---
 
