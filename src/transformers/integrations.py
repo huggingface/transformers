@@ -398,20 +398,20 @@ class WandbCallback(TrainerCallback):
             self.setup(args, state, model, reinit=hp_search, **kwargs)
 
     def on_train_end(self, args, state, control, **kwargs):
-        if self._log_model and self._initialized and state.is_world_process_zero and 'model' in kwargs:
+        if self._log_model and self._initialized and state.is_world_process_zero and "model" in kwargs:
             from .trainer import Trainer
-            fake_trainer = Trainer(args=args, model=kwargs['model'], tokenizer=kwargs.get('tokenizer'))
+
+            fake_trainer = Trainer(args=args, model=kwargs["model"], tokenizer=kwargs.get("tokenizer"))
             with tempfile.TemporaryDirectory() as temp_dir:
                 fake_trainer.save_model(temp_dir)
                 # use run name and ensure it's a valid Artifact name
                 artifact_name = re.sub(r"[^a-zA-Z0-9_\.\-]", "", wandb.run.name)
                 state = dict(vars(state))
-                state.pop('log_history', None)
-
-                artifact = wandb.Artifact(name=f"run-{artifact_name}", type="model", metadata={'state': state})
-                for f in Path(temp_dir).glob('*'):
+                state.pop("log_history", None)
+                artifact = wandb.Artifact(name=f"run-{artifact_name}", type="model", metadata={"state": state})
+                for f in Path(temp_dir).glob("*"):
                     if f.is_file():
-                        with artifact.new_file(f.name, mode='wb') as fa:
+                        with artifact.new_file(f.name, mode="wb") as fa:
                             fa.write(f.read_bytes())
                 wandb.run.log_artifact(artifact)
 
