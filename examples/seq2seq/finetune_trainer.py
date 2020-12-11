@@ -320,12 +320,12 @@ def main():
 
         t0 = time.time()
         metrics = trainer.evaluate()
-        metrics.update(speed_metrics("eval", t0, data_args.n_val))
+        metrics.update(speed_metrics("val", t0, data_args.n_val))
         metrics["eval_loss"] = round(metrics["eval_loss"], 4)
 
         if trainer.is_world_process_zero():
 
-            handle_metrics("eval", metrics, training_args.output_dir)
+            handle_metrics("val", metrics, training_args.output_dir)
             all_metrics.update(metrics)
 
     if training_args.do_predict:
