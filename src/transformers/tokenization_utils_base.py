@@ -2672,7 +2672,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 index += 1
             if index < len(encoded_inputs["input_ids"]):
                 first_element = encoded_inputs["input_ids"][index][0]
-        if not isinstance(first_element, int):
+        # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
+        if not isinstance(first_element, (int, list, tuple)):
             if is_tf_available() and isinstance(first_element, tf.Tensor):
                 return_tensors = "tf" if return_tensors is None else return_tensors
             elif is_torch_available() and isinstance(first_element, torch.Tensor):
