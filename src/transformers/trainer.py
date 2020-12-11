@@ -1246,7 +1246,7 @@ class Trainer:
         self,
         eval_dataset: Optional[Dataset] = None,
         ignore_keys: Optional[List[str]] = None,
-        metric_key_prefix: Optional[str] = None,
+        metric_key_prefix: Optional[str] = "eval",
     ) -> Dict[str, float]:
         """
         Run evaluation and returns metrics.
@@ -1264,9 +1264,8 @@ class Trainer:
             ignore_keys (:obj:`Lst[str]`, `optional`):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
-            metric_key_prefix (:obj:`str`, `optional`):
-                An optional prefix to be used as the metrics key prefix - by default "eval" is used. For example
-                "eval_bleu".
+            metric_key_prefix (:obj:`str`, `optional`, defaults to "eval"):
+                An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named "eval_bleu" if the prefix is "eval" (default)
 
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
@@ -1297,7 +1296,7 @@ class Trainer:
         return output.metrics
 
     def predict(
-        self, test_dataset: Dataset, ignore_keys: Optional[List[str]] = None, metric_key_prefix: Optional[str] = None
+        self, test_dataset: Dataset, ignore_keys: Optional[List[str]] = None, metric_key_prefix: Optional[str] = "eval"
     ) -> PredictionOutput:
         """
         Run prediction and returns predictions and potential metrics.
@@ -1312,9 +1311,8 @@ class Trainer:
             ignore_keys (:obj:`Lst[str]`, `optional`):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
-            metric_key_prefix (:obj:`str`, `optional`):
-                An optional prefix to be used as the metrics key prefix - by default "eval" is used. For example
-                "eval_bleu".
+            metric_key_prefix (:obj:`str`, `optional`, defaults to "eval"):
+                An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named "eval_bleu" if the prefix is "eval" (default)
 
         .. note::
 
@@ -1344,7 +1342,7 @@ class Trainer:
         description: str,
         prediction_loss_only: Optional[bool] = None,
         ignore_keys: Optional[List[str]] = None,
-        metric_key_prefix: Optional[str] = None,
+        metric_key_prefix: Optional[str] = "eval",
     ) -> PredictionOutput:
         """
         Prediction/evaluation loop, shared by :obj:`Trainer.evaluate()` and :obj:`Trainer.predict()`.
@@ -1434,9 +1432,6 @@ class Trainer:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
         else:
             metrics = {}
-
-        if metric_key_prefix is None:
-            metric_key_prefix = "eval"
 
         if eval_loss is not None:
             metrics[f"{metric_key_prefix}_loss"] = eval_loss.mean().item()
