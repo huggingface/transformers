@@ -80,9 +80,10 @@ jobs:
                 command: |
                     set +e
                     echo "my experiment is here"
-                    echo "it can safely fail"
                     # emulate failure
                     false
+                    echo "it can safely fail"
+                    
             - run:
                 when: always
                 command: |
