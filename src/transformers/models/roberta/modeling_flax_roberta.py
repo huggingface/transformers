@@ -14,13 +14,12 @@
 # limitations under the License.
 from typing import Callable, Dict, Tuple
 
-import numpy as np
-
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from jax.random import PRNGKey
+import numpy as np
 from flax.core import freeze
+from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_flax_utils import FlaxPreTrainedModel, gelu
@@ -41,8 +40,8 @@ ROBERTA_START_DOCSTRING = r"""
     PyTorch models)
 
     This model is also a Flax Linen `flax.linen.Module
-    <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`__ subclass. Use it as a regular Flax
-    Module and refer to the Flax documentation for all matter related to general usage and behavior.
+    <https://flax.readthedocs.io/en/latest/flax.linen.html#module>`__ subclass. Use it as a regular Flax Module and
+    refer to the Flax documentation for all matter related to general usage and behavior.
 
     Finally, this model supports inherent JAX features such as:
 
