@@ -141,10 +141,10 @@ class TrainingArguments:
         seed (:obj:`int`, `optional`, defaults to 42):
             Random seed for initialization.
         fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to use 16-bit (mixed) precision training (through NVIDIA apex) instead of 32-bit training.
+            Whether to use 16-bit (mixed) precision training (through NVIDIA Apex) instead of 32-bit training.
         fp16_opt_level (:obj:`str`, `optional`, defaults to 'O1'):
-            For :obj:`fp16` training, apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
-            on the `apex documentation <https://nvidia.github.io/apex/amp.html>`__.
+            For :obj:`fp16` training, Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
+            on the `Apex documentation <https://nvidia.github.io/apex/amp.html>`__.
         local_rank (:obj:`int`, `optional`, defaults to -1):
             During distributed training, the rank of the process.
         tpu_num_cores (:obj:`int`, `optional`):
@@ -310,7 +310,7 @@ class TrainingArguments:
 
     fp16: bool = field(
         default=False,
-        metadata={"help": "Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit"},
+        metadata={"help": "Whether to use 16-bit (mixed) precision (through NVIDIA Apex) instead of 32-bit"},
     )
     fp16_opt_level: str = field(
         default="O1",
