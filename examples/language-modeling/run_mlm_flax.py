@@ -379,7 +379,7 @@ def training_step(optimizer, batch, dropout_rng):
         # Hide away tokens which doesn't participate in the optimization
         token_mask = jnp.where(targets > 0, 1.0, 0.0)
 
-        pooled, logits = model(**batch, params=params, dropout_rng=dropout_rng, train=True)
+        logits = model(**batch, params=params, dropout_rng=dropout_rng, train=True)
         loss, weight_sum = cross_entropy(logits, targets, token_mask)
         return loss / weight_sum
 
@@ -401,7 +401,7 @@ def eval_step(params, batch):
 
     # Hide away tokens which doesn't participate in the optimization
     token_mask = jnp.where(targets > 0, 1.0, 0.0)
-    _, logits = model(**batch, params=params, train=False)
+    logits = model(**batch, params=params, train=False)
 
     return compute_metrics(logits, targets, token_mask)
 
