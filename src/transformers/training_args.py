@@ -87,7 +87,7 @@ class TrainingArguments:
                 * :obj:`"epoch"`: Evaluation is done at the end of each epoch.
 
         prediction_loss_only (:obj:`bool`, `optional`, defaults to `False`):
-            When performing evaluation and predictions, only returns the loss.
+            When performing evaluation and generating predictions, only returns the loss.
         per_device_train_batch_size (:obj:`int`, `optional`, defaults to 8):
             The batch size per GPU/TPU core/CPU for training.
         per_device_eval_batch_size (:obj:`int`, `optional`, defaults to 8):
