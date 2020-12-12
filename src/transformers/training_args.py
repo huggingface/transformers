@@ -109,11 +109,11 @@ class TrainingArguments:
         weight_decay (:obj:`float`, `optional`, defaults to 0):
             The weight decay to apply (if not zero).
         adam_beta1 (:obj:`float`, `optional`, defaults to 0.9):
-            The beta1 for the Adam optimizer.
+            The beta1 hyperparameter for the Adam optimizer.
         adam_beta2 (:obj:`float`, `optional`, defaults to 0.999):
-            The beta2 for the Adam optimizer.
+            The beta2 hyperparameter for the Adam optimizer.
         adam_epsilon (:obj:`float`, `optional`, defaults to 1e-8):
-            Epsilon for the Adam optimizer.
+            The epsilon hyperparameter for the Adam optimizer.
         max_grad_norm (:obj:`float`, `optional`, defaults to 1.0):
             Maximum gradient norm (for gradient clipping).
         num_train_epochs(:obj:`float`, `optional`, defaults to 3.0):
