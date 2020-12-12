@@ -166,7 +166,7 @@ class TrainingArguments:
             ``Trainer`` will use the corresponding output (usually index 2) as the past state and feed it to the model
             at the next training step under the keyword argument ``mems``.
         run_name (:obj:`str`, `optional`):
-            A descriptor for the run. Notably used for wandb logging.
+            A descriptor for the run. Typically used for `wandb <https://www.wandb.com/>`_ logging.
         disable_tqdm (:obj:`bool`, `optional`):
             Whether or not to disable the tqdm progress bars and table of metrics produced by
             :class:`~transformers.notebook.NotebookTrainingTracker` in Jupyter Notebooks. Will default to :obj:`True`
