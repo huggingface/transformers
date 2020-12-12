@@ -165,8 +165,9 @@ class TrainingArguments:
         run_name (:obj:`str`, `optional`):
             A descriptor for the run. Notably used for wandb logging.
         disable_tqdm (:obj:`bool`, `optional`):
-            Whether or not to disable the tqdm progress bars. Will default to :obj:`True` if the logging level is set
-            to warn or lower (default), :obj:`False` otherwise.
+            Whether or not to disable the tqdm progress bars and table of metrics produced by
+            :class:`~transformers.notebook.NotebookTrainingTracker` in Jupyter Notebooks. Will default to :obj:`True` 
+            if the logging level is set to warn or lower (default), :obj:`False` otherwise.
         remove_unused_columns (:obj:`bool`, `optional`, defaults to :obj:`True`):
             If using `nlp.Dataset` datasets, whether or not to automatically remove the columns unused by the model
             forward method.
