@@ -374,6 +374,12 @@ class TrainingArguments:
             "help": "When resuming training, whether or not to skip the first epochs and batches to get to the same training data."
         },
     )
+    tokenizers_parallelism: bool = field(
+        default=True,
+        metadata={
+            "help": "Sets the TOKENIZERS_PARALLELISM variable to True or False to prevent warnings"
+        },
+    )
 
     def __post_init__(self):
         if self.disable_tqdm is None:

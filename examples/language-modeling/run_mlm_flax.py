@@ -413,7 +413,7 @@ def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndar
     if samples_to_remove != 0:
         samples_idx = samples_idx[:-samples_to_remove]
     sections_split = nb_samples // batch_size
-    batch_idx = jnp.split(samples_idx, sections_split)
+    batch_idx = np.split(samples_idx, sections_split)
     return batch_idx
 
 
@@ -520,14 +520,15 @@ if __name__ == "__main__":
     else:
         column_names = datasets["validation"].column_names
     text_column_name = "text" if "text" in column_names else column_names[0]
+    columns_to_remove = [column_name for column_name in column_names if column_name != text_column_name]
 
     padding = "max_length" if data_args.pad_to_max_length else False
 
     def tokenize_function(examples):
         # Remove empty lines
-        examples["text"] = [line for line in examples["text"] if len(line) > 0 and not line.isspace()]
+        examples = [line for line in examples if len(line) > 0 and not line.isspace()]
         return tokenizer(
-            examples["text"],
+            examples,
             return_special_tokens_mask=True,
             padding=padding,
             truncation=True,
@@ -536,9 +537,10 @@ if __name__ == "__main__":
 
     tokenized_datasets = datasets.map(
         tokenize_function,
+        input_columns=[text_column_name],
         batched=True,
         num_proc=data_args.preprocessing_num_workers,
-        remove_columns=[text_column_name],
+        remove_columns=column_names,
         load_from_cache_file=not data_args.overwrite_cache,
     )
 
@@ -548,6 +550,10 @@ if __name__ == "__main__":
 
     # Data collator
     # This one will take care of randomly masking the tokens.
+    if training_args.tokenizers_parallelism:
+        os.environ["TOKENIZERS_PARALLELISM"] = "true"
+    else:
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
     data_collator = FlaxDataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=data_args.mlm_probability)
 
     # Initialize our training
