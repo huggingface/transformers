@@ -69,10 +69,11 @@ class TrainingArguments:
             intended to be used by your training/evaluation scripts instead. See the `example scripts
             <https://github.com/huggingface/transformers/tree/master/examples>`__ for more details.
         do_eval (:obj:`bool`, `optional`):
-            Whether to run evaluation on the dev set or not. Will be set to :obj:`True` if :obj:`evaluation_strategy`
-            is different from :obj:`"no"`. This argument is not directly used by :class:`~transformers.Trainer`, it's
-            intended to be used by your training/evaluation scripts instead. See the `example scripts
-            <https://github.com/huggingface/transformers/tree/master/examples>`__ for more details.
+            Whether to run evaluation on the validation set or not. Will be set to :obj:`True` if
+            :obj:`evaluation_strategy` is different from :obj:`"no"`. This argument is not directly used by
+            :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
+            the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
+            details.
         do_predict (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to run predictions on the test set or not. This argument is not directly used by
             :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
@@ -167,7 +168,7 @@ class TrainingArguments:
             A descriptor for the run. Notably used for wandb logging.
         disable_tqdm (:obj:`bool`, `optional`):
             Whether or not to disable the tqdm progress bars and table of metrics produced by
-            :class:`~transformers.notebook.NotebookTrainingTracker` in Jupyter Notebooks. Will default to :obj:`True` 
+            :class:`~transformers.notebook.NotebookTrainingTracker` in Jupyter Notebooks. Will default to :obj:`True`
             if the logging level is set to warn or lower (default), :obj:`False` otherwise.
         remove_unused_columns (:obj:`bool`, `optional`, defaults to :obj:`True`):
             If using `nlp.Dataset` datasets, whether or not to automatically remove the columns unused by the model
