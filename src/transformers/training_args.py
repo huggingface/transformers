@@ -146,7 +146,7 @@ class TrainingArguments:
             For :obj:`fp16` training, Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
             on the `Apex documentation <https://nvidia.github.io/apex/amp.html>`__.
         local_rank (:obj:`int`, `optional`, defaults to -1):
-            During distributed training, the rank of the process.
+            Rank of the process during distributed training.
         tpu_num_cores (:obj:`int`, `optional`):
             When training on TPU, the number of TPU cores (automatically passed by launcher script).
         debug (:obj:`bool`, `optional`, defaults to :obj:`False`):
