@@ -205,7 +205,7 @@ class TrainingArguments:
               :obj:`"eval_loss"`.
             - :obj:`False` if :obj:`metric_for_best_model` is not set, or set to :obj:`"loss"` or :obj:`"eval_loss"`.
         model_parallel (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If there are more than one devices, whether to use model parallelism to distribute the model's modules
+            If there is more than one device, whether to use model parallelism to distribute the model's modules
             across devices or not.
         ignore_skip_data (:obj:`bool`, `optional`, defaults to :obj:`False`):
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
