@@ -33,9 +33,9 @@ class TFTrainingArguments(TrainingArguments):
     TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop
     itself**.
 
-    Using :class:`~transformers.HfArgumentParser` we can turn this class into
-    `argparse <https://docs.python.org/3/library/argparse.html#module-argparse>`_ arguments that can be specified on
-    the command line.
+    Using :class:`~transformers.HfArgumentParser` we can turn this class into `argparse
+    <https://docs.python.org/3/library/argparse.html#module-argparse>`_ arguments that can be specified on the command
+    line.
 
     Parameters:
         output_dir (:obj:`str`):
@@ -97,7 +97,7 @@ class TFTrainingArguments(TrainingArguments):
         warmup_steps (:obj:`int`, `optional`, defaults to 0):
             Number of steps used for a linear warmup from 0 to :obj:`learning_rate`.
         logging_dir (:obj:`str`, `optional`):
-            `TensorBoard <https://www.tensorflow.org/tensorboard>`_ log directory. Will default to 
+            `TensorBoard <https://www.tensorflow.org/tensorboard>`_ log directory. Will default to
             `runs/**CURRENT_DATETIME_HOSTNAME**`.
         logging_first_step (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to log and evaluate the first :obj:`global_step` or not.

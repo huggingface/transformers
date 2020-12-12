@@ -51,9 +51,9 @@ class TrainingArguments:
     TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop
     itself**.
 
-    Using :class:`~transformers.HfArgumentParser` we can turn this class into
-    `argparse <https://docs.python.org/3/library/argparse.html#module-argparse>`_ arguments that can be specified on
-    the command line.
+    Using :class:`~transformers.HfArgumentParser` we can turn this class into `argparse
+    <https://docs.python.org/3/library/argparse.html#module-argparse>`_ arguments that can be specified on the command
+    line.
 
 
 
@@ -125,7 +125,7 @@ class TrainingArguments:
         warmup_steps (:obj:`int`, `optional`, defaults to 0):
             Number of steps used for a linear warmup from 0 to :obj:`learning_rate`.
         logging_dir (:obj:`str`, `optional`):
-            `TensorBoard <https://www.tensorflow.org/tensorboard>`_ log directory. Will default to 
+            `TensorBoard <https://www.tensorflow.org/tensorboard>`_ log directory. Will default to
             `runs/**CURRENT_DATETIME_HOSTNAME**`.
         logging_first_step (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to log and evaluate the first :obj:`global_step` or not.
@@ -172,8 +172,8 @@ class TrainingArguments:
             :class:`~transformers.notebook.NotebookTrainingTracker` in Jupyter Notebooks. Will default to :obj:`True`
             if the logging level is set to warn or lower (default), :obj:`False` otherwise.
         remove_unused_columns (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If using `datasets.Dataset` datasets, whether or not to automatically remove the columns unused by the model
-            forward method.
+            If using `datasets.Dataset` datasets, whether or not to automatically remove the columns unused by the
+            model forward method.
 
             (Note that this behavior is not implemented for :class:`~transformers.TFTrainer` yet.)
         label_names (:obj:`List[str]`, `optional`):
@@ -205,8 +205,8 @@ class TrainingArguments:
               :obj:`"eval_loss"`.
             - :obj:`False` if :obj:`metric_for_best_model` is not set, or set to :obj:`"loss"` or :obj:`"eval_loss"`.
         model_parallel (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If there is more than one device, whether to use model parallelism to distribute the model's modules
-            across devices or not.
+            If there is more than one device, whether to use model parallelism to distribute the model's modules across
+            devices or not.
         ignore_skip_data (:obj:`bool`, `optional`, defaults to :obj:`False`):
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to :obj:`True`, the training will begin faster (as that skipping
