@@ -142,14 +142,3 @@ class FlaxModelTesterMixin:
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
-
-    def test_naming_convention(self):
-
-        for model_class in self.all_model_classes:
-            model_class_name = model_class.__class__.__name__
-            module_class_name = (
-                model_class_name[:-5] + "Module" if model_class_name[-5:] == "Model" else model_class_name + "Module"
-            )
-            module = __import__("transformers", fromlist=[module_class_name])
-
-            self.assertIsNotNone(module)

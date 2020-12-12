@@ -59,4 +59,4 @@ if is_tf_available():
     )
 
 if is_flax_available():
-    from .modeling_flax_bert import FlaxBertForMaskedLM, FlaxBertForMaskedLMModule, FlaxBertModel, FlaxBertModule
+    from .modeling_flax_bert import FlaxBertForMaskedLM, FlaxBertModel

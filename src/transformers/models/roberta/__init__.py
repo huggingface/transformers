@@ -50,4 +50,4 @@ if is_tf_available():
     )
 
 if is_flax_available():
-    from .modeling_flax_roberta import FlaxRobertaModel, FlaxRobertaModule
+    from .modeling_flax_roberta import FlaxRobertaModel

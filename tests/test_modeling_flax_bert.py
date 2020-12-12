@@ -110,6 +110,19 @@ class FlaxBertModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = FlaxBertModelTester(self)
 
+    def test_naming_convention(self):
+        for model_class in self.all_model_classes:
+            model_class_name = model_class.__name__
+            module_class_name = (
+                model_class_name[:-5] + "Module" if model_class_name[-5:] == "Model" else model_class_name + "Module"
+            )
+            bert_modeling_flax_module = __import__(
+                "transformers.models.bert.modeling_flax_bert", fromlist=[module_class_name]
+            )
+            module_cls = getattr(bert_modeling_flax_module, module_class_name)
+
+            self.assertIsNotNone(module_cls)
+
     @slow
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
