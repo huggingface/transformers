@@ -473,6 +473,8 @@ if __name__ == "__main__":
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name)
+        datasets["validation"] = load_dataset(data_args.dataset_name, data_args.dataset_config_name, split="train[80%:90%]")
+        datasets["test"] = load_dataset(data_args.dataset_name, data_args.dataset_config_name, split="train[90%:100%]")
     else:
         data_files = {}
         if data_args.train_file is not None:
