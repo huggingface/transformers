@@ -117,13 +117,6 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     return (1.0 - expanded_mask) * LARGE_NEGATIVE
 
 
-def _reorder_buffer(attn_cache, new_order):
-    for k, input_buffer_k in attn_cache.items():
-        if input_buffer_k is not None:
-            attn_cache[k] = tf.gather(input_buffer_k, new_order, axis=0)
-    return attn_cache
-
-
 class TFLearnedPositionalEmbedding(TFSharedEmbeddings):
     """
     This module learns positional embeddings up to a fixed maximum size. Padding ids are ignored by either offsetting
@@ -207,8 +200,8 @@ class TFAttention(tf.keras.layers.Layer):
         embed_dim,
         num_heads,
         dropout=0.0,
+        is_decoder: bool = False,
         bias=True,
-        encoder_decoder_attention=False,  # otherwise self_attention
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -219,106 +212,184 @@ class TFAttention(tf.keras.layers.Layer):
         self.head_dim = embed_dim // num_heads
         assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
         self.scaling = self.head_dim ** -0.5
-
-        self.encoder_decoder_attention = encoder_decoder_attention
+        self.is_decoder = is_decoder
 
         self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
         self.q_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
         self.v_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
         self.out_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
 
-        self.cache_key = "encoder_decoder" if self.encoder_decoder_attention else "self"
+    #    def _shape(self, tensor: tf.Tensor, dim_0, bsz) -> tf.Tensor:
+    #        reshaped_T_B_D = tf.reshape(tensor, (dim_0, bsz * self.num_heads, self.head_dim))
+    #        return tf.transpose(reshaped_T_B_D, perm=(1, 0, 2))
 
-    def _shape(self, tensor: tf.Tensor, dim_0, bsz) -> tf.Tensor:
-        reshaped_T_B_D = tf.reshape(tensor, (dim_0, bsz * self.num_heads, self.head_dim))
-        return tf.transpose(reshaped_T_B_D, perm=(1, 0, 2))
+    def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
+        return tf.transpose(tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim)), (0, 2, 1, 3))
 
     def call(
         self,
-        query: tf.Tensor,
-        key: tf.Tensor,
-        layer_state: Optional[Dict[str, tf.Tensor]] = None,
+        hidden_states: tf.Tensor,
+        key_value_states: tf.Tensor,
+        past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
         attn_mask: Optional[tf.Tensor] = None,
         training=False,
     ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
-        """
-        Input shape: Batch x Time(SeqLen) x Channel
+        """Input shape: Batch x Time x Channel"""
 
-        Args:
-            attn_mask (FloatTensor, optional): typically used to
-                implement causal attention, where the mask prevents the attention from looking forward in time
-                (default: None).
-        """
-        static_kv = self.encoder_decoder_attention  # value=key=encoder_hidden_states,
-        bsz, tgt_len, embed_dim = shape_list(query)
-        assert (
-            embed_dim == self.embed_dim
-        ), f"query must be shaped {(tgt_len, bsz, self.embed_dim)} got {shape_list(query)}"
-        # get here for encoder decoder cause of static_kv
-        if layer_state is not None:  # get the last k and v for reuse
-            saved_state = layer_state.get(self.cache_key, {})
-            if "prev_key" in saved_state:
-                # previous time steps are cached - no need to recompute key and value if they are static
-                if static_kv:
-                    key = None
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        # for the decoder
+        is_cross_attention = key_value_states is not None
+        bsz, tgt_len, embed_dim = shape_list(hidden_states)
+
+        # get query proj
+        query_states = self.q_proj(hidden_states) * self.scaling
+        # get key, value proj
+        if is_cross_attention and past_key_value is not None:
+            # reuse k,v, cross_attentions
+            key_states = past_key_value[0]
+            value_states = past_key_value[1]
+        elif is_cross_attention:
+            # cross_attentions
+            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
+            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+        elif past_key_value is not None:
+            # reuse k, v, self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = tf.concat([past_key_value[0], key_states], axis=2)
+            value_states = tf.concat([past_key_value[1], value_states], axis=2)
         else:
-            # this branch is hit by encoder
-            saved_state = None
+            # self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
-        # Project query key values using weights q_proj, k_proj, v_proj
-        q = self.q_proj(query) * self.scaling
-        if static_kv and key is None:  # cross-attention with cache
-            k = v = None
-        elif static_kv and key is not None:  # cross-attention no prev_key found in cache
-            k = self.k_proj(key)
-            v = self.v_proj(key)
-        else:  # self-attention
-            k = self.k_proj(query)
-            v = self.v_proj(query)
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_states, value_states)
 
-        # Reshape
-        q = self._shape(q, tgt_len, bsz)
-        if k is not None:
-            k = self._shape(k, -1, bsz)
-            v = self._shape(v, -1, bsz)
+        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
+        query_states = tf.reshape(self._shape(query_states, tgt_len, bsz), proj_shape)
+        key_states = tf.reshape(key_states, proj_shape)
+        value_states = tf.reshape(value_states, proj_shape)
 
-        if saved_state:  # read from cache
-            k, v = self._concat_saved_state(k, v, saved_state, static_kv, bsz)
+        src_len = shape_list(key_states)[1]
+        attn_weights = tf.matmul(query_states, key_states, transpose_b=True)
 
-        if layer_state is not None:  # Write to cache every decoder call
-            cached_shape = (bsz, self.num_heads, -1, self.head_dim)  # bsz must be first for reorder_cache
-            layer_state[self.cache_key] = dict(
-                prev_key=tf.reshape(k, cached_shape), prev_value=tf.reshape(v, cached_shape)
-            )
-
-        # Compute multi-headed attention
-        src_len = shape_list(k)[1]
-        attn_weights = tf.matmul(q, k, transpose_b=True)  # shape (bsz * self.num_heads, tgt_len, src_len)
+        assert shape_list(attn_weights) == [
+            bsz * self.num_heads,
+            tgt_len,
+            src_len,
+        ], f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {shape_list(attn_weights)}"
 
         if attn_mask is not None:
-            assert attn_mask.dtype == tf.float32, f"expected dtype tf.float32 got {attn_mask.dtype}"
+            assert shape_list(attn_mask) == [
+                bsz,
+                1,
+                tgt_len,
+                src_len,
+            ], f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {shape_list(attn_mask)}"
             attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attn_mask
             attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
+
         attn_probs = self.dropout(attn_weights, training=training)
 
-        attn_output = tf.matmul(attn_probs, v)  # shape: (bsz * self.num_heads, tgt_len, self.head_dim)
+        attn_output = tf.matmul(attn_probs, value_states)
+
+        assert shape_list(attn_output) == [
+            bsz * self.num_heads,
+            tgt_len,
+            self.head_dim,
+        ], f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+
         attn_output = tf.transpose(
             tf.reshape(attn_output, (bsz, self.num_heads, tgt_len, self.head_dim)), (0, 2, 1, 3)
         )
         attn_output = tf.reshape(attn_output, (bsz, tgt_len, embed_dim))
+
         attn_output = self.out_proj(attn_output)
         attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
-        return attn_output, attn_weights
 
-    def _concat_saved_state(self, k, v, saved_state, static_kv, bsz) -> Tuple[tf.Tensor]:
-        # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
-        prev_key = tf.reshape(saved_state["prev_key"], (bsz * self.num_heads, -1, self.head_dim))
-        k = prev_key if static_kv else tf.concat([prev_key, k], axis=1)
-        prev_value = tf.reshape(saved_state["prev_value"], (bsz * self.num_heads, -1, self.head_dim))
-        v = prev_value if static_kv else tf.concat([prev_value, v], axis=1)
-        return k, v
+        return attn_output, attn_weights, past_key_value
+
+
+#        static_kv = self.encoder_decoder_attention  # value=key=encoder_hidden_states,
+#        bsz, tgt_len, embed_dim = shape_list(query)
+#        assert (
+#            embed_dim == self.embed_dim
+#        ), f"query must be shaped {(tgt_len, bsz, self.embed_dim)} got {shape_list(query)}"
+# get here for encoder decoder cause of static_kv
+#        if layer_state is not None:  # get the last k and v for reuse
+#            saved_state = layer_state.get(self.cache_key, {})
+#            if "prev_key" in saved_state:
+# previous time steps are cached - no need to recompute key and value if they are static
+#                if static_kv:
+#                    key = None
+#        else:
+# this branch is hit by encoder
+#            saved_state = None
+#
+# Project query key values using weights q_proj, k_proj, v_proj
+#        q = self.q_proj(query) * self.scaling
+#        if static_kv and key is None:  # cross-attention with cache
+#            k = v = None
+#        elif static_kv and key is not None:  # cross-attention no prev_key found in cache
+#            k = self.k_proj(key)
+#            v = self.v_proj(key)
+#        else:  # self-attention
+#            k = self.k_proj(query)
+#            v = self.v_proj(query)
+#
+# Reshape
+#        q = self._shape(q, tgt_len, bsz)
+#        if k is not None:
+#            k = self._shape(k, -1, bsz)
+#            v = self._shape(v, -1, bsz)
+#
+#        if saved_state:  # read from cache
+#            k, v = self._concat_saved_state(k, v, saved_state, static_kv, bsz)
+#
+#        if layer_state is not None:  # Write to cache every decoder call
+#            cached_shape = (bsz, self.num_heads, -1, self.head_dim)  # bsz must be first for reorder_cache
+#            layer_state[self.cache_key] = dict(
+#                prev_key=tf.reshape(k, cached_shape), prev_value=tf.reshape(v, cached_shape)
+#            )
+#
+# Compute multi-headed attention
+#        src_len = shape_list(k)[1]
+#        attn_weights = tf.matmul(q, k, transpose_b=True)  # shape (bsz * self.num_heads, tgt_len, src_len)
+#
+#        if attn_mask is not None:
+#            assert attn_mask.dtype == tf.float32, f"expected dtype tf.float32 got {attn_mask.dtype}"
+#            attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attn_mask
+#            attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
+#
+#        attn_weights = tf.nn.softmax(attn_weights, axis=-1)
+#        attn_probs = self.dropout(attn_weights, training=training)
+#
+#        attn_output = tf.matmul(attn_probs, v)  # shape: (bsz * self.num_heads, tgt_len, self.head_dim)
+#        attn_output = tf.transpose(
+#            tf.reshape(attn_output, (bsz, self.num_heads, tgt_len, self.head_dim)), (0, 2, 1, 3)
+#        )
+#        attn_output = tf.reshape(attn_output, (bsz, tgt_len, embed_dim))
+#        attn_output = self.out_proj(attn_output)
+#        attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
+#        return attn_output, attn_weights
+#
+#    def _concat_saved_state(self, k, v, saved_state, static_kv, bsz) -> Tuple[tf.Tensor]:
+# saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
+#        prev_key = tf.reshape(saved_state["prev_key"], (bsz * self.num_heads, -1, self.head_dim))
+#        k = prev_key if static_kv else tf.concat([prev_key, k], axis=1)
+#        prev_value = tf.reshape(saved_state["prev_value"], (bsz * self.num_heads, -1, self.head_dim))
+#        v = prev_value if static_kv else tf.concat([prev_value, v], axis=1)
+#        return k, v
 
 
 class TFEncoderLayer(tf.keras.layers.Layer):
@@ -352,7 +423,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         residual = x
         if self.normalize_before:
             x = self.self_attn_layer_norm(x)
-        x, self_attn_weights = self.self_attn(query=x, key=x, attn_mask=attention_mask)
+        x, self_attn_weights, _ = self.self_attn(hidden_states=x, key_value_states=x, attn_mask=attention_mask)
         assert shape_list(x) == shape_list(
             residual
         ), f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(x)}"
@@ -384,6 +455,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
             name="self_attn",
+            is_decoder=True,
         )
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.activation_fn = ACT2FN[config.activation_function]
@@ -395,8 +467,8 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
-            encoder_decoder_attention=True,
             name="encoder_attn",
+            is_decoder=True,
         )
         self.encoder_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
         self.fc1 = tf.keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
@@ -409,7 +481,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         attention_mask: tf.Tensor,
         encoder_hidden_states: tf.Tensor = None,
         encoder_attn_mask: tf.Tensor = None,
-        layer_state=None,
+        past_key_value=None,
         training=False,
     ) -> Tuple[tf.Tensor, tf.Tensor, Dict[str, tf.Tensor]]:
         """
@@ -425,16 +497,16 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             Tuple containing, encoded output of shape `(seq_len, batch, embed_dim)`, self_attn_weights, layer_state
         """
         residual = x  # Make a copy of the input tensor to add later.
-        if layer_state is None:
-            layer_state = {}
         if self.normalize_before:
             x = self.self_attn_layer_norm(x)
 
-        # next line mutates layer state and we need a copy of it
-        x, self_attn_weights = self.self_attn(
-            query=x,
-            key=x,
-            layer_state=layer_state,
+        # Self Attention
+        # decoder uni-directional self-attention cached key/values tuple is at first position
+        self_attn_past_key_value = past_key_value[0] if past_key_value is not None else None
+        x, self_attn_weights, self_attn_present_key_value = self.self_attn(
+            hidden_states=x,
+            key_value_states=x,
+            past_key_value=self_attn_past_key_value,
             attn_mask=attention_mask,
         )
         x = self.dropout(x, training=training)
@@ -447,11 +519,14 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             residual = x
             if self.normalize_before:
                 x = self.encoder_attn_layer_norm(x)
-            x, _ = self.encoder_attn(
-                query=x,
-                key=encoder_hidden_states,
+
+            # cross_attn cached key/values tuple is at second position
+            cross_attn_past_key_value = past_key_value[1] if past_key_value is not None else None
+            x, _, cross_attn_present_key_value = self.encoder_attn(
+                hidden_states=x,
+                key_value_states=encoder_hidden_states,
                 attn_mask=encoder_attn_mask,
-                layer_state=layer_state,  # mutates layer state
+                past_key_value=cross_attn_past_key_value,
             )
             x = self.dropout(x, training=training)
             x = residual + x
@@ -469,10 +544,14 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         x = residual + x
         if not self.normalize_before:
             x = self.final_layer_norm(x)
+
+        # make sure decoder uni-directional self-attn at 1st position and cross-attn at 2nd position.
+        present_key_value = (self_attn_present_key_value, cross_attn_present_key_value)
+
         return (
             x,
             self_attn_weights,
-            layer_state,
+            present_key_value,
         )  # just self_attn weights for now, following t5, layer_state = cache for decoding
 
 
@@ -767,9 +846,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
         # check attention mask and invert
         use_cache = cast_bool_to_primitive(use_cache)
 
-        past_key_values_length = (
-            shape_list(past_key_values[0]["self"]["prev_value"])[2] if past_key_values is not None else 0
-        )
+        past_key_values_length = past_key_values[0][0][0].shape[2] if past_key_values is not None else 0
 
         # embed positions
         positions = self.embed_positions(input_ids, past_key_values_length)
@@ -817,18 +894,18 @@ class TFBartDecoder(tf.keras.layers.Layer):
             if training and (dropout_probability < self.config.layerdrop):
                 continue
 
-            layer_state = past_key_values[idx] if past_key_values is not None else None
+            past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            x, layer_self_attn, layer_past = decoder_layer(
+            x, layer_self_attn, present_key_value = decoder_layer(
                 x,
                 attention_mask=attn_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attn_mask=encoder_attention_mask,
-                layer_state=layer_state,
+                past_key_value=past_key_value,
             )
 
             if use_cache:
-                next_decoder_cache.append(layer_past.copy())
+                next_decoder_cache += (present_key_value,)
 
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
@@ -1138,20 +1215,38 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
+    #    @staticmethod
+    #    def _reorder_cache(past, beam_idx):
+    #        def _reorder_buffer(attn_cache, new_order):
+    #            for k, input_buffer_k in attn_cache.items():
+    #                if input_buffer_k is not None:
+    #                    attn_cache[k] = tf.gather(input_buffer_k, new_order, axis=0)
+    #            return attn_cache
+    #
+    #        (encoder_out, past_key_values) = past
+    #        reordered_past = []
+    #        for layer_past in past_key_values:
+    # get the correct batch idx from decoder layer's batch dim for cross and self-attn
+    #            layer_past_new = {
+    #                attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
+    #            }
+    #            reordered_past.append(layer_past_new)
+    #
+    #        past = (encoder_out, reordered_past)
+    #        return past
+
     @staticmethod
     def _reorder_cache(past, beam_idx):
-        assert len(past) == 2
-        (encoder_out, past_key_values) = past
-        reordered_past = []
-        for layer_past in past_key_values:
-            # get the correct batch idx from decoder layer's batch dim for cross and self-attn
-            layer_past_new = {
-                attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
-            }
-            reordered_past.append(layer_past_new)
+        def _reorder_buffer(cache: Tuple[tf.Tensor], new_order) -> Tuple[tf.Tensor]:
+            import ipdb
 
-        past = (encoder_out, reordered_past)
-        return past
+            ipdb.set_trace()
+            return tuple(tf.gather(past_state, new_order) for past_state in cache)
+
+        reordered_past = ()
+        for layer_past in past:
+            reordered_past += (tuple(_reorder_buffer(cache, beam_idx) for cache in layer_past),)
+        return reordered_past
 
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
         if cur_len == 1 and self.config.force_bos_token_to_be_generated:
