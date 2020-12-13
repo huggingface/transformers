@@ -146,10 +146,6 @@ class TFBartModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_inputs_embeds(self):
-        # inputs_embeds not supported
-        pass
-
     def test_saved_model_with_hidden_states_output(self):
         # Should be uncommented during patrick TF refactor
         pass
@@ -373,8 +369,8 @@ class TestTFSinusoidalPositionalEmbeddings(unittest.TestCase):
     def test_positional_emb_cache_logic(self):
         input_ids = _long_tensor([[4, 10]])
         emb1 = TFSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=6)
-        no_cache = emb1(input_ids, use_cache=False)
-        yes_cache = emb1(input_ids, use_cache=True)
+        no_cache = emb1(input_ids.shape, use_cache=False)
+        yes_cache = emb1(input_ids.shape, use_cache=True)
         self.assertEqual((1, 1, 6), yes_cache.shape)  # extra dim to allow broadcasting, feel free to delete!
 
         np.testing.assert_almost_equal(no_cache[-1].numpy(), yes_cache[0][0].numpy())
