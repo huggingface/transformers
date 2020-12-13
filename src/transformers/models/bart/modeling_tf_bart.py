@@ -219,17 +219,13 @@ class TFAttention(tf.keras.layers.Layer):
         self.v_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
         self.out_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
 
-    #    def _shape(self, tensor: tf.Tensor, dim_0, bsz) -> tf.Tensor:
-    #        reshaped_T_B_D = tf.reshape(tensor, (dim_0, bsz * self.num_heads, self.head_dim))
-    #        return tf.transpose(reshaped_T_B_D, perm=(1, 0, 2))
-
     def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
         return tf.transpose(tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim)), (0, 2, 1, 3))
 
     def call(
         self,
         hidden_states: tf.Tensor,
-        key_value_states: tf.Tensor,
+        key_value_states: Optional[tf.Tensor] = None,
         past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
         attn_mask: Optional[tf.Tensor] = None,
         training=False,
@@ -423,7 +419,7 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         residual = x
         if self.normalize_before:
             x = self.self_attn_layer_norm(x)
-        x, self_attn_weights, _ = self.self_attn(hidden_states=x, key_value_states=x, attn_mask=attention_mask)
+        x, self_attn_weights, _ = self.self_attn(hidden_states=x, attn_mask=attention_mask)
         assert shape_list(x) == shape_list(
             residual
         ), f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(x)}"
@@ -505,7 +501,6 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         self_attn_past_key_value = past_key_value[0] if past_key_value is not None else None
         x, self_attn_weights, self_attn_present_key_value = self.self_attn(
             hidden_states=x,
-            key_value_states=x,
             past_key_value=self_attn_past_key_value,
             attn_mask=attention_mask,
         )
@@ -515,6 +510,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             x = self.self_attn_layer_norm(x)
 
         # Cross-Attention Block
+        cross_attn_present_key_value = None
         if encoder_hidden_states is not None:
             residual = x
             if self.normalize_before:
@@ -1215,7 +1211,6 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
-    #    @staticmethod
     #    def _reorder_cache(past, beam_idx):
     #        def _reorder_buffer(attn_cache, new_order):
     #            for k, input_buffer_k in attn_cache.items():
@@ -1237,16 +1232,20 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
-        def _reorder_buffer(cache: Tuple[tf.Tensor], new_order) -> Tuple[tf.Tensor]:
-            import ipdb
+        past_key_values = past[1]
 
-            ipdb.set_trace()
+        def _reorder_buffer(cache: Tuple[tf.Tensor], new_order) -> Tuple[tf.Tensor]:
+
             return tuple(tf.gather(past_state, new_order) for past_state in cache)
 
         reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(_reorder_buffer(cache, beam_idx) for cache in layer_past),)
-        return reordered_past
+        for layer_past_key_values in past_key_values:
+            reordered_past += (
+                tuple(
+                    _reorder_buffer(layer_past_key_value, beam_idx) for layer_past_key_value in layer_past_key_values
+                ),
+            )
+        return (past[0], past_key_values)
 
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
         if cur_len == 1 and self.config.force_bos_token_to_be_generated:

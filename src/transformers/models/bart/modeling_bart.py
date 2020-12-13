@@ -16,7 +16,7 @@
 import math
 import random
 import warnings
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 import torch
@@ -1284,7 +1284,7 @@ class BartForConditionalGeneration(BartPretrainedModel):
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
-        def _reorder_buffer(cache: Tuple[torch.Tensor], new_order) -> Dict:
+        def _reorder_buffer(cache: Tuple[torch.Tensor], new_order) -> Tuple[torch.Tensor]:
             return tuple(past_state.index_select(0, new_order) for past_state in cache)
 
         reordered_past = ()
