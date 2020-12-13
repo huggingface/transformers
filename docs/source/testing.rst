@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Testing
 =======================================================================================================================
 
@@ -909,9 +921,10 @@ pipelines), then we should run that test in the non-slow test suite. If it's foc
 such as the documentation or the examples, then we should run these tests in the slow test suite. And then, to refine
 this approach we should have exceptions:
 
-* All tests that need to download a heavy set of weights (e.g., model or tokenizer integration tests, pipeline
-  integration tests) should be set to slow. If you're adding a new model, you should create and upload to the hub a
-  tiny version of it (with random weights) for integration tests. This is discussed in the following paragraphs.
+* All tests that need to download a heavy set of weights or a dataset that is larger than ~50MB (e.g., model or
+  tokenizer integration tests, pipeline integration tests) should be set to slow. If you're adding a new model, you
+  should create and upload to the hub a tiny version of it (with random weights) for integration tests. This is
+  discussed in the following paragraphs.
 * All tests that need to do a training not specifically optimized to be fast should be set to slow.
 * We can introduce exceptions if some of these should-be-non-slow tests are excruciatingly slow, and set them to
   ``@slow``. Auto-modeling tests, which save and load large files to disk, are a good example of tests that are marked

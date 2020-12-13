@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Quick tour
 =======================================================================================================================
 
@@ -182,6 +194,7 @@ and get tensors back. You can specify all of that to the tokenizer:
     ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
     ...     padding=True,
     ...     truncation=True,
+    ...     max_length=512,
     ...     return_tensors="pt"
     ... )
     >>> ## TENSORFLOW CODE
@@ -189,6 +202,7 @@ and get tensors back. You can specify all of that to the tokenizer:
     ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
     ...     padding=True,
     ...     truncation=True,
+    ...     max_length=512,
     ...     return_tensors="tf"
     ... )
 
@@ -240,7 +254,9 @@ activations of the model.
            [ 0.08181786, -0.04179301]], dtype=float32)>,)
 
 The model can return more than just the final activations, which is why the output is a tuple. Here we only asked for
-the final activations, so we get a tuple with one element. .. note::
+the final activations, so we get a tuple with one element.
+
+.. note::
 
     All 🤗 Transformers models (PyTorch or TensorFlow) return the activations of the model *before* the final activation
     function (like SoftMax) since this final activation function is often fused with the loss.

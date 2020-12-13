@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 LXMERT
 -----------------------------------------------------------------------------------------------------------------------
 
@@ -19,7 +31,7 @@ Encoder Representations from Transformers) framework to learn these vision-and-l
 build a large-scale Transformer model that consists of three encoders: an object relationship encoder, a language
 encoder, and a cross-modality encoder. Next, to endow our model with the capability of connecting vision and language
 semantics, we pre-train the model with large amounts of image-and-sentence pairs, via five diverse representative
-pre-training tasks: masked language modeling, masked object prediction (feature regression and label classification),
+pretraining tasks: masked language modeling, masked object prediction (feature regression and label classification),
 cross-modality matching, and image question answering. These tasks help in learning both intra-modality and
 cross-modality relationships. After fine-tuning from our pretrained parameters, our model achieves the state-of-the-art
 results on two visual question answering datasets (i.e., VQA and GQA). We also show the generalizability of our

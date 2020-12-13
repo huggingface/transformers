@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -18,6 +32,7 @@ from transformers.optimization import (
     get_polynomial_decay_schedule_with_warmup,
 )
 from transformers.trainer_pt_utils import get_tpu_sampler
+from transformers.training_args import ParallelMode
 
 
 logger = logging.get_logger(__name__)
@@ -122,7 +137,8 @@ class Seq2SeqTrainer(Trainer):
         else:
             if self.args.sortish_sampler:
                 self.train_dataset.make_sortish_sampler(
-                    self.args.per_device_train_batch_size, distributed=self.args.n_gpu > 1
+                    self.args.per_device_train_batch_size,
+                    distributed=(self.args.parallel_mode == ParallelMode.DISTRIBUTED),
                 )
 
             return (
@@ -189,7 +205,7 @@ class Seq2SeqTrainer(Trainer):
         }
 
         if self.args.predict_with_generate and not self.args.prediction_loss_only:
-            generated_tokens = model.generate(
+            generated_tokens = self.model.generate(
                 inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
                 **gen_kwargs,

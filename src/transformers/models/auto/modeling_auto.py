@@ -60,7 +60,7 @@ from ..camembert.modeling_camembert import (
     CamembertForTokenClassification,
     CamembertModel,
 )
-from ..ctrl.modeling_ctrl import CTRLLMHeadModel, CTRLModel
+from ..ctrl.modeling_ctrl import CTRLForSequenceClassification, CTRLLMHeadModel, CTRLModel
 from ..deberta.modeling_deberta import DebertaForSequenceClassification, DebertaModel
 from ..distilbert.modeling_distilbert import (
     DistilBertForMaskedLM,
@@ -122,6 +122,14 @@ from ..mobilebert.modeling_mobilebert import (
     MobileBertForTokenClassification,
     MobileBertModel,
 )
+from ..mpnet.modeling_mpnet import (
+    MPNetForMaskedLM,
+    MPNetForMultipleChoice,
+    MPNetForQuestionAnswering,
+    MPNetForSequenceClassification,
+    MPNetForTokenClassification,
+    MPNetModel,
+)
 from ..mt5.modeling_mt5 import MT5ForConditionalGeneration, MT5Model
 from ..openai.modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
 from ..pegasus.modeling_pegasus import PegasusForConditionalGeneration
@@ -157,7 +165,7 @@ from ..squeezebert.modeling_squeezebert import (
     SqueezeBertModel,
 )
 from ..t5.modeling_t5 import T5ForConditionalGeneration, T5Model
-from ..transfo_xl.modeling_transfo_xl import TransfoXLLMHeadModel, TransfoXLModel
+from ..transfo_xl.modeling_transfo_xl import TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
 from ..xlm.modeling_xlm import (
     XLMForMultipleChoice,
     XLMForQuestionAnsweringSimple,
@@ -212,6 +220,7 @@ from .configuration_auto import (
     MarianConfig,
     MBartConfig,
     MobileBertConfig,
+    MPNetConfig,
     MT5Config,
     OpenAIGPTConfig,
     PegasusConfig,
@@ -267,6 +276,7 @@ MODEL_MAPPING = OrderedDict(
         (DPRConfig, DPRQuestionEncoder),
         (XLMProphetNetConfig, XLMProphetNetModel),
         (ProphetNetConfig, ProphetNetModel),
+        (MPNetConfig, MPNetModel),
     ]
 )
 
@@ -297,6 +307,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForPreTraining),
         (LxmertConfig, LxmertForPreTraining),
         (FunnelConfig, FunnelForPreTraining),
+        (MPNetConfig, MPNetForMaskedLM),
     ]
 )
 
@@ -328,6 +339,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (EncoderDecoderConfig, EncoderDecoderModel),
         (ReformerConfig, ReformerModelWithLMHead),
         (FunnelConfig, FunnelForMaskedLM),
+        (MPNetConfig, MPNetForMaskedLM),
     ]
 )
 
@@ -373,6 +385,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForMaskedLM),
         (ReformerConfig, ReformerForMaskedLM),
         (FunnelConfig, FunnelForMaskedLM),
+        (MPNetConfig, MPNetForMaskedLM),
     ]
 )
 
@@ -415,6 +428,9 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (GPT2Config, GPT2ForSequenceClassification),
         (OpenAIGPTConfig, OpenAIGPTForSequenceClassification),
         (ReformerConfig, ReformerForSequenceClassification),
+        (CTRLConfig, CTRLForSequenceClassification),
+        (TransfoXLConfig, TransfoXLForSequenceClassification),
+        (MPNetConfig, MPNetForSequenceClassification),
     ]
 )
 
@@ -438,6 +454,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (ReformerConfig, ReformerForQuestionAnswering),
         (FunnelConfig, FunnelForQuestionAnswering),
         (LxmertConfig, LxmertForQuestionAnswering),
+        (MPNetConfig, MPNetForQuestionAnswering),
     ]
 )
 
@@ -460,6 +477,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForTokenClassification),
         (FlaubertConfig, FlaubertForTokenClassification),
         (FunnelConfig, FunnelForTokenClassification),
+        (MPNetConfig, MPNetForTokenClassification),
     ]
 )
 
@@ -480,6 +498,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (XLMConfig, XLMForMultipleChoice),
         (FlaubertConfig, FlaubertForMultipleChoice),
         (FunnelConfig, FunnelForMultipleChoice),
+        (MPNetConfig, MPNetForMultipleChoice),
     ]
 )
 
@@ -502,7 +521,7 @@ AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
         deactivated). To train the model, you should first set it back in training mode with ``model.train()``
 
         Args:
-            pretrained_model_name_or_path:
+            pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
                 Can be either:
 
                     - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
@@ -533,7 +552,7 @@ AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
                 weights. In this case though, you should check if using
                 :func:`~transformers.PreTrainedModel.save_pretrained` and
                 :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
-            cache_dir (:obj:`str`, `optional`):
+            cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
             from_tf (:obj:`bool`, `optional`, defaults to :obj:`False`):

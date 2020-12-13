@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - master
-      - model-templates
+      - ci_*
     paths:
       - "src/**"
       - "tests/**"
@@ -57,13 +57,13 @@ jobs:
           python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
           python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
 
-      - name: Create model files
-        run: |
-          source .env/bin/activate
-          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/encoder-bert-tokenizer.json --path=templates/adding_a_new_model
-          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/pt-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
-          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/standalone.json --path=templates/adding_a_new_model
-          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/tf-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+#      - name: Create model files
+#        run: |
+#          source .env/bin/activate
+#          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+#          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/pt-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+#          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/standalone.json --path=templates/adding_a_new_model
+#          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/tf-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
 
       - name: Run all non-slow tests on GPU
         env:
@@ -129,10 +129,10 @@ jobs:
       - name: Create model files
         run: |
           source .env/bin/activate
-          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/encoder-bert-tokenizer.json --path=templates/adding_a_new_model
-          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/pt-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
-          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/standalone.json --path=templates/adding_a_new_model
-          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/tf-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+#          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+#          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/pt-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+#          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/standalone.json --path=templates/adding_a_new_model
+#          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/tf-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
 
       - name: Run all non-slow tests on GPU
         env:

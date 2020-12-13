@@ -1,3 +1,18 @@
+#!/usr/bin/env python
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import logging
 import os
 import sys
@@ -9,6 +24,7 @@ from seq2seq_trainer import Seq2SeqTrainer
 from seq2seq_training_args import Seq2SeqTrainingArguments
 from transformers import AutoConfig, AutoModelForSeq2SeqLM, AutoTokenizer, HfArgumentParser, MBartTokenizer, set_seed
 from transformers.trainer_utils import EvaluationStrategy, is_main_process
+from transformers.training_args import ParallelMode
 from utils import (
     Seq2SeqDataCollator,
     Seq2SeqDataset,
@@ -130,7 +146,7 @@ def main():
         training_args.local_rank,
         training_args.device,
         training_args.n_gpu,
-        bool(training_args.local_rank != -1),
+        bool(training_args.parallel_mode == ParallelMode.DISTRIBUTED),
         training_args.fp16,
     )
     # Set the verbosity to info of the Transformers logger (on main process only):

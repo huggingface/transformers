@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import os
 import sys
 from unittest.mock import patch
@@ -8,7 +22,8 @@ from transformers.testing_utils import (
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
-    require_torch_non_multi_gpu_but_fix_me,
+    require_torch_multi_gpu,
+    require_torch_non_multi_gpu,
     slow,
 )
 from transformers.trainer_callback import TrainerState
@@ -16,25 +31,40 @@ from transformers.trainer_utils import set_seed
 
 from .finetune_trainer import Seq2SeqTrainingArguments, main
 from .seq2seq_trainer import Seq2SeqTrainer
-from .test_seq2seq_examples import MBART_TINY
 
 
 set_seed(42)
 MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
+MBART_TINY = "sshleifer/tiny-mbart"
 
 
 class TestFinetuneTrainer(TestCasePlus):
-    def test_finetune_trainer(self):
-        output_dir = self.run_trainer(1, "12", MBART_TINY, 1)
+    def finetune_trainer_quick(self, distributed=None):
+        output_dir = self.run_trainer(1, "12", MBART_TINY, 1, distributed)
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
         eval_metrics = [log for log in logs if "eval_loss" in log.keys()]
         first_step_stats = eval_metrics[0]
         assert "eval_bleu" in first_step_stats
 
+    @require_torch_non_multi_gpu
+    def test_finetune_trainer_no_dist(self):
+        self.finetune_trainer_quick()
+
+    # the following 2 tests verify that the trainer can handle distributed and non-distributed with n_gpu > 1
+    @require_torch_multi_gpu
+    def test_finetune_trainer_dp(self):
+        self.finetune_trainer_quick(distributed=False)
+
+    @require_torch_multi_gpu
+    def test_finetune_trainer_ddp(self):
+        self.finetune_trainer_quick(distributed=True)
+
     @slow
     def test_finetune_trainer_slow(self):
         # There is a missing call to __init__process_group somewhere
-        output_dir = self.run_trainer(eval_steps=2, max_len="128", model_name=MARIAN_MODEL, num_train_epochs=10)
+        output_dir = self.run_trainer(
+            eval_steps=2, max_len="128", model_name=MARIAN_MODEL, num_train_epochs=10, distributed=False
+        )
 
         # Check metrics
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
@@ -52,7 +82,6 @@ class TestFinetuneTrainer(TestCasePlus):
         assert "test_results.json" in contents
 
     @slow
-    @require_torch_non_multi_gpu_but_fix_me
     def test_finetune_bert2bert(self):
         if not is_datasets_available():
             return
@@ -165,7 +194,9 @@ class TestFinetuneTrainer(TestCasePlus):
         # start training
         trainer.train()
 
-    def run_trainer(self, eval_steps: int, max_len: str, model_name: str, num_train_epochs: int):
+    def run_trainer(
+        self, eval_steps: int, max_len: str, model_name: str, num_train_epochs: int, distributed: bool = False
+    ):
         data_dir = self.examples_dir / "seq2seq/test_data/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()
         args = f"""
@@ -200,8 +231,8 @@ class TestFinetuneTrainer(TestCasePlus):
         """.split()
         # --eval_beams  2
 
-        n_gpu = get_gpu_count()
-        if n_gpu > 1:
+        if distributed:
+            n_gpu = get_gpu_count()
             distributed_args = f"""
                 -m torch.distributed.launch
                 --nproc_per_node={n_gpu}
@@ -210,7 +241,6 @@ class TestFinetuneTrainer(TestCasePlus):
             cmd = [sys.executable] + distributed_args + args
             execute_subprocess_async(cmd, env=self.get_env())
         else:
-            # 0 or 1 gpu
             testargs = ["finetune_trainer.py"] + args
             with patch.object(sys, "argv", testargs):
                 main()

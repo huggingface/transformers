@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Summary of the tasks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -305,7 +317,7 @@ Language modeling is the task of fitting a model to a corpus, which can be domai
 transformer-based models are trained using a variant of language modeling, e.g. BERT with masked language modeling,
 GPT-2 with causal language modeling.
 
-Language modeling can be useful outside of pre-training as well, for example to shift the model distribution to be
+Language modeling can be useful outside of pretraining as well, for example to shift the model distribution to be
 domain-specific: using a language model trained over a very large corpus, and then fine-tuning it to a news dataset or
 on scientific papers e.g. `LysandreJik/arxiv-nlp <https://huggingface.co/lysandre/arxiv-nlp>`__.
 
