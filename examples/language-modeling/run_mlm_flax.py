@@ -574,6 +574,8 @@ if __name__ == "__main__":
     ).create(model.params)
 
     # Create learning rate scheduler
+    if training_args.warmup_steps == 0:
+        training_args.warmup_steps = 1
     lr_scheduler_fn = create_learning_rate_scheduler(
         base_learning_rate=training_args.learning_rate, warmup_steps=training_args.warmup_steps
     )
@@ -614,7 +616,6 @@ if __name__ == "__main__":
             batches.desc = (
                 f"Loss: {loss})"
             )
-            print(loss)
 
         epochs.write(f"Loss: {loss}")
 
