@@ -597,7 +597,7 @@ if __name__ == "__main__":
     at_least_one_eval = False
 
 
-    def evaluation_routine(epoch=0):
+    def evaluation_routine(epoch=-1):
 
         nb_eval_samples = len(tokenized_datasets["test"])
         eval_samples_idx = jnp.arange(nb_eval_samples)
@@ -622,6 +622,7 @@ if __name__ == "__main__":
         epochs.desc = (
             f"Epoch... ({epoch + 1}/{nb_epochs} | Loss: {eval_summary['loss']}, Acc: {eval_summary['accuracy']})"
         )
+        print("Epoch... ({epoch + 1}/{nb_epochs} | Loss: {eval_summary['loss']}, Acc: {eval_summary['accuracy']})")
 
         # Save metrics
         if has_tensorboard and jax.host_id() == 0:
