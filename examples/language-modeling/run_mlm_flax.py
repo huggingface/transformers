@@ -593,9 +593,6 @@ if __name__ == "__main__":
     batch_size = int(training_args.train_batch_size)
     eval_batch_size = int(training_args.eval_batch_size)
 
-    # Allow evaluation to be performed at least once when not training (nb_epochs = 0)
-    at_least_one_eval = False
-
 
     def evaluation_routine(epoch=-1):
 
@@ -630,6 +627,9 @@ if __name__ == "__main__":
                 summary_writer.scalar(name, value, epoch)
 
 
+    if training_args.initial_evaluation:
+        evaluation_routine()
+
     epochs = tqdm(range(nb_epochs), desc=f"Epoch ... (1/{nb_epochs})", position=0)
     for epoch in epochs:
 
@@ -659,8 +659,3 @@ if __name__ == "__main__":
 
         # ======================== Evaluating ==============================
         evaluation_routine(epoch)
-        at_least_one_eval = True
-
-    # ======================== Evaluating ==============================
-    if not at_least_one_eval:
-        evaluation_routine()

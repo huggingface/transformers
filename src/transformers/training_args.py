@@ -23,13 +23,11 @@ from .file_utils import cached_property, is_torch_available, is_torch_tpu_availa
 from .trainer_utils import EvaluationStrategy
 from .utils import logging
 
-
 if is_torch_available():
     import torch
 
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
-
 
 logger = logging.get_logger(__name__)
 
@@ -84,6 +82,8 @@ class TrainingArguments:
                 * :obj:`"steps"`: Evaluation is done (and logged) every :obj:`eval_steps`.
                 * :obj:`"epoch"`: Evaluation is done at the end of each epoch.
 
+        initial_evaluation (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to perform evaluation before doing any training, for example for fine-tuning.
         prediction_loss_only (:obj:`bool`, `optional`, defaults to `False`):
             When performing evaluation and predictions, only returns the loss.
         per_device_train_batch_size (:obj:`int`, `optional`, defaults to 8):
@@ -238,6 +238,8 @@ class TrainingArguments:
         default="no",
         metadata={"help": "Run evaluation during training at each logging step."},
     )
+    initial_evaluation: bool = field(default=False, metadata={
+        "help": "Whether to perform evaluation before doing any training, for example for fine-tuning."})
     prediction_loss_only: bool = field(
         default=False,
         metadata={"help": "When performing evaluation and predictions, only returns the loss."},
@@ -254,14 +256,14 @@ class TrainingArguments:
         default=None,
         metadata={
             "help": "Deprecated, the use of `--per_device_train_batch_size` is preferred. "
-            "Batch size per GPU/TPU core/CPU for training."
+                    "Batch size per GPU/TPU core/CPU for training."
         },
     )
     per_gpu_eval_batch_size: Optional[int] = field(
         default=None,
         metadata={
             "help": "Deprecated, the use of `--per_device_eval_batch_size` is preferred."
-            "Batch size per GPU/TPU core/CPU for evaluation."
+                    "Batch size per GPU/TPU core/CPU for evaluation."
         },
     )
 
