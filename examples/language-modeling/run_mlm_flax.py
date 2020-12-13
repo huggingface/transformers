@@ -53,7 +53,6 @@ from transformers import (
     set_seed,
 )
 
-
 # Cache the result
 has_tensorboard = is_tensorboard_available()
 if has_tensorboard:
@@ -69,7 +68,6 @@ else:
         "Please run pip install tensorboard to enable."
     )
 
-
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
@@ -84,7 +82,7 @@ class ModelArguments:
         default=None,
         metadata={
             "help": "The model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
+                    "Don't set if you want to train a model from scratch."
         },
     )
     model_type: Optional[str] = field(
@@ -138,7 +136,7 @@ class DataTrainingArguments:
         default=None,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated. Default to the max input length of the model."
+                    "than this will be truncated. Default to the max input length of the model."
         },
     )
     preprocessing_num_workers: Optional[int] = field(
@@ -152,7 +150,7 @@ class DataTrainingArguments:
         default=False,
         metadata={
             "help": "Whether to pad all samples to `max_seq_length`. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+                    "If False, will pad the samples dynamically when batching to the maximum length in the batch."
         },
     )
 
@@ -223,7 +221,7 @@ class FlaxDataCollatorForLanguageModeling:
         return batch
 
     def mask_tokens(
-        self, inputs: np.ndarray, special_tokens_mask: Optional[np.ndarray]
+            self, inputs: np.ndarray, special_tokens_mask: Optional[np.ndarray]
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
@@ -253,12 +251,12 @@ class FlaxDataCollatorForLanguageModeling:
 
 
 def create_learning_rate_scheduler(
-    factors="constant * linear_warmup * rsqrt_decay",
-    base_learning_rate=0.5,
-    warmup_steps=1000,
-    decay_factor=0.5,
-    steps_per_decay=20000,
-    steps_per_cycle=100000,
+        factors="constant * linear_warmup * rsqrt_decay",
+        base_learning_rate=0.5,
+        warmup_steps=1000,
+        decay_factor=0.5,
+        steps_per_decay=20000,
+        steps_per_cycle=100000,
 ):
     """Creates learning rate schedule.
     Interprets factors in the factors string which can consist of:
@@ -354,7 +352,7 @@ def cross_entropy(logits, targets, weights=None, label_smoothing=0.0):
     confidence = 1.0 - label_smoothing
     low_confidence = (1.0 - confidence) / (vocab_size - 1)
     normalizing_constant = -(
-        confidence * jnp.log(confidence) + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
+            confidence * jnp.log(confidence) + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
     )
     soft_targets = common_utils.onehot(targets, vocab_size, on_value=confidence, off_value=low_confidence)
 
@@ -431,10 +429,10 @@ if __name__ == "__main__":
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     if (
-        os.path.exists(training_args.output_dir)
-        and os.listdir(training_args.output_dir)
-        and training_args.do_train
-        and not training_args.overwrite_output_dir
+            os.path.exists(training_args.output_dir)
+            and os.listdir(training_args.output_dir)
+            and training_args.do_train
+            and not training_args.overwrite_output_dir
     ):
         raise ValueError(
             f"Output directory ({training_args.output_dir}) already exists and is not empty."
@@ -473,8 +471,9 @@ if __name__ == "__main__":
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name)
-        datasets["validation"] = load_dataset(data_args.dataset_name, data_args.dataset_config_name, split="train[80%:90%]")
-        datasets["test"] = load_dataset(data_args.dataset_name, data_args.dataset_config_name, split="train[90%:100%]")
+        datasets["validation"] = load_dataset(data_args.dataset_name, data_args.dataset_config_name,
+                                              split="train[90%:95%]")
+        datasets["test"] = load_dataset(data_args.dataset_name, data_args.dataset_config_name, split="train[95%:100%]")
     else:
         data_files = {}
         if data_args.train_file is not None:
@@ -526,6 +525,7 @@ if __name__ == "__main__":
 
     padding = "max_length" if data_args.pad_to_max_length else False
 
+
     def tokenize_function(examples):
         # Remove empty lines
         examples = [line for line in examples if len(line) > 0 and not line.isspace()]
@@ -536,6 +536,7 @@ if __name__ == "__main__":
             truncation=True,
             max_length=data_args.max_seq_length,
         )
+
 
     tokenized_datasets = datasets.map(
         tokenize_function,
@@ -592,34 +593,12 @@ if __name__ == "__main__":
     batch_size = int(training_args.train_batch_size)
     eval_batch_size = int(training_args.eval_batch_size)
 
-    epochs = tqdm(range(nb_epochs), desc=f"Epoch ... (1/{nb_epochs})", position=0)
-    for epoch in epochs:
+    # Allow evaluation to be performed at least once when not training (nb_epochs = 0)
+    at_least_one_eval = False
 
-        # ======================== Training ================================
-        # Create sampling rng
-        rng, training_rng, eval_rng = jax.random.split(rng, 3)
 
-        # Generate an epoch by shuffling sampling indices from the train dataset
-        nb_training_samples = len(tokenized_datasets["train"])
-        training_samples_idx = jax.random.permutation(training_rng, jnp.arange(nb_training_samples))
-        training_batch_idx = generate_batch_splits(training_samples_idx, batch_size)
+    def evaluation_routine(epoch=0):
 
-        # Gather the indexes for creating the batch and do a training step
-        batches = tqdm(training_batch_idx, desc="Training...", position=1)
-        for batch_idx in batches:
-            samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
-            model_inputs = data_collator(samples, pad_to_multiple_of=16)
-
-            # Model forward
-            model_inputs = common_utils.shard(model_inputs.data)
-            loss, optimizer, dropout_rngs = p_training_step(optimizer, model_inputs, dropout_rngs)
-            batches.desc = (
-                f"Loss: {loss})"
-            )
-
-        epochs.write(f"Loss: {loss}")
-
-        # ======================== Evaluating ==============================
         nb_eval_samples = len(tokenized_datasets["test"])
         eval_samples_idx = jnp.arange(nb_eval_samples)
         eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
@@ -648,3 +627,39 @@ if __name__ == "__main__":
         if has_tensorboard and jax.host_id() == 0:
             for name, value in eval_summary.items():
                 summary_writer.scalar(name, value, epoch)
+
+
+    epochs = tqdm(range(nb_epochs), desc=f"Epoch ... (1/{nb_epochs})", position=0)
+    for epoch in epochs:
+
+        # ======================== Training ================================
+        # Create sampling rng
+        rng, training_rng, eval_rng = jax.random.split(rng, 3)
+
+        # Generate an epoch by shuffling sampling indices from the train dataset
+        nb_training_samples = len(tokenized_datasets["train"])
+        training_samples_idx = jax.random.permutation(training_rng, jnp.arange(nb_training_samples))
+        training_batch_idx = generate_batch_splits(training_samples_idx, batch_size)
+
+        # Gather the indexes for creating the batch and do a training step
+        batches = tqdm(training_batch_idx, desc="Training...", position=1)
+        for batch_idx in batches:
+            samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
+            model_inputs = data_collator(samples, pad_to_multiple_of=16)
+
+            # Model forward
+            model_inputs = common_utils.shard(model_inputs.data)
+            loss, optimizer, dropout_rngs = p_training_step(optimizer, model_inputs, dropout_rngs)
+            batches.desc = (
+                f"Loss: {loss})"
+            )
+
+        epochs.write(f"Loss: {loss}")
+
+        # ======================== Evaluating ==============================
+        evaluation_routine(epoch)
+        at_least_one_eval = True
+
+    # ======================== Evaluating ==============================
+    if not at_least_one_eval:
+        evaluation_routine()
