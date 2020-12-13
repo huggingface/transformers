@@ -603,13 +603,18 @@ if __name__ == "__main__":
         training_batch_idx = generate_batch_splits(training_samples_idx, batch_size)
 
         # Gather the indexes for creating the batch and do a training step
-        for batch_idx in tqdm(training_batch_idx, desc="Training...", position=1):
+        batches = tqdm(training_batch_idx, desc="Training...", position=1)
+        for batch_idx in batches:
             samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples, pad_to_multiple_of=16)
 
             # Model forward
             model_inputs = common_utils.shard(model_inputs.data)
             loss, optimizer, dropout_rngs = p_training_step(optimizer, model_inputs, dropout_rngs)
+            batches.desc = (
+                f"Loss: {loss})"
+            )
+            print(loss)
 
         epochs.write(f"Loss: {loss}")
 
