@@ -627,10 +627,11 @@ if __name__ == "__main__":
                 summary_writer.scalar(name, value, epoch)
 
 
+    epochs = tqdm(range(nb_epochs), desc=f"Epoch ... (1/{nb_epochs})", position=0)
+
     if training_args.initial_evaluation:
         evaluation_routine()
 
-    epochs = tqdm(range(nb_epochs), desc=f"Epoch ... (1/{nb_epochs})", position=0)
     for epoch in epochs:
 
         # ======================== Training ================================
