@@ -209,6 +209,7 @@ from .integrations import (  # isort:skip
 
 if is_sentencepiece_available():
     from .models.albert import AlbertTokenizer
+    from .models.barthez import BarthezTokenizer
     from .models.bert_generation import BertGenerationTokenizer
     from .models.camembert import CamembertTokenizer
     from .models.marian import MarianTokenizer
@@ -225,6 +226,7 @@ else:
 if is_tokenizers_available():
     from .models.albert import AlbertTokenizerFast
     from .models.bart import BartTokenizerFast
+    from .models.barthez import BarthezTokenizerFast
     from .models.bert import BertTokenizerFast
     from .models.camembert import CamembertTokenizerFast
     from .models.distilbert import DistilBertTokenizerFast
