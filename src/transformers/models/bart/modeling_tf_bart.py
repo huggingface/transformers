@@ -316,78 +316,6 @@ class TFAttention(tf.keras.layers.Layer):
         return attn_output, attn_weights, past_key_value
 
 
-#        static_kv = self.encoder_decoder_attention  # value=key=encoder_hidden_states,
-#        bsz, tgt_len, embed_dim = shape_list(query)
-#        assert (
-#            embed_dim == self.embed_dim
-#        ), f"query must be shaped {(tgt_len, bsz, self.embed_dim)} got {shape_list(query)}"
-# get here for encoder decoder cause of static_kv
-#        if layer_state is not None:  # get the last k and v for reuse
-#            saved_state = layer_state.get(self.cache_key, {})
-#            if "prev_key" in saved_state:
-# previous time steps are cached - no need to recompute key and value if they are static
-#                if static_kv:
-#                    key = None
-#        else:
-# this branch is hit by encoder
-#            saved_state = None
-#
-# Project query key values using weights q_proj, k_proj, v_proj
-#        q = self.q_proj(query) * self.scaling
-#        if static_kv and key is None:  # cross-attention with cache
-#            k = v = None
-#        elif static_kv and key is not None:  # cross-attention no prev_key found in cache
-#            k = self.k_proj(key)
-#            v = self.v_proj(key)
-#        else:  # self-attention
-#            k = self.k_proj(query)
-#            v = self.v_proj(query)
-#
-# Reshape
-#        q = self._shape(q, tgt_len, bsz)
-#        if k is not None:
-#            k = self._shape(k, -1, bsz)
-#            v = self._shape(v, -1, bsz)
-#
-#        if saved_state:  # read from cache
-#            k, v = self._concat_saved_state(k, v, saved_state, static_kv, bsz)
-#
-#        if layer_state is not None:  # Write to cache every decoder call
-#            cached_shape = (bsz, self.num_heads, -1, self.head_dim)  # bsz must be first for reorder_cache
-#            layer_state[self.cache_key] = dict(
-#                prev_key=tf.reshape(k, cached_shape), prev_value=tf.reshape(v, cached_shape)
-#            )
-#
-# Compute multi-headed attention
-#        src_len = shape_list(k)[1]
-#        attn_weights = tf.matmul(q, k, transpose_b=True)  # shape (bsz * self.num_heads, tgt_len, src_len)
-#
-#        if attn_mask is not None:
-#            assert attn_mask.dtype == tf.float32, f"expected dtype tf.float32 got {attn_mask.dtype}"
-#            attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attn_mask
-#            attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
-#
-#        attn_weights = tf.nn.softmax(attn_weights, axis=-1)
-#        attn_probs = self.dropout(attn_weights, training=training)
-#
-#        attn_output = tf.matmul(attn_probs, v)  # shape: (bsz * self.num_heads, tgt_len, self.head_dim)
-#        attn_output = tf.transpose(
-#            tf.reshape(attn_output, (bsz, self.num_heads, tgt_len, self.head_dim)), (0, 2, 1, 3)
-#        )
-#        attn_output = tf.reshape(attn_output, (bsz, tgt_len, embed_dim))
-#        attn_output = self.out_proj(attn_output)
-#        attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
-#        return attn_output, attn_weights
-#
-#    def _concat_saved_state(self, k, v, saved_state, static_kv, bsz) -> Tuple[tf.Tensor]:
-# saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
-#        prev_key = tf.reshape(saved_state["prev_key"], (bsz * self.num_heads, -1, self.head_dim))
-#        k = prev_key if static_kv else tf.concat([prev_key, k], axis=1)
-#        prev_value = tf.reshape(saved_state["prev_value"], (bsz * self.num_heads, -1, self.head_dim))
-#        v = prev_value if static_kv else tf.concat([prev_value, v], axis=1)
-#        return k, v
-
-
 class TFEncoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(**kwargs)
@@ -1180,7 +1108,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             encoder_attentions=outputs.encoder_attentions,  # 2 of e out
         )
 
-    def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache=True, **kwargs) -> Dict:
+    def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs) -> Dict:
         assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
         if len(past) == 1:
             assert isinstance(past[0], tf.Tensor)
@@ -1211,31 +1139,14 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
-    #    def _reorder_cache(past, beam_idx):
-    #        def _reorder_buffer(attn_cache, new_order):
-    #            for k, input_buffer_k in attn_cache.items():
-    #                if input_buffer_k is not None:
-    #                    attn_cache[k] = tf.gather(input_buffer_k, new_order, axis=0)
-    #            return attn_cache
-    #
-    #        (encoder_out, past_key_values) = past
-    #        reordered_past = []
-    #        for layer_past in past_key_values:
-    # get the correct batch idx from decoder layer's batch dim for cross and self-attn
-    #            layer_past_new = {
-    #                attn_key: _reorder_buffer(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
-    #            }
-    #            reordered_past.append(layer_past_new)
-    #
-    #        past = (encoder_out, reordered_past)
-    #        return past
-
     @staticmethod
     def _reorder_cache(past, beam_idx):
+        if len(past) == 1:
+            return past
+
         past_key_values = past[1]
 
         def _reorder_buffer(cache: Tuple[tf.Tensor], new_order) -> Tuple[tf.Tensor]:
-
             return tuple(tf.gather(past_state, new_order) for past_state in cache)
 
         reordered_past = ()
@@ -1245,7 +1156,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
                     _reorder_buffer(layer_past_key_value, beam_idx) for layer_past_key_value in layer_past_key_values
                 ),
             )
-        return (past[0], past_key_values)
+        return (past[0], reordered_past)
 
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
         if cur_len == 1 and self.config.force_bos_token_to_be_generated:
