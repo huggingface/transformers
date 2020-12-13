@@ -242,7 +242,7 @@ class TFAttention(tf.keras.layers.Layer):
         training=False,
     ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
         """
-        Input shape: Time(SeqLen) x Batch x Channel
+        Input shape: Batch x Time(SeqLen) x Channel
 
         Args:
             attn_mask (FloatTensor, optional): typically used to
@@ -250,7 +250,7 @@ class TFAttention(tf.keras.layers.Layer):
                 (default: None).
         """
         static_kv = self.encoder_decoder_attention  # value=key=encoder_hidden_states,
-        tgt_len, bsz, embed_dim = shape_list(query)
+        bsz, tgt_len, embed_dim = shape_list(query)
         assert (
             embed_dim == self.embed_dim
         ), f"query must be shaped {(tgt_len, bsz, self.embed_dim)} got {shape_list(query)}"
@@ -304,8 +304,10 @@ class TFAttention(tf.keras.layers.Layer):
         attn_probs = self.dropout(attn_weights, training=training)
 
         attn_output = tf.matmul(attn_probs, v)  # shape: (bsz * self.num_heads, tgt_len, self.head_dim)
-        attn_output = tf.transpose(attn_output, perm=(1, 0, 2))
-        attn_output = tf.reshape(attn_output, (tgt_len, bsz, embed_dim))
+        attn_output = tf.transpose(
+            tf.reshape(attn_output, (bsz, self.num_heads, tgt_len, self.head_dim)), (0, 2, 1, 3)
+        )
+        attn_output = tf.reshape(attn_output, (bsz, tgt_len, embed_dim))
         attn_output = self.out_proj(attn_output)
         attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
         return attn_output, attn_weights
@@ -663,9 +665,6 @@ class TFBartEncoder(tf.keras.layers.Layer):
         x = self.layernorm_embedding(x)
         x = self.dropout(x, training=training)
 
-        # B x T x C -> T x B x C
-        x = tf.transpose(x, perm=[1, 0, 2])
-
         # check attention mask and invert
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -692,8 +691,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
             x = self.layer_norm(x)
         if output_hidden_states:
             encoder_states.append(x)
-            encoder_states = [tf.transpose(hidden_state, perm=(1, 0, 2)) for hidden_state in encoder_states]
-        x = tf.transpose(x, perm=(1, 0, 2))
+
         if not return_dict:
             return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
         return TFBaseModelOutput(last_hidden_state=x, hidden_states=encoder_states, attentions=all_attentions)
@@ -807,13 +805,6 @@ class TFBartDecoder(tf.keras.layers.Layer):
             x = self.layernorm_embedding(x + positions)
         x = self.dropout(x, training=training)
 
-        # Convert to Bart output format: (BS, seq_len, model_dim) ->  (seq_len, BS, model_dim)
-        x = tf.transpose(x, perm=(1, 0, 2))
-
-        if encoder_hidden_states is not None:
-            assert len(shape_list(encoder_hidden_states)) == 3, "encoder_hidden_states must be a 3D tensor"
-            encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))
-
         # decoder layers
         all_hidden_states = ()
         all_self_attns = ()
@@ -848,13 +839,11 @@ class TFBartDecoder(tf.keras.layers.Layer):
         # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         if output_hidden_states:
             all_hidden_states += (x,)
-            # T x B x C -> B x T x C
-            all_hidden_states = tuple(tf.transpose(hs, perm=(1, 0, 2)) for hs in all_hidden_states)
         else:
             all_hidden_states = None
+
         all_self_attns = list(all_self_attns) if output_attentions else None
 
-        x = tf.transpose(x, perm=(1, 0, 2))
         if encoder_hidden_states is not None:
             encoder_hidden_states = tf.transpose(encoder_hidden_states, perm=(1, 0, 2))  # could maybe be avoided.
 
