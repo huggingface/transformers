@@ -622,7 +622,7 @@ if __name__ == "__main__":
         epochs.desc = (
             f"Epoch... ({epoch + 1}/{nb_epochs} | Loss: {eval_summary['loss']}, Acc: {eval_summary['accuracy']})"
         )
-        print("Epoch... ({epoch + 1}/{nb_epochs} | Loss: {eval_summary['loss']}, Acc: {eval_summary['accuracy']})")
+        print(f"Epoch... ({epoch + 1}/{nb_epochs} | Loss: {eval_summary['loss']}, Acc: {eval_summary['accuracy']})")
 
         # Save metrics
         if has_tensorboard and jax.host_id() == 0:
