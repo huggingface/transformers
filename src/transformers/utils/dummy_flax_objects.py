@@ -23,15 +23,6 @@ class FlaxBertForMaskedLM:
         requires_flax(self)
 
 
-class FlaxBertForMaskedLMModule:
-    def __init__(self, *args, **kwargs):
-        requires_flax(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_flax(self)
-
-
 class FlaxBertModel:
     def __init__(self, *args, **kwargs):
         requires_flax(self)
@@ -41,20 +32,10 @@ class FlaxBertModel:
         requires_flax(self)
 
 
-class FlaxBertModule:
-    def __init__(self, *args, **kwargs):
-        requires_flax(self)
-
-
 class FlaxRobertaModel:
     def __init__(self, *args, **kwargs):
         requires_flax(self)
 
     @classmethod
     def from_pretrained(self, *args, **kwargs):
-        requires_flax(self)
-
-
-class FlaxRobertaModule:
-    def __init__(self, *args, **kwargs):
         requires_flax(self)
