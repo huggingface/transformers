@@ -14,6 +14,8 @@
 
 import unittest
 
+import numpy as np
+
 from transformers import BertConfig, is_flax_available
 from transformers.testing_utils import require_flax, slow
 
@@ -127,4 +129,5 @@ class FlaxBertModelTest(FlaxModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         for model_class_name in self.all_model_classes:
             model = model_class_name.from_pretrained("bert-base-cased")
-            self.assertIsNotNone(model)
+            outputs = model(np.ones((1, 1)))
+            self.assertIsNotNone(outputs)

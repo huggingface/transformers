@@ -21,6 +21,7 @@ from typing import Dict, Optional, Union
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+from flax.core.frozen_dict import FrozenDict
 from flax.serialization import from_bytes, to_bytes
 from flax.traverse_util import unflatten_dict
 from jax.random import PRNGKey
@@ -191,7 +192,69 @@ class FlaxPreTrainedModel(ABC):
                 raise EnvironmentError(
                     f"Unable to convert pytorch model {archive_file} to Flax deserializable object. "
                 )
+
+        # init random models
+        rnd_model = cls(config, *model_args, **model_kwargs)
+        rnd_model.init(rnd_model.key, (1, 1))
+
+        # if model is base model only use model_prefix key
+        if cls.base_model_prefix not in dict(rnd_model.params) and cls.base_model_prefix in state:
+            state = state[cls.base_model_prefix]
+
+        # flatten dicts
+        state_dict = cls.flatten_frozen_state(state)
+        rnd_dict = cls.flatten_frozen_state(rnd_model.params)
+
+        missing_keys = set(rnd_dict.keys()) - set(state_dict.keys())
+        unexpected_keys = set(state_dict.keys()) - set(rnd_dict.keys())
+
+        for missing_key in missing_keys:
+            state[missing_key] = rnd_dict[missing_key]
+
+        if len(unexpected_keys) > 0:
+            logger.warning(
+                f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
+                f"initializing {rnd_model.__class__.__name__}: {unexpected_keys}\n"
+                f"- This IS expected if you are initializing {rnd_model.__class__.__name__} from the checkpoint of a model trained on another task "
+                f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).\n"
+                f"- This IS NOT expected if you are initializing {rnd_model.__class__.__name__} from the checkpoint of a model that you expect "
+                f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
+            )
+        else:
+            logger.info(f"All model checkpoint weights were used when initializing {rnd_model.__class__.__name__}.\n")
+
+        if len(missing_keys) > 0:
+            logger.warning(
+                f"Some weights of {rnd_model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
+                f"and are newly initialized: {missing_keys}\n"
+                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+            )
+        else:
+            logger.info(
+                f"All the weights of {rnd_model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
+                f"If your task is similar to the task the model of the checkpoint was trained on, "
+                f"you can already use {rnd_model.__class__.__name__} for predictions without further training."
+            )
+
+        # unflatten back to flax style
+        state = unflatten_dict({tuple(k.split(".")): v for k, v in state.items()})
         return cls(config, state, *model_args, **model_kwargs)
+
+    @staticmethod
+    def flatten_frozen_state(state):
+        flat_dict = {}
+
+        def _flatten(value, key):
+            if isinstance(value, FrozenDict):
+                value = dict(value)
+            if isinstance(value, dict):
+                for k, v in value.items():
+                    _flatten(v, key + "." + k if key != "" else k)
+            else:
+                flat_dict[key] = value
+
+        _flatten(state, "")
+        return flat_dict
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike]):
         """

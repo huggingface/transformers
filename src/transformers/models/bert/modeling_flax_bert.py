@@ -505,6 +505,11 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
             if "pooler.dense.kernel" in key:
                 jax_state[key] = tensor.T
 
+            # Hack to correctly load some pytorch models
+            if "predictions.bias" in key:
+                del jax_state[key]
+                jax_state[".".join(key.split(".")[:2]) + ".decoder.bias"] = tensor
+
             # Handle LayerNorm conversion
             if "LayerNorm" in key:
                 del jax_state[key]
