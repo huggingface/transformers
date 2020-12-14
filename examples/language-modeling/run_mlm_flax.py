@@ -53,7 +53,6 @@ from transformers import (
     set_seed,
 )
 
-
 # Cache the result
 has_tensorboard = is_tensorboard_available()
 if has_tensorboard:
@@ -69,7 +68,6 @@ else:
         "Please run pip install tensorboard to enable."
     )
 
-
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
@@ -84,7 +82,7 @@ class ModelArguments:
         default=None,
         metadata={
             "help": "The model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
+                    "Don't set if you want to train a model from scratch."
         },
     )
     model_type: Optional[str] = field(
@@ -138,7 +136,7 @@ class DataTrainingArguments:
         default=None,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated. Default to the max input length of the model."
+                    "than this will be truncated. Default to the max input length of the model."
         },
     )
     preprocessing_num_workers: Optional[int] = field(
@@ -152,7 +150,7 @@ class DataTrainingArguments:
         default=False,
         metadata={
             "help": "Whether to pad all samples to `max_seq_length`. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+                    "If False, will pad the samples dynamically when batching to the maximum length in the batch."
         },
     )
 
@@ -223,7 +221,7 @@ class FlaxDataCollatorForLanguageModeling:
         return batch
 
     def mask_tokens(
-        self, inputs: np.ndarray, special_tokens_mask: Optional[np.ndarray]
+            self, inputs: np.ndarray, special_tokens_mask: Optional[np.ndarray]
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
@@ -253,12 +251,12 @@ class FlaxDataCollatorForLanguageModeling:
 
 
 def create_learning_rate_scheduler(
-    factors="constant * linear_warmup * rsqrt_decay",
-    base_learning_rate=0.5,
-    warmup_steps=1000,
-    decay_factor=0.5,
-    steps_per_decay=20000,
-    steps_per_cycle=100000,
+        factors="constant * linear_warmup * rsqrt_decay",
+        base_learning_rate=0.5,
+        warmup_steps=1000,
+        decay_factor=0.5,
+        steps_per_decay=20000,
+        steps_per_cycle=100000,
 ):
     """Creates learning rate schedule.
     Interprets factors in the factors string which can consist of:
@@ -354,7 +352,7 @@ def cross_entropy(logits, targets, weights=None, label_smoothing=0.0):
     confidence = 1.0 - label_smoothing
     low_confidence = (1.0 - confidence) / (vocab_size - 1)
     normalizing_constant = -(
-        confidence * jnp.log(confidence) + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
+            confidence * jnp.log(confidence) + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
     )
     soft_targets = common_utils.onehot(targets, vocab_size, on_value=confidence, off_value=low_confidence)
 
@@ -413,7 +411,7 @@ def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndar
     if samples_to_remove != 0:
         samples_idx = samples_idx[:-samples_to_remove]
     sections_split = nb_samples // batch_size
-    batch_idx = jnp.split(samples_idx, sections_split)
+    batch_idx = np.split(samples_idx, sections_split)
     return batch_idx
 
 
@@ -431,10 +429,10 @@ if __name__ == "__main__":
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     if (
-        os.path.exists(training_args.output_dir)
-        and os.listdir(training_args.output_dir)
-        and training_args.do_train
-        and not training_args.overwrite_output_dir
+            os.path.exists(training_args.output_dir)
+            and os.listdir(training_args.output_dir)
+            and training_args.do_train
+            and not training_args.overwrite_output_dir
     ):
         raise ValueError(
             f"Output directory ({training_args.output_dir}) already exists and is not empty."
@@ -473,6 +471,9 @@ if __name__ == "__main__":
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name)
+        datasets["validation"] = load_dataset(data_args.dataset_name, data_args.dataset_config_name,
+                                              split="train[90%:95%]")
+        datasets["test"] = load_dataset(data_args.dataset_name, data_args.dataset_config_name, split="train[95%:100%]")
     else:
         data_files = {}
         if data_args.train_file is not None:
@@ -491,13 +492,21 @@ if __name__ == "__main__":
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
-    if model_args.config_name:
+
+    rng = jax.random.PRNGKey(training_args.seed)
+    dropout_rngs = jax.random.split(rng, jax.local_device_count())
+
+    if model_args.model_name_or_path:
+        model = FlaxBertForMaskedLM.from_pretrained(model_args.model_name_or_path, dtype=jnp.float32, dropout_rate=0.1)
+    elif model_args.config_name:
         config = AutoConfig.from_pretrained(model_args.config_name, cache_dir=model_args.cache_dir)
-    elif model_args.model_name_or_path:
-        config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+        model = FlaxBertForMaskedLM(config)
+        model.init(jax.random.PRNGKey(training_args.seed), (training_args.train_batch_size, model.config.max_length))
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
+        model = FlaxBertForMaskedLM(config)
+        model.init(jax.random.PRNGKey(training_args.seed), (training_args.train_batch_size, model.config.max_length))
 
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(
@@ -520,25 +529,29 @@ if __name__ == "__main__":
     else:
         column_names = datasets["validation"].column_names
     text_column_name = "text" if "text" in column_names else column_names[0]
+    columns_to_remove = [column_name for column_name in column_names if column_name != text_column_name]
 
     padding = "max_length" if data_args.pad_to_max_length else False
 
+
     def tokenize_function(examples):
         # Remove empty lines
-        examples["text"] = [line for line in examples["text"] if len(line) > 0 and not line.isspace()]
+        examples = [line for line in examples if len(line) > 0 and not line.isspace()]
         return tokenizer(
-            examples["text"],
+            examples,
             return_special_tokens_mask=True,
             padding=padding,
             truncation=True,
             max_length=data_args.max_seq_length,
         )
 
+
     tokenized_datasets = datasets.map(
         tokenize_function,
+        input_columns=[text_column_name],
         batched=True,
         num_proc=data_args.preprocessing_num_workers,
-        remove_columns=[text_column_name],
+        remove_columns=column_names,
         load_from_cache_file=not data_args.overwrite_cache,
     )
 
@@ -548,14 +561,11 @@ if __name__ == "__main__":
 
     # Data collator
     # This one will take care of randomly masking the tokens.
+    if training_args.tokenizers_parallelism:
+        os.environ["TOKENIZERS_PARALLELISM"] = "true"
+    else:
+        os.environ["TOKENIZERS_PARALLELISM"] = "false"
     data_collator = FlaxDataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=data_args.mlm_probability)
-
-    # Initialize our training
-    rng = jax.random.PRNGKey(training_args.seed)
-    dropout_rngs = jax.random.split(rng, jax.local_device_count())
-
-    model = FlaxBertForMaskedLM.from_pretrained("bert-base-cased", dtype=jnp.float32, dropout_rate=0.1)
-    model.init(jax.random.PRNGKey(training_args.seed), (training_args.train_batch_size, model.config.max_length))
 
     # Setup optimizer
     optimizer = Adam(
@@ -566,6 +576,8 @@ if __name__ == "__main__":
     ).create(model.params)
 
     # Create learning rate scheduler
+    if training_args.warmup_steps == 0:
+        training_args.warmup_steps = 1
     lr_scheduler_fn = create_learning_rate_scheduler(
         base_learning_rate=training_args.learning_rate, warmup_steps=training_args.warmup_steps
     )
@@ -582,30 +594,9 @@ if __name__ == "__main__":
     batch_size = int(training_args.train_batch_size)
     eval_batch_size = int(training_args.eval_batch_size)
 
-    epochs = tqdm(range(nb_epochs), desc=f"Epoch ... (1/{nb_epochs})", position=0)
-    for epoch in epochs:
 
-        # ======================== Training ================================
-        # Create sampling rng
-        rng, training_rng, eval_rng = jax.random.split(rng, 3)
+    def evaluation_routine(epoch=-1):
 
-        # Generate an epoch by shuffling sampling indices from the train dataset
-        nb_training_samples = len(tokenized_datasets["train"])
-        training_samples_idx = jax.random.permutation(training_rng, jnp.arange(nb_training_samples))
-        training_batch_idx = generate_batch_splits(training_samples_idx, batch_size)
-
-        # Gather the indexes for creating the batch and do a training step
-        for batch_idx in tqdm(training_batch_idx, desc="Training...", position=1):
-            samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
-            model_inputs = data_collator(samples, pad_to_multiple_of=16)
-
-            # Model forward
-            model_inputs = common_utils.shard(model_inputs.data)
-            loss, optimizer, dropout_rngs = p_training_step(optimizer, model_inputs, dropout_rngs)
-
-        epochs.write(f"Loss: {loss}")
-
-        # ======================== Evaluating ==============================
         nb_eval_samples = len(tokenized_datasets["test"])
         eval_samples_idx = jnp.arange(nb_eval_samples)
         eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
@@ -629,8 +620,44 @@ if __name__ == "__main__":
         epochs.desc = (
             f"Epoch... ({epoch + 1}/{nb_epochs} | Loss: {eval_summary['loss']}, Acc: {eval_summary['accuracy']})"
         )
+        print(f"Epoch... ({epoch + 1}/{nb_epochs} | Loss: {eval_summary['loss']}, Acc: {eval_summary['accuracy']})")
 
         # Save metrics
         if has_tensorboard and jax.host_id() == 0:
             for name, value in eval_summary.items():
                 summary_writer.scalar(name, value, epoch)
+
+
+    epochs = tqdm(range(nb_epochs), desc=f"Epoch ... (1/{nb_epochs})", position=0)
+
+    if training_args.initial_evaluation:
+        evaluation_routine()
+
+    for epoch in epochs:
+
+        # ======================== Training ================================
+        # Create sampling rng
+        rng, training_rng, eval_rng = jax.random.split(rng, 3)
+
+        # Generate an epoch by shuffling sampling indices from the train dataset
+        nb_training_samples = len(tokenized_datasets["train"])
+        training_samples_idx = jax.random.permutation(training_rng, jnp.arange(nb_training_samples))
+        training_batch_idx = generate_batch_splits(training_samples_idx, batch_size)
+
+        # Gather the indexes for creating the batch and do a training step
+        batches = tqdm(training_batch_idx, desc="Training...", position=1)
+        for batch_idx in batches:
+            samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
+            model_inputs = data_collator(samples, pad_to_multiple_of=16)
+
+            # Model forward
+            model_inputs = common_utils.shard(model_inputs.data)
+            loss, optimizer, dropout_rngs = p_training_step(optimizer, model_inputs, dropout_rngs)
+            batches.desc = (
+                f"Loss: {loss})"
+            )
+
+        epochs.write(f"Loss: {loss}")
+
+        # ======================== Evaluating ==============================
+        evaluation_routine(epoch)
