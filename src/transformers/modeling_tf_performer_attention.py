@@ -212,15 +212,21 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         # Apply the padding mask to K'. Also applying it to Q' would be redundant.
         if mask is not None:
             k_prime *= tf.expand_dims(tf.expand_dims(mask, 1), -1)#.expand_as(k_prime)
-        
-        k_prime_t = tf.linalg.matrix_transpose(k_prime)
-        output = q_prime @ (k_prime_t @ v)
+
+        if self.causal:
+            output = _causal_numerator(q_prime, k_prime, v)
+        else:
+            k_prime_t = tf.linalg.matrix_transpose(k_prime)
+            output = q_prime @ (k_prime_t @ v)
         
         # Ensure that the output vectors are convex combinations of input vectors; that is,
         # the implied attention scores sum to 1
-        if self.normalize_output:    
-            # Equivalent to multiplying K'^T by a ones vector
-            d = q_prime @ tf.expand_dims(tf.math.reduce_sum(k_prime), -1)
+        if self.normalize_output:
+            if self.causal:
+                d = _causal_denominator
+            else:
+                # Equivalent to multiplying K'^T by a ones vector
+                d = q_prime @ tf.expand_dims(tf.math.reduce_sum(k_prime), -1)
             
             # Avoid dividing by very small numbers
             d += 2 * self.normalization_stabilizer * (tf.abs(d) <= self.normalization_stabilizer)

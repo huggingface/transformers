@@ -38,6 +38,8 @@ class PerformerAttentionConfig:
             rows of the implicit attention map sum to 1.
         normalization_stabilizer (:obj:`float`, `optional`, defaults to 1e-6):
             Stabilizer term used when normalizing the output to avoid dividing by very small numbers.
+        use_thick_features (:obj:`bool`, `optional`, defaults to False):
+            Whether to generate a random feature tensor that has a batch dimension.
         use_orthogonal_features (:obj:`bool`, `optional`, defaults to True):
             Whether to use strictly orthogonal random features, as opposed to features drawn from a standard Gaussian
             distribution. Orthogonal features result in outputs that more closely approximate softmax attention, but at
@@ -79,6 +81,7 @@ class PerformerAttentionConfig:
     normalize_output: bool = True
     normalization_stabilizer: float = 1e-6
 
+    use_thick_features: bool = False
     use_orthogonal_features: bool = True
     use_qkv_linear_layers: bool = True
     regularize_feature_norms: bool = True

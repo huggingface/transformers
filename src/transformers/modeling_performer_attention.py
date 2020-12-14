@@ -142,7 +142,7 @@ class PerformerAttention(nn.Module):
         
         # If the sequence length is short enough that FAVOR+ would use considerably more time and/or memory than just
         # using softmax attention, use softmax. This works because FAVOR+ is an unbiased estimator of softmax attention.
-        m = round(dim_per_head * math.log(dim_per_head)) # m is the number of random features
+        m = round(dim_per_head * math.log(dim_per_head))    # m is the number of random features
         if self.should_fallback_to_softmax(q_length, m, self.training):
             scores = q @ k.transpose(-2, -1) / (dim ** 0.5)
             
@@ -158,7 +158,7 @@ class PerformerAttention(nn.Module):
         if output_attentions:
             raise ValueError("PerformerAttention: Can't output attention maps when using FAVOR+ linear attention.")
         
-        self._redraw_features_if_needed(q.device)
+        self._redraw_features_if_needed(bs, q.device)
         
         # Get the transformed values of Q and K
         q_prime, k_prime = self.get_projected_queries_and_keys(q, k)
@@ -166,15 +166,15 @@ class PerformerAttention(nn.Module):
     
     # Turns Q into Q', K into K'
     def get_projected_queries_and_keys(self, q, k):
-        # Broadcast the feature matrix across the batch dimension
-        new_shape = list(q.shape)
-        new_shape[-2] = self.random_features.shape[-2]
-        W_t = self.random_features.expand(new_shape).transpose(-2, -1)
-        
         # Instead of dividing the product QK^T by sqrt(d), we divide Q and K by the 4th root of d.
         q = q / (self.d_model ** 0.25)
         k = k / (self.d_model ** 0.25)
-        
+
+        W_t = self.random_features
+        if not self.use_thick_features:
+            W_t = W_t.expand_as(q)
+
+        W_t = W_t.transpose(-2, -1)
         projected_q = q @ W_t
         projected_k = k @ W_t
         
@@ -214,15 +214,21 @@ class PerformerAttention(nn.Module):
         # Apply the padding mask to K'. Also applying it to Q' would be redundant.
         if mask is not None:
             k_prime *= mask.unsqueeze(1).unsqueeze(-1).expand_as(k_prime)
-        
-        k_prime_t = k_prime.transpose(-2, -1)
-        output = q_prime @ (k_prime_t @ v)
+
+        if self.causal:
+            output = CausalNumerator.apply(q_prime, k_prime, v)
+        else:
+            k_prime_t = k_prime.transpose(-2, -1)
+            output = q_prime @ (k_prime_t @ v)
         
         # Ensure that the output vectors are convex combinations of input vectors; that is,
         # the implied attention scores sum to 1
-        if self.normalize_output:    
-            # Equivalent to multiplying K'^T by a ones vector
-            d = q_prime @ k_prime.sum(dim=-2).unsqueeze(-1)
+        if self.normalize_output:
+            if self.causal:
+                d = CausalDenominator.apply(q_prime, k_prime)
+            else:
+                # Equivalent to multiplying K'^T by a ones vector
+                d = q_prime @ k_prime.sum(dim=-2).unsqueeze(-1)
             
             # Avoid dividing by very small numbers
             d += 2 * self.normalization_stabilizer * (torch.abs(d) <= self.normalization_stabilizer)
@@ -247,39 +253,42 @@ class PerformerAttention(nn.Module):
         else:
             return context,
 
-    def _generate_feature_matrix(self, device):
+    def _generate_feature_matrix(self, batch, device):
         dim_per_head = self.d_model // self.num_heads
         num_rows = round(dim_per_head * math.log(dim_per_head))
+
+        if not self.use_thick_features:
+            batch = 1
         
         if not self.use_orthogonal_features:
-            return torch.randn(num_rows, dim_per_head, device=device)
+            return torch.randn(batch, num_rows, dim_per_head, device=device)
 
         num_full_blocks = num_rows // dim_per_head
-        block_list = [_get_square_orthogonal_block_givens(dim_per_head, device) for _ in range(num_full_blocks)]
+        orthog_func = _get_square_orthogonal_block_givens if dim_per_head % 2 == 0 else _get_square_orthogonal_block_qr
+        block_list = [orthog_func(batch, dim_per_head, device) for _ in range(num_full_blocks)]
         
         remaining_rows = num_rows - num_full_blocks * dim_per_head
         if remaining_rows > 0:
-            q = _get_square_orthogonal_block_givens(dim_per_head, device)
+            q = orthog_func(batch, dim_per_head, device)
             block_list.append(q[:remaining_rows])
         
-        final_matrix = torch.cat(block_list)
+        final_tensor = torch.cat(block_list)
         
         # This option yields SMREG
         if self.regularize_feature_norms:
-            final_matrix *= dim_per_head ** 0.5
+            final_tensor *= dim_per_head ** 0.5
         else:
             # Hack to make the matrix columns have the norm we would expect them to have if they were sampled straight
             # from a Gaussian, instead of being all norm 1 since they went through QR decomposition
-            multiplier = torch.randn(num_rows, dim_per_head, device=device).norm(dim = 1)
-            final_matrix = torch.diag(multiplier) @ final_matrix
-        
-        random_features = final_matrix.to(device)
-        self.random_features = random_features
+            multiplier = torch.randn(batch, num_rows, dim_per_head, device=device).norm(dim = 2)
+            final_tensor = torch.diag(multiplier) @ final_tensor
+
+        self.random_features = final_tensor
     
-    def _redraw_features_if_needed(self, device):
+    def _redraw_features_if_needed(self, batch, device):
         # We haven't created the projection matrix yet, let's create it
         if self.random_features is None:
-            self._generate_feature_matrix(device)
+            self._generate_feature_matrix(batch, device)
         
         elif self.feature_redraw_interval is not None:
             if self.redraw_stochastically:
@@ -296,14 +305,22 @@ class PerformerAttention(nn.Module):
             else:
                 self.calls_since_last_redraw += 1
 
-# Not currently used - slower
-def _get_square_orthogonal_block_qr(size, device = None):
-    unstructured_block = torch.randn(size, size, device=device)
+# Not currently used unless dim_per_head is odd
+def _get_square_orthogonal_block_qr(batch, size, device = None):
+    unstructured_block = torch.randn(batch, size, size, device=device)
     q, r = torch.qr(unstructured_block, some = True)
-    return q.t()
+    return q.transpose(-2, -1)
+
+# Not ideal but all we can do until https://github.com/pytorch/pytorch/issues/42502 gets implemented
+def _batch_randperm(batch, n, dtype=torch.int64, device=None):
+    out_tensor = torch.empty(batch, n, dtype=dtype, device=device)
+    for i in range(batch):
+        torch.randperm(n, out=out_tensor[i], dtype=dtype, device=device)
+
+    return out_tensor
 
 # Fast parallelizable way of making random orthogonal matrices- O(n log(n)) vs. O(n^3) for QR
-def _get_square_orthogonal_block_givens(num_rows, device = None):
+def _get_square_orthogonal_block_givens(batch, num_rows, device = None):
     r"""Constructs a 2D-tensor which is a product of Givens random rotations.
     Constructs a 2D-tensor of the form G_1 * ... * G_k, where G_i is a Givens
     random rotation. The resulting tensor mimics a matrix taken uniformly at
@@ -313,27 +330,119 @@ def _get_square_orthogonal_block_givens(num_rows, device = None):
     Returns:
       The product of Givens random rotations.
     """
-    q = torch.eye(num_rows, device=device)   # Start with identity matrix
+    q = torch.eye(num_rows, device=device)      # Start with identity matrix
+    q = q.expand(batch, num_rows, num_rows)
 
     # Compute the cosines and sines of the rotations up front
     num_iterations = 2 * int(math.ceil(math.log(num_rows)))
-    angles = math.pi * torch.rand(num_iterations, num_rows // 2, 1, device=device)
+    angles = math.pi * torch.rand(batch, num_iterations, num_rows // 2, 1, device=device)
     cosines, sines = torch.cos(angles), torch.sin(angles)
-    q.unsqueeze_(1)
+    q.unsqueeze_(2)
 
     # Group the matrix into random, non-overlapping pairs of rows. Because these pairs are non-overlapping, we can
     # perform each set of rotations in parallel.
     for n in range(num_iterations):
-        shuffled_rows = torch.randperm(num_rows, device=device).view(-1, 1, 1)
-        random_row_pairs = q.gather(0, shuffled_rows.expand_as(q)).view(-1, 2, num_rows)
+        shuffled_rows = _batch_randperm(batch, num_rows, device=device).view(batch, -1, 1, 1)
+        random_row_pairs = q.gather(1, shuffled_rows.expand_as(q)).view(batch, -1, 2, num_rows)
 
-        rows1, rows2 = random_row_pairs[:, 0], random_row_pairs[:, 1]
-        new_rows1 = cosines[n] * rows1 + sines[n] * rows2
-        new_rows2 = -sines[n] * rows1 + cosines[n] * rows2
+        rows1, rows2 = random_row_pairs[:, :, 0], random_row_pairs[:, :, 1]
+        new_rows1 = cosines[:, n] * rows1 + sines[:, n] * rows2
+        new_rows2 = -sines[:, n] * rows1 + cosines[:, n] * rows2
 
-        random_row_pairs[:, 0], random_row_pairs[:, 1] = new_rows1, new_rows2
+        random_row_pairs[:, :, 0], random_row_pairs[:, :, 1] = new_rows1, new_rows2
 
-        q = random_row_pairs.view(-1, 1, num_rows)     # Ungroup all the rows again
+        q = random_row_pairs.view(batch, -1, 1, num_rows)     # Ungroup all the rows again
 
     return q.squeeze()
 
+# Custom gradient functions
+class CausalNumerator(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, q_prime, k_prime, v):
+        """Computes not-normalized FAVOR causal attention using the prefix-sum method.
+            Args:
+              q_prime: query_prime tensor of the shape [L,B,H,M].
+              k_prime: key_prime tensor of the shape [L,B,H,M].
+              v: value tensor of the shape [L,B,H,D].
+            Returns:
+              Not-normalized FAVOR causal attention A_{masked}V.
+            """
+        result = []
+        sums = torch.zeros_like(torch.einsum("ijk,ijl->ijkl", k_prime[0], v[0]))
+        ctx.save_for_backward(sums)
+        ctx.save_for_backward(q_prime)
+        ctx.save_for_backward(k_prime)
+        ctx.save_for_backward(v)
+
+        for index in range(q_prime.shape[0]):
+            sums = sums + torch.einsum("ijk,ijl->ijkl", k_prime[index], v[index])
+            result.append(torch.einsum("ijkl,ijk->ijl", sums, q_prime[index])[None, Ellipsis])
+
+        result = torch.cat(result, dim=0)
+        return result
+
+    @staticmethod
+    def backward(ctx, upstream_grad):
+        gr_sums, q_prime, k_prime, v = ctx.saved_tensors
+
+        grads = torch.zeros_like(torch.einsum("ijk,ijl->ijkl", k_prime[0], v[0]))
+        q_grads = []
+        k_grads = []
+        v_grads = []
+
+        for i in range(q_prime.shape[0] - 1, -1, -1):
+            q_grads.append(
+                torch.einsum("ijkl,ijl->ijk", gr_sums, upstream_grad[i])[None, Ellipsis])
+            grads = grads + torch.einsum("ijk,ijl->ijkl", q_prime[i], upstream_grad[i])
+            k_grads.append(torch.einsum("ijkl,ijl->ijk", grads, v[i])[None, Ellipsis])
+            v_grads.append(torch.einsum("ijkl,ijk->ijl", grads, k_prime[i])[None, Ellipsis])
+            gr_sums = gr_sums - torch.einsum("ijk,ijl->ijkl", k_prime[i], v[i])
+
+        q_grads = torch.cat(q_grads[::-1], dim=0)
+        k_grads = torch.cat(k_grads[::-1], dim=0)
+        v_grads = torch.cat(v_grads[::-1], dim=0)
+        return q_grads, k_grads, v_grads
+
+class CausalDenominator(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, q_prime, k_prime):
+        """Computes FAVOR normalizer in causal attention using the prefix-sum method.
+            Args:
+              q_prime: query_prime tensor of the shape [L,B,H,M].
+              k_prime: key_prime tensor of the shape [L,B,H,M].
+            Returns:
+              FAVOR normalizer in causal attention.
+            """
+
+        result = []
+        sums = torch.zeros_like(k_prime[0])
+        ctx.save_for_backward(sums)
+        ctx.save_for_backward(q_prime)
+        ctx.save_for_backward(k_prime)
+
+        for index in range(q_prime.shape[0]):
+            sums = sums + k_prime[index]
+            result.append(torch.sum(q_prime[index] * sums, dim=2)[None, Ellipsis])
+
+        result = torch.cat(result, dim=0)
+        return result
+
+    @staticmethod
+    def backward(ctx, upstream_grad):
+        gr_sums, q_prime, k_prime = ctx.saved_tensors
+
+        k_grad = torch.zeros_like(k_prime[0])
+        q_grads = []
+        k_grads = []
+
+        for i in range(q_prime.shape[0] - 1, -1, -1):
+            q_grads.append(
+                torch.einsum("ijk,ij->ijk", gr_sums, upstream_grad[i])[None, Ellipsis])
+            k_grad = k_grad + torch.einsum("ijk,ij->ijk", q_prime[i], upstream_grad[i])
+            k_grads.append(k_grad[None, Ellipsis])
+            gr_sums = gr_sums - k_prime[i]
+
+        q_grads = torch.cat(q_grads[::-1], dim=0)
+        k_grads = torch.cat(k_grads[::-1], dim=0)
+
+        return q_grads, k_grads
