@@ -781,6 +781,9 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
+    def set_output_embeddings(self, new_embeddings):
+        self.cls.predictions.decoder = new_embeddings
+
     @add_start_docstrings_to_model_forward(LAYOUTLM_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,

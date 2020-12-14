@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright {{cookiecutter.authors}} and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ if is_tf_available():
         TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
         TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
         TF{{cookiecutter.camelcase_modelname}}ForTokenClassification,
+        TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
         TF{{cookiecutter.camelcase_modelname}}Model,
     )
 
@@ -134,6 +135,21 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    def create_and_check_lm_head(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.is_decoder = True
+        model = TF{{cookiecutter.camelcase_modelname}}ForCausalLM(config=config)
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "token_type_ids": token_type_ids,
+        }
+        prediction_scores = model(inputs)["logits"]
+        self.parent.assertListEqual(
+            list(prediction_scores.numpy().shape), [self.batch_size, self.seq_length, self.vocab_size]
+        )
+
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -224,6 +240,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTest(TFModelTesterMixin, unitte
     all_model_classes = (
         (
             TF{{cookiecutter.camelcase_modelname}}Model,
+            TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
             TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
             TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
             TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
@@ -249,6 +266,10 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTest(TFModelTesterMixin, unitte
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
 
+    def test_for_causal_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_lm_head(*config_and_inputs)
+
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
@@ -269,3 +290,31 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTest(TFModelTesterMixin, unitte
     def test_model_from_pretrained(self):
         model = TF{{cookiecutter.camelcase_modelname}}Model.from_pretrained("{{cookiecutter.checkpoint_identifier}}")
         self.assertIsNotNone(model)
+
+@require_tf
+class TF{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference_masked_lm(self):
+        model = TF{{cookiecutter.camelcase_modelname}}ForMaskedLM.from_pretrained("{{cookiecutter.checkpoint_identifier}}")
+        input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
+        output = model(input_ids)[0]
+
+        # TODO Replace vocab size
+        vocab_size = 32000
+
+        expected_shape = [1, 6, vocab_size]
+        self.assertEqual(output.shape, expected_shape)
+
+        print(output[:, :3, :3])
+
+        # TODO Replace values below with what was printed above.
+        expected_slice = tf.constant(
+            [
+                [
+                    [-0.05243197, -0.04498899, 0.05512108],
+                    [-0.07444685, -0.01064632, 0.04352357],
+                    [-0.05020351, 0.05530146, 0.00700043],
+                ]
+            ]
+        )
+        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-4)

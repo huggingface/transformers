@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -335,7 +335,7 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
         model, output_loading_info = TFBertForTokenClassification.from_pretrained(
             "jplu/tiny-tf-bert-random", output_loading_info=True
         )
-        self.assertEqual(sorted(output_loading_info["unexpected_keys"]), ["mlm___cls", "nsp___cls"])
+        self.assertEqual(sorted(output_loading_info["unexpected_keys"]), [])
         for layer in output_loading_info["missing_keys"]:
             self.assertTrue(layer.split("_")[0] in ["dropout", "classifier"])
 

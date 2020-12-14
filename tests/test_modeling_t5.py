@@ -444,6 +444,20 @@ class T5ModelTester:
                     )
                 )
 
+    def check_resize_embeddings_t5_v1_1(
+        self,
+        config,
+    ):
+        prev_vocab_size = config.vocab_size
+
+        config.tie_word_embeddings = False
+        model = T5ForConditionalGeneration(config=config).to(torch_device).eval()
+        model.resize_token_embeddings(prev_vocab_size - 10)
+
+        self.parent.assertEqual(model.get_input_embeddings().weight.shape[0], prev_vocab_size - 10)
+        self.parent.assertEqual(model.get_output_embeddings().weight.shape[0], prev_vocab_size - 10)
+        self.parent.assertEqual(model.config.vocab_size, prev_vocab_size - 10)
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -480,7 +494,7 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_torchscript = True
-    test_resize_embeddings = False
+    test_resize_embeddings = True
     test_model_parallel = True
     is_encoder_decoder = True
 
@@ -535,6 +549,10 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
+
+    def test_v1_1_resize_embeddings(self):
+        config = self.model_tester.prepare_config_and_inputs()[0]
+        self.model_tester.check_resize_embeddings_t5_v1_1(config)
 
     @slow
     def test_model_from_pretrained(self):
