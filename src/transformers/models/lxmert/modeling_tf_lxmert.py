@@ -1257,6 +1257,15 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             **({"obj_labels": obj_labels} if self.config.task_obj_predict else {}),
         }
 
+    def get_output_embeddings(self):
+        return self.lxmert.embeddings
+
+    def get_output_layer_with_bias(self):
+        return self.cls.predictions
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.cls.name + "/" + self.cls.predictions.name
+
     @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFLxmertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(

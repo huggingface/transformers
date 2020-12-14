@@ -803,6 +803,12 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
     def get_output_embeddings(self):
         return self.pred_layer.input_embeddings
 
+    def get_output_layer_with_bias(self):
+        return self.pred_layer
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.pred_layer.name
+
     def prepare_inputs_for_generation(self, inputs, **kwargs):
         mask_token_id = self.config.mask_token_id
         lang_id = self.config.lang_id

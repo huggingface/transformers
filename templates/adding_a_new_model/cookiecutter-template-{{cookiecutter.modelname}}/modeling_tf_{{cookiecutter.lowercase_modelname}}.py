@@ -772,9 +772,15 @@ class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelca
 
         self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
         self.mlm = TF{{cookiecutter.camelcase_modelname}}MLMHead(config, self.{{cookiecutter.lowercase_modelname}}.embeddings, name="mlm___cls")
-
+    
     def get_output_embeddings(self):
         return self.{{cookiecutter.lowercase_modelname}}.embeddings
+
+    def get_output_layer_with_bias(self):
+        return self.mlm.predictions
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

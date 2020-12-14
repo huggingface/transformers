@@ -282,6 +282,17 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_t5_decoder_model_past_large_inputs(*config_and_inputs)
 
+    def test_model_common_attributes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+            x = model.get_output_layer_with_bias()
+            assert x is None
+            name = model.get_prefix_bias_name()
+            assert name is None
+
     @slow
     def test_model_from_pretrained(self):
         model = TFT5Model.from_pretrained("t5-small")

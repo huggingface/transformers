@@ -353,6 +353,17 @@ class TFGPT2ModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_double_head(*config_and_inputs)
 
+    def test_model_common_attributes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+            x = model.get_output_layer_with_bias()
+            assert x is None
+            name = model.get_prefix_bias_name()
+            assert name is None
+
     def test_gpt2_sequence_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_for_sequence_classification(*config_and_inputs)

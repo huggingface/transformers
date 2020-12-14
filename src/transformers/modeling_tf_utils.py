@@ -614,12 +614,31 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
     def get_output_embeddings(self) -> tf.keras.layers.Layer:
         """
-        Returns the model's output embeddings.
+        Returns the model's output embeddings
 
         Returns:
             :obj:`tf.keras.layers.Layer`: A torch module mapping hidden states to vocabulary.
         """
         return None  # Overwrite for models with output embeddings
+
+    def get_output_layer_with_bias(self) -> Union[None, tf.keras.layers.Layer]:
+        """
+        Get the layer that handles a bias attribute in case the model has an LM head with weights tied to the
+        embeddings.
+
+        Return:
+            :obj:`tf.keras.layers.Layer`: The layer that handles the bias, None if not an LM model.
+        """
+        return None
+
+    def get_prefix_bias_name(self) -> Union[None, str]:
+        """
+        Get the concatenated prefix name of the bias from the model name to the parent layer.
+
+        Return:
+            :obj:`str`: The prefix name of the bias.
+        """
+        return None
 
     def resize_token_embeddings(self, new_num_tokens=None) -> tf.Variable:
         """
@@ -662,7 +681,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             # TFSharedEmbeddings
             return embeddings.weight
         else:
-            raise ValueError("word embedding is not defined.")
+            # Here we build the word embeddings weights if not exists.
+            # And then we retry to get the attribute once built.
+            embeddings.build([])
+            if hasattr(embeddings, "word_embeddings"):
+                # TFBertEmbeddings, TFAlbertEmbeddings, TFElectraEmbeddings
+                return embeddings.word_embeddings
+            elif hasattr(embeddings, "weight"):
+                # TFSharedEmbeddings
+                return embeddings.weight
+            else:
+                raise ValueError("word embedding is not defined.")
 
     def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None) -> tf.Variable:
         """
@@ -684,27 +713,86 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             :obj:`new_num_tokens` is :obj:`None`
         """
         word_embeddings = self._get_word_embeddings(old_embeddings)
+        bias_layer = self.get_output_layer_with_bias()
+
         if new_num_tokens is None:
             return word_embeddings
+
         old_num_tokens, old_embedding_dim = word_embeddings.shape
+
         if old_num_tokens == new_num_tokens:
             return word_embeddings
 
         # initialize new embeddings
         # todo: initializer range is not always passed in config.
         init_range = getattr(self.config, "initializer_range", 0.02)
+        name = (
+            self.name
+            + "/"
+            + self.base_model_prefix
+            + "/"
+            + old_embeddings.name
+            + "/"
+            + word_embeddings.name.split(":")[0]
+        )
         new_embeddings = self.add_weight(
-            "weight",
+            name=name,
             shape=[new_num_tokens, old_embedding_dim],
             initializer=get_initializer(init_range),
             dtype=tf.float32,
         )
-        init_weights = new_embeddings.numpy()
+        init_weights = tf.make_ndarray(tf.make_tensor_proto(new_embeddings.value()))
 
         # Copy token embeddings from the previous weights
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-        init_weights[:num_tokens_to_copy] = word_embeddings[:num_tokens_to_copy, :]
+        init_weights[:num_tokens_to_copy] = word_embeddings.value()[:num_tokens_to_copy, :]
         new_embeddings.assign(init_weights)
+
+        if bias_layer is not None:
+            if not hasattr(bias_layer, "bias"):
+                bias_layer.build([])
+
+            # Second check in order to be sure the attribute has been properly created
+            if not hasattr(bias_layer, "bias"):
+                raise ValueError("bias is not defined.")
+
+            # initialize bias
+            init_bias = np.zeros((new_num_tokens,))
+            init_bias[:num_tokens_to_copy] = bias_layer.bias.value()[
+                :num_tokens_to_copy
+            ]  # tf.make_ndarray(tf.make_tensor_proto(bias_layer.bias.value()))[:num_tokens_to_copy]
+
+            bias_layer.bias = self.add_weight(
+                shape=(new_num_tokens,),
+                initializer="zeros",
+                trainable=True,
+                name=self.get_prefix_bias_name() + "/bias",
+            )
+
+            bias_layer.bias.assign(init_bias)
+
+        output_embeddings = self.get_output_embeddings()
+
+        if output_embeddings is not None:
+            if self.get_input_embeddings() != output_embeddings:
+                if not hasattr(output_embeddings, "decoder"):
+                    output_embeddings.build([])
+
+                # Second check in order to be sure the attribute has been properly created
+                if not hasattr(output_embeddings, "decoder"):
+                    raise ValueError("decoder is not defined.")
+
+                # initialize decoder
+                init_weights = np.zeros((new_num_tokens, old_embedding_dim))
+                init_weights[:num_tokens_to_copy] = output_embeddings.decoder.value()[:num_tokens_to_copy, :]
+
+                output_embeddings.decoder = self.add_weight(
+                    shape=(new_num_tokens, old_embedding_dim),
+                    initializer="zeros",
+                    trainable=True,
+                    name=self.get_prefix_bias_name() + "/decoder/weight",
+                )
+                output_embeddings.decoder.assign(init_weights)
 
         return new_embeddings
 

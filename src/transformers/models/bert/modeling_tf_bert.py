@@ -893,6 +893,12 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
     def get_output_embeddings(self):
         return self.bert.embeddings
 
+    def get_output_layer_with_bias(self):
+        return self.mlm.predictions
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
+
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -1002,6 +1008,12 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     def get_output_embeddings(self):
         return self.bert.embeddings
 
+    def get_output_layer_with_bias(self):
+        return self.mlm.predictions
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
+
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -1094,6 +1106,12 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
 
     def get_output_embeddings(self):
         return self.bert.embeddings
+
+    def get_output_layer_with_bias(self):
+        return self.mlm.predictions
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,

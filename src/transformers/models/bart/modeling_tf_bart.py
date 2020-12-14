@@ -1049,6 +1049,24 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
             name="/final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )
 
+    def resize_token_embeddings(self, new_num_tokens):
+        super().resize_token_embeddings(new_num_tokens=new_num_tokens)
+
+        # BART is a special case where the bias has two dimensions
+        # and not named just `bias`
+        if new_num_tokens is not None:
+            num_tokens_to_copy = min(self.final_logits_bias.shape[0], new_num_tokens)
+            init_bias = tf.zeros((new_num_tokens,))
+            init_bias[:num_tokens_to_copy] = self.final_logits_bias.value()[:num_tokens_to_copy]
+            name = self.name + "/final_logits_bias"
+            self.final_logits_bias = self.add_weight(
+                shape=(1, new_num_tokens),
+                initializer="zeros",
+                trainable=False,
+                name=name,
+            )
+            self.final_logits_bias.assign(init_bias)
+
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(

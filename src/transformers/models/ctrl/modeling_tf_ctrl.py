@@ -629,6 +629,12 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
     def get_output_embeddings(self):
         return self.lm_head.input_embeddings
 
+    def get_output_layer_with_bias(self):
+        return self.lm_head
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.lm_head.name
+
     def prepare_inputs_for_generation(self, inputs, past, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
         if past:
