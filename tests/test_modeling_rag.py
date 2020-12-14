@@ -842,9 +842,9 @@ class RagModelIntegrationTests(unittest.TestCase):
             " walls of the abdomen",
             " spodumene",
             " obama",
-            " grainger's compound",
+            " new orleans",
             " japan",
-            " old trafford stadium",
+            " old trafford",
         ]
         self.assertListEqual(outputs, EXPECTED_OUTPUTS)
 
