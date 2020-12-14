@@ -309,7 +309,9 @@ def booleans_processing(config, **kwargs):
 
 def input_processing(func, config, input_ids, **kwargs):
     """
-    Process the input of each TensorFlow model including the booleans.
+    Process the input of each TensorFlow model including the booleans. In case of a list of symbolic inputs, each input
+    has to be named accordingly to the parameters name, i.e. `input_ids = tf.keras.Input(shape=(128,), dtype='int32',
+    name="input_ids")` otherwise the order of the tensors will not be guaranteed during the training.
 
     Args:
         func (:obj:`callable`):
@@ -365,9 +367,7 @@ def input_processing(func, config, input_ids, **kwargs):
                 if tensor_name in parameter_names:
                     output[tensor_name] = input
                 else:
-                    raise ValueError(
-                        f"The tensor named {input.name} does not belong to the authorized list of names {parameter_names}."
-                    )
+                    output[parameter_names[i]] = input
             elif isinstance(input, allowed_types) or input is None:
                 output[parameter_names[i]] = input
             else:

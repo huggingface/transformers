@@ -65,12 +65,11 @@ class FlaxPreTrainedModel(ABC):
     base_model_prefix = ""
     model_class = None
 
-    def __init__(self, config: PretrainedConfig, module: nn.Module, params: Dict, seed: int = 0):
+    def __init__(
+        self, config: PretrainedConfig, module: nn.Module, params: Dict, seed: int = 0, dtype: jnp.dtype = jnp.float32
+    ):
         if config is None:
             raise ValueError("config cannot be None")
-
-        if module is None:
-            raise ValueError("module cannot be None")
 
         if params is None:
             raise ValueError("state cannot be None")
@@ -82,11 +81,15 @@ class FlaxPreTrainedModel(ABC):
         # Those are public as their type is generic to every derived classes.
         self.key = PRNGKey(seed)
         self.params = params
-        self.model = module
+        self.dtype = dtype
 
     @property
     def config(self) -> PretrainedConfig:
         return self._config
+
+    @property
+    def module(self) -> nn.Module:
+        return self._module
 
     @staticmethod
     @abstractmethod
@@ -94,7 +97,7 @@ class FlaxPreTrainedModel(ABC):
         raise NotImplementedError()
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path, dtype: jnp.dtype = jnp.float32, *model_args, **kwargs):
         r"""
         Instantiate a pretrained Flax model from a pre-trained model configuration.
         """
@@ -126,6 +129,9 @@ class FlaxPreTrainedModel(ABC):
             )
         else:
             model_kwargs = kwargs
+
+        # Add the dtype to model_kwargs
+        model_kwargs["dtype"] = dtype
 
         # Load model
         if pretrained_model_name_or_path is not None:

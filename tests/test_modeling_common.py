@@ -302,6 +302,8 @@ class ModelTesterMixin:
                 # Question Answering model returns start_logits and end_logits
                 if model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
                     correct_outlen += 1  # start_logits and end_logits instead of only 1 output
+                if "past_key_values" in outputs:
+                    correct_outlen += 1  # past_key_values have been returned
 
                 self.assertEqual(out_len, correct_outlen)
 
@@ -386,7 +388,7 @@ class ModelTesterMixin:
 
             try:
                 if model.config.is_encoder_decoder:
-                    model.config.use_cache = False  # TODO: this should be deleted after bug #7474 is solved
+                    model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
                     input_ids = inputs["input_ids"]
                     attention_mask = inputs["attention_mask"]
                     decoder_input_ids = inputs["decoder_input_ids"]
@@ -1020,7 +1022,6 @@ class ModelTesterMixin:
             )
 
     def test_inputs_embeds(self):
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
