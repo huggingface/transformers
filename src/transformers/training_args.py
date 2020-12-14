@@ -203,7 +203,7 @@ class TrainingArguments:
         model_parallel (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If there are more than one devices, whether to use model parallelism to distribute the model's modules
             across devices or not.
-        ignore_skip_data (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        ignore_data_skip (:obj:`bool`, `optional`, defaults to :obj:`False`):
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to :obj:`True`, the training will begin faster (as that skipping
             step can take a long time) but will not yield the same results as the interrupted training would have.
