@@ -146,14 +146,6 @@ class TFBartModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_saved_model_with_hidden_states_output(self):
-        # Should be uncommented during patrick TF refactor
-        pass
-
-    def test_saved_model_with_attentions_output(self):
-        # Should be uncommented during patrick TF refactor
-        pass
-
     def test_decoder_model_past_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)

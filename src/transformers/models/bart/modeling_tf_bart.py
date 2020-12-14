@@ -42,7 +42,6 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSharedEmbeddings,
     TFWrappedEmbeddings,
-    cast_bool_to_primitive,
     input_processing,
     keras_serializable,
     shape_list,
@@ -464,6 +463,7 @@ class TFBartDecoderLayer(tf.keras.layers.Layer):
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
+
         if not self.normalize_before:
             hidden_states = self.final_layer_norm(hidden_states)
 
@@ -596,9 +596,6 @@ class TFBartEncoder(tf.keras.layers.Layer):
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.layerdrop = config.encoder_layerdrop
-        self.output_hidden_states = config.output_hidden_states
-        self.output_attentions = config.output_attentions
-
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
@@ -629,7 +626,6 @@ class TFBartEncoder(tf.keras.layers.Layer):
             if config.add_final_layer_norm
             else None
         )
-        self.return_dict = config.return_dict
 
     def call(
         self,
@@ -672,10 +668,6 @@ class TFBartEncoder(tf.keras.layers.Layer):
             return_dict (:obj:`bool`, `optional`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
-        return_dict = return_dict if return_dict is not None else self.return_dict
-
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -771,9 +763,6 @@ class TFBartDecoder(tf.keras.layers.Layer):
         )
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.output_hidden_states = config.output_hidden_states
-        self.output_attentions = config.output_attentions
-        self.use_cache = config.use_cache
         self.do_blenderbot_90_layernorm = config.do_blenderbot_90_layernorm
 
     def call(
@@ -840,10 +829,6 @@ class TFBartDecoder(tf.keras.layers.Layer):
             return_dict (:obj:`bool`, `optional`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
-        use_cache = use_cache if use_cache is not None else self.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
@@ -856,8 +841,6 @@ class TFBartDecoder(tf.keras.layers.Layer):
 
         if use_cache:
             assert not training, "Training + use cache are incompatible"
-
-        use_cache = cast_bool_to_primitive(use_cache)
 
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
@@ -1112,7 +1095,7 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel):
         self.use_cache = config.use_cache
         # final_bias_logits is registered as a buffer in pytorch, so not trainable for the the sake of consistency.
         self.final_logits_bias = self.add_weight(
-            name="/final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
+            name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )
 
     def get_decoder(self):
@@ -1127,12 +1110,11 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel):
             num_tokens_to_copy = min(self.final_logits_bias.shape[0], new_num_tokens)
             init_bias = tf.zeros((new_num_tokens,))
             init_bias[:num_tokens_to_copy] = self.final_logits_bias.value()[:num_tokens_to_copy]
-            name = self.name + "/final_logits_bias"
             self.final_logits_bias = self.add_weight(
                 shape=(1, new_num_tokens),
                 initializer="zeros",
                 trainable=False,
-                name=name,
+                name="final_logits_bias",
             )
             self.final_logits_bias.assign(init_bias)
 
