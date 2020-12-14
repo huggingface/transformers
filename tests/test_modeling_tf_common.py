@@ -591,17 +591,29 @@ class TFModelTesterMixin:
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
             )
 
-            if self.is_encoder_decoder:
-                hidden_states = outputs.decoder_hidden_states
+            if model.config.is_encoder_decoder:
+                encoder_hidden_states = outputs.encoder_hidden_states
+                decoder_hidden_states = outputs.decoder_hidden_states
+
+                self.assertEqual(config.output_attentions, False)
+                self.assertEqual(len(encoder_hidden_states), expected_num_layers)
+                self.assertListEqual(
+                    list(encoder_hidden_states[0].shape[-2:]),
+                    [self.model_tester.seq_length, self.model_tester.hidden_size],
+                )
+                self.assertEqual(len(decoder_hidden_states), expected_num_layers)
+                self.assertListEqual(
+                    list(decoder_hidden_states[0].shape[-2:]),
+                    [self.model_tester.seq_length, self.model_tester.hidden_size],
+                )
             else:
                 hidden_states = outputs.hidden_states
-
-            self.assertEqual(config.output_attentions, False)
-            self.assertEqual(len(hidden_states), expected_num_layers)
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [self.model_tester.seq_length, self.model_tester.hidden_size],
-            )
+                self.assertEqual(config.output_attentions, False)
+                self.assertEqual(len(hidden_states), expected_num_layers)
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]),
+                    [self.model_tester.seq_length, self.model_tester.hidden_size],
+                )
 
         for model_class in self.all_model_classes:
             inputs_dict["output_hidden_states"] = True
