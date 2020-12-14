@@ -492,13 +492,21 @@ if __name__ == "__main__":
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
-    if model_args.config_name:
+
+    rng = jax.random.PRNGKey(training_args.seed)
+    dropout_rngs = jax.random.split(rng, jax.local_device_count())
+
+    if model_args.model_name_or_path:
+        model = FlaxBertForMaskedLM.from_pretrained(model_args.model_name_or_path, dtype=jnp.float32, dropout_rate=0.1)
+    elif model_args.config_name:
         config = AutoConfig.from_pretrained(model_args.config_name, cache_dir=model_args.cache_dir)
-    elif model_args.model_name_or_path:
-        config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+        model = FlaxBertForMaskedLM(config)
+        model.init(jax.random.PRNGKey(training_args.seed), (training_args.train_batch_size, model.config.max_length))
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
+        model = FlaxBertForMaskedLM(config)
+        model.init(jax.random.PRNGKey(training_args.seed), (training_args.train_batch_size, model.config.max_length))
 
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(
@@ -513,16 +521,6 @@ if __name__ == "__main__":
             "You are instantiating a new tokenizer from scratch. This is not supported by this script."
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
-
-    # Initialize our model
-    rng = jax.random.PRNGKey(training_args.seed)
-    dropout_rngs = jax.random.split(rng, jax.local_device_count())
-
-    if model_args.model_name_or_path is not None:
-        model = FlaxBertForMaskedLM.from_pretrained(model_args.model_name_or_path, dtype=jnp.float32, dropout_rate=0.1)
-    else:
-        model = FlaxBertForMaskedLM(config)
-        model.init(jax.random.PRNGKey(training_args.seed), (training_args.train_batch_size, model.config.max_length))
 
     # Preprocessing the datasets.
     # First we tokenize all the texts.
