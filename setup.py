@@ -128,7 +128,7 @@ _deps = [
     "sphinx==3.2.1",
     "starlette",
     "tensorflow-cpu>=2.0",
-    "tensorflow>=2.0",
+    "tensorflow>=2.0,<2.4",
     "timeout-decorator",
     "tokenizers==0.9.4",
     "torch>=1.0",
