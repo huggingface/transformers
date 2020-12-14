@@ -49,14 +49,34 @@ def convert_tf_checkpoint_to_pytorch(
         # WTQ config
         config = TapasConfig(
             reset_position_index_per_cell=reset_position_index_per_cell,
-            task="WTQ",
+            # run_task_main.py hparams
+            num_aggregation_labels=4,
+            use_answer_as_supervision=True,
+            # hparam_utils.py hparams
+            answer_loss_cutoff=0.664694,
+            cell_selection_preference=0.207951,
+            huber_loss_delta=0.121194,
+            init_cell_selection_weights_to_zero=True,
+            select_one_column=True,
+            allow_empty_column_selection=False,
+            temperature=0.0352513,
         )
         model = TapasForQuestionAnswering(config=config)
     elif task == "WIKISQL_SUPERVISED":
         # WikiSQL-supervised config
         config = TapasConfig(
             reset_position_index_per_cell=reset_position_index_per_cell,
-            task="WIKISQL_SUPERVISED",
+            # run_task_main.py hparams
+            num_aggregation_labels=4,
+            use_answer_as_supervision=False,
+            # hparam_utils.py hparams
+            answer_loss_cutoff=36.4519,
+            cell_selection_preference=0.903421,
+            huber_loss_delta=222.088,
+            init_cell_selection_weights_to_zero=True,
+            select_one_column=True,
+            allow_empty_column_selection=True,
+            temperature=0.763141,
         )
         model = TapasForQuestionAnswering(config=config)
     elif task == "TABFACT":
@@ -95,7 +115,7 @@ if __name__ == "__main__":
         "--reset_position_index_per_cell",
         default=True,
         type=bool,
-        help="Whether to use relative position embeddings or not. Default to True.",
+        help="Whether to use relative position embeddings or not. Defaults to True.",
     )
     parser.add_argument(
         "--tf_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."

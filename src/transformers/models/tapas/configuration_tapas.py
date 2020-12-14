@@ -13,11 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- TAPAS configuration. Adds additional hyperparameters to the configuration of BERT.
+TAPAS configuration. Adds additional hyperparameters to the configuration of BERT.
 
-Hyperparameters are taken from run_task_main.py and hparam_utils.py of the original implementation. URLS: -
-https://github.com/google-research/tapas/blob/master/tapas/run_task_main.py -
-https://github.com/google-research/tapas/blob/master/tapas/utils/hparam_utils.py
+Hyperparameters are taken from run_task_main.py and hparam_utils.py of the original implementation. URLS:
+
+- https://github.com/google-research/tapas/blob/master/tapas/run_task_main.py
+- https://github.com/google-research/tapas/blob/master/tapas/utils/hparam_utils.py
 
 """
 
@@ -121,22 +122,12 @@ class TapasConfig(PretrainedConfig):
             Whether to restart position indexes at every cell (i.e. use relative position embeddings).
         disable_per_token_loss: (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to disable any (strong or weak) supervision on cells.
-        task: (:obj:`str`, `optional`, defaults to :obj:`"SQA"`):
-            Task for which to load hyperparameters as they were used in the original TAPAS paper, if wanted. Defaults
-            to SQA configuration. Can be one of "SQA", "WTQ" or "WIKISQL_SUPERVISED".
 
     Example::
 
         >>> from transformers import TapasModel, TapasConfig
         >>> # Initializing a default (SQA) Tapas configuration
         >>> configuration = TapasConfig()
-        >>> # Initializing a WTQ Tapas configuration (which will set things like answer_loss_cutoff, huber_loss_delta
-        ... # as they were used in the original TAPAS paper)
-        >>> configuration = TapasConfig(task="WTQ")
-        >>> # Initializing a custom configuration
-        >>> configuration = TapasConfig(reset_position_index_per_cell=True,
-        ...                             answer_loss_cutoff=0.5,
-        ...                             init_cell_selection_weights_to_zero=True)
         >>> # Initializing a model from the configuration
         >>> model = TapasModel(configuration)
         >>> # Accessing the model configuration
@@ -183,7 +174,6 @@ class TapasConfig(PretrainedConfig):
         init_cell_selection_weights_to_zero=False,
         reset_position_index_per_cell=True,
         disable_per_token_loss=False,
-        task="SQA",
         **kwargs
     ):
 
@@ -227,30 +217,3 @@ class TapasConfig(PretrainedConfig):
         self.init_cell_selection_weights_to_zero = init_cell_selection_weights_to_zero
         self.reset_position_index_per_cell = reset_position_index_per_cell
         self.disable_per_token_loss = disable_per_token_loss
-        self.task = task
-
-        if task == "WTQ":
-            # run_task_main.py hparams
-            self.num_aggregation_labels = 4
-            self.use_answer_as_supervision = True
-            # hparam_utils.py hparams
-            self.answer_loss_cutoff = 0.664694
-            self.cell_selection_preference = 0.207951
-            self.huber_loss_delta = 0.121194
-            self.init_cell_selection_weights_to_zero = True
-            self.select_one_column = True
-            self.allow_empty_column_selection = False
-            self.temperature = 0.0352513
-
-        elif task == "WIKISQL_SUPERVISED":
-            # run_task_main.py hparams
-            self.num_aggregation_labels = 4
-            self.use_answer_as_supervision = False
-            # hparam_utils.py hparams
-            self.answer_loss_cutoff = 36.4519
-            self.cell_selection_preference = 0.903421
-            self.huber_loss_delta = 222.088
-            self.init_cell_selection_weights_to_zero = True
-            self.select_one_column = True
-            self.allow_empty_column_selection = True
-            self.temperature = 0.763141

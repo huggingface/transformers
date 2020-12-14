@@ -115,31 +115,11 @@ for your environment):
         >>> model = TapasForQuestionAnswering.from_pretrained('google/tapas-base')
 
         >>> # or, the base sized model with WTQ configuration
-        >>> config = TapasConfig(
-        ...            num_aggregation_labels = 4,
-        ...            use_answer_as_supervision = True,
-        ...            answer_loss_cutoff = 0.664694,
-        ...            cell_selection_preference = 0.207951,
-        ...            huber_loss_delta = 0.121194,
-        ...            init_cell_selection_weights_to_zero = True,
-        ...            select_one_column = True,
-        ...            allow_empty_column_selection = False,
-        ...            temperature = 0.0352513,
-        ... )
+        >>> config = TapasConfig.from_pretrained('google/tapas-base-finetuned-wtq')
         >>> model = TapasForQuestionAnswering.from_pretrained('google/tapas-base', config=config)
 
         >>> # or, the base sized model with WikiSQL configuration
-        >>> config = TapasConfig(
-        ...            num_aggregation_labels = 4
-        ...            use_answer_as_supervision = False
-        ...            answer_loss_cutoff = 36.4519
-        ...            cell_selection_preference = 0.903421
-        ...            huber_loss_delta = 222.088
-        ...            init_cell_selection_weights_to_zero = True
-        ...            select_one_column = True
-        ...            allow_empty_column_selection = True
-        ...            temperature = 0.763141
-        ... )
+        >>> config = TapasConfig('google-base-finetuned-wikisql-supervised')
         >>> model = TapasForQuestionAnswering.from_pretrained('google/tapas-base', config=config)
 
 
