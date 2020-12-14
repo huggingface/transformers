@@ -595,7 +595,7 @@ class TFModelTesterMixin:
                 hidden_states = outputs.decoder_hidden_states
             else:
                 hidden_states = outputs.hidden_states
-                
+
             self.assertEqual(config.output_attentions, False)
             self.assertEqual(len(hidden_states), expected_num_layers)
             self.assertListEqual(
