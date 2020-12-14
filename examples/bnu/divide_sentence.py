@@ -40,10 +40,10 @@ def process_and_save_func(path: str) -> Any:
         pure_path = PureWindowsPath(save_path).parents[0]
     if not os.path.exists(pure_path):
         os.makedirs(pure_path)
-        print(pure_path)
-    with open(save_path, 'w+', encoding="utf-8") as f:
-        for item in sentence_list:
-            f.write(item + '\n')
+    if not os.path.exists(save_path):
+        with open(save_path, 'w+', encoding="utf-8") as f:
+            for item in sentence_list:
+                f.write(item + '\n')
 
     numpy_arr = np.array([len(length) for length in sentence_list])
     if len(numpy_arr) != 0:
