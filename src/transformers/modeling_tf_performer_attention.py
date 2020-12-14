@@ -1,6 +1,8 @@
 from typing import Optional, Union
 import logging
+import math
 import numpy as np
+import random
 import tensorflow as tf
 
 
@@ -141,7 +143,7 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         
         # If the sequence length is short enough that FAVOR+ would use considerably more time and/or memory than just
         # using softmax attention, use softmax. This works because FAVOR+ is an unbiased estimator of softmax attention.
-        m = round(dim_per_head * np.log(dim_per_head))  # m is the number of random features
+        m = round(dim_per_head * math.log(dim_per_head))  # m is the number of random features
         if self.should_fallback_to_softmax(q_length, m, self.training):
             scores = q @ tf.linalg.matrix_transpose(k) / (dim ** 0.5)
             
@@ -204,7 +206,7 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         
         # Generalized attention (ReLU, ELU...)
         else:
-            return (self.kernel_fn(x) + self.kernel_epsilon for x in (projected_q, projected_k))
+            return tuple(self.kernel_fn(x) + self.kernel_epsilon for x in (projected_q, projected_k))
     
     def compute_attention_with_projected_queries_and_keys(self, q_prime, k_prime, v, mask = None, head_mask = None):
         # Apply the padding mask to K'. Also applying it to Q' would be redundant.
@@ -247,7 +249,7 @@ class TFPerformerAttention(tf.keras.layers.Layer):
 
     def _generate_feature_matrix(self):
         dim_per_head = self.d_model // self.num_heads
-        num_rows = round(dim_per_head * np.log(dim_per_head))
+        num_rows = round(dim_per_head * math.log(dim_per_head))
         
         if not self.use_orthogonal_features:
             return tf.random.normal((num_rows, dim_per_head))
@@ -257,7 +259,7 @@ class TFPerformerAttention(tf.keras.layers.Layer):
                 unstructured_block = tf.random.normal((size, size))
                 orthog, r = tf.linalg.qr(unstructured_block)
 
-            return orthog.t()
+            return tf.transpose(orthog)
 
         num_full_blocks = num_rows // dim_per_head
         block_list = [get_square_block(dim_per_head) for _ in range(num_full_blocks)]
@@ -287,8 +289,9 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         
         elif self.feature_redraw_interval is not None:
             if self.redraw_stochastically:
-                # Flip a (very biased) coin
-                if np.random.default_rng().binomial(1, 1. / self.feature_redraw_interval):
+                # random.random() returns a float between 0.0 and 1.0, so this expression
+                # evaluates to True with probability 1. / self.feature_redraw_interval
+                if random.random() < 1. / self.feature_redraw_interval:
                     self.redraw_features_now()
             
             # It's time to redraw the projection matrix
@@ -298,3 +301,150 @@ class TFPerformerAttention(tf.keras.layers.Layer):
             # Keep track of how many forward passes we do before we redraw again
             else:
                 self.calls_since_last_redraw += 1
+
+# An asymptotically fast way of making random orthogonal matrices- O(nlog(n)) vs. O(n^3) for Gram-Schmidt QR
+def _create_products_of_givens_rotations(num_rows, seed):
+    r"""Constructs a 2D-tensor which is a product of Givens random rotations.
+    Constructs a 2D-tensor of the form G_1 * ... * G_k, where G_i is a Givens
+    random rotation. The resulting tensor mimics a matrix taken uniformly at
+    random form the orthogonal group.
+    Args:
+      num_rows: number of rows/columns of the resulting 2D-tensor.
+      seed: random seed.
+    Returns:
+      The product of Givens random rotations.
+    """
+    q = np.eye(num_rows)   # Start with identity matrix
+    np.random.seed(seed)
+
+    # Each iteration, pick two random rows and a random angle between 0.0 and pi, and rotate
+    num_rotations = num_rows * int(math.ceil(math.log(float(num_rows))))     # N log N rotations
+    angles = np.random.uniform(0.0, math.pi, size=num_rotations)             # Random rotation angles
+    row_pairs = np.random.choice(num_rows, (num_rotations, 2))
+    row_pairs.sort(axis=1)  # Make sure the first row in each pair is the smaller of the two
+
+    for n, random_angle in enumerate(angles):
+        index_i, index_j = row_pairs[n]
+
+        # This is for speed as well as accuracy- without this check the resulting matrices will not be valid rotation
+        # matrices (their determinants will not be 1) since we will end up modifying the same row twice (see below)
+        if index_i == index_j:
+            continue
+
+        row_i, row_j = q[index_i], q[index_j]
+
+        new_row_i = math.cos(random_angle) * row_i + math.sin(random_angle) * row_j
+        new_row_j = -math.sin(random_angle) * row_i + math.cos(random_angle) * row_j
+        q[index_i], q[index_j] = new_row_i, new_row_j
+
+    return tf.constant(q, dtype=tf.float32)
+
+def _noncausal_numerator(q_prime, k_prime, v):
+    """Computes not-normalized FAVOR noncausal attention AV.
+    Args:
+      q_prime: query_prime tensor of the shape [L,B,H,M].
+      k_prime: key_prime tensor of the shape [L,B,H,M].
+      v: value tensor of the shape [L,B,H,D].
+    Returns:
+      Not-normalized FAVOR noncausal attention AV.
+    """
+    kvs = tf.einsum("lbhm,lbhd->bhmd", k_prime, v)
+    return tf.einsum("lbhm,bhmd->lbhd", q_prime, kvs)
+
+
+def _noncausal_denominator(q_prime, k_prime):
+    """Computes FAVOR normalizer in noncausal attention.
+    Args:
+      q_prime: query_prime tensor of the shape [L,B,H,M].
+      k_prime: key_prime tensor of the shape [L,B,H,M].
+    Returns:
+      FAVOR normalizer in noncausal attention.
+    """
+    all_ones = tf.ones([k_prime.shape[0]])
+    ks_sum = tf.einsum("lbhm,l->bhm", k_prime, all_ones)
+    return tf.einsum("lbhm,bhm->lbh", q_prime, ks_sum)
+
+# Custom gradient functions
+@tf.custom_gradient
+def _causal_numerator(q_prime, k_prime, v):
+    """Computes not-normalized FAVOR causal attention using the prefix-sum method.
+    Args:
+      q_prime: query_prime tensor of the shape [L,B,H,M].
+      k_prime: key_prime tensor of the shape [L,B,H,M].
+      v: value tensor of the shape [L,B,H,D].
+    Returns:
+      Not-normalized FAVOR causal attention A_{masked}V.
+    """
+    result = []
+    sums = tf.zeros_like(tf.einsum("ijk,ijl->ijkl", k_prime[0], v[0]))
+
+    for index in range(q_prime.shape[0]):
+        sums = sums + tf.einsum("ijk,ijl->ijkl", k_prime[index], v[index])
+        result.append(tf.einsum("ijkl,ijk->ijl", sums, q_prime[index])[None, Ellipsis])
+
+    result = tf.concat(result, axis=0)
+
+    # Function called later by TensorFlow to compute the gradient, if needed
+    def grad(res_grad):
+        grads = tf.zeros_like(tf.einsum("ijk,ijl->ijkl", k_prime[0], v[0]))
+        gr_sums = sums
+        q_grads = []
+        k_grads = []
+        v_grads = []
+
+        for i in range(q_prime.shape[0] - 1, -1, -1):
+            q_grads.append(
+                tf.einsum("ijkl,ijl->ijk", gr_sums, res_grad[i])[None, Ellipsis])
+            grads = grads + tf.einsum("ijk,ijl->ijkl", q_prime[i], res_grad[i])
+            k_grads.append(tf.einsum("ijkl,ijl->ijk", grads, v[i])[None, Ellipsis])
+            v_grads.append(tf.einsum("ijkl,ijk->ijl", grads, k_prime[i])[None, Ellipsis])
+            gr_sums = gr_sums - tf.einsum("ijk,ijl->ijkl", k_prime[i], v[i])
+
+        q_grads = tf.concat(q_grads[::-1], axis=0)
+        k_grads = tf.concat(k_grads[::-1], axis=0)
+        v_grads = tf.concat(v_grads[::-1], axis=0)
+        return q_grads, k_grads, v_grads
+
+    return result, grad
+
+@tf.custom_gradient
+def _causal_denominator(q_prime, k_prime):
+    """Computes FAVOR normalizer in causal attention using the prefix-sum method.
+    Args:
+      q_prime: query_prime tensor of the shape [L,B,H,M].
+      k_prime: key_prime tensor of the shape [L,B,H,M].
+    Returns:
+      FAVOR normalizer in causal attention.
+    """
+
+    result = []
+    sums = tf.zeros_like(k_prime[0])
+
+    for index in range(q_prime.shape[0]):
+        sums = sums + k_prime[index]
+        result.append(tf.reduce_sum(q_prime[index] * sums, axis=2)[None, Ellipsis])
+
+    result = tf.concat(result, axis=0)
+
+    # Function called later by TensorFlow to compute the gradient, if needed
+    def grad(res_grad):
+        k_grad = tf.zeros_like(k_prime[0])
+        gr_sums = sums
+
+        q_grads = []
+        k_grads = []
+
+        for i in range(q_prime.shape[0] - 1, -1, -1):
+
+            q_grads.append(
+                tf.einsum("ijk,ij->ijk", gr_sums, res_grad[i])[None, Ellipsis])
+            k_grad = k_grad + tf.einsum("ijk,ij->ijk", q_prime[i], res_grad[i])
+            k_grads.append(k_grad[None, Ellipsis])
+            gr_sums = gr_sums - k_prime[i]
+
+        q_grads = tf.concat(q_grads[::-1], axis=0)
+        k_grads = tf.concat(k_grads[::-1], axis=0)
+
+        return q_grads, k_grads
+
+    return result, grad

@@ -1,7 +1,8 @@
 from torch import nn
 from typing import Optional, Union
 import logging
-import numpy as np
+import math
+import random
 import torch
 import torch.nn.functional as F
 
@@ -141,7 +142,7 @@ class PerformerAttention(nn.Module):
         
         # If the sequence length is short enough that FAVOR+ would use considerably more time and/or memory than just
         # using softmax attention, use softmax. This works because FAVOR+ is an unbiased estimator of softmax attention.
-        m = round(dim_per_head * np.log(dim_per_head)) # m is the number of random features
+        m = round(dim_per_head * math.log(dim_per_head)) # m is the number of random features
         if self.should_fallback_to_softmax(q_length, m, self.training):
             scores = q @ k.transpose(-2, -1) / (dim ** 0.5)
             
@@ -248,22 +249,17 @@ class PerformerAttention(nn.Module):
 
     def _generate_feature_matrix(self, device):
         dim_per_head = self.d_model // self.num_heads
-        num_rows = round(dim_per_head * np.log(dim_per_head))
+        num_rows = round(dim_per_head * math.log(dim_per_head))
         
         if not self.use_orthogonal_features:
             return torch.randn(num_rows, dim_per_head, device=device)
-        
-        def get_square_block(size):
-            unstructured_block = torch.randn(size, size, device='cpu')
-            q, r = torch.qr(unstructured_block, some = True)
-            return q.t()
-        
+
         num_full_blocks = num_rows // dim_per_head
-        block_list = [get_square_block(dim_per_head) for _ in range(num_full_blocks)]
+        block_list = [_get_square_orthogonal_block_givens(dim_per_head, device) for _ in range(num_full_blocks)]
         
         remaining_rows = num_rows - num_full_blocks * dim_per_head
         if remaining_rows > 0:
-            q = get_square_block(dim_per_head)
+            q = _get_square_orthogonal_block_givens(dim_per_head, device)
             block_list.append(q[:remaining_rows])
         
         final_matrix = torch.cat(block_list)
@@ -274,7 +270,7 @@ class PerformerAttention(nn.Module):
         else:
             # Hack to make the matrix columns have the norm we would expect them to have if they were sampled straight
             # from a Gaussian, instead of being all norm 1 since they went through QR decomposition
-            multiplier = torch.randn(num_rows, dim_per_head, device='cpu').norm(dim = 1)
+            multiplier = torch.randn(num_rows, dim_per_head, device=device).norm(dim = 1)
             final_matrix = torch.diag(multiplier) @ final_matrix
         
         random_features = final_matrix.to(device)
@@ -287,8 +283,9 @@ class PerformerAttention(nn.Module):
         
         elif self.feature_redraw_interval is not None:
             if self.redraw_stochastically:
-                # Flip a (very biased) coin
-                if np.random.default_rng().binomial(1, 1. / self.feature_redraw_interval):
+                # random.random() returns a float between 0.0 and 1.0, so this expression
+                # evaluates to True with probability 1. / self.feature_redraw_interval
+                if random.random() < 1. / self.feature_redraw_interval:
                     self.redraw_features_now()
             
             # It's time to redraw the projection matrix
@@ -298,3 +295,45 @@ class PerformerAttention(nn.Module):
             # Keep track of how many forward passes we do before we redraw again
             else:
                 self.calls_since_last_redraw += 1
+
+# Not currently used - slower
+def _get_square_orthogonal_block_qr(size, device = None):
+    unstructured_block = torch.randn(size, size, device=device)
+    q, r = torch.qr(unstructured_block, some = True)
+    return q.t()
+
+# Fast parallelizable way of making random orthogonal matrices- O(n log(n)) vs. O(n^3) for QR
+def _get_square_orthogonal_block_givens(num_rows, device = None):
+    r"""Constructs a 2D-tensor which is a product of Givens random rotations.
+    Constructs a 2D-tensor of the form G_1 * ... * G_k, where G_i is a Givens
+    random rotation. The resulting tensor mimics a matrix taken uniformly at
+    random form the orthogonal group.
+    Args:
+      num_rows: number of rows/columns of the resulting 2D-tensor.
+    Returns:
+      The product of Givens random rotations.
+    """
+    q = torch.eye(num_rows, device=device)   # Start with identity matrix
+
+    # Compute the cosines and sines of the rotations up front
+    num_iterations = 2 * int(math.ceil(math.log(num_rows)))
+    angles = math.pi * torch.rand(num_iterations, num_rows // 2, 1, device=device)
+    cosines, sines = torch.cos(angles), torch.sin(angles)
+    q.unsqueeze_(1)
+
+    # Group the matrix into random, non-overlapping pairs of rows. Because these pairs are non-overlapping, we can
+    # perform each set of rotations in parallel.
+    for n in range(num_iterations):
+        shuffled_rows = torch.randperm(num_rows, device=device).view(-1, 1, 1)
+        random_row_pairs = q.gather(0, shuffled_rows.expand_as(q)).view(-1, 2, num_rows)
+
+        rows1, rows2 = random_row_pairs[:, 0], random_row_pairs[:, 1]
+        new_rows1 = cosines[n] * rows1 + sines[n] * rows2
+        new_rows2 = -sines[n] * rows1 + cosines[n] * rows2
+
+        random_row_pairs[:, 0], random_row_pairs[:, 1] = new_rows1, new_rows2
+
+        q = random_row_pairs.view(-1, 1, num_rows)     # Ungroup all the rows again
+
+    return q.squeeze()
+
