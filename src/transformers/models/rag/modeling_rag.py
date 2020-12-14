@@ -1068,13 +1068,10 @@ class RagTokenForGeneration(RagPreTrainedModel):
             result = hidden_states.view(-1, *hidden_states.shape[2:])
             return result
 
-        def _reorder_buffer(cache, new_order):
-            return tuple(_reorder_stacked(past_state, new_order) for past_state in cache)
-
         reordered_past = ()
         for layer_past in past:
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
-            reordered_past += (tuple(_reorder_buffer(cache, beam_idx) for cache in layer_past),)
+            reordered_past += (tuple(_reorder_stacked(past_state, beam_idx) for past_state in layer_past),)
 
         return reordered_past
 
