@@ -810,6 +810,12 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
+    def get_output_layer_with_bias(self):
+        return self.lm_head
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.lm_head.name
+
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
