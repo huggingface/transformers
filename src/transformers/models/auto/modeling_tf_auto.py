@@ -120,7 +120,7 @@ from ..mpnet.modeling_tf_mpnet import (
     TFMPNetModel,
 )
 from ..mt5.modeling_tf_mt5 import TFMT5ForConditionalGeneration, TFMT5Model
-from ..openai.modeling_tf_openai import TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
+from ..openai.modeling_tf_openai import TFOpenAIGPTForSequenceClassification, TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
 from ..pegasus.modeling_tf_pegasus import TFPegasusForConditionalGeneration
 from ..roberta.modeling_tf_roberta import (
     TFRobertaForMaskedLM,
@@ -341,6 +341,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (FunnelConfig, TFFunnelForSequenceClassification),
         (GPT2Config, TFGPT2ForSequenceClassification),
         (MPNetConfig, TFMPNetForSequenceClassification),
+        (OpenAIGPTConfig, TFOpenAIGPTForSequenceClassification),
     ]
 )
 

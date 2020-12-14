@@ -29,6 +29,7 @@ if is_tf_available():
     from transformers.models.openai.modeling_tf_openai import (
         TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFOpenAIGPTDoubleHeadsModel,
+        TFOpenAIGPTForSequenceClassification,
         TFOpenAIGPTLMHeadModel,
         TFOpenAIGPTModel,
     )
@@ -62,6 +63,7 @@ class TFOpenAIGPTModelTester:
         self.num_labels = 3
         self.num_choices = 4
         self.scope = None
+        self.pad_token_id = self.vocab_size - 1
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -99,6 +101,7 @@ class TFOpenAIGPTModelTester:
             n_ctx=self.max_position_embeddings,
             # type_vocab_size=self.type_vocab_size,
             # initializer_range=self.initializer_range,
+            pad_token_id=self.pad_token_id,
         )
 
         head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
@@ -154,6 +157,21 @@ class TFOpenAIGPTModelTester:
         )
         self.parent.assertEqual(result.mc_logits.shape, (self.batch_size, self.num_choices))
 
+    def create_and_check_openai_gpt_for_sequence_classification(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+    ):
+        config.num_labels = self.num_labels
+        sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": input_mask,
+            "token_type_ids": token_type_ids,
+            "labels": sequence_labels,
+        }
+        model = TFOpenAIGPTForSequenceClassification(config)
+        result = model(inputs)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
 
@@ -177,7 +195,9 @@ class TFOpenAIGPTModelTester:
 class TFOpenAIGPTModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (TFOpenAIGPTModel, TFOpenAIGPTLMHeadModel, TFOpenAIGPTDoubleHeadsModel) if is_tf_available() else ()
+        (TFOpenAIGPTModel, TFOpenAIGPTLMHeadModel, TFOpenAIGPTDoubleHeadsModel, TFOpenAIGPTForSequenceClassification)
+        if is_tf_available()
+        else ()
     )
     all_generative_model_classes = (
         (TFOpenAIGPTLMHeadModel,) if is_tf_available() else ()
@@ -212,6 +232,10 @@ class TFOpenAIGPTModelTest(TFModelTesterMixin, unittest.TestCase):
             assert x is None
             name = model.get_prefix_bias_name()
             assert name is None
+
+    def test_openai_gpt_sequence_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_openai_gpt_for_sequence_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):

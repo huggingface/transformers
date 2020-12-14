@@ -859,6 +859,7 @@ if is_tf_available():
     from .models.openai import (
         TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFOpenAIGPTDoubleHeadsModel,
+        TFOpenAIGPTForSequenceClassification,
         TFOpenAIGPTLMHeadModel,
         TFOpenAIGPTMainLayer,
         TFOpenAIGPTModel,
