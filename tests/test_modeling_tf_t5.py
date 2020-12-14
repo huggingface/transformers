@@ -399,6 +399,7 @@ class TFT5EncoderOnlyModelTester:
 
 
 class TFT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
+    is_encoder_decoder = False
     all_model_classes = (TFT5EncoderModel,) if is_tf_available() else ()
 
     def setUp(self):

@@ -591,10 +591,11 @@ class TFModelTesterMixin:
                 self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
             )
 
-            if hasattr(outputs, "hidden_states"):
-                hidden_states = outputs.hidden_states
-            else:
+            if self.is_encoder_decoder:
                 hidden_states = outputs.decoder_hidden_states
+            else:
+                hidden_states = outputs.hidden_states
+                
             self.assertEqual(config.output_attentions, False)
             self.assertEqual(len(hidden_states), expected_num_layers)
             self.assertListEqual(

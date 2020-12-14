@@ -354,7 +354,6 @@ def input_processing(func, config, input_ids, **kwargs):
         if isinstance(v, allowed_types) or v is None:
             output[k] = v
         else:
-            print(k, v)
             raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
 
     if isinstance(input_ids, (tuple, list)):
