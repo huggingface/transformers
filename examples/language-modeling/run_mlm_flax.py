@@ -588,18 +588,11 @@ if __name__ == "__main__":
 
     # Data collator
     # This one will take care of randomly masking the tokens.
-    if training_args.tokenizers_parallelism:
-        os.environ["TOKENIZERS_PARALLELISM"] = "true"
-    else:
-        os.environ["TOKENIZERS_PARALLELISM"] = "false"
     data_collator = FlaxDataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=data_args.mlm_probability)
 
     # Initialize our training
     rng = jax.random.PRNGKey(training_args.seed)
     dropout_rngs = jax.random.split(rng, jax.local_device_count())
-
-    model = FlaxBertForMaskedLM.from_pretrained("bert-base-cased", dtype=jnp.float32, dropout_rate=0.1)
-    model.init(jax.random.PRNGKey(training_args.seed), (training_args.train_batch_size, model.config.max_length))
 
     # Setup optimizer
     optimizer = Adam(
