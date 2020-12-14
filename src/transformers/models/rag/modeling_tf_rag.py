@@ -1,6 +1,3 @@
-#@title
-%%writefile /usr/local/lib/python3.6/dist-packages/transformers/models/rag/modeling_tf_rag.py
-
 # coding=utf-8
 # Copyright 2020, The RAG Authors and The HuggingFace Inc. team.
 #
