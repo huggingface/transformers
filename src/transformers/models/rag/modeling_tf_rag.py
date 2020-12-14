@@ -1,3 +1,6 @@
+#@title
+%%writefile /usr/local/lib/python3.6/dist-packages/transformers/models/rag/modeling_tf_rag.py
+
 # coding=utf-8
 # Copyright 2020, The RAG Authors and The HuggingFace Inc. team.
 #
@@ -33,14 +36,14 @@ from ...file_utils import (
 from ...generation_tf_utils import *  # this is needed since we adjust _generate_no_beam and _generate_with_beam to TFRag
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPast, TFSeq2SeqLMOutput
 from ...modeling_tf_utils import (
-    TFCausalLanguageModelingLoss,  # input_processing, # TOFIX for 4.1.0; TOFIX not sure if we should use this
+    TFCausalLanguageModelingLoss,  input_processing, # TOFIX for 4.1.0; TOFIX not sure if we should use this
 )
 from ...modeling_tf_utils import (
     DUMMY_INPUTS,
     TFPreTrainedModel,
     TFSharedEmbeddings,
     TFWrappedEmbeddings,
-    cast_bool_to_primitive,
+    # cast_bool_to_primitive, # TOFIX - delete for master after 15 Dec
     keras_serializable,
     shape_list,
 )
@@ -483,7 +486,6 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
             Number of documents to retrieve and/or number of documents for which to generate an answer.
 """
 
-
 @add_start_docstrings_to_model_forward(RAG_START_DOCSTRING)
 class TFRagModel(TFRagPreTrainedModel):
     def __init__(
@@ -510,12 +512,17 @@ class TFRagModel(TFRagPreTrainedModel):
         if question_encoder is None:
             from ..auto.modeling_tf_auto import TFAutoModel
 
-            question_encoder = TFAutoModel.from_config(config.question_encoder, name="question_encoder")
+            question_encoder = TFAutoModel.from_config(config.question_encoder
+                                                      #  , name="question_encoder"
+                                                       )
+            question_encoder._name = "question_encoder"
         if generator is None:
             from ..auto.modeling_tf_auto import TFAutoModelForSeq2SeqLM
 
-            generator = TFAutoModelForSeq2SeqLM.from_config(config.generator, name="generator")
-
+            generator = TFAutoModelForSeq2SeqLM.from_config(config.generator, 
+                                                            # name="generator"
+                                                            )
+            generator._name = "generator"
         self.retriever = retriever
         if self.retriever is not None:
             assert isinstance(
@@ -530,7 +537,7 @@ class TFRagModel(TFRagPreTrainedModel):
     @replace_return_docstrings(output_type=TFRetrievAugLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        inputs,
+        input_ids=None,
         attention_mask=None,
         encoder_outputs=None,
         decoder_input_ids=None,
@@ -544,6 +551,7 @@ class TFRagModel(TFRagPreTrainedModel):
         output_hidden_states=None,
         output_retrieved=None,
         n_docs=None,
+        return_dict=None,
         training=False,
         **kwargs
     ):
@@ -568,50 +576,47 @@ class TFRagModel(TFRagPreTrainedModel):
         assert (
             "decoder_cached_states" not in kwargs
         ), "Please use past_key_values to cache intermediate outputs"  # from modeling_tf_bart.py
-        if isinstance(inputs, (tuple, list)):
-            assert len(inputs) <= 14, "Too many inputs."
-            input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            encoder_outputs = inputs[2] if len(inputs) > 2 else encoder_outputs
-            decoder_input_ids = inputs[3] if len(inputs) > 3 else decoder_input_ids
-            decoder_attention_mask = inputs[4] if len(inputs) > 4 else decoder_attention_mask
-            past_key_values = inputs[5] if len(inputs) > 5 else past_key_values
-            doc_scores = inputs[6] if len(inputs) > 6 else doc_scores
-            context_input_ids = inputs[7] if len(inputs) > 7 else context_input_ids
-            context_attention_mask = inputs[8] if len(inputs) > 8 else context_attention_mask
-            use_cache = inputs[9] if len(inputs) > 9 else use_cache
-            output_attentions = inputs[10] if len(inputs) > 10 else output_attentions
-            output_hidden_states = inputs[11] if len(inputs) > 11 else output_hidden_states
-            output_retrieved = inputs[12] if len(inputs) > 12 else output_retrieved
-            n_docs = inputs[13] if len(inputs) > 13 else n_docs
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            assert len(inputs) <= 14, "Too many inputs."
-            if "inputs" in inputs:
-                raise ValueError("Using `inputs` as a keyword argument is deprecated. Please use `input_ids` instead.")
-            input_ids = inputs.get("input_ids")
-            attention_mask = inputs.get("attention_mask", attention_mask)
-            decoder_input_ids = inputs.get("decoder_input_ids", decoder_input_ids)
-            decoder_attention_mask = inputs.get("decoder_attention_mask", decoder_attention_mask)
-            encoder_outputs = inputs.get("encoder_outputs", encoder_outputs)
-            past_key_values = inputs.get("past_key_values", past_key_values)
-            use_cache = inputs.get("use_cache", use_cache)
-            output_attentions = inputs.get("output_attentions", output_attentions)
-            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            doc_scores = inputs.get("doc_scores", doc_scores)
-            context_input_ids = inputs.get("context_input_ids", context_input_ids)
-            context_attention_mask = inputs.get("context_attention_mask", context_attention_mask)
-            output_retrieved = inputs.get("output_retrieved", output_retrieved)
-            n_docs = inputs.get("n_docs", n_docs)
-        else:
-            input_ids = inputs
 
-        n_docs = n_docs if n_docs is not None else self.config.n_docs
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            encoder_outputs=encoder_outputs,
+            past_key_values=past_key_values,
+            doc_scores=doc_scores,
+            context_input_ids=context_input_ids,
+            context_attention_mask=context_attention_mask,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            output_retrieved=output_retrieved,
+            return_dict=return_dict,
+            n_docs=n_docs,
+            training=training,
+            kwargs_call=kwargs,
         )
-        output_retrieved = output_retrieved if output_retrieved is not None else self.config.output_retrieved
+
+        # aliasing to minimize code changing
+        input_ids=inputs["input_ids"]
+        attention_mask=inputs["attention_mask"]
+        decoder_input_ids=inputs["decoder_input_ids"]
+        decoder_attention_mask=inputs["decoder_attention_mask"]
+        encoder_outputs=inputs["encoder_outputs"]
+        past_key_values=inputs["past_key_values"]
+        doc_scores=inputs["doc_scores"]
+        context_input_ids=inputs["context_input_ids"]
+        context_attention_mask=inputs["context_attention_mask"]
+
+        use_cache = inputs["use_cache"]
+        output_attentions = inputs["output_attentions"]
+        output_hidden_states = inputs["output_hidden_states"]
+        return_dict = inputs["return_dict"]
+        n_docs = inputs["n_docs"]
+        output_retrieved = inputs["output_retrieved"]
+        training=inputs["training"]
 
         # whether retriever has to be used
         has_to_retrieve = (
@@ -729,7 +734,6 @@ class TFRagModel(TFRagPreTrainedModel):
             generator_dec_attentions=gen_outputs.decoder_attentions,
         )
 
-
 @add_start_docstrings_to_model_forward(
     """
     A TF RAG-token model implementation. It performs RAG-token specific marginalization in the forward pass.
@@ -760,6 +764,30 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         self.rag = TFRagModel(
             config=config, question_encoder=question_encoder, generator=generator, retriever=retriever, name="rag"
         )
+
+    # NEED_HELP: (temporarily put the hack back to make model.generate() works) 
+    # really ugly fixed and require torch model: manually and ineffcient fixed of two weights name mismatched
+    @classmethod
+    def from_pretrained(cls, path_or_weight_name, model_pt=None, **kwargs):
+        
+        # print(path_or_weight_name, kwargs)
+        model = super(TFRagTokenForGeneration, cls).from_pretrained(path_or_weight_name, **kwargs)
+
+        if True:
+            import gc
+            import tensorflow.keras.backend as K
+            from transformers import RagTokenForGeneration
+
+            gc.collect()
+            if model_pt is None:
+                model_pt = RagTokenForGeneration.from_pretrained(path_or_weight_name, **kwargs)
+            K.set_value(model.rag.generator.model.shared.weight, model_pt.rag.generator.model.shared.weight.detach().numpy())
+            K.set_value(model.rag.generator.final_logits_bias, model_pt.rag.generator.final_logits_bias.detach().numpy())
+            del model_pt
+            gc.collect()
+            print('*** Ugly fix of weights loading -- not a generalizable solution ***')
+
+        return model
 
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
@@ -795,15 +823,15 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             encoder_outputs, TFBaseModelOutput
         ), f"encoder_outputs should be a TFBaseModelOutput, Instead got {type(encoder_outputs)}."
         return {
-            "inputs": None,  # encoder_outputs is defined. input_ids not needed
+            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
-            "past_key_values": decoder_cached_states,  # This is due to TFBart and is the main difference to Pytorch's RAG
+            "doc_scores": doc_scores,
+            "context_attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
+            "past_key_values": decoder_cached_states, # This is due to TFBart and is the main difference to Pytorch's RAG
+            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
             "do_marginalize": True,
             "n_docs": n_docs,
-            "doc_scores": doc_scores,
-            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
     @property
@@ -818,7 +846,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
     def question_encoder(self):
         return self.rag.question_encoder
 
-    # TOFIX : will translate, but cannot find any call to this function anywhere
+    # TOFIX : will translate when dealing with beam-search (waiting for generation_tf_util refactor ?)
     # @staticmethod
     # def _reorder_cache(past, beam_idx):
     #     """Reorders cache for generation. BART-inspired but we need to take care of the extra dimension for docs"""
@@ -859,11 +887,11 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
     @replace_return_docstrings(output_type=TFRetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        inputs,
+        input_ids=None,
         attention_mask=None,
-        encoder_outputs=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        encoder_outputs=None,
         past_key_values=None,
         doc_scores=None,
         context_input_ids=None,
@@ -922,92 +950,71 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             "decoder_cached_states" not in kwargs
         ), "Please use past_key_values to cache intermediate outputs"  # from modeling_tf_bart.py
 
-        # NEED_ADVICE : Here following Pytorch on argument order, but not sure that encoder_outputs should come before/after decoder_input_ids
-        if isinstance(inputs, (tuple, list)):
-            assert len(inputs) <= 17, "Too many inputs."
-            input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            encoder_outputs = inputs[2] if len(inputs) > 2 else encoder_outputs
-            decoder_input_ids = inputs[3] if len(inputs) > 3 else decoder_input_ids
-            decoder_attention_mask = inputs[4] if len(inputs) > 4 else decoder_attention_mask
-            past_key_values = inputs[5] if len(inputs) > 5 else past_key_values
-            doc_scores = inputs[6] if len(inputs) > 6 else doc_scores
-            context_input_ids = inputs[7] if len(inputs) > 7 else context_input_ids
-            context_attention_mask = inputs[8] if len(inputs) > 8 else context_attention_mask
-            use_cache = inputs[9] if len(inputs) > 9 else use_cache
-            output_attentions = inputs[10] if len(inputs) > 10 else output_attentions
-            output_hidden_states = inputs[11] if len(inputs) > 11 else output_hidden_states
-            output_retrieved = inputs[12] if len(inputs) > 12 else output_retrieved
-            n_docs = inputs[13] if len(inputs) > 13 else n_docs
-            do_marginalize = inputs[14] if len(inputs) > 14 else do_marginalize
-            labels = inputs[15] if len(inputs) > 15 else labels
-            reduce_loss = inputs[16] if len(inputs) > 16 else reduce_loss
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            assert len(inputs) <= 17, "Too many inputs."
-            if "inputs" in inputs:
-                raise ValueError("Using `inputs` as a keyword argument is deprecated. Please use `input_ids` instead.")
-            input_ids = inputs.get("input_ids")
-            attention_mask = inputs.get("attention_mask", attention_mask)
-            decoder_input_ids = inputs.get("decoder_input_ids", decoder_input_ids)
-            decoder_attention_mask = inputs.get("decoder_attention_mask", decoder_attention_mask)
-            encoder_outputs = inputs.get("encoder_outputs", encoder_outputs)
-            past_key_values = inputs.get("past_key_values", past_key_values)
-            use_cache = inputs.get("use_cache", use_cache)
-            output_attentions = inputs.get("output_attentions", output_attentions)
-            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            doc_scores = inputs.get("doc_scores", doc_scores)
-            context_input_ids = inputs.get("context_input_ids", context_input_ids)
-            context_attention_mask = inputs.get("context_attention_mask", context_attention_mask)
-            output_retrieved = inputs.get("output_retrieved", output_retrieved)
-            n_docs = inputs.get("n_docs", n_docs)
-            do_marginalize = inputs.get("do_marginalize", do_marginalize)
-            labels = inputs.get("labels", labels)
-            reduce_loss = inputs.get("reduce_loss", reduce_loss)
-        else:
-            input_ids = inputs
-
-        n_docs = n_docs if n_docs is not None else self.config.n_docs
-        do_marginalize = do_marginalize if do_marginalize is not None else self.config.do_marginalize
-        reduce_loss = reduce_loss if reduce_loss is not None else self.config.reduce_loss
-
-        if labels is not None:
-            if decoder_input_ids is None:
-                decoder_input_ids = labels
-            use_cache = False
-
-        outputs = self.rag(
-            input_ids,
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
             attention_mask=attention_mask,
-            encoder_outputs=encoder_outputs,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            encoder_outputs=encoder_outputs,
+            past_key_values=past_key_values,
+            doc_scores=doc_scores,
             context_input_ids=context_input_ids,
             context_attention_mask=context_attention_mask,
-            doc_scores=doc_scores,
-            past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             output_retrieved=output_retrieved,
             n_docs=n_docs,
+            do_marginalize=do_marginalize,
+            labels=labels,
+            reduce_loss=reduce_loss,
             training=training,
+            kwargs_call=kwargs,
+        )
+        if inputs["labels"] is not None:
+            if inputs["decoder_input_ids"] is None:
+                inputs["decoder_input_ids"] = inputs["labels"]
+            inputs["use_cache"] = False
+
+        if inputs["n_docs"] is None: inputs["n_docs"] = self.config.n_docs 
+        if inputs["do_marginalize"] is None: inputs["do_marginalize"] = self.config.n_docs 
+        if inputs["reduce_loss"] is None: inputs["reduce_loss"] = self.config.n_docs 
+
+        outputs = self.rag(
+            inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            encoder_outputs=inputs["encoder_outputs"],
+            decoder_input_ids=inputs["decoder_input_ids"],
+            decoder_attention_mask=inputs["decoder_attention_mask"],
+            context_input_ids=inputs["context_input_ids"],
+            context_attention_mask=inputs["context_attention_mask"],
+            doc_scores=inputs["doc_scores"],
+            past_key_values=inputs["past_key_values"],
+            use_cache=inputs["use_cache"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            output_retrieved=inputs["output_retrieved"],
+            n_docs=inputs["n_docs"],
+            training=inputs["training"],
         )
 
         loss = None
         logits = outputs.logits
-        if labels is not None:
-            assert decoder_input_ids is not None
+        if inputs["labels"] is not None:
+            assert inputs["decoder_input_ids"] is not None
             loss = self.get_nll(
                 outputs.logits,
                 outputs.doc_scores,
-                labels,
-                reduce_loss=reduce_loss,
+                inputs["labels"],
+                reduce_loss=inputs["reduce_loss"],
                 epsilon=self.config.label_smoothing,
-                n_docs=n_docs,
+                n_docs=inputs["n_docs"],
             )
 
-        if do_marginalize:
-            logits = self.marginalize(logits, outputs.doc_scores, n_docs)
+        if inputs["do_marginalize"]:
+            logits = self.marginalize(logits, outputs.doc_scores, inputs["n_docs"])
 
         return TFRetrievAugLMMarginOutput(
             loss=loss,
