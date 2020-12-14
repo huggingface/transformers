@@ -46,9 +46,13 @@ def process_and_save_func(path: str) -> Any:
             f.write(item + '\n')
 
     numpy_arr = np.array([len(length) for length in sentence_list])
-    static_info = [numpy_arr.min(), numpy_arr.max(), numpy_arr.mean(), numpy_arr[numpy_arr <= 128],
-                   numpy_arr[numpy_arr > 128]]
-    gol_info_dict[path] = static_info
+    if len(numpy_arr) != 0:
+        static_info = [numpy_arr.min() if numpy_arr.min() else 0, numpy_arr.max() if numpy_arr.max() else 0,
+                       numpy_arr.mean() if numpy_arr.mean() else 0,
+                       numpy_arr[numpy_arr <= 128], numpy_arr[numpy_arr > 128]]
+        gol_info_dict[path] = static_info
+    else:
+        logging.info("{} length is zero".format(save_path))
     return save_path
 
 
