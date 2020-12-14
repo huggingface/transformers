@@ -12,7 +12,11 @@ that encode tabular structure. TAPAS is pre-trained on the masked language model
 comprising millions of tables from English Wikipedia and corresponding texts. For question answering, TAPAS has 2 heads
 on top: a cell selection head and an aggregation head, for (optionally) performing aggregations (such as counting or
 summing) among selected cells. TAPAS has been fine-tuned on several datasets: `SQA
+<<<<<<< HEAD
 <https://www.microsoft.com/en-us/download/details.aspx?id=54253>`__ (Sequential Question Answering by Microsoft), `WTQ
+=======
+<https://www.microsoft.com/en-us/download/details.aspx?id=54253>`_ (Sequential Question Answering by Microsoft), `WTQ
+>>>>>>> 0c66d1741ae52a1b65fa92263f756034f763a566
 <https://github.com/ppasupat/WikiTableQuestions>`__ (Wiki Table Questions by Stanford University) and `WikiSQL
 <https://github.com/salesforce/WikiSQL>`__ (by Salesforce). It achieves state-of-the-art on both SQA and WTQ, while
 having comparable performance to SOTA on WikiSQL, with a much simpler architecture.
@@ -420,14 +424,22 @@ TapasModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TapasModel
+<<<<<<< HEAD
     :members: forward
+=======
+    :members:
+>>>>>>> 0c66d1741ae52a1b65fa92263f756034f763a566
 
 
 TapasForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TapasForMaskedLM
+<<<<<<< HEAD
     :members: forward
+=======
+    :members:
+>>>>>>> 0c66d1741ae52a1b65fa92263f756034f763a566
 
 
 TapasForSequenceClassification
@@ -441,4 +453,8 @@ TapasForQuestionAnswering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TapasForQuestionAnswering
+<<<<<<< HEAD
     :members: forward
+=======
+    :members:
+>>>>>>> 0c66d1741ae52a1b65fa92263f756034f763a566
