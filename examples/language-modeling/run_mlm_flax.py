@@ -514,6 +514,16 @@ if __name__ == "__main__":
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 
+    # Initialize our model
+    rng = jax.random.PRNGKey(training_args.seed)
+    dropout_rngs = jax.random.split(rng, jax.local_device_count())
+
+    if model_args.model_name_or_path is not None:
+        model = FlaxBertForMaskedLM.from_pretrained(model_args.model_name_or_path, dtype=jnp.float32, dropout_rate=0.1)
+    else:
+        model = FlaxBertForMaskedLM(config)
+        model.init(jax.random.PRNGKey(training_args.seed), (training_args.train_batch_size, model.config.max_length))
+
     # Preprocessing the datasets.
     # First we tokenize all the texts.
     if training_args.do_train:
@@ -558,13 +568,6 @@ if __name__ == "__main__":
     else:
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
     data_collator = FlaxDataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=data_args.mlm_probability)
-
-    # Initialize our training
-    rng = jax.random.PRNGKey(training_args.seed)
-    dropout_rngs = jax.random.split(rng, jax.local_device_count())
-
-    model = FlaxBertForMaskedLM.from_pretrained("bert-base-cased", dtype=jnp.float32, dropout_rate=0.1)
-    model.init(jax.random.PRNGKey(training_args.seed), (training_args.train_batch_size, model.config.max_length))
 
     # Setup optimizer
     optimizer = Adam(
