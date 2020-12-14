@@ -1596,8 +1596,8 @@ class T5EncoderModel(T5PreTrainedModel):
         self.encoder = self.encoder.to("cpu")
         self.model_parallel = False
         self.device_map = None
-        torch.cuda.empty_cache()    
-    
+        torch.cuda.empty_cache()
+
     def get_input_embeddings(self):
         return self.shared
 
