@@ -127,7 +127,7 @@ _deps = [
     "sphinx-rtd-theme==0.4.3",  # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
     "sphinx==3.2.1",
     "starlette",
-    "tensorflow-cpu>=2.0",
+    "tensorflow-cpu>=2.0,<2.4",
     "tensorflow>=2.0,<2.4",
     "timeout-decorator",
     "tokenizers==0.9.4",
