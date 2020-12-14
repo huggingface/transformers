@@ -1246,7 +1246,7 @@ class Trainer:
         self,
         eval_dataset: Optional[Dataset] = None,
         ignore_keys: Optional[List[str]] = None,
-        metric_key_prefix: Optional[str] = "eval",
+        metric_key_prefix: str = "eval",
     ) -> Dict[str, float]:
         """
         Run evaluation and returns metrics.
@@ -1297,7 +1297,7 @@ class Trainer:
         return output.metrics
 
     def predict(
-        self, test_dataset: Dataset, ignore_keys: Optional[List[str]] = None, metric_key_prefix: Optional[str] = "eval"
+        self, test_dataset: Dataset, ignore_keys: Optional[List[str]] = None, metric_key_prefix: str = "eval"
     ) -> PredictionOutput:
         """
         Run prediction and returns predictions and potential metrics.
