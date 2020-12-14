@@ -30,7 +30,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFBartForConditionalGeneration, TFBartModel
-    from transformers.models.bart.modeling_tf_bart import TFSinusoidalPositionalEmbedding
+    from transformers.models.bart.modeling_tf_bart import TFBartSinusoidalPositionalEmbedding
 
 
 @require_tf
@@ -379,7 +379,7 @@ class TestTFSinusoidalPositionalEmbeddings(unittest.TestCase):
 
     def test_positional_emb_cache_logic(self):
         input_ids = _long_tensor([[4, 10]])
-        emb1 = TFSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=6)
+        emb1 = TFBartSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=6)
         no_cache = emb1(input_ids.shape, use_cache=False)
         yes_cache = emb1(input_ids.shape, use_cache=True)
         self.assertEqual((1, 1, 6), yes_cache.shape)  # extra dim to allow broadcasting, feel free to delete!
@@ -387,7 +387,7 @@ class TestTFSinusoidalPositionalEmbeddings(unittest.TestCase):
         np.testing.assert_almost_equal(no_cache[-1].numpy(), yes_cache[0][0].numpy())
 
     def test_positional_emb_weights_against_marian(self):
-        emb1 = TFSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512)
+        emb1 = TFBartSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512)
         emb1.build(None)
         weights = emb1.embeddings.numpy()
         for i, (expected_weight, actual_weight) in enumerate(zip(self.desired_weights, weights)):

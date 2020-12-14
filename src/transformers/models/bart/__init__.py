@@ -36,4 +36,4 @@ if is_torch_available():
     )
 
 if is_tf_available():
-    from .modeling_tf_bart import TFBartForConditionalGeneration, TFBartModel
+    from .modeling_tf_bart import TFBartForConditionalGeneration, TFBartModel, TFBartPretrainedModel
