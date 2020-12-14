@@ -248,7 +248,7 @@ class FlaxRobertaAttention(nn.Module):
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertIntermediate with Bert->Roberta
 class FlaxRobertaIntermediate(nn.Module):
     output_size: int
-    hidden_act: str
+    hidden_act: str = "gelu"
     kernel_init_scale: float = 0.2
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -287,7 +287,7 @@ class FlaxRobertaLayer(nn.Module):
     num_heads: int
     head_size: int
     intermediate_size: int
-    hidden_act: str
+    hidden_act: str = "gelu"
     dropout_rate: float = 0.0
     kernel_init_scale: float = 0.2
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -326,7 +326,7 @@ class FlaxRobertaLayerCollection(nn.Module):
     num_heads: int
     head_size: int
     intermediate_size: int
-    hidden_act: str
+    hidden_act: str = "gelu"
     dropout_rate: float = 0.0
     kernel_init_scale: float = 0.2
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -360,7 +360,7 @@ class FlaxRobertaEncoder(nn.Module):
     num_heads: int
     head_size: int
     intermediate_size: int
-    hidden_act: str
+    hidden_act: str = "gelu"
     dropout_rate: float = 0.0
     kernel_init_scale: float = 0.2
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
