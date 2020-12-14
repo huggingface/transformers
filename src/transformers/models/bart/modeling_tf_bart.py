@@ -337,10 +337,6 @@ class TFBartEncoderLayer(tf.keras.layers.Layer):
             hidden_states (:obj:`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (:obj:`tf.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-
-        Returns:
-            encoded output of shape `(batch_size, seq_len, embed_dim)` attention weights of shape `(batch_size,
-            tgt_len, src_len)`
         """
         residual = hidden_states
         if self.normalize_before:
@@ -417,10 +413,6 @@ class TFBartDecoderLayer(tf.keras.layers.Layer):
             encoder_attention_mask (:obj:`tf.Tensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             past_key_value (:obj:`Tuple(tf.Tensor)`): cached past key and value projection states
-
-        Returns:
-            encoded output of shape `(batch_size, seq_len, embed_dim)` present_key_value of shape `Tuple(batch_size,
-            seq_len, num_heads, head_dim)` attention weights of shape `(batch_size, tgt_len, src_len)`
         """
         residual = hidden_states
         if self.normalize_before:

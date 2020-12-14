@@ -342,10 +342,6 @@ class BartEncoderLayer(nn.Module):
             attention_mask (:obj:`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             output_attentions (:obj:`bool`): Whether the base model outputs attentions. This requires the attentions tensor to be reshaped in this function.
-
-        Returns:
-            encoded output of shape `(batch_size, seq_len, embed_dim)` attention weights of shape `(batch_size,
-            tgt_len, src_len)`
         """
         residual = hidden_states
         if self.normalize_before:
@@ -421,11 +417,6 @@ class BartDecoderLayer(nn.Module):
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             past_key_value (:obj:`Tuple(torch.FloatTensor)`): cached past key and value projection states
             output_attentions (:obj:`bool`): Whether the base model outputs attentions. This requires the attentions tensor to be reshaped in this function.
-
-        Returns:
-            encoded output of shape `(batch_size, seq_len, embed_dim)` present_key_value of shape `Tuple(batch_size,
-            seq_len, num_heads, head_dim)` attention weights of shape `(batch_size, tgt_len, src_len)` cross attention
-            weights of shape `(batch_size, tgt_len, src_len)`
         """
         residual = hidden_states
         if self.normalize_before:

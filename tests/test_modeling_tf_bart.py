@@ -363,7 +363,6 @@ class FasterTFBartModelIntegrationTests(unittest.TestCase):
             truncation=True,
         )
         features = self.xsum_1_1_model.get_encoder()(**batch).last_hidden_state
-        import numpy as np
 
         expected = np.array([[-0.0828, -0.0251, -0.0674], [0.1277, 0.3311, -0.0255], [0.2613, -0.0840, -0.2763]])
         assert np.allclose(features[0, :3, :3].numpy(), expected, atol=1e-3)
@@ -378,13 +377,11 @@ class TestTFSinusoidalPositionalEmbeddings(unittest.TestCase):
     ]
 
     def test_positional_emb_cache_logic(self):
-        input_ids = _long_tensor([[4, 10]])
         emb1 = TFBartSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=6)
-        no_cache = emb1(input_ids.shape, use_cache=False)
-        yes_cache = emb1(input_ids.shape, use_cache=True)
-        self.assertEqual((1, 1, 6), yes_cache.shape)  # extra dim to allow broadcasting, feel free to delete!
-
-        np.testing.assert_almost_equal(no_cache[-1].numpy(), yes_cache[0][0].numpy())
+        no_cache = emb1((4, 10), past_key_values_length=0)
+        yes_cache = emb1((4, 10), past_key_values_length=2)
+        self.assertTrue(no_cache.shape == yes_cache.shape == (10, 6))
+        self.assertListEqual(no_cache[2:].numpy().tolist(), yes_cache[:-2].numpy().tolist())
 
     def test_positional_emb_weights_against_marian(self):
         emb1 = TFBartSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512)
