@@ -882,7 +882,7 @@ class TFElectraMaskedLMHead(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
-    def call(self, hidden_states):
+    def call(self, hidden_states, training=False):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
         hidden_states = hidden_states + self.bias
 
@@ -914,7 +914,13 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
         self.generator_lm_head = TFElectraMaskedLMHead(config, self.electra.embeddings, name="generator_lm_head")
 
     def get_output_embeddings(self):
+        return self.electra.embeddings
+
+    def get_output_layer_with_bias(self):
         return self.generator_lm_head
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.generator_lm_head.name
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
