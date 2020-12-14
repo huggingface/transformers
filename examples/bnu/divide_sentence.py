@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from nltk import sent_tokenize
 from collections import OrderedDict
 from pathlib import PureWindowsPath
+from pathlib import PurePosixPath
 from typing import Any
 from pathlib import Path
 import numpy as np
@@ -32,7 +33,11 @@ def process_and_save_func(path: str) -> Any:
         sentence_list = sent_tokenize(document)
 
     save_path = path.replace(root_path, save_root_path)
-    pure_path = PureWindowsPath(save_path).parents[0]
+    pure_path = ''
+    if os.name == 'posix':
+        pure_path = PurePosixPath(save_path).parents[0]
+    else:
+        pure_path = PureWindowsPath(save_path).parents[0]
     if not os.path.exists(pure_path):
         os.makedirs(pure_path)
         print(pure_path)
@@ -60,11 +65,13 @@ def save_info_to_csv(info_dict: dict):
 
 
 if __name__ == '__main__':
-    root_path = r"G:\BTU\bert_corpus\bert_corpus"
-    save_root_path = r"G:\BTU\bert_corpus_update"
+    # root_path = r"G:\BTU\bert_corpus\bert_corpus"
+    root_path = r"/home/wuyan/usr/material/bert_corpus"
+    # save_root_path = r"G:\BTU\bert_corpus_update"
+    save_root_path = r"/home/wuyan/usr/material/bert_corpus_update"
     gol_info_dict = OrderedDict()
-    path = [r"G:\BTU\bert_corpus\bert_corpus\alloys\1\1.txt",r"G:\BTU\bert_corpus\bert_corpus\alloys\1\2.txt"]
-    print(path)
+    path = [str(x) for x in Path(root_path).glob("**/*.txt")]
+    # path = [r"G:\BTU\bert_corpus\bert_corpus\alloys\1\1.txt", r"G:\BTU\bert_corpus\bert_corpus\alloys\1\2.txt"]
     multip_process(path)
     # process_and_save_func(path)
     save_info_to_csv(gol_info_dict)
