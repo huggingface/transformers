@@ -41,7 +41,6 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSharedEmbeddings,
     TFWrappedEmbeddings,
-    cast_bool_to_primitive,
     input_processing,
     keras_serializable,
     shape_list,
@@ -258,9 +257,11 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         if self.normalize_before:
             x = self.self_attn_layer_norm(x)
         x, self_attn_weights = self.self_attn(query=x, key=x, key_padding_mask=encoder_padding_mask)
-        assert shape_list(x) == shape_list(
-            residual
-        ), f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(x)}"
+        tf.debugging.assert_equal(
+            shape_list(x),
+            shape_list(residual),
+            message=f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(x)}",
+        )
         x = self.dropout(x, training=training)
         x = residual + x
         if not self.normalize_before:
@@ -295,9 +296,6 @@ class TFBartEncoder(tf.keras.layers.Layer):
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.layerdrop = config.encoder_layerdrop
-        self.output_hidden_states = config.output_hidden_states
-        self.output_attentions = config.output_attentions
-
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
@@ -328,7 +326,6 @@ class TFBartEncoder(tf.keras.layers.Layer):
             if config.add_final_layer_norm
             else None
         )
-        self.return_dict = config.return_dict
 
     def call(
         self,
@@ -355,10 +352,6 @@ class TFBartEncoder(tf.keras.layers.Layer):
                 - **all_attentions** (List[tf.Tensor]): Attention weights for each layer.
                 During training might not be of length n_layers because of layer dropout.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
-        return_dict = return_dict if return_dict is not None else self.return_dict
-
         # check attention mask and invert
         if attention_mask is not None:
             assert (
@@ -546,9 +539,6 @@ class TFBartDecoder(tf.keras.layers.Layer):
         )
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.output_hidden_states = config.output_hidden_states
-        self.output_attentions = config.output_attentions
-        self.use_cache = config.use_cache
         self.do_blenderbot_90_layernorm = config.do_blenderbot_90_layernorm
 
     def call(
@@ -565,14 +555,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
         return_dict=None,
         training=False,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
-        use_cache = use_cache if use_cache is not None else self.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        if use_cache:
-            assert not training, "Training + use cache are incompatible"
         # check attention mask and invert
-        use_cache = cast_bool_to_primitive(use_cache)
         if encoder_padding_mask is not None:
             encoder_padding_mask = invert_mask(encoder_padding_mask)
 
@@ -1046,7 +1029,7 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         self.use_cache = config.use_cache
         # final_bias_logits is registered as a buffer in pytorch, so not trainable for the the sake of consistency.
         self.final_logits_bias = self.add_weight(
-            name="/final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
+            name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )
 
     def resize_token_embeddings(self, new_num_tokens):
