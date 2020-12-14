@@ -488,6 +488,7 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         (
             T5Model,
             T5ForConditionalGeneration,
+            T5EncoderModel
         )
         if is_torch_available()
         else ()
