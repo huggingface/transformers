@@ -34,5 +34,5 @@ help people access the inner representations, mainly adapted from the great work
   in https://arxiv.org/abs/1905.10650.
 
 To help you understand and use these features, we have added a specific example script: `bertology.py
-<https://github.com/huggingface/transformers/blob/master/examples/bertology/run_bertology.py>`_ while extract
-information and prune a model pre-trained on GLUE.
+<https://github.com/huggingface/transformers/blob/master/examples/research_projects/bertology/run_bertology.py>`_ while
+extract information and prune a model pre-trained on GLUE.
