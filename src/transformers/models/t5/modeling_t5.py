@@ -781,7 +781,7 @@ class T5Stack(T5PreTrainedModel):
     def parallelize(self, device_map=None):
         # Check validity of device_map
         self.device_map = (
-            get_device_map(len(self.block), torch.cuda.device_count()) if device_map is None else device_map
+            get_device_map(len(self.block), range(torch.cuda.device_count())) if device_map is None else device_map
         )
         assert_device_map(self.device_map, len(self.block))
         self.model_parallel = True
@@ -1578,6 +1578,25 @@ class T5EncoderModel(T5PreTrainedModel):
         self.encoder = T5Stack(encoder_config, self.shared)
 
         self.init_weights()
+
+    @add_start_docstrings(PARALLELIZE_DOCSTRING)
+    def parallelize(self, device_map=None):
+        self.device_map = (
+            get_device_map(len(self.encoder.block), range(torch.cuda.device_count()))
+            if device_map is None
+            else device_map
+        )
+        assert_device_map(self.device_map, len(self.encoder.block))
+        self.encoder.parallelize(self.device_map)
+        self.model_parallel = True
+
+    @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
+    def deparallelize(self):
+        self.encoder.deparallelize()
+        self.encoder = self.encoder.to("cpu")
+        self.model_parallel = False
+        self.device_map = None
+        torch.cuda.empty_cache()
 
     def get_input_embeddings(self):
         return self.shared
