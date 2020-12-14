@@ -1221,6 +1221,12 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
     def get_output_embeddings(self):
         return self.lm_loss.input_embeddings
 
+    def get_output_layer_with_bias(self):
+        return self.lm_loss
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.lm_loss.name
+
     def prepare_inputs_for_generation(self, inputs, past, use_mems=None, **kwargs):
         # Add dummy token at the end (no attention on this one)
 

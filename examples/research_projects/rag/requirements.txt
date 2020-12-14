@@ -1,0 +1,6 @@
+faiss-cpu >= 1.6.3
+datasets >= 1.0.1
+psutil >= 5.7.0
+torch >= 1.4.0
+transformers
+pytorch-lightning==1.0.4
