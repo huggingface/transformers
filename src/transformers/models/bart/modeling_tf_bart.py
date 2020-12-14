@@ -41,7 +41,6 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSharedEmbeddings,
     TFWrappedEmbeddings,
-    cast_bool_to_primitive,
     input_processing,
     keras_serializable,
     shape_list,
@@ -235,9 +234,9 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         )
         self.normalize_before = config.normalize_before
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
-        self.dropout = config.dropout
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
+        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
         self.fc1 = tf.keras.layers.Dense(config.encoder_ffn_dim, name="fc1")
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
@@ -258,10 +257,12 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         if self.normalize_before:
             x = self.self_attn_layer_norm(x)
         x, self_attn_weights = self.self_attn(query=x, key=x, key_padding_mask=encoder_padding_mask)
-        assert shape_list(x) == shape_list(
-            residual
-        ), f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(x)}"
-        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
+        tf.debugging.assert_equal(
+            shape_list(x),
+            shape_list(residual),
+            message=f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(x)}",
+        )
+        x = self.dropout(x, training=training)
         x = residual + x
         if not self.normalize_before:
             x = self.self_attn_layer_norm(x)
@@ -270,9 +271,9 @@ class TFEncoderLayer(tf.keras.layers.Layer):
         if self.normalize_before:
             x = self.final_layer_norm(x)
         x = self.activation_fn(self.fc1(x))
-        x = tf.nn.dropout(x, rate=self.self.activation_dropout if training else 0)
+        x = self.activation_dropout(x, training=training)
         x = self.fc2(x)
-        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
+        x = self.dropout(x, training=training)
         x = residual + x
         if not self.normalize_before:
             x = self.final_layer_norm(x)
@@ -293,11 +294,8 @@ class TFBartEncoder(tf.keras.layers.Layer):
     def __init__(self, config: BartConfig, embed_tokens: TFSharedEmbeddings, **kwargs):
         super().__init__(**kwargs)
 
-        self.dropout = config.dropout
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.layerdrop = config.encoder_layerdrop
-        self.output_hidden_states = config.output_hidden_states
-        self.output_attentions = config.output_attentions
-
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
@@ -328,7 +326,6 @@ class TFBartEncoder(tf.keras.layers.Layer):
             if config.add_final_layer_norm
             else None
         )
-        self.return_dict = config.return_dict
 
     def call(
         self,
@@ -355,10 +352,6 @@ class TFBartEncoder(tf.keras.layers.Layer):
                 - **all_attentions** (List[tf.Tensor]): Attention weights for each layer.
                 During training might not be of length n_layers because of layer dropout.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
-        return_dict = return_dict if return_dict is not None else self.return_dict
-
         # check attention mask and invert
         if attention_mask is not None:
             assert (
@@ -370,7 +363,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
         embed_pos = self.embed_positions(input_ids)
         x = inputs_embeds + embed_pos
         x = self.layernorm_embedding(x)
-        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
+        x = self.dropout(x, training=training)
 
         # B x T x C -> T x B x C
         x = tf.transpose(x, perm=[1, 0, 2])
@@ -413,9 +406,9 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             dropout=config.attention_dropout,
             name="self_attn",
         )
-        self.dropout = config.dropout
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
+        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
         self.normalize_before = config.normalize_before
 
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
@@ -467,7 +460,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             attn_mask=causal_mask,
             key_padding_mask=decoder_padding_mask,
         )
-        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
+        x = self.dropout(x, training=training)
         x = residual + x
         if not self.normalize_before:
             x = self.self_attn_layer_norm(x)
@@ -481,7 +474,7 @@ class TFDecoderLayer(tf.keras.layers.Layer):
             key_padding_mask=encoder_attn_mask,
             layer_state=layer_state,  # mutates layer state
         )
-        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
+        x = self.dropout(x, training=training)
         x = residual + x
         if not self.normalize_before:
             x = self.encoder_attn_layer_norm(x)
@@ -490,9 +483,9 @@ class TFDecoderLayer(tf.keras.layers.Layer):
         if self.normalize_before:
             x = self.final_layer_norm(x)
         x = self.activation_fn(self.fc1(x))
-        x = tf.nn.dropout(x, rate=self.activation_dropout if training else 0)
+        x = self.activation_dropout(x, training=training)
         x = self.fc2(x)
-        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
+        x = self.dropout(x, training=training)
         x = residual + x
         if not self.normalize_before:
             x = self.final_layer_norm(x)
@@ -545,10 +538,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
             else None
         )
 
-        self.dropout = config.dropout
-        self.output_hidden_states = config.output_hidden_states
-        self.output_attentions = config.output_attentions
-        self.use_cache = config.use_cache
+        self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.do_blenderbot_90_layernorm = config.do_blenderbot_90_layernorm
 
     def call(
@@ -565,14 +555,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
         return_dict=None,
         training=False,
     ):
-        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
-        use_cache = use_cache if use_cache is not None else self.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        if use_cache:
-            assert not training, "Training + use cache are incompatible"
         # check attention mask and invert
-        use_cache = cast_bool_to_primitive(use_cache)
         if encoder_padding_mask is not None:
             encoder_padding_mask = invert_mask(encoder_padding_mask)
 
@@ -588,7 +571,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
             x = self.layernorm_embedding(x) + positions
         else:
             x = self.layernorm_embedding(x + positions)
-        x = tf.nn.dropout(x, rate=self.dropout if training else 0)
+        x = self.dropout(x, training=training)
 
         # Convert to Bart output format: (BS, seq_len, model_dim) ->  (seq_len, BS, model_dim)
         x = tf.transpose(x, perm=(1, 0, 2))
@@ -674,7 +657,7 @@ class TFAttention(tf.keras.layers.Layer):
         self.embed_dim = embed_dim
 
         self.num_heads = num_heads
-        self.dropout = dropout
+        self.dropout = tf.keras.layers.Dropout(dropout)
         self.head_dim = embed_dim // num_heads
         assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
         self.scaling = self.head_dim ** -0.5
@@ -772,7 +755,7 @@ class TFAttention(tf.keras.layers.Layer):
             attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
-        attn_probs = tf.nn.dropout(attn_weights, rate=self.dropout if training else 0.0)
+        attn_probs = self.dropout(attn_weights, training=training)
 
         attn_output = tf.matmul(attn_probs, v)  # shape: (bsz * self.num_heads, tgt_len, self.head_dim)
         attn_output = tf.transpose(attn_output, perm=(1, 0, 2))
@@ -1046,8 +1029,26 @@ class TFBartForConditionalGeneration(TFPretrainedBartModel):
         self.use_cache = config.use_cache
         # final_bias_logits is registered as a buffer in pytorch, so not trainable for the the sake of consistency.
         self.final_logits_bias = self.add_weight(
-            name="/final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
+            name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )
+
+    def resize_token_embeddings(self, new_num_tokens):
+        super().resize_token_embeddings(new_num_tokens=new_num_tokens)
+
+        # BART is a special case where the bias has two dimensions
+        # and not named just `bias`
+        if new_num_tokens is not None:
+            num_tokens_to_copy = min(self.final_logits_bias.shape[0], new_num_tokens)
+            init_bias = tf.zeros((new_num_tokens,))
+            init_bias[:num_tokens_to_copy] = self.final_logits_bias.value()[:num_tokens_to_copy]
+            name = self.name + "/final_logits_bias"
+            self.final_logits_bias = self.add_weight(
+                shape=(1, new_num_tokens),
+                initializer="zeros",
+                trainable=False,
+                name=name,
+            )
+            self.final_logits_bias.assign(init_bias)
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)

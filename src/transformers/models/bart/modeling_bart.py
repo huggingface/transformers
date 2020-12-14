@@ -16,7 +16,7 @@
 import math
 import random
 import warnings
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 import torch
@@ -407,7 +407,7 @@ class BartDecoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         encoder_hidden_states: torch.Tensor,
         encoder_attn_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.Tensor]]] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attn_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[torch.Tensor] = False,
     ):
@@ -416,9 +416,10 @@ class BartDecoderLayer(nn.Module):
             hidden_states = self.self_attn_layer_norm(hidden_states)
         # Self Attention
 
-        # decoder uni-directional self-attention cached key/values tuple is at first position
-        self_attn_past_key_value = past_key_value[0] if past_key_value is not None else None
-        hidden_states, self_attn_weights, self_attn_present_key_value = self.self_attn(
+        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
+        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        # add present self-attn cache to positions 1,2 of present_key_value tuple
+        hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             past_key_value=self_attn_past_key_value,
             attn_mask=attn_mask,
@@ -437,8 +438,8 @@ class BartDecoderLayer(nn.Module):
             if self.normalize_before:
                 hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
-            # cross_attn cached key/values tuple is at second position
-            cross_attn_past_key_value = past_key_value[1] if past_key_value is not None else None
+            # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
+            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
@@ -451,6 +452,9 @@ class BartDecoderLayer(nn.Module):
             if not self.normalize_before:
                 hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
+            # add cross-attn to positions 3,4 of present_key_value tuple
+            present_key_value = present_key_value + cross_attn_present_key_value
+
         # Fully Connected
         residual = hidden_states
         if self.normalize_before:
@@ -462,9 +466,6 @@ class BartDecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         if not self.normalize_before:
             hidden_states = self.final_layer_norm(hidden_states)
-
-        # make sure decoder uni-directional self-attn at 1st position and cross-attn at 2nd position.
-        present_key_value = (self_attn_present_key_value, cross_attn_present_key_value)
 
         return (
             hidden_states,
@@ -600,7 +601,7 @@ BART_INPUTS_DOCSTRING = r"""
             :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
             `optional`) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
             cross-attention of the decoder.
-        past_key_values (:obj:`Tuple[Tuple[Tuple[torch.Tensor]]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+        past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
 
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
@@ -857,7 +858,7 @@ class BartDecoder(BartPretrainedModel):
                 - 0 for tokens that are **masked**.
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
-            past_key_values (:obj:`Tuple[Tuple[Tuple[torch.Tensor]]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+            past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
                 Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
                 decoding.
 
@@ -897,7 +898,7 @@ class BartDecoder(BartPretrainedModel):
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
@@ -1284,12 +1285,9 @@ class BartForConditionalGeneration(BartPretrainedModel):
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
-        def _reorder_buffer(cache: Tuple[torch.Tensor], new_order) -> Dict:
-            return tuple(past_state.index_select(0, new_order) for past_state in cache)
-
         reordered_past = ()
         for layer_past in past:
-            reordered_past += (tuple(_reorder_buffer(cache, beam_idx) for cache in layer_past),)
+            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
 
 
