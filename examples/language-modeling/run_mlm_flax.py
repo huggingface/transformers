@@ -53,6 +53,7 @@ from transformers import (
     set_seed,
 )
 
+
 # Cache the result
 has_tensorboard = is_tensorboard_available()
 if has_tensorboard:
@@ -68,6 +69,7 @@ else:
         "Please run pip install tensorboard to enable."
     )
 
+
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
@@ -82,7 +84,7 @@ class ModelArguments:
         default=None,
         metadata={
             "help": "The model checkpoint for weights initialization."
-                    "Don't set if you want to train a model from scratch."
+            "Don't set if you want to train a model from scratch."
         },
     )
     model_type: Optional[str] = field(
@@ -132,11 +134,20 @@ class DataTrainingArguments:
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
+    validation_split_percentage: Optional[int] = field(
+        default=5,
+        metadata={
+            "help": "The percentage of the train set used as validation set in case there's no validation split"
+        },
+    )
+    test_split_percentage: Optional[int] = field(
+        default=5, metadata={"help": "The percentage of the train set used as test set in case there's no test split"}
+    )
     max_seq_length: Optional[int] = field(
         default=None,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
-                    "than this will be truncated. Default to the max input length of the model."
+            "than this will be truncated. Default to the max input length of the model."
         },
     )
     preprocessing_num_workers: Optional[int] = field(
@@ -150,7 +161,7 @@ class DataTrainingArguments:
         default=False,
         metadata={
             "help": "Whether to pad all samples to `max_seq_length`. "
-                    "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+            "If False, will pad the samples dynamically when batching to the maximum length in the batch."
         },
     )
 
@@ -221,7 +232,7 @@ class FlaxDataCollatorForLanguageModeling:
         return batch
 
     def mask_tokens(
-            self, inputs: np.ndarray, special_tokens_mask: Optional[np.ndarray]
+        self, inputs: np.ndarray, special_tokens_mask: Optional[np.ndarray]
     ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         """
         Prepare masked tokens inputs/labels for masked language modeling: 80% MASK, 10% random, 10% original.
@@ -251,12 +262,12 @@ class FlaxDataCollatorForLanguageModeling:
 
 
 def create_learning_rate_scheduler(
-        factors="constant * linear_warmup * rsqrt_decay",
-        base_learning_rate=0.5,
-        warmup_steps=1000,
-        decay_factor=0.5,
-        steps_per_decay=20000,
-        steps_per_cycle=100000,
+    factors="constant * linear_warmup * rsqrt_decay",
+    base_learning_rate=0.5,
+    warmup_steps=1000,
+    decay_factor=0.5,
+    steps_per_decay=20000,
+    steps_per_cycle=100000,
 ):
     """Creates learning rate schedule.
     Interprets factors in the factors string which can consist of:
@@ -352,7 +363,7 @@ def cross_entropy(logits, targets, weights=None, label_smoothing=0.0):
     confidence = 1.0 - label_smoothing
     low_confidence = (1.0 - confidence) / (vocab_size - 1)
     normalizing_constant = -(
-            confidence * jnp.log(confidence) + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
+        confidence * jnp.log(confidence) + (vocab_size - 1) * low_confidence * jnp.log(low_confidence + 1e-20)
     )
     soft_targets = common_utils.onehot(targets, vocab_size, on_value=confidence, off_value=low_confidence)
 
@@ -377,7 +388,7 @@ def training_step(optimizer, batch, dropout_rng):
         # Hide away tokens which doesn't participate in the optimization
         token_mask = jnp.where(targets > 0, 1.0, 0.0)
 
-        logits = model(**batch, params=params, dropout_rng=dropout_rng, train=True)
+        logits = model(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
         loss, weight_sum = cross_entropy(logits, targets, token_mask)
         return loss / weight_sum
 
@@ -429,10 +440,10 @@ if __name__ == "__main__":
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     if (
-            os.path.exists(training_args.output_dir)
-            and os.listdir(training_args.output_dir)
-            and training_args.do_train
-            and not training_args.overwrite_output_dir
+        os.path.exists(training_args.output_dir)
+        and os.listdir(training_args.output_dir)
+        and training_args.do_train
+        and not training_args.overwrite_output_dir
     ):
         raise ValueError(
             f"Output directory ({training_args.output_dir}) already exists and is not empty."
@@ -461,7 +472,9 @@ if __name__ == "__main__":
 
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
-    # (the dataset will be downloaded automatically from the datasets Hub).
+    # (the dataset will be downloaded automatically from the datasets Hub). If you choose this option, and the dataset
+    # does not have validation or test splits, this script will automatically partition the train set to create the
+    # missing splits. The arguments `validation_split_percentage` and `test_split_percentage` set the ratios.
     #
     # For CSV/JSON files, this script will use the column called 'text' or the first column if no column called
     # 'text' is found. You can easily tweak this behavior (see below).
@@ -471,9 +484,25 @@ if __name__ == "__main__":
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name)
-        datasets["validation"] = load_dataset(data_args.dataset_name, data_args.dataset_config_name,
-                                              split="train[90%:95%]")
-        datasets["test"] = load_dataset(data_args.dataset_name, data_args.dataset_config_name, split="train[95%:100%]")
+        offset = 0
+        if "validation" not in datasets.keys():
+            datasets["validation"] = load_dataset(
+                data_args.dataset_name,
+                data_args.dataset_config_name,
+                split=f"train[{offset}%:{offset + data_args.validation_split_percentage}%]",
+            )
+            offset += data_args.validation_split_percentage
+        if "test" not in datasets.keys():
+            datasets["test"] = load_dataset(
+                data_args.dataset_name,
+                data_args.dataset_config_name,
+                split=f"train[{offset}%:{offset + data_args.test_split_percentage}%]",
+            )
+            offset += data_args.test_split_percentage
+        if offset >= 0:
+            datasets["train"] = load_dataset(
+                data_args.dataset_name, data_args.dataset_config_name, split=f"train[{offset}%:100%]"
+            )
     else:
         data_files = {}
         if data_args.train_file is not None:
@@ -533,7 +562,6 @@ if __name__ == "__main__":
 
     padding = "max_length" if data_args.pad_to_max_length else False
 
-
     def tokenize_function(examples):
         # Remove empty lines
         examples = [line for line in examples if len(line) > 0 and not line.isspace()]
@@ -544,7 +572,6 @@ if __name__ == "__main__":
             truncation=True,
             max_length=data_args.max_seq_length,
         )
-
 
     tokenized_datasets = datasets.map(
         tokenize_function,
@@ -566,6 +593,13 @@ if __name__ == "__main__":
     else:
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
     data_collator = FlaxDataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=data_args.mlm_probability)
+
+    # Initialize our training
+    rng = jax.random.PRNGKey(training_args.seed)
+    dropout_rngs = jax.random.split(rng, jax.local_device_count())
+
+    model = FlaxBertForMaskedLM.from_pretrained("bert-base-cased", dtype=jnp.float32, dropout_rate=0.1)
+    model.init(jax.random.PRNGKey(training_args.seed), (training_args.train_batch_size, model.config.max_length))
 
     # Setup optimizer
     optimizer = Adam(
@@ -594,9 +628,30 @@ if __name__ == "__main__":
     batch_size = int(training_args.train_batch_size)
     eval_batch_size = int(training_args.eval_batch_size)
 
+    epochs = tqdm(range(nb_epochs), desc=f"Epoch ... (1/{nb_epochs})", position=0)
+    for epoch in epochs:
 
-    def evaluation_routine(epoch=-1):
+        # ======================== Training ================================
+        # Create sampling rng
+        rng, training_rng, eval_rng = jax.random.split(rng, 3)
 
+        # Generate an epoch by shuffling sampling indices from the train dataset
+        nb_training_samples = len(tokenized_datasets["train"])
+        training_samples_idx = jax.random.permutation(training_rng, jnp.arange(nb_training_samples))
+        training_batch_idx = generate_batch_splits(training_samples_idx, batch_size)
+
+        # Gather the indexes for creating the batch and do a training step
+        for batch_idx in tqdm(training_batch_idx, desc="Training...", position=1):
+            samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
+            model_inputs = data_collator(samples, pad_to_multiple_of=16)
+
+            # Model forward
+            model_inputs = common_utils.shard(model_inputs.data)
+            loss, optimizer, dropout_rngs = p_training_step(optimizer, model_inputs, dropout_rngs)
+
+        epochs.write(f"Loss: {loss}")
+
+        # ======================== Evaluating ==============================
         nb_eval_samples = len(tokenized_datasets["test"])
         eval_samples_idx = jnp.arange(nb_eval_samples)
         eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
@@ -620,44 +675,8 @@ if __name__ == "__main__":
         epochs.desc = (
             f"Epoch... ({epoch + 1}/{nb_epochs} | Loss: {eval_summary['loss']}, Acc: {eval_summary['accuracy']})"
         )
-        print(f"Epoch... ({epoch + 1}/{nb_epochs} | Loss: {eval_summary['loss']}, Acc: {eval_summary['accuracy']})")
 
         # Save metrics
         if has_tensorboard and jax.host_id() == 0:
             for name, value in eval_summary.items():
                 summary_writer.scalar(name, value, epoch)
-
-
-    epochs = tqdm(range(nb_epochs), desc=f"Epoch ... (1/{nb_epochs})", position=0)
-
-    if training_args.initial_evaluation:
-        evaluation_routine()
-
-    for epoch in epochs:
-
-        # ======================== Training ================================
-        # Create sampling rng
-        rng, training_rng, eval_rng = jax.random.split(rng, 3)
-
-        # Generate an epoch by shuffling sampling indices from the train dataset
-        nb_training_samples = len(tokenized_datasets["train"])
-        training_samples_idx = jax.random.permutation(training_rng, jnp.arange(nb_training_samples))
-        training_batch_idx = generate_batch_splits(training_samples_idx, batch_size)
-
-        # Gather the indexes for creating the batch and do a training step
-        batches = tqdm(training_batch_idx, desc="Training...", position=1)
-        for batch_idx in batches:
-            samples = [tokenized_datasets["train"][int(idx)] for idx in batch_idx]
-            model_inputs = data_collator(samples, pad_to_multiple_of=16)
-
-            # Model forward
-            model_inputs = common_utils.shard(model_inputs.data)
-            loss, optimizer, dropout_rngs = p_training_step(optimizer, model_inputs, dropout_rngs)
-            batches.desc = (
-                f"Loss: {loss})"
-            )
-
-        epochs.write(f"Loss: {loss}")
-
-        # ======================== Evaluating ==============================
-        evaluation_routine(epoch)
