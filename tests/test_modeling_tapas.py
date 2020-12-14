@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 Google Research and The HuggingFace Inc. team.
+# Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -645,9 +645,9 @@ class TapasModelIntegrationTest(unittest.TestCase):
         # let's test on a batch
         table, queries = prepare_tapas_batch_inputs_for_inference()
         inputs = tokenizer(table=table, queries=queries, padding="longest", return_tensors="pt")
-        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
+        inputs_on_device = {k: v.to(torch_device) for k, v in inputs.items()}
 
-        outputs = model(**inputs)
+        outputs = model(**inputs_on_device)
         # test the logits
         logits = outputs.logits
         expected_shape = torch.Size((2, 28))
@@ -679,7 +679,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
         EXPECTED_PREDICTED_AGGREGATION_INDICES = [0, 1]
 
         predicted_answer_coordinates, predicted_aggregation_indices = tokenizer.convert_logits_to_predictions(
-            inputs, outputs.logits, outputs.logits_aggregation
+            inputs, outputs.logits.detach().cpu(), outputs.logits_aggregation.detach().cpu()
         )
 
         self.assertEqual(EXPECTED_PREDICTED_ANSWER_COORDINATES, predicted_answer_coordinates)

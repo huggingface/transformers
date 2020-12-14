@@ -1287,7 +1287,7 @@ class TapasTokenizer(PreTrainedTokenizer):
                 Total maximum length.
             truncation_strategy (:obj:`str` or :obj:`~transformers.TapasTruncationStrategy`):
                 Truncation strategy to use. Seeing as this method should only be called when truncating, the only
-                available strategy is the "drop_rows_to_fit" strategy.
+                available strategy is the :obj:`"drop_rows_to_fit"` strategy.
 
         Returns:
             :obj:`Tuple(int, int)`: tuple containing the number of rows after truncation, and the number of tokens

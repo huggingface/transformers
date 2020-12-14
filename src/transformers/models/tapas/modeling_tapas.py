@@ -286,10 +286,8 @@ class TapasEmbeddings(nn.Module):
         # position embeddings
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         # token type embeddings
-        token_type_embedding_name = "token_type_embeddings"
-
         for i, type_vocab_sizes in enumerate(config.type_vocab_sizes):
-            name = "%s_%d" % (token_type_embedding_name, i)
+            name = f"token_type_embeddings_{i}"
             setattr(self, name, nn.Embedding(type_vocab_sizes, config.hidden_size))
 
         self.number_of_token_type_embeddings = len(config.type_vocab_sizes)
@@ -347,10 +345,8 @@ class TapasEmbeddings(nn.Module):
 
         embeddings = inputs_embeds + position_embeddings
 
-        token_type_embedding_name = "token_type_embeddings"
-
         for i in range(self.number_of_token_type_embeddings):
-            name = f"{token_type_embedding_name}_{i}"
+            name = f"token_type_embeddings_{i}"
             embeddings += getattr(self, name)(token_type_ids[:, :, i])
 
         embeddings = self.LayerNorm(embeddings)
@@ -769,17 +765,15 @@ class TapasModel(TapasPreTrainedModel):
 
     """
 
-    config_class = TapasConfig
-    base_model_prefix = "tapas"
-
-    def __init__(self, config):
+    def __init__(self, config, add_pooling_layer=True):
         requires_scatter(self)
         super().__init__(config)
         self.config = config
 
         self.embeddings = TapasEmbeddings(config)
         self.encoder = TapasEncoder(config)
-        self.pooler = TapasPooler(config)
+
+        self.pooler = TapasPooler(config) if add_pooling_layer else None
 
         self.init_weights()
 
@@ -896,7 +890,7 @@ class TapasModel(TapasPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
@@ -917,7 +911,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.tapas = TapasModel(config)
+        self.tapas = TapasModel(config, add_pooling_layer=False)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
         self.init_weights()
