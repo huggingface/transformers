@@ -19,7 +19,7 @@ import argparse
 
 import torch
 
-from transformers.models.tapas import (
+from transformers.models.tapas.modeling_tapas import (
     TapasConfig,
     TapasForMaskedLM,
     TapasForQuestionAnswering,
@@ -27,6 +27,7 @@ from transformers.models.tapas import (
     TapasModel,
     load_tf_weights_in_tapas,
 )
+from transformers.models.tapas.tokenization_tapas import TapasTokenizer
 from transformers.utils import logging
 
 
@@ -36,63 +37,51 @@ logging.set_verbosity_info()
 def convert_tf_checkpoint_to_pytorch(
     task, reset_position_index_per_cell, tf_checkpoint_path, tapas_config_file, pytorch_dump_path
 ):
-    # Initialise PyTorch model. Defaults to TapasForQuestionAnswering with default SQA config.
+    # Initialise PyTorch model. 
     # If you want to convert a checkpoint that uses absolute position embeddings, make sure to set reset_position_index_per_cell of
     # TapasConfig to False.
 
+    # initialize configuration from json file
+    config = TapasConfig.from_json_file(tapas_config_file)
+    # set absolute/relative position embeddings parameter
+    config.reset_position_index_per_cell=reset_position_index_per_cell
+    
+    # set remaining parameters of TapasConfig as well as the model based on the task
     if task == "SQA":
-        config = TapasConfig(
-            reset_position_index_per_cell=reset_position_index_per_cell,
-        )
         model = TapasForQuestionAnswering(config=config)
     elif task == "WTQ":
-        # WTQ config
-        config = TapasConfig(
-            reset_position_index_per_cell=reset_position_index_per_cell,
-            # run_task_main.py hparams
-            num_aggregation_labels=4,
-            use_answer_as_supervision=True,
-            # hparam_utils.py hparams
-            answer_loss_cutoff=0.664694,
-            cell_selection_preference=0.207951,
-            huber_loss_delta=0.121194,
-            init_cell_selection_weights_to_zero=True,
-            select_one_column=True,
-            allow_empty_column_selection=False,
-            temperature=0.0352513,
-        )
+        # run_task_main.py hparams
+        config.num_aggregation_labels=4
+        config.use_answer_as_supervision=True
+        # hparam_utils.py hparams
+        config.answer_loss_cutoff=0.664694
+        config.cell_selection_preference=0.207951
+        config.huber_loss_delta=0.121194
+        config.init_cell_selection_weights_to_zero=True
+        config.select_one_column=True
+        config.allow_empty_column_selection=False
+        config.temperature=0.0352513
+
         model = TapasForQuestionAnswering(config=config)
     elif task == "WIKISQL_SUPERVISED":
-        # WikiSQL-supervised config
-        config = TapasConfig(
-            reset_position_index_per_cell=reset_position_index_per_cell,
-            # run_task_main.py hparams
-            num_aggregation_labels=4,
-            use_answer_as_supervision=False,
-            # hparam_utils.py hparams
-            answer_loss_cutoff=36.4519,
-            cell_selection_preference=0.903421,
-            huber_loss_delta=222.088,
-            init_cell_selection_weights_to_zero=True,
-            select_one_column=True,
-            allow_empty_column_selection=True,
-            temperature=0.763141,
-        )
+        # run_task_main.py hparams
+        config.num_aggregation_labels=4
+        config.use_answer_as_supervision=False
+        # hparam_utils.py hparams
+        config.answer_loss_cutoff=36.4519
+        config.cell_selection_preference=0.903421
+        config.huber_loss_delta=222.088
+        config.init_cell_selection_weights_to_zero=True
+        config.select_one_column=True
+        config.allow_empty_column_selection=True
+        config.temperature=0.763141
+
         model = TapasForQuestionAnswering(config=config)
     elif task == "TABFACT":
-        config = TapasConfig(
-            reset_position_index_per_cell=reset_position_index_per_cell,
-        )
         model = TapasForSequenceClassification(config=config)
     elif task == "MLM":
-        config = TapasConfig(
-            reset_position_index_per_cell=reset_position_index_per_cell,
-        )
         model = TapasForMaskedLM(config=config)
     elif task == "INTERMEDIATE_PRETRAINING":
-        config = TapasConfig(
-            reset_position_index_per_cell=reset_position_index_per_cell,
-        )
         model = TapasModel(config=config)
 
     print("Building PyTorch model from configuration: {}".format(str(config)))
@@ -100,9 +89,16 @@ def convert_tf_checkpoint_to_pytorch(
     # Load weights from tf checkpoint
     load_tf_weights_in_tapas(model, config, tf_checkpoint_path)
 
-    # Save pytorch-model
+    # Save pytorch-model (weights and configuration)
     print("Save PyTorch model to {}".format(pytorch_dump_path))
-    torch.save(model.state_dict(), pytorch_dump_path)
+    model.save_pretrained(pytorch_dump_path[:-17])
+
+    # Save tokenizer files
+    dir_name = r"C:\Users\niels.rogge\Documents\Python projecten\tensorflow\Tensorflow models\SQA\Base\tapas_sqa_inter_masklm_base_reset"
+    tokenizer = TapasTokenizer(vocab_file=dir_name + r"\vocab.txt", model_max_length=512)
+
+    print("Save tokenizer files to {}".format(pytorch_dump_path))
+    tokenizer.save_pretrained(pytorch_dump_path[:-17])
 
 
 if __name__ == "__main__":
