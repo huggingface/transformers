@@ -636,8 +636,6 @@ class Trainer:
         # Mixed precision training with apex (torch < 1.6)
         model = self.model
         if self.use_apex:
-            if not is_apex_available():
-                raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
 
         # Multi-gpu training (should be after apex fp16 initialization)
