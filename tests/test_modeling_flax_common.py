@@ -87,6 +87,7 @@ class FlaxModelTesterMixin:
 
                 with torch.no_grad():
                     pt_outputs = pt_model(**pt_inputs).to_tuple()
+
                 fx_outputs = fx_model(**inputs_dict)
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):

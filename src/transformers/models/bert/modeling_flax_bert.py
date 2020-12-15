@@ -653,7 +653,7 @@ class FlaxBertForMaskedLM(FlaxBertPreTrainedModel):
             head_size=config.hidden_size,
             num_heads=config.num_attention_heads,
             num_encoder_layers=config.num_hidden_layers,
-            max_length=config.max_length,
+            max_length=config.max_position_embeddings,
             hidden_act=config.hidden_act,
             **kwargs,
         )

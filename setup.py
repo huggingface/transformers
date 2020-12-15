@@ -97,7 +97,7 @@ _deps = [
     "fastapi",
     "filelock",
     "flake8>=3.8.3",
-    "flax==0.2.2",
+    "flax>=0.2.2",
     "fugashi>=1.0",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -175,7 +175,7 @@ class DepsTableUpdateCommand(Command):
             "deps = {",
             entries,
             "}",
-            ""
+            "",
         ]
         target = "src/transformers/dependency_versions_table.py"
         print(f"updating {target}")
@@ -232,14 +232,14 @@ extras["dev"] = (
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
     deps["dataclasses"] + ";python_version<'3.7'",  # dataclasses for Python versions that don't have it
-    deps["filelock"],   # filesystem locks, e.g., to prevent parallel downloads
+    deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
     deps["numpy"],
     deps["packaging"],  # utilities from PyPA to e.g., compare versions
-    deps["regex"],      # for OpenAI GPT
-    deps["requests"],   # for downloading models over HTTPS
-    deps["sacremoses"], # for XLM
+    deps["regex"],  # for OpenAI GPT
+    deps["requests"],  # for downloading models over HTTPS
+    deps["sacremoses"],  # for XLM
     deps["tokenizers"],
-    deps["tqdm"],       # progress bars in model download and training scripts
+    deps["tqdm"],  # progress bars in model download and training scripts
 ]
 
 setup(

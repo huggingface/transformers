@@ -21,9 +21,9 @@ from typing import Dict, Set, Tuple, Union
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict
+from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.serialization import from_bytes, to_bytes
-from flax.traverse_util import unflatten_dict
+from flax.traverse_util import flatten_dict, unflatten_dict
 from jax.random import PRNGKey
 
 from .configuration_utils import PretrainedConfig
@@ -79,7 +79,7 @@ class FlaxPreTrainedModel(ABC):
         random_params = self.init(self.key, input_shape)
 
         # save required_params as set
-        self._required_params = set(self.flatten_frozen_state(random_params).keys())
+        self._required_params = set(flatten_dict(unfreeze(random_params)).keys())
         self.params = random_params
 
     def init(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> Dict:
@@ -102,14 +102,16 @@ class FlaxPreTrainedModel(ABC):
         return self._required_params
 
     @params.setter
-    def params(self, params: Dict):
-        param_keys = set(self.flatten_frozen_state(params).keys())
+    def params(self, params: Union[Dict, FrozenDict]):
+        if isinstance(params, FrozenDict):
+            params = unfreeze(params)
+        param_keys = set(flatten_dict(params).keys())
         if len(self.required_params - param_keys) > 0:
             raise ValueError(
                 "Some parameters are missing. Make sure that `params` include the following "
                 f"parameters {self.required_params - param_keys}"
             )
-        self._params = params
+        self._params = freeze(params)
 
     @staticmethod
     @abstractmethod
@@ -228,11 +230,11 @@ class FlaxPreTrainedModel(ABC):
             state = state[cls.base_model_prefix]
 
         # flatten dicts
-        state_dict = cls.flatten_frozen_state(state)
-        rnd_dict = cls.flatten_frozen_state(model.params)
+        state = flatten_dict(state)
+        rnd_dict = flatten_dict(unfreeze(model.params))
 
-        missing_keys = model.required_params - set(state_dict.keys())
-        unexpected_keys = set(state_dict.keys()) - model.required_params
+        missing_keys = model.required_params - set(state.keys())
+        unexpected_keys = set(state.keys()) - model.required_params
 
         # add missing keys as random parameters
         for missing_key in missing_keys:
@@ -263,28 +265,9 @@ class FlaxPreTrainedModel(ABC):
                 f"you can already use {model.__class__.__name__} for predictions without further training."
             )
 
-        # unflatten back to flax style
-        state = unflatten_dict({tuple(k.split(".")): v for k, v in state.items()})
-
         # set correct parameters
-        model.params = state
+        model.params = unflatten_dict(state)
         return model
-
-    @staticmethod
-    def flatten_frozen_state(state):
-        flat_dict = {}
-
-        def _flatten(value, key):
-            if isinstance(value, FrozenDict):
-                value = dict(value)
-            if isinstance(value, dict):
-                for k, v in value.items():
-                    _flatten(v, key + "." + k if key != "" else k)
-            else:
-                flat_dict[key] = value
-
-        _flatten(state, "")
-        return flat_dict
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike]):
         """
