@@ -57,12 +57,14 @@ IGNORE_NON_TESTED = [
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
 # trigger the common tests.
 TEST_FILES_WITH_NO_COMMON_TESTS = [
+    "test_modeling_bort.py",
     "test_modeling_camembert.py",
     "test_modeling_flax_bert.py",
     "test_modeling_flax_roberta.py",
     "test_modeling_mbart.py",
     "test_modeling_mt5.py",
     "test_modeling_pegasus.py",
+    "test_modeling_tf_bort.py",
     "test_modeling_tf_camembert.py",
     "test_modeling_tf_mt5.py",
     "test_modeling_tf_xlm_roberta.py",
