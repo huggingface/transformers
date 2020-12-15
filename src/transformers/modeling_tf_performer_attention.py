@@ -1,7 +1,6 @@
 from typing import Optional, Union
 import logging
 import math
-import numpy as np
 import random
 import tensorflow as tf
 
@@ -253,16 +252,19 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         else:
             return context,
 
-    def _generate_feature_matrix(self):
+    def _generate_feature_matrix(self, batch):
         dim_per_head = self.d_model // self.num_heads
         num_rows = self.num_random_features or round(dim_per_head * math.log(dim_per_head))
+
+        if not self.use_thick_features:
+            batch = 1
         
         if not self.use_orthogonal_features:
-            return tf.random.normal((num_rows, dim_per_head))
+            return tf.random.normal((batch, num_rows, dim_per_head))
         
         def get_square_block(size):
             with tf.device('/CPU:0'):
-                unstructured_block = tf.random.normal((size, size))
+                unstructured_block = tf.random.normal((batch, size, size))
                 orthog, r = tf.linalg.qr(unstructured_block)
 
             return tf.transpose(orthog)
@@ -275,7 +277,7 @@ class TFPerformerAttention(tf.keras.layers.Layer):
             q = get_square_block(dim_per_head)
             block_list.append(q[:remaining_rows])
         
-        final_matrix = tf.concat(block_list)
+        final_matrix = tf.concat(block_list, axis=1)
         
         # This option yields SMREG
         if self.regularize_feature_norms:
@@ -283,7 +285,7 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         else:
             # Hack to make the matrix columns have the norm we would expect them to have if they were sampled straight
             # from a Gaussian, instead of being all norm 1 since they went through QR decomposition
-            multiplier = tf.random.normal((num_rows, dim_per_head)).norm(dim = 1)
+            multiplier = tf.random.normal((batch, num_rows, dim_per_head)).norm(dim = 1)
             final_matrix = tf.linalg.diag(multiplier) @ final_matrix
 
         self.random_features = final_matrix
@@ -307,43 +309,6 @@ class TFPerformerAttention(tf.keras.layers.Layer):
             # Keep track of how many forward passes we do before we redraw again
             else:
                 self.calls_since_last_redraw += 1
-
-# An asymptotically fast way of making random orthogonal matrices- O(nlog(n)) vs. O(n^3) for Gram-Schmidt QR
-def _create_products_of_givens_rotations(num_rows, seed):
-    r"""Constructs a 2D-tensor which is a product of Givens random rotations.
-    Constructs a 2D-tensor of the form G_1 * ... * G_k, where G_i is a Givens
-    random rotation. The resulting tensor mimics a matrix taken uniformly at
-    random form the orthogonal group.
-    Args:
-      num_rows: number of rows/columns of the resulting 2D-tensor.
-      seed: random seed.
-    Returns:
-      The product of Givens random rotations.
-    """
-    q = np.eye(num_rows)   # Start with identity matrix
-    np.random.seed(seed)
-
-    # Each iteration, pick two random rows and a random angle between 0.0 and pi, and rotate
-    num_rotations = num_rows * int(math.ceil(math.log(float(num_rows))))     # N log N rotations
-    angles = np.random.uniform(0.0, math.pi, size=num_rotations)             # Random rotation angles
-    row_pairs = np.random.choice(num_rows, (num_rotations, 2))
-    row_pairs.sort(axis=1)  # Make sure the first row in each pair is the smaller of the two
-
-    for n, random_angle in enumerate(angles):
-        index_i, index_j = row_pairs[n]
-
-        # This is for speed as well as accuracy- without this check the resulting matrices will not be valid rotation
-        # matrices (their determinants will not be 1) since we will end up modifying the same row twice (see below)
-        if index_i == index_j:
-            continue
-
-        row_i, row_j = q[index_i], q[index_j]
-
-        new_row_i = math.cos(random_angle) * row_i + math.sin(random_angle) * row_j
-        new_row_j = -math.sin(random_angle) * row_i + math.cos(random_angle) * row_j
-        q[index_i], q[index_j] = new_row_i, new_row_j
-
-    return tf.constant(q, dtype=tf.float32)
 
 def _noncausal_numerator(q_prime, k_prime, v):
     """Computes not-normalized FAVOR noncausal attention AV.

@@ -171,13 +171,8 @@ class PerformerAttention(nn.Module):
         q = q / (self.d_model ** 0.25)
         k = k / (self.d_model ** 0.25)
 
-        W_t = self.random_features
-        if not self.use_thick_features:
-            W_t = W_t.expand_as(q)
-
-        W_t = W_t.transpose(-2, -1)
-        projected_q = q @ W_t
-        projected_k = k @ W_t
+        projected_q = q @ self.random_features
+        projected_k = k @ self.random_features
         
         # Special logic for kernels that attempt to approximate softmax
         if self.kernel_type in ('cosh', 'exp'):
@@ -226,11 +221,11 @@ class PerformerAttention(nn.Module):
         # the implied attention scores sum to 1
         if self.normalize_output:
             if self.causal:
-                d = CausalDenominator.apply(q_prime, k_prime)
+                d = CausalDenominator.apply(q_prime, k_prime).unsqueeze(-1)
             else:
                 # Equivalent to multiplying K'^T by a ones vector
                 d = q_prime @ k_prime.sum(dim=-2).unsqueeze(-1)
-            
+
             # Avoid dividing by very small numbers
             d += 2 * self.normalization_stabilizer * (torch.abs(d) <= self.normalization_stabilizer)
             output /= d
@@ -254,13 +249,11 @@ class PerformerAttention(nn.Module):
         else:
             return context,
 
-    def _generate_feature_matrix(self, batch, device):
+    def _generate_feature_matrix(self, batch_size, device):
         dim_per_head = self.d_model // self.num_heads
         num_rows = self.num_random_features or round(dim_per_head * math.log(dim_per_head))
+        batch = batch_size if self.use_thick_features else 1
 
-        if not self.use_thick_features:
-            batch = 1
-        
         if not self.use_orthogonal_features:
             return torch.randn(batch, num_rows, dim_per_head, device=device)
 
@@ -273,9 +266,9 @@ class PerformerAttention(nn.Module):
         remaining_rows = num_rows - num_full_blocks * dim_per_head
         if remaining_rows > 0:
             q = orthog_func(batch, dim_per_head, device)
-            block_list.append(q[:remaining_rows])
+            block_list.append(q[:, :remaining_rows])
         
-        final_tensor = torch.cat(block_list)
+        final_tensor = torch.cat(block_list, dim=1)
         
         # This option yields SMREG
         if self.regularize_feature_norms:
@@ -286,7 +279,12 @@ class PerformerAttention(nn.Module):
             multiplier = torch.randn(batch, num_rows, dim_per_head, device=device).norm(dim = 2)
             final_tensor = torch.diag(multiplier) @ final_tensor
 
-        self.random_features = final_tensor
+        # Add an attention head dimension
+        final_tensor.unsqueeze_(1)
+        new_shape = list(final_tensor.shape)
+        new_shape[0] = batch_size       # This is redundant if use_thick_features == True, but not otherwise
+        new_shape[1] = self.num_heads
+        self.random_features = final_tensor.expand(*new_shape).transpose(-2, -1)
     
     def _redraw_features_if_needed(self, batch, device):
         # We haven't created the projection matrix yet, let's create it
@@ -333,7 +331,7 @@ def _get_square_orthogonal_block_givens(batch, num_rows, device = None):
     Returns:
       The product of Givens random rotations.
     """
-    q = torch.eye(num_rows, device=device)      # Start with identity matrix
+    q = torch.eye(num_rows, device=device)   # Start with identity matrix
     q = q.expand(batch, num_rows, num_rows)
 
     # Compute the cosines and sines of the rotations up front
@@ -356,7 +354,7 @@ def _get_square_orthogonal_block_givens(batch, num_rows, device = None):
 
         q = random_row_pairs.view(batch, -1, 1, num_rows)     # Ungroup all the rows again
 
-    return q.squeeze()
+    return q.squeeze(-2)
 
 # Custom gradient functions
 class CausalNumerator(torch.autograd.Function):
