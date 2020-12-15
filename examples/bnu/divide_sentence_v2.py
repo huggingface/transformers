@@ -11,21 +11,32 @@ logging.basicConfig(level=logging.INFO, format='[%(threadName)-9s] %(message)s')
 
 
 def process_and_save_func(file_path: str) -> Any:
-    with open(file_path, 'r+', encoding="utf-8") as f:
-        document = f.read()
-        sentence_list = sent_tokenize(document)
-        f.seek(0)
-        for item in sentence_list:
-            f.write(item + '\n')
+    try:
+        with open(file_path, 'r+', encoding="utf-8") as f:
+            document = f.read()
+            sentence_list = sent_tokenize(document)
+            f.seek(0)
+            for item in sentence_list:
+                f.write(item + '\n')
+    except UnicodeError:
+        logging.info('{} have unicodeError'.format(file_path))
+        with open(file_path, 'r+', encoding="gkb") as f:
+            document = f.read()
+            sentence_list = sent_tokenize(document)
+            f.seek(0)
+            for item in sentence_list:
+                f.write(item + '\n')
+    finally:
+        numpy_arr = np.array([len(length) for length in sentence_list])
+        if numpy_arr.size != 0:
+            static_info = [numpy_arr.min(), numpy_arr.max(), numpy_arr.mean(), numpy_arr[numpy_arr <= 128],
+                           numpy_arr[numpy_arr > 128]]
+            gol_info_dict[file_path] = static_info
+        else:
+            logging.info("{} length is zero".format(file_path))
+        return file_path
 
-    numpy_arr = np.array([len(length) for length in sentence_list])
-    if numpy_arr.size != 0:
-        static_info = [numpy_arr.min(), numpy_arr.max(), numpy_arr.mean(), numpy_arr[numpy_arr <= 128],
-                       numpy_arr[numpy_arr > 128]]
-        gol_info_dict[file_path] = static_info
-    else:
-        logging.info("{} length is zero".format(file_path))
-    return file_path
+
 
 
 def multip_process(task: list):
