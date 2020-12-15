@@ -463,9 +463,7 @@ if __name__ == "__main__":
 
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
-    # (the dataset will be downloaded automatically from the datasets Hub). If you choose this option, and the dataset
-    # does not have validation or test splits, this script will automatically partition the train set to create the
-    # missing splits. The arguments `validation_split_percentage` and `test_split_percentage` set the ratios.
+    # (the dataset will be downloaded automatically from the datasets Hub).
     #
     # For CSV/JSON files, this script will use the column called 'text' or the first column if no column called
     # 'text' is found. You can easily tweak this behavior (see below).
@@ -493,7 +491,6 @@ if __name__ == "__main__":
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
-
     if model_args.config_name:
         config = AutoConfig.from_pretrained(model_args.config_name, cache_dir=model_args.cache_dir)
     elif model_args.model_name_or_path:
