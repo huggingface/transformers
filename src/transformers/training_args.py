@@ -51,8 +51,9 @@ class TrainingArguments:
     TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop
     itself**.
 
-    Using :class:`~transformers.HfArgumentParser` we can turn this class into argparse arguments to be able to specify
-    them on the command line.
+    Using :class:`~transformers.HfArgumentParser` we can turn this class into `argparse
+    <https://docs.python.org/3/library/argparse.html#module-argparse>`__ arguments that can be specified on the command
+    line.
 
 
 
@@ -68,10 +69,11 @@ class TrainingArguments:
             intended to be used by your training/evaluation scripts instead. See the `example scripts
             <https://github.com/huggingface/transformers/tree/master/examples>`__ for more details.
         do_eval (:obj:`bool`, `optional`):
-            Whether to run evaluation on the dev set or not. Will be set to :obj:`True` if :obj:`evaluation_strategy`
-            is different from :obj:`"no"`. This argument is not directly used by :class:`~transformers.Trainer`, it's
-            intended to be used by your training/evaluation scripts instead. See the `example scripts
-            <https://github.com/huggingface/transformers/tree/master/examples>`__ for more details.
+            Whether to run evaluation on the validation set or not. Will be set to :obj:`True` if
+            :obj:`evaluation_strategy` is different from :obj:`"no"`. This argument is not directly used by
+            :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
+            the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
+            details.
         do_predict (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to run predictions on the test set or not. This argument is not directly used by
             :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
@@ -85,7 +87,7 @@ class TrainingArguments:
                 * :obj:`"epoch"`: Evaluation is done at the end of each epoch.
 
         prediction_loss_only (:obj:`bool`, `optional`, defaults to `False`):
-            When performing evaluation and predictions, only returns the loss.
+            When performing evaluation and generating predictions, only returns the loss.
         per_device_train_batch_size (:obj:`int`, `optional`, defaults to 8):
             The batch size per GPU/TPU core/CPU for training.
         per_device_eval_batch_size (:obj:`int`, `optional`, defaults to 8):
@@ -107,11 +109,11 @@ class TrainingArguments:
         weight_decay (:obj:`float`, `optional`, defaults to 0):
             The weight decay to apply (if not zero).
         adam_beta1 (:obj:`float`, `optional`, defaults to 0.9):
-            The beta1 for the Adam optimizer.
+            The beta1 hyperparameter for the Adam optimizer.
         adam_beta2 (:obj:`float`, `optional`, defaults to 0.999):
-            The beta2 for the Adam optimizer.
+            The beta2 hyperparameter for the Adam optimizer.
         adam_epsilon (:obj:`float`, `optional`, defaults to 1e-8):
-            Epsilon for the Adam optimizer.
+            The epsilon hyperparameter for the Adam optimizer.
         max_grad_norm (:obj:`float`, `optional`, defaults to 1.0):
             Maximum gradient norm (for gradient clipping).
         num_train_epochs(:obj:`float`, `optional`, defaults to 3.0):
@@ -123,7 +125,8 @@ class TrainingArguments:
         warmup_steps (:obj:`int`, `optional`, defaults to 0):
             Number of steps used for a linear warmup from 0 to :obj:`learning_rate`.
         logging_dir (:obj:`str`, `optional`):
-            Tensorboard log directory. Will default to `runs/**CURRENT_DATETIME_HOSTNAME**`.
+            `TensorBoard <https://www.tensorflow.org/tensorboard>`__ log directory. Will default to
+            `runs/**CURRENT_DATETIME_HOSTNAME**`.
         logging_first_step (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to log and evaluate the first :obj:`global_step` or not.
         logging_steps (:obj:`int`, `optional`, defaults to 500):
@@ -138,12 +141,12 @@ class TrainingArguments:
         seed (:obj:`int`, `optional`, defaults to 42):
             Random seed for initialization.
         fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to use 16-bit (mixed) precision training (through NVIDIA apex) instead of 32-bit training.
+            Whether to use 16-bit (mixed) precision training (through NVIDIA Apex) instead of 32-bit training.
         fp16_opt_level (:obj:`str`, `optional`, defaults to 'O1'):
-            For :obj:`fp16` training, apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
-            on the `apex documentation <https://nvidia.github.io/apex/amp.html>`__.
+            For :obj:`fp16` training, Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
+            on the `Apex documentation <https://nvidia.github.io/apex/amp.html>`__.
         local_rank (:obj:`int`, `optional`, defaults to -1):
-            During distributed training, the rank of the process.
+            Rank of the process during distributed training.
         tpu_num_cores (:obj:`int`, `optional`):
             When training on TPU, the number of TPU cores (automatically passed by launcher script).
         debug (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -163,13 +166,14 @@ class TrainingArguments:
             ``Trainer`` will use the corresponding output (usually index 2) as the past state and feed it to the model
             at the next training step under the keyword argument ``mems``.
         run_name (:obj:`str`, `optional`):
-            A descriptor for the run. Notably used for wandb logging.
+            A descriptor for the run. Typically used for `wandb <https://www.wandb.com/>`_ logging.
         disable_tqdm (:obj:`bool`, `optional`):
-            Whether or not to disable the tqdm progress bars. Will default to :obj:`True` if the logging level is set
-            to warn or lower (default), :obj:`False` otherwise.
+            Whether or not to disable the tqdm progress bars and table of metrics produced by
+            :class:`~transformers.notebook.NotebookTrainingTracker` in Jupyter Notebooks. Will default to :obj:`True`
+            if the logging level is set to warn or lower (default), :obj:`False` otherwise.
         remove_unused_columns (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            If using `nlp.Dataset` datasets, whether or not to automatically remove the columns unused by the model
-            forward method.
+            If using :obj:`datasets.Dataset` datasets, whether or not to automatically remove the columns unused by the
+            model forward method.
 
             (Note that this behavior is not implemented for :class:`~transformers.TFTrainer` yet.)
         label_names (:obj:`List[str]`, `optional`):
@@ -201,9 +205,9 @@ class TrainingArguments:
               :obj:`"eval_loss"`.
             - :obj:`False` if :obj:`metric_for_best_model` is not set, or set to :obj:`"loss"` or :obj:`"eval_loss"`.
         model_parallel (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If there are more than one devices, whether to use model parallelism to distribute the model's modules
-            across devices or not.
-        ignore_data_skip (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If there is more than one device, whether to use model parallelism to distribute the model's modules across
+            devices or not.
+        ignore_skip_data (:obj:`bool`, `optional`, defaults to :obj:`False`):
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to :obj:`True`, the training will begin faster (as that skipping
             step can take a long time) but will not yield the same results as the interrupted training would have.
@@ -306,7 +310,7 @@ class TrainingArguments:
 
     fp16: bool = field(
         default=False,
-        metadata={"help": "Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit"},
+        metadata={"help": "Whether to use 16-bit (mixed) precision (through NVIDIA Apex) instead of 32-bit"},
     )
     fp16_opt_level: str = field(
         default="O1",
