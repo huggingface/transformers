@@ -886,6 +886,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (i.e., do not try to download the model).
+            use_auth_token (:obj:`str` or `bool`, `optional`):
+                Specify token to use as Bearer authorization for remote files. If true, will get token from
+                ~/.huggingface.
             revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
@@ -931,6 +934,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
+        use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
         mirror = kwargs.pop("mirror", None)
 
@@ -946,6 +950,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 resume_download=resume_download,
                 proxies=proxies,
                 local_files_only=local_files_only,
+                use_auth_token=use_auth_token,
                 revision=revision,
                 **kwargs,
             )
@@ -998,6 +1003,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     proxies=proxies,
                     resume_download=resume_download,
                     local_files_only=local_files_only,
+                    use_auth_token=use_auth_token,
                 )
             except EnvironmentError as err:
                 logger.error(err)

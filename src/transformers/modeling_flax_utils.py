@@ -110,6 +110,7 @@ class FlaxPreTrainedModel(ABC):
         proxies = kwargs.pop("proxies", None)
         # output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
+        use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
 
         # Load config if we don't provide a configuration
@@ -124,6 +125,7 @@ class FlaxPreTrainedModel(ABC):
                 resume_download=resume_download,
                 proxies=proxies,
                 local_files_only=local_files_only,
+                use_auth_token=use_auth_token,
                 revision=revision,
                 **kwargs,
             )
@@ -149,6 +151,7 @@ class FlaxPreTrainedModel(ABC):
                     proxies=proxies,
                     resume_download=resume_download,
                     local_files_only=local_files_only,
+                    use_auth_token=use_auth_token,
                 )
             except EnvironmentError as err:
                 logger.error(err)

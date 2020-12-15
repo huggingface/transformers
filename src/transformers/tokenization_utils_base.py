@@ -1648,6 +1648,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             proxies (:obj:`Dict[str, str], `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+            use_auth_token (:obj:`str` or `bool`, `optional`):
+                Specify token to use as Bearer authorization for remote files. If true, will get token from
+                ~/.huggingface.
             revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
@@ -1689,6 +1692,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         local_files_only = kwargs.pop("local_files_only", False)
+        use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", None)
 
@@ -1770,6 +1774,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                         proxies=proxies,
                         resume_download=resume_download,
                         local_files_only=local_files_only,
+                        use_auth_token=use_auth_token,
                     )
                 except requests.exceptions.HTTPError as err:
                     if "404 Client Error" in str(err):
