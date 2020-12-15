@@ -212,7 +212,9 @@ class PerformerAttention(nn.Module):
             k_prime *= mask.unsqueeze(1).unsqueeze(-1).expand_as(k_prime)
 
         if self.causal:
-            output = CausalNumerator.apply(q_prime, k_prime, v)
+            # [B, H, L, M/D] -> [L, B, H, M/D]
+            q_permuted, k_permuted, v_permuted = (x.permute(2, 0, 1, 3) for x in (q_prime, k_prime, v))
+            output = CausalNumerator.apply(q_permuted, k_permuted, v_permuted).permute(1, 2, 0, 3)
         else:
             k_prime_t = k_prime.transpose(-2, -1)
             output = q_prime @ (k_prime_t @ v)
@@ -221,7 +223,7 @@ class PerformerAttention(nn.Module):
         # the implied attention scores sum to 1
         if self.normalize_output:
             if self.causal:
-                d = CausalDenominator.apply(q_prime, k_prime).unsqueeze(-1)
+                d = CausalDenominator.apply(q_permuted, k_permuted).permute(1, 2, 0).unsqueeze(-1)
             else:
                 # Equivalent to multiplying K'^T by a ones vector
                 d = q_prime @ k_prime.sum(dim=-2).unsqueeze(-1)

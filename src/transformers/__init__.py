@@ -688,6 +688,7 @@ if is_tf_available():
     from .benchmark.benchmark_tf import TensorFlowBenchmark
     from .generation_tf_utils import tf_top_k_top_p_filtering
     from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, shape_list
+    from .modeling_tf_performer_attention import TFPerformerAttention
     from .models.albert import (
         TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFAlbertForMaskedLM,
