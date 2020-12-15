@@ -1264,7 +1264,7 @@ class Trainer:
             ignore_keys (:obj:`Lst[str]`, `optional`):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
-            metric_key_prefix (:obj:`str`, defaults to :obj:`"eval"`):
+            metric_key_prefix (:obj:`str`, `optional`, defaults to :obj:`"eval"`):
                 An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
                 "eval_bleu" if the prefix is "eval" (default)
 
@@ -1312,7 +1312,7 @@ class Trainer:
             ignore_keys (:obj:`Lst[str]`, `optional`):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
-            metric_key_prefix (:obj:`str`, defaults to :obj:`"eval"`):
+            metric_key_prefix (:obj:`str`, `optional`, defaults to :obj:`"eval"`):
                 An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
                 "eval_bleu" if the prefix is "eval" (default)
 
