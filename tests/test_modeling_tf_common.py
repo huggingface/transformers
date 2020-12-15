@@ -434,14 +434,14 @@ class TFModelTesterMixin:
                 num_labels = 2
 
             X = tf.data.Dataset.from_tensor_slices(
-                (inputs_dict, np.random.randint(0, num_labels, (self.model_tester.batch_size, 1)))
+                (inputs_dict, np.ones((self.model_tester.batch_size, self.model_tester.seq_length, num_labels, 1)))
             ).batch(1)
 
             hidden_states = main_layer(symbolic_inputs)[0]
             outputs = tf.keras.layers.Dense(num_labels, activation="softmax", name="outputs")(hidden_states)
             model = tf.keras.models.Model(inputs=symbolic_inputs, outputs=[outputs])
 
-            model.compile(loss="binary_crossentropy", optimizer="adam", metrics=["acc"])
+            model.compile(loss="binary_crossentropy", optimizer="adam", metrics=["binary_accuracy"])
             model.fit(X, epochs=1)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
