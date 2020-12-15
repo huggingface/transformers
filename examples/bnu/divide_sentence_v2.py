@@ -11,6 +11,7 @@ logging.basicConfig(level=logging.INFO, format='[%(threadName)-9s] %(message)s')
 
 
 def process_and_save_func(file_path: str) -> Any:
+    sentence_list=[]
     try:
         with open(file_path, 'r+', encoding="utf-8") as f:
             document = f.read()
