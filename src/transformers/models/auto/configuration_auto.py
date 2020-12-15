@@ -27,6 +27,7 @@ from ..blenderbot_small.configuration_blenderbot_small import (
     BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     BlenderbotSmallConfig,
 )
+from ..bort.configuration_bort import BORT_PRETRAINED_CONFIG_ARCHIVE_MAP, BortConfig
 from ..camembert.configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from ..ctrl.configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from ..deberta.configuration_deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig
@@ -76,6 +77,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BART_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BORT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MBART_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -153,6 +155,7 @@ CONFIG_MAPPING = OrderedDict(
         ("layoutlm", LayoutLMConfig),
         ("rag", RagConfig),
         ("tapas", TapasConfig),
+        ("bort", BortConfig),
     ]
 )
 
@@ -200,6 +203,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mt5", "mT5"),
         ("mpnet", "MPNet"),
         ("tapas", "TAPAS"),
+        ("bort", "BORT"),
     ]
 )
 

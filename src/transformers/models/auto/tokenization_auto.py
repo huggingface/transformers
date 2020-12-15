@@ -60,6 +60,7 @@ from .configuration_auto import (
     BertGenerationConfig,
     BlenderbotConfig,
     BlenderbotSmallConfig,
+    BortConfig,
     CamembertConfig,
     CTRLConfig,
     DebertaConfig,
@@ -103,6 +104,7 @@ if is_sentencepiece_available():
     from ..albert.tokenization_albert import AlbertTokenizer
     from ..barthez.tokenization_barthez import BarthezTokenizer
     from ..bert_generation.tokenization_bert_generation import BertGenerationTokenizer
+    from ..bort import BortTokenizer
     from ..camembert.tokenization_camembert import CamembertTokenizer
     from ..marian.tokenization_marian import MarianTokenizer
     from ..mbart.tokenization_mbart import MBartTokenizer
@@ -117,6 +119,7 @@ else:
     AlbertTokenizer = None
     BarthezTokenizer = None
     BertGenerationTokenizer = None
+    BortTokenizer = None
     CamembertTokenizer = None
     MarianTokenizer = None
     MBartTokenizer = None
@@ -133,6 +136,7 @@ if is_tokenizers_available():
     from ..bart.tokenization_bart_fast import BartTokenizerFast
     from ..barthez.tokenization_barthez_fast import BarthezTokenizerFast
     from ..bert.tokenization_bert_fast import BertTokenizerFast
+    from ..bort import BortTokenizerFast
     from ..camembert.tokenization_camembert_fast import CamembertTokenizerFast
     from ..distilbert.tokenization_distilbert_fast import DistilBertTokenizerFast
     from ..dpr.tokenization_dpr_fast import DPRQuestionEncoderTokenizerFast
@@ -162,6 +166,7 @@ else:
     BartTokenizerFast = None
     BarthezTokenizerFast = None
     BertTokenizerFast = None
+    BortTokenizerFast = None
     CamembertTokenizerFast = None
     DistilBertTokenizerFast = None
     DPRQuestionEncoderTokenizerFast = None
@@ -233,6 +238,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (MPNetConfig, (MPNetTokenizer, MPNetTokenizerFast)),
         (TapasConfig, (TapasTokenizer, None)),
         (LEDConfig, (LEDTokenizer, LEDTokenizerFast)),
+        (BortConfig, (BortTokenizer, BortTokenizerFast)),
     ]
 )
 

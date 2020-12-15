@@ -52,6 +52,15 @@ from ..bert.modeling_bert import (
 from ..bert_generation.modeling_bert_generation import BertGenerationDecoder, BertGenerationEncoder
 from ..blenderbot.modeling_blenderbot import BlenderbotForConditionalGeneration, BlenderbotModel
 from ..blenderbot_small.modeling_blenderbot_small import BlenderbotSmallForConditionalGeneration, BlenderbotSmallModel
+from ..blenderbot.modeling_blenderbot import BlenderbotForConditionalGeneration
+from ..bort.modeling_bort import (
+    BortForMaskedLM,
+    BortForMultipleChoice,
+    BortForQuestionAnswering,
+    BortForSequenceClassification,
+    BortForTokenClassification,
+    BortModel,
+)
 from ..camembert.modeling_camembert import (
     CamembertForCausalLM,
     CamembertForMaskedLM,
@@ -227,6 +236,7 @@ from .configuration_auto import (
     BertGenerationConfig,
     BlenderbotConfig,
     BlenderbotSmallConfig,
+    BortConfig,
     CamembertConfig,
     CTRLConfig,
     DebertaConfig,
@@ -311,6 +321,7 @@ MODEL_MAPPING = OrderedDict(
         (MPNetConfig, MPNetModel),
         (TapasConfig, TapasModel),
         (MarianConfig, MarianModel),
+        (BortConfig, BortModel),
     ]
 )
 
@@ -343,6 +354,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForPreTraining),
         (MPNetConfig, MPNetForMaskedLM),
         (TapasConfig, TapasForMaskedLM),
+        (BortConfig, BortForMaskedLM),
     ]
 )
 
@@ -378,6 +390,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForMaskedLM),
         (MPNetConfig, MPNetForMaskedLM),
         (TapasConfig, TapasForMaskedLM),
+        (BortConfig, BortForMaskedLM),
     ]
 )
 
@@ -425,6 +438,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForMaskedLM),
         (MPNetConfig, MPNetForMaskedLM),
         (TapasConfig, TapasForMaskedLM),
+        (BortConfig, BortForMaskedLM),
     ]
 )
 
@@ -476,6 +490,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (TransfoXLConfig, TransfoXLForSequenceClassification),
         (MPNetConfig, MPNetForSequenceClassification),
         (TapasConfig, TapasForSequenceClassification),
+        (BortConfig, BortForSequenceClassification),
     ]
 )
 
@@ -509,6 +524,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Table Question Answering mapping
         (TapasConfig, TapasForQuestionAnswering),
+        (BortConfig, BortForQuestionAnswering),
     ]
 )
 
@@ -532,6 +548,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertForTokenClassification),
         (FunnelConfig, FunnelForTokenClassification),
         (MPNetConfig, MPNetForTokenClassification),
+        (BortConfig, BortForTokenClassification),
     ]
 )
 
@@ -553,6 +570,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertForMultipleChoice),
         (FunnelConfig, FunnelForMultipleChoice),
         (MPNetConfig, MPNetForMultipleChoice),
+        (BortConfig, BortForMultipleChoice),
     ]
 )
 
