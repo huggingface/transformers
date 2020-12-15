@@ -173,29 +173,13 @@ def load_tf_weights_in_tapas(model, config, tf_checkpoint_path):
         # in case the model is TapasForSequenceClassification, we skip output_bias and output_weights
         # since these are not used for classification
         if isinstance(model, TapasForSequenceClassification):
-            if any(
-                n
-                in [
-                    "output_bias",
-                    "output_weights",
-                ]
-                for n in name
-            ):
+            if any(n in ["output_bias", "output_weights"] for n in name):
                 logger.info("Skipping {}".format("/".join(name)))
                 continue
         # in case the model is TapasModel, we skip output_bias, output_weights, output_bias_cls and output_weights_cls
         # since this model does not have MLM and NSP heads
         if isinstance(model, TapasModel):
-            if any(
-                n
-                in [
-                    "output_bias",
-                    "output_weights",
-                    "output_bias_cls",
-                    "output_weights_cls",
-                ]
-                for n in name
-            ):
+            if any(n in ["output_bias", "output_weights", "output_bias_cls", "output_weights_cls"] for n in name):
                 logger.info("Skipping {}".format("/".join(name)))
                 continue
         # if first scope name starts with "bert", change it to "tapas"
@@ -245,15 +229,7 @@ def load_tf_weights_in_tapas(model, config, tf_checkpoint_path):
                 pointer = pointer[num]
         if m_name[-11:] == "_embeddings":
             pointer = getattr(pointer, "weight")
-        elif m_name[-13:] in [
-            "_embeddings_0",
-            "_embeddings_1",
-            "_embeddings_2",
-            "_embeddings_3",
-            "_embeddings_4",
-            "_embeddings_5",
-            "_embeddings_6",
-        ]:
+        elif m_name[-13:] in [f"_embeddings_{i}" for i in range(7)]:
             pointer = getattr(pointer, "weight")
         elif m_name == "kernel":
             array = np.transpose(array)
@@ -265,7 +241,8 @@ def load_tf_weights_in_tapas(model, config, tf_checkpoint_path):
             e.args += (pointer.shape, array.shape)
             raise
         logger.info("Initialize PyTorch weight {}".format(name))
-        # added a check to see whether the array is a scalar (because bias terms in Tapas checkpoints can be scalar => should first be converted to numpy arrays)
+        # Added a check to see whether the array is a scalar (because bias terms in Tapas checkpoints can be
+        # scalar => should first be converted to numpy arrays)
         if np.isscalar(array):
             array = np.array(array)
         pointer.data = torch.from_numpy(array)
@@ -314,21 +291,19 @@ class TapasEmbeddings(nn.Module):
             position_ids = position_ids.unsqueeze(0).expand(input_shape)
             # when self.config.reset_position_index_per_cell is set to True, create relative position embeddings
             if self.config.reset_position_index_per_cell:
-                col_index = IndexMap(
-                    token_type_ids[:, :, 1], self.config.type_vocab_sizes[1], batch_dims=1
-                )  # shape (batch_size, seq_len)
-                row_index = IndexMap(
-                    token_type_ids[:, :, 2], self.config.type_vocab_sizes[2], batch_dims=1
-                )  # shape (batch_size, seq_len)
-                full_index = ProductIndexMap(col_index, row_index)  # shape (batch_size, seq_len)
 
-                first_position_per_segment = reduce_min(position_ids, full_index)[
-                    0
-                ]  # shape (max_rows * max_columns,). First absolute position for every cell
-                first_position = gather(
-                    first_position_per_segment, full_index
-                )  # ? shape (batch_size, seq_len). First absolute position of the cell for every token
-                position = torch.arange(seq_length, dtype=torch.long, device=device).unsqueeze(0)  # shape (1, seq_len)
+                # shape (batch_size, seq_len)
+                col_index = IndexMap(token_type_ids[:, :, 1], self.config.type_vocab_sizes[1], batch_dims=1)
+                # shape (batch_size, seq_len)
+                row_index = IndexMap(token_type_ids[:, :, 2], self.config.type_vocab_sizes[2], batch_dims=1)
+                # shape (batch_size, seq_len)
+                full_index = ProductIndexMap(col_index, row_index)
+                # shape (max_rows * max_columns,). First absolute position for every cell
+                first_position_per_segment = reduce_min(position_ids, full_index)[0]
+                # ? shape (batch_size, seq_len). First absolute position of the cell for every token
+                first_position = gather(first_position_per_segment, full_index)
+                # shape (1, seq_len)
+                position = torch.arange(seq_length, dtype=torch.long, device=device).unsqueeze(0)
                 position_ids = torch.min(
                     torch.as_tensor(self.config.max_position_embeddings - 1, device=device), position - first_position
                 )
@@ -359,8 +334,8 @@ class TapasSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
+                f"heads {config.num_attention_heads}"
             )
 
         self.num_attention_heads = config.num_attention_heads

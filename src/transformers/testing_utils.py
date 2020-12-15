@@ -225,10 +225,7 @@ def require_tokenizers(test_case):
 
 def require_pandas(test_case):
     """
-    Decorator marking a test that requires pandas.
-
-    These tests are skipped when pandas isn't installed.
-
+    Decorator marking a test that requires pandas. These tests are skipped when pandas isn't installed.
     """
     if not _pandas_available:
         return unittest.skip("test requires pandas")(test_case)

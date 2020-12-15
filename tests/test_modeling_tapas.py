@@ -632,7 +632,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
                 ]
             ],
             device=torch_device,
-        )  # ok
+        )
 
         self.assertTrue(torch.allclose(logits, expected_tensor, atol=TOLERANCE))
 
@@ -681,7 +681,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
                 ]
             ],
             device=torch_device,
-        )  # ok
+        )
 
         self.assertTrue(torch.allclose(logits, expected_tensor, atol=TOLERANCE))
 
@@ -708,7 +708,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
                 [-9861.6123, -9861.6123, -9861.6123, -9861.6123, -9891.01172, 146.600677],
             ],
             device=torch_device,
-        )  # ok (batch size = 2)
+        )
 
         self.assertTrue(torch.allclose(logits[:, -6:], expected_slice, atol=TOLERANCE))
 
@@ -719,7 +719,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
         expected_tensor = torch.tensor(
             [[18.8545208, -9.76614857, -6.3128891, -2.93525243], [-4.05782509, 40.0351, -5.35329962, 23.3978653]],
             device=torch_device,
-        )  # ok (batch size = 2)
+        )
 
         self.assertTrue(torch.allclose(logits_aggregation, expected_tensor, atol=TOLERANCE))
 
@@ -777,7 +777,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
 
         # test the loss
         loss = outputs.loss
-        expected_loss = torch.tensor(3.3527612686157227e-08, device=torch_device)  # ok
+        expected_loss = torch.tensor(3.3527612686157227e-08, device=torch_device)
         self.assertTrue(torch.allclose(loss, expected_loss, atol=TOLERANCE))
 
         # test the logits on the first example
@@ -797,7 +797,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
                 -10092.6006,
             ],
             device=torch_device,
-        )  # ok
+        )
 
         self.assertTrue(torch.allclose(logits[0, -9:], expected_slice, atol=TOLERANCE))
 
@@ -805,7 +805,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
         logits_aggregation = outputs.logits_aggregation
         expected_shape = torch.Size((2, 4))
         self.assertEqual(logits_aggregation.shape, expected_shape)
-        expected_slice = torch.tensor([-4.0538, 40.0304, -5.3554, 23.3965], device=torch_device)  # ok
+        expected_slice = torch.tensor([-4.0538, 40.0304, -5.3554, 23.3965], device=torch_device)
 
         self.assertTrue(torch.allclose(logits_aggregation[1, -4:], expected_slice, atol=TOLERANCE))
 
@@ -852,7 +852,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
                 ]
             ],
             device=torch_device,
-        )  # ok
+        )
 
         self.assertTrue(torch.allclose(logits, expected_tensor, atol=TOLERANCE))
 
@@ -862,7 +862,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
         self.assertEqual(logits_aggregation.shape, expected_shape)
         expected_tensor = torch.tensor(
             [[16.5659733, -3.06624889, -2.34152961, -0.970244825]], device=torch_device
-        )  # ok, PyTorch model outputs [[16.5679, -3.0668, -2.3442, -0.9674]]
+        )  # PyTorch model outputs [[16.5679, -3.0668, -2.3442, -0.9674]]
 
         self.assertTrue(torch.allclose(logits_aggregation, expected_tensor, atol=TOLERANCE))
 
@@ -883,7 +883,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
         self.assertEqual(logits.shape, expected_shape)
         expected_tensor = torch.tensor(
             [[0.795137286, 9.5572]], device=torch_device
-        )  # ok. Note that the PyTorch model outputs [[0.8057, 9.5281]]
+        )  # Note that the PyTorch model outputs [[0.8057, 9.5281]]
 
         self.assertTrue(torch.allclose(outputs.logits, expected_tensor, atol=TOLERANCE))
 
