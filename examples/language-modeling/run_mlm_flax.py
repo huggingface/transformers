@@ -134,6 +134,12 @@ class DataTrainingArguments:
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
+    validation_split_percentage: Optional[int] = field(
+        default=5,
+        metadata={
+            "help": "The percentage of the train set used as validation set in case there's no validation split"
+        },
+    )
     max_seq_length: Optional[int] = field(
         default=None,
         metadata={
@@ -473,6 +479,17 @@ if __name__ == "__main__":
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name)
+        if "validation" not in datasets.keys():
+            datasets["validation"] = load_dataset(
+                data_args.dataset_name,
+                data_args.dataset_config_name,
+                split=f"train[:{data_args.validation_split_percentage}%]",
+            )
+            datasets["train"] = load_dataset(
+                data_args.dataset_name,
+                data_args.dataset_config_name,
+                split=f"train[{data_args.validation_split_percentage}%:]",
+            )
     else:
         data_files = {}
         if data_args.train_file is not None:
@@ -608,13 +625,13 @@ if __name__ == "__main__":
         epochs.write(f"Loss: {loss}")
 
         # ======================== Evaluating ==============================
-        nb_eval_samples = len(tokenized_datasets["test"])
+        nb_eval_samples = len(tokenized_datasets["validation"])
         eval_samples_idx = jnp.arange(nb_eval_samples)
         eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
 
         eval_metrics = []
         for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
-            samples = [tokenized_datasets["test"][int(idx)] for idx in batch_idx]
+            samples = [tokenized_datasets["validation"][int(idx)] for idx in batch_idx]
             model_inputs = data_collator(samples, pad_to_multiple_of=16)
 
             # Model forward
