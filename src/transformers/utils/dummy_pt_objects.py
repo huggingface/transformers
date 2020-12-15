@@ -1867,6 +1867,45 @@ def load_tf_weights_in_t5(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_t5)
 
 
+TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TapasForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class TapasForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class TapasForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class TapasModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

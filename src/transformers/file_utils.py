@@ -216,6 +216,29 @@ except ImportError:
     _tokenizers_available = False
 
 
+try:
+    import pandas  # noqa: F401
+
+    _pandas_available = True
+
+except ImportError:
+    _pandas_available = False
+
+
+try:
+    import torch_scatter
+
+    # Check we're not importing a "torch_scatter" directory somewhere
+    _scatter_available = hasattr(torch_scatter, "__version__") and hasattr(torch_scatter, "scatter")
+    if _scatter_available:
+        logger.debug(f"Succesfully imported torch-scatter version {torch_scatter.__version__}")
+    else:
+        logger.debug("Imported a torch_scatter object but this doesn't seem to be the torch-scatter library.")
+
+except ImportError:
+    _scatter_available = False
+
+
 old_default_cache_path = os.path.join(torch_cache_home, "transformers")
 # New default cache, shared with the Datasets library
 hf_cache_home = os.path.expanduser(
@@ -325,6 +348,14 @@ def is_in_notebook():
     return _in_notebook
 
 
+def is_scatter_available():
+    return _scatter_available
+
+
+def is_pandas_available():
+    return _pandas_available
+
+
 def torch_only_method(fn):
     def wrapper(*args, **kwargs):
         if not _torch_available:
@@ -427,6 +458,13 @@ installation page: https://github.com/google/flax and follow the ones that match
 """
 
 
+# docstyle-ignore
+SCATTER_IMPORT_ERROR = """
+{0} requires the torch-scatter library but it was not found in your environment. You can install it with pip as
+explained here: https://github.com/rusty1s/pytorch_scatter.
+"""
+
+
 def requires_datasets(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_datasets_available():
@@ -479,6 +517,12 @@ def requires_protobuf(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_protobuf_available():
         raise ImportError(PROTOBUF_IMPORT_ERROR.format(name))
+
+
+def requires_scatter(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_scatter_available():
+        raise ImportError(SCATTER_IMPORT_ERROR.format(name))
 
 
 def add_start_docstrings(*docstr):
