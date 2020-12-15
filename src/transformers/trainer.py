@@ -302,7 +302,7 @@ class Trainer:
         self.sharded_dpp = False
         if args.sharded_ddp:
             if args.local_rank == -1:
-                logger.warn("Using sharded DDP only works in distributed training.")
+                raise ValueError("Using sharded DDP only works in distributed training.")
             elif not is_fairscale_available():
                 raise ImportError("Sharded DDP training requires fairscale: `pip install fairscale`.")
             else:
@@ -660,7 +660,9 @@ class Trainer:
             model = torch.nn.DataParallel(model)
 
         # Distributed training (should be after apex fp16 initialization)
-        if self.args.local_rank != -1 and not self.sharded_dpp:
+        if self.sharded_dpp:
+            model = ShardedDDP(model, self.optimizer)
+        elif self.args.local_rank != -1:
             model = torch.nn.parallel.DistributedDataParallel(
                 model,
                 device_ids=[self.args.local_rank],
@@ -673,8 +675,6 @@ class Trainer:
             )
             # find_unused_parameters breaks checkpointing as per
             # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
-        elif self.sharded_dpp:
-            model = ShardedDDP(model, self.optimizer)
 
         # Train!
         if is_torch_tpu_available():
