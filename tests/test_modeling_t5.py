@@ -610,6 +610,9 @@ class T5EncoderOnlyModelTester:
         self.scope = None
         self.is_training = is_training
 
+    def get_large_model_config(self):
+        return T5Config.from_pretrained("t5-base")
+
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
 
