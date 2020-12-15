@@ -529,13 +529,15 @@ if __name__ == "__main__":
         model = FlaxBertForMaskedLM.from_pretrained(model_args.model_name_or_path, dtype=jnp.float32, dropout_rate=0.1)
     elif model_args.config_name:
         config = AutoConfig.from_pretrained(model_args.config_name, cache_dir=model_args.cache_dir)
-        model = FlaxBertForMaskedLM(config)
-        model.init(jax.random.PRNGKey(training_args.seed), (training_args.train_batch_size, model.config.max_length))
+        model = FlaxBertForMaskedLM(
+            config, seed=training_args.seed, input_shape=(training_args.train_batch_size, model.config.max_length)
+        )
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
-        model = FlaxBertForMaskedLM(config)
-        model.init(jax.random.PRNGKey(training_args.seed), (training_args.train_batch_size, model.config.max_length))
+        model = FlaxBertForMaskedLM(
+            config, seed=training_args.seed, input_shape=(training_args.train_batch_size, model.config.max_length)
+        )
 
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(

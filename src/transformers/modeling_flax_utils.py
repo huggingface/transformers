@@ -16,7 +16,7 @@
 import os
 from abc import ABC, abstractmethod
 from pickle import UnpicklingError
-from typing import Dict, Optional, Union
+from typing import Dict, Set, Tuple, Union
 
 import flax.linen as nn
 import jax
@@ -57,7 +57,7 @@ class FlaxPreTrainedModel(ABC):
         self,
         config: PretrainedConfig,
         module: nn.Module,
-        params: Optional[Dict] = None,
+        input_shape: Tuple = (1, 1),
         seed: int = 0,
         dtype: jnp.dtype = jnp.float32,
     ):
@@ -73,8 +73,17 @@ class FlaxPreTrainedModel(ABC):
 
         # Those are public as their type is generic to every derived classes.
         self.key = PRNGKey(seed)
-        self.params = params
         self.dtype = dtype
+
+        # randomely initialized parameters
+        random_params = self.init(self.key, input_shape)
+
+        # save required_params as set
+        self._required_params = set(self.flatten_frozen_state(random_params).keys())
+        self.params = random_params
+
+    def init(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> Dict:
+        raise NotImplementedError(f"init method has to be implemented for {self}")
 
     @property
     def config(self) -> PretrainedConfig:
@@ -83,6 +92,24 @@ class FlaxPreTrainedModel(ABC):
     @property
     def module(self) -> nn.Module:
         return self._module
+
+    @property
+    def params(self) -> Union[Dict, FrozenDict]:
+        return self._params
+
+    @property
+    def required_params(self) -> Set:
+        return self._required_params
+
+    @params.setter
+    def params(self, params: Dict):
+        param_keys = set(self.flatten_frozen_state(params).keys())
+        if len(self.required_params - param_keys) > 0:
+            raise ValueError(
+                "Some parameters are missing. Make sure that `params` include the following "
+                f"parameters {self.required_params - param_keys}"
+            )
+        self._params = params
 
     @staticmethod
     @abstractmethod
@@ -194,51 +221,54 @@ class FlaxPreTrainedModel(ABC):
                 )
 
         # init random models
-        rnd_model = cls(config, *model_args, **model_kwargs)
-        rnd_model.init(rnd_model.key, (1, 1))
+        model = cls(config, *model_args, **model_kwargs)
 
         # if model is base model only use model_prefix key
-        if cls.base_model_prefix not in dict(rnd_model.params) and cls.base_model_prefix in state:
+        if cls.base_model_prefix not in dict(model.params) and cls.base_model_prefix in state:
             state = state[cls.base_model_prefix]
 
         # flatten dicts
         state_dict = cls.flatten_frozen_state(state)
-        rnd_dict = cls.flatten_frozen_state(rnd_model.params)
+        rnd_dict = cls.flatten_frozen_state(model.params)
 
-        missing_keys = set(rnd_dict.keys()) - set(state_dict.keys())
-        unexpected_keys = set(state_dict.keys()) - set(rnd_dict.keys())
+        missing_keys = model.required_params - set(state_dict.keys())
+        unexpected_keys = set(state_dict.keys()) - model.required_params
 
+        # add missing keys as random parameters
         for missing_key in missing_keys:
             state[missing_key] = rnd_dict[missing_key]
 
         if len(unexpected_keys) > 0:
             logger.warning(
                 f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "
-                f"initializing {rnd_model.__class__.__name__}: {unexpected_keys}\n"
-                f"- This IS expected if you are initializing {rnd_model.__class__.__name__} from the checkpoint of a model trained on another task "
+                f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
+                f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
                 f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).\n"
-                f"- This IS NOT expected if you are initializing {rnd_model.__class__.__name__} from the checkpoint of a model that you expect "
+                f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
                 f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
             )
         else:
-            logger.info(f"All model checkpoint weights were used when initializing {rnd_model.__class__.__name__}.\n")
+            logger.info(f"All model checkpoint weights were used when initializing {model.__class__.__name__}.\n")
 
         if len(missing_keys) > 0:
             logger.warning(
-                f"Some weights of {rnd_model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
                 f"and are newly initialized: {missing_keys}\n"
                 f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
         else:
             logger.info(
-                f"All the weights of {rnd_model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
+                f"All the weights of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
                 f"If your task is similar to the task the model of the checkpoint was trained on, "
-                f"you can already use {rnd_model.__class__.__name__} for predictions without further training."
+                f"you can already use {model.__class__.__name__} for predictions without further training."
             )
 
         # unflatten back to flax style
         state = unflatten_dict({tuple(k.split(".")): v for k, v in state.items()})
-        return cls(config, state, *model_args, **model_kwargs)
+
+        # set correct parameters
+        model.params = state
+        return model
 
     @staticmethod
     def flatten_frozen_state(state):

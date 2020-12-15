@@ -80,7 +80,8 @@ class FlaxModelTesterMixin:
                 pt_model = pt_model_class(config).eval()
 
                 fx_state = convert_state_dict_from_pt(model_class, pt_model.state_dict(), config)
-                fx_model = model_class(config, fx_state, dtype=jnp.float32)
+                fx_model = model_class(config, dtype=jnp.float32)
+                fx_model.params = fx_state
 
                 pt_inputs = {k: torch.tensor(v.tolist()) for k, v in inputs_dict.items()}
 
@@ -108,7 +109,6 @@ class FlaxModelTesterMixin:
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
                 model = model_class(config)
-                model.init(model.key, inputs_dict["input_ids"].shape)
 
                 outputs = model(**inputs_dict)
 
@@ -126,7 +126,6 @@ class FlaxModelTesterMixin:
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
                 model = model_class(config)
-                model.init(model.key, inputs_dict["input_ids"].shape)
 
                 @jax.jit
                 def model_jitted(input_ids, attention_mask=None, token_type_ids=None):

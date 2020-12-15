@@ -20,6 +20,7 @@ import numpy as np
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+from flax.core.frozen_dict import FrozenDict
 from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
@@ -437,7 +438,7 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
 
         return input_ids, attention_mask, token_type_ids, position_ids
 
-    def init(self, rng: jax.random.PRNGKey, input_shape: Tuple):
+    def init(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
             jnp.zeros(input_shape, dtype="i4"), None, None, None
         )
@@ -445,7 +446,7 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        self.params = self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids)["params"]
+        return self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids)["params"]
 
     @staticmethod
     def convert_from_pytorch(pt_state: Dict, config: BertConfig) -> Dict:
@@ -539,7 +540,9 @@ class FlaxBertModel(FlaxBertPreTrainedModel):
     Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
     """
 
-    def __init__(self, config: BertConfig, state: dict = None, seed: int = 0, dtype: jnp.dtype = jnp.float32):
+    def __init__(
+        self, config: BertConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
+    ):
         module = FlaxBertModule(
             vocab_size=config.vocab_size,
             hidden_size=config.hidden_size,
@@ -552,9 +555,10 @@ class FlaxBertModel(FlaxBertPreTrainedModel):
             dropout_rate=config.hidden_dropout_prob,
             hidden_act=config.hidden_act,
             dtype=dtype,
+            **kwargs,
         )
 
-        super().__init__(config, module, state, seed)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
@@ -639,7 +643,7 @@ class FlaxBertModule(nn.Module):
 
 class FlaxBertForMaskedLM(FlaxBertPreTrainedModel):
     def __init__(
-        self, config: BertConfig, state: dict = None, seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
+        self, config: BertConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
     ):
         module = FlaxBertForMaskedLMModule(
             vocab_size=config.vocab_size,
@@ -654,7 +658,7 @@ class FlaxBertForMaskedLM(FlaxBertPreTrainedModel):
             **kwargs,
         )
 
-        super().__init__(config, module, state, seed)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
     def __call__(
         self,

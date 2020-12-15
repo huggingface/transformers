@@ -19,6 +19,7 @@ import numpy as np
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+from flax.core.frozen_dict import FrozenDict
 from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
@@ -476,7 +477,7 @@ class FlaxRobertaPreTrainedModel(FlaxPreTrainedModel):
 
         return jax_state
 
-    def init(self, rng: jax.random.PRNGKey, input_shape: Tuple):
+    def init(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
         input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
             jnp.zeros(input_shape, dtype="i4"), None, None, None
         )
@@ -484,7 +485,7 @@ class FlaxRobertaPreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        self.params = self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids)["params"]
+        return self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids)["params"]
 
     def _check_inputs(self, input_ids, attention_mask, token_type_ids, position_ids):
         if token_type_ids is None:
@@ -511,7 +512,14 @@ class FlaxRobertaModel(FlaxRobertaPreTrainedModel):
     Kaiser and Illia Polosukhin.
     """
 
-    def __init__(self, config: RobertaConfig, state: dict = None, seed: int = 0, dtype: jnp.dtype = jnp.float32):
+    def __init__(
+        self,
+        config: RobertaConfig,
+        input_shape: Tuple = (1, 1),
+        seed: int = 0,
+        dtype: jnp.dtype = jnp.float32,
+        **kwargs
+    ):
         module = FlaxRobertaModule(
             vocab_size=config.vocab_size,
             hidden_size=config.hidden_size,
@@ -524,9 +532,10 @@ class FlaxRobertaModel(FlaxRobertaPreTrainedModel):
             intermediate_size=config.intermediate_size,
             dropout_rate=config.hidden_dropout_prob,
             dtype=dtype,
+            **kwargs,
         )
 
-        super().__init__(config, module, state, seed)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(
