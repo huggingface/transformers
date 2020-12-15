@@ -131,7 +131,7 @@ def convert_bort_checkpoint_to_pytorch(bort_checkpoint_path: str, pytorch_dump_f
         "intermediate_size": predefined_args["hidden_size"],
         "layer_norm_eps": predefined_args["layer_norm_eps"],
         "max_position_embeddings": predefined_args["max_length"],
-        "model_type": "bert",
+        "model_type": "bort",
         "num_attention_heads": predefined_args["num_heads"],
         "num_hidden_layers": predefined_args["num_layers"],
         "pad_token_id": 1,  # 2 = BERT, 1 = RoBERTa
