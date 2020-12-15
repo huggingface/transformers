@@ -33,8 +33,9 @@ class TFTrainingArguments(TrainingArguments):
     TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop
     itself**.
 
-    Using :class:`~transformers.HfArgumentParser` we can turn this class into argparse arguments to be able to specify
-    them on the command line.
+    Using :class:`~transformers.HfArgumentParser` we can turn this class into `argparse
+    <https://docs.python.org/3/library/argparse.html#module-argparse>`__ arguments that can be specified on the command
+    line.
 
     Parameters:
         output_dir (:obj:`str`):
@@ -43,16 +44,26 @@ class TFTrainingArguments(TrainingArguments):
             If :obj:`True`, overwrite the content of the output directory. Use this to continue training if
             :obj:`output_dir` points to a checkpoint directory.
         do_train (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to run training or not.
-        do_eval (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to run evaluation on the dev set or not.
+            Whether to run training or not. This argument is not directly used by :class:`~transformers.Trainer`, it's
+            intended to be used by your training/evaluation scripts instead. See the `example scripts
+            <https://github.com/huggingface/transformers/tree/master/examples>`__ for more details.
+        do_eval (:obj:`bool`, `optional`):
+            Whether to run evaluation on the validation set or not. Will be set to :obj:`True` if
+            :obj:`evaluation_strategy` is different from :obj:`"no"`. This argument is not directly used by
+            :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
+            the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
+            details.
         do_predict (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to run predictions on the test set or not.
+            Whether to run predictions on the test set or not. This argument is not directly used by
+            :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
+            the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
+            details.
         evaluation_strategy (:obj:`str` or :class:`~transformers.trainer_utils.EvaluationStrategy`, `optional`, defaults to :obj:`"no"`):
             The evaluation strategy to adopt during training. Possible values are:
 
                 * :obj:`"no"`: No evaluation is done during training.
                 * :obj:`"steps"`: Evaluation is done (and logged) every :obj:`eval_steps`.
+                * :obj:`"epoch"`: Evaluation is done at the end of each epoch.
 
         per_device_train_batch_size (:obj:`int`, `optional`, defaults to 8):
             The batch size per GPU/TPU core/CPU for training.
@@ -70,8 +81,12 @@ class TFTrainingArguments(TrainingArguments):
             The initial learning rate for Adam.
         weight_decay (:obj:`float`, `optional`, defaults to 0):
             The weight decay to apply (if not zero).
+        adam_beta1 (:obj:`float`, `optional`, defaults to 0.9):
+            The beta1 hyperparameter for the Adam optimizer.
+        adam_beta2 (:obj:`float`, `optional`, defaults to 0.999):
+            The beta2 hyperparameter for the Adam optimizer.
         adam_epsilon (:obj:`float`, `optional`, defaults to 1e-8):
-            Epsilon for the Adam optimizer.
+            The epsilon hyperparameter for the Adam optimizer.
         max_grad_norm (:obj:`float`, `optional`, defaults to 1.0):
             Maximum gradient norm (for gradient clipping).
         num_train_epochs(:obj:`float`, `optional`, defaults to 3.0):
@@ -82,7 +97,8 @@ class TFTrainingArguments(TrainingArguments):
         warmup_steps (:obj:`int`, `optional`, defaults to 0):
             Number of steps used for a linear warmup from 0 to :obj:`learning_rate`.
         logging_dir (:obj:`str`, `optional`):
-            Tensorboard log directory. Will default to `runs/**CURRENT_DATETIME_HOSTNAME**`.
+            `TensorBoard <https://www.tensorflow.org/tensorboard>`__ log directory. Will default to
+            `runs/**CURRENT_DATETIME_HOSTNAME**`.
         logging_first_step (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to log and evaluate the first :obj:`global_step` or not.
         logging_steps (:obj:`int`, `optional`, defaults to 500):
@@ -97,10 +113,10 @@ class TFTrainingArguments(TrainingArguments):
         seed (:obj:`int`, `optional`, defaults to 42):
             Random seed for initialization.
         fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to use 16-bit (mixed) precision training (through NVIDIA apex) instead of 32-bit training.
+            Whether to use 16-bit (mixed) precision training (through NVIDIA Apex) instead of 32-bit training.
         fp16_opt_level (:obj:`str`, `optional`, defaults to 'O1'):
-            For :obj:`fp16` training, apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
-            on the `apex documentation <https://nvidia.github.io/apex/amp.html>`__.
+            For :obj:`fp16` training, Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
+            on the `Apex documentation <https://nvidia.github.io/apex/amp.html>`__.
         local_rank (:obj:`int`, `optional`, defaults to -1):
             During distributed training, the rank of the process.
         tpu_num_cores (:obj:`int`, `optional`):
