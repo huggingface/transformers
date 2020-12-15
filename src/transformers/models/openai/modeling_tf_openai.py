@@ -767,7 +767,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The GPT2 Model transformer with a sequence classification head on top (linear layer).
+    The OpenAI GPT Model transformer with a sequence classification head on top (linear layer).
 
     :class:`~transformers.TFOpenAIGPTForSequenceClassification` uses the last token in order to do the classification,
     as other causal models (e.g. GPT-2) do.
