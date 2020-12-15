@@ -74,7 +74,7 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
 
     index_of_eos = (prev_output_tokens.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
     decoder_start_tokens = prev_output_tokens.gather(1, index_of_eos).squeeze()
-    prev_output_tokens[:, 1:] = prev_output_tokens[:, :-1]
+    prev_output_tokens[:, 1:] = prev_output_tokens[:, :-1].clone()
     prev_output_tokens[:, 0] = decoder_start_tokens
 
     return prev_output_tokens
