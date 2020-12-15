@@ -78,7 +78,7 @@ class OptimizationFTest(unittest.TestCase):
                 local_variables = strategy.experimental_local_results(gradient_placeholder)
                 local_variables[0].assign(grad1)
                 local_variables[1].assign(grad2)
-                if parse(tf.version.VERSION).release >= (2, 2, 0):
+                if version.parse(tf.version.VERSION) >= version.parse("2.2"):
                     strategy.run(accumulate_on_replica, args=(gradient_placeholder,))
                 else:
                     strategy.experimental_run_v2(accumulate_on_replica, args=(gradient_placeholder,))
