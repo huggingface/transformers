@@ -574,7 +574,7 @@ class TFTrainer:
 
                     if (
                         self.args.eval_steps > 0
-                        and self.args.evaluate_strategy == EvaluationStrategy.STEPS
+                        and self.args.evaluation_strategy == EvaluationStrategy.STEPS
                         and self.global_step % self.args.eval_steps == 0
                     ):
                         self.evaluate()
