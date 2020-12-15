@@ -401,7 +401,7 @@ def eval_step(params, batch):
 
     # Hide away tokens which doesn't participate in the optimization
     token_mask = jnp.where(targets > 0, 1.0, 0.0)
-    logits = model(**batch, params=params, train=False)
+    logits = model(**batch, params=params, train=False)[0]
 
     return compute_metrics(logits, targets, token_mask)
 
