@@ -495,7 +495,7 @@ class TFBartPretrainedModel(TFPreTrainedModel):
 class TFPretrainedBartModel(TFBartPretrainedModel):
     def __init_subclass__(self):
         warnings.warn(
-            "The class `TFPretrainedBartModel` has been depreciated, please use `TFBartPretrainedModel` instead.",
+            "The class `TFPretrainedBartModel` has been deprecated, please use `TFBartPretrainedModel` instead.",
             FutureWarning,
         )
 
@@ -640,7 +640,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
         training=False,
         **kwargs,
     ):
-        r"""
+        """
         Args:
             input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
@@ -927,7 +927,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
         all_self_attns = ()
         present_key_values = ()
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arhidden_statesiv.org/abs/1909.11556 for description)
+            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if inputs["output_hidden_states"]:
                 all_hidden_states += (hidden_states,)
             dropout_probability = random.uniform(0, 1)
