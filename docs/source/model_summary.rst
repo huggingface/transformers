@@ -788,6 +788,25 @@ to adapt to downstream tasks.
 
 The two models RAG-Token and RAG-Sequence are available for generation.
 
+BORT
+-----------------------------------------------------------------------------------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=bort">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-bort-blueviolet">
+   </a>
+   <a href="model_doc/bort.html">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-bort-blueviolet">
+   </a>
+
+`Optimal Subarchitecture Extraction For BERT <https://arxiv.org/abs/2010.10499>`_, Adrian de Wynter and Daniel J. Perry
+
+We extract an optimal subset of architectural parameters for the BERT architecture from Devlin et al. (2018) by
+applying recent breakthroughs in algorithms for neural architecture search. This optimal subset, which we refer to as
+"Bort", is demonstrably smaller, having an effective (that is, not counting the embedding layer) size of 5.5% the
+original BERT-large architecture, and 16% of the net size.
+
 More technical aspects
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
