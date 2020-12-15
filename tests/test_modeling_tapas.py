@@ -681,7 +681,7 @@ class TapasModelIntegrationTest(unittest.TestCase):
                 ]
             ],
             device=torch_device,
-        ) # ok 
+        )  # ok
 
         self.assertTrue(torch.allclose(logits, expected_tensor, atol=TOLERANCE))
 
@@ -811,8 +811,8 @@ class TapasModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_question_answering_head_strong_supervision(self):
-        # note that nielsr/tapas-base-finetuned-wikisql-supervised should correspond to tapas_wikisql_sqa_inter_masklm_base_reset
-        model = TapasForQuestionAnswering.from_pretrained("nielsr/tapas-base-finetuned-wikisql-supervised").to(
+        # note that google/tapas-base-finetuned-wikisql-supervised should correspond to tapas_wikisql_sqa_inter_masklm_base_reset
+        model = TapasForQuestionAnswering.from_pretrained("google/tapas-base-finetuned-wikisql-supervised").to(
             torch_device
         )
 

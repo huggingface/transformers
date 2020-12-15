@@ -112,7 +112,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--reset_position_index_per_cell",
         default=False,
-        type=bool,
+        action="store_true",
         help="Whether to use relative position embeddings or not. Defaults to True.",
     )
     parser.add_argument(
