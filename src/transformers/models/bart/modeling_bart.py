@@ -1506,3 +1506,9 @@ class BartForQuestionAnswering(BartPretrainedModel):
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
+
+
+class BartForCausalLM(BartPretrainedModel):
+    def __init__(self,config):
+        super().__init__(config)
+    
