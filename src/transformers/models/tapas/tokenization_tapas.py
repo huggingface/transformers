@@ -600,27 +600,19 @@ class TapasTokenizer(PreTrainedTokenizer):
         assert isinstance(table, pd.DataFrame), "Table must be of type pd.DataFrame"
 
         # Input type checking for clearer error
-        assert (
-            queries is None
-            or isinstance(queries, str)
-            or (
-                isinstance(queries, (list, tuple))
-                and (
-                    len(queries) == 0
-                    or (
-                        isinstance(queries[0], str)
-                        or (
-                            isinstance(queries[0], (list, tuple))
-                            and (len(queries[0]) == 0 or isinstance(queries[0][0], str))
-                        )
-                    )
-                )
-            )
-        ), (
-            "queries input must of type `str` (single example), `List[str]` (batch or single pretokenized example) "
-            "or `List[List[str]]` (batch of pretokenized examples)."
-        )
+        valid_query = False
 
+        # Check that query has a valid type
+        if queries is None or isinstance(queries, str):
+            valid_query = True
+        elif isinstance(queries, (list, tuple)):
+            if len(queries) == 0 or isinstance(queries[0], str):
+                valid_query = True
+
+        if not valid_query:
+            raise ValueError(
+                "queries input must of type `str` (single example), `List[str]` (batch or single pretokenized example). "
+            )
         is_batched = isinstance(queries, (list, tuple))
 
         if is_batched:

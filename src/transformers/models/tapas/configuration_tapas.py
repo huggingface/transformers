@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-TAPAS configuration. Adds additional hyperparameters to the configuration of BERT.
+TAPAS configuration. Based on the BERT configuration with added parameters.
 
 Hyperparameters are taken from run_task_main.py and hparam_utils.py of the original implementation. URLS:
 
@@ -67,7 +67,7 @@ class TapasConfig(PretrainedConfig):
         max_position_embeddings (:obj:`int`, `optional`, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_sizes (:obj:`List[int]`, `optional`, defaults to [3, 256, 256, 2, 256, 256, 10]):
+        type_vocab_sizes (:obj:`List[int]`, `optional`, defaults to :obj:`[3, 256, 256, 2, 256, 256, 10]`):
             The vocabulary sizes of the :obj:`token_type_ids` passed when calling :class:`~transformers.TapasModel`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
