@@ -86,7 +86,7 @@ class OptimizationFTest(unittest.TestCase):
         @tf.function
         def apply_grad():
             with strategy.scope():
-                if parse(tf.version.VERSION).release >= (2, 2, 0):
+                if version.parse(tf.version.VERSION) >= version.parse("2.2"):
                     strategy.run(apply_on_replica)
                 else:
                     strategy.experimental_run_v2(apply_on_replica)
