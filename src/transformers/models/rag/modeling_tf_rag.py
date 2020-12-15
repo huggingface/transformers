@@ -19,8 +19,6 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import tensorflow as tf
-from tensorflow import Tensor
-from tensorflow.keras.layers import Dense, LayerNormalization
 
 from ...activations_tf import ACT2FN
 from ...configuration_utils import PretrainedConfig
@@ -33,14 +31,11 @@ from ...file_utils import (
 from ...generation_tf_utils import *  # this is needed since we adjust _generate_no_beam and _generate_with_beam to TFRag
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPast, TFSeq2SeqLMOutput
 from ...modeling_tf_utils import (
-    TFCausalLanguageModelingLoss,  input_processing, # TOFIX for 4.1.0; TOFIX not sure if we should use this
+    TFCausalLanguageModelingLoss,  input_processing,
 )
 from ...modeling_tf_utils import (
     DUMMY_INPUTS,
     TFPreTrainedModel,
-    TFSharedEmbeddings,
-    TFWrappedEmbeddings,
-    # cast_bool_to_primitive, # TOFIX - delete for master after 15 Dec
     keras_serializable,
     shape_list,
 )
@@ -237,7 +232,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
     """
     config_class = RagConfig
     base_model_prefix = "rag"
-    authorized_missing_keys = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     @classmethod
     def from_pretrained_question_encoder_generator(
@@ -1429,6 +1424,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         # if there are different sentences lengths in the batch, some batches have to be padded
         min_sent_length = tf.math.reduce_min(sent_lengths)
         max_sent_length = tf.math.reduce_max(sent_lengths)
+
         if min_sent_length != max_sent_length:
             assert pad_token_id is not None, "`Pad_token_id` has to be defined if batches have different lengths"
             # finished sents are filled with pad_token
