@@ -206,7 +206,7 @@ class HfApi:
 
     def model_list(self) -> List[ModelInfo]:
         """
-        Get the public list of all the models on huggingface, including the community models
+        Get the public list of all the models on huggingface.co
         """
         path = "{}/api/models".format(self.endpoint)
         r = requests.get(path)
