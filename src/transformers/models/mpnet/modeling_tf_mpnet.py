@@ -237,9 +237,11 @@ class TFMPNetSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        assert (
-            config.hidden_size % config.num_attention_heads == 0
-        ), f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention heads ({config.num_attention_heads})"
+        if config.hidden_size % config.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number "
+                f"of attention heads ({config.num_attention_heads})"
+            )
 
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
@@ -288,6 +290,7 @@ class TFMPNetSelfAttention(tf.keras.layers.Layer):
             attention_scores += position_bias
 
         if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in TFMPNetModel call() function)
             attention_scores = attention_scores + attention_mask
 
         attention_probs = tf.nn.softmax(attention_scores, axis=-1)
