@@ -29,6 +29,15 @@ class BertGenerationTokenizer:
         requires_sentencepiece(self)
 
 
+class BortTokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+
 class CamembertTokenizer:
     def __init__(self, *args, **kwargs):
         requires_sentencepiece(self)
