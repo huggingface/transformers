@@ -216,7 +216,7 @@ class FlaxPreTrainedModel(ABC):
 
             >>> from transformers import BertConfig, FlaxBertModel
             >>> # Download model and configuration from huggingface.co and cache.
-            >>> model = FlaxBertModel.from_pretrained('bert-base-uncased')
+            >>> model = FlaxBertModel.from_pretrained('bert-base-cased')
             >>> # Model was saved using `save_pretrained('./test/saved_model/')` (for example purposes, not runnable).
             >>> model = FlaxBertModel.from_pretrained('./test/saved_model/')
             >>> # Loading from a PyTorch checkpoint file instead of a PyTorch model (slower, for example purposes, not runnable).
