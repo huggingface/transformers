@@ -116,6 +116,7 @@ CONFIG_MAPPING = OrderedDict(
         # Add configs here
         ("led", LEDConfig),
         ("blenderbot-small", BlenderbotSmallConfig),
+        ("bort", BortConfig),
         ("retribert", RetriBertConfig),
         ("mt5", MT5Config),
         ("t5", T5Config),
@@ -155,7 +156,6 @@ CONFIG_MAPPING = OrderedDict(
         ("layoutlm", LayoutLMConfig),
         ("rag", RagConfig),
         ("tapas", TapasConfig),
-        ("bort", BortConfig),
     ]
 )
 
@@ -164,6 +164,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         # Add full (and cased) model names here
         ("led", "LED"),
         ("blenderbot-small", "BlenderbotSmall"),
+        ("bort", "BORT"),
         ("retribert", "RetriBERT"),
         ("t5", "T5"),
         ("mobilebert", "MobileBERT"),
@@ -203,7 +204,6 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mt5", "mT5"),
         ("mpnet", "MPNet"),
         ("tapas", "TAPAS"),
-        ("bort", "BORT"),
     ]
 )
 
