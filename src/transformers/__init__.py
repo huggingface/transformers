@@ -152,6 +152,7 @@ _import_structure = {
         "BlenderbotSmallConfig",
         "BlenderbotSmallTokenizer",
     ],
+    "models.bort": ["BortConfig"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
@@ -255,6 +256,7 @@ if is_sentencepiece_available():
     _import_structure["models.albert"].append("AlbertTokenizer")
     _import_structure["models.barthez"].append("BarthezTokenizer")
     _import_structure["models.bert_generation"].append("BertGenerationTokenizer")
+    _import_structure["models.bort"].append("BortTokenizer")
     _import_structure["models.camembert"].append("CamembertTokenizer")
     _import_structure["models.marian"].append("MarianTokenizer")
     _import_structure["models.mbart"].append("MBartTokenizer")
@@ -279,6 +281,7 @@ if is_tokenizers_available():
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
+    _import_structure["models.bort"].append("BortTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
     _import_structure["models.distilbert"].append("DistilBertTokenizerFast")
     _import_structure["models.dpr"].extend(
@@ -448,6 +451,17 @@ if is_torch_available():
             "BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST",
             "BlenderbotSmallForConditionalGeneration",
             "BlenderbotSmallModel",
+        ]
+    )
+    _import_structure["models.bort"].extend(
+        [
+            "BORT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BortModel",
+            "BortForMaskedLM",
+            "BortForSequenceClassification",
+            "BortForMultipleChoice",
+            "BortForTokenClassification",
+            "BortForQuestionAnswering",
         ]
     )
     _import_structure["models.camembert"].extend(
@@ -851,7 +865,6 @@ if is_tf_available():
             "TFAutoModelWithLMHead",
         ]
     )
-<<<<<<< HEAD
     _import_structure["models.bart"].extend(["TFBartForConditionalGeneration", "TFBartModel", "TFBartPretrainedModel"])
     _import_structure["models.bert"].extend(
         [
@@ -869,74 +882,21 @@ if is_tf_available():
             "TFBertModel",
             "TFBertPreTrainedModel",
         ]
-=======
-    from .models.bert import (
-        BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        BertForMaskedLM,
-        BertForMultipleChoice,
-        BertForNextSentencePrediction,
-        BertForPreTraining,
-        BertForQuestionAnswering,
-        BertForSequenceClassification,
-        BertForTokenClassification,
-        BertLayer,
-        BertLMHeadModel,
-        BertModel,
-        BertPreTrainedModel,
-        load_tf_weights_in_bert,
-    )
-    from .models.bert_generation import (
-        BertGenerationDecoder,
-        BertGenerationEncoder,
-        load_tf_weights_in_bert_generation,
-    )
-    from .models.blenderbot import BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST, BlenderbotForConditionalGeneration
-    from .models.bort import (
-        BORT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        BortForMaskedLM,
-        BortForMultipleChoice,
-        BortForQuestionAnswering,
-        BortForSequenceClassification,
-        BortForTokenClassification,
-        BortModel,
-    )
-    from .models.camembert import (
-        CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        CamembertForCausalLM,
-        CamembertForMaskedLM,
-        CamembertForMultipleChoice,
-        CamembertForQuestionAnswering,
-        CamembertForSequenceClassification,
-        CamembertForTokenClassification,
-        CamembertModel,
-    )
-    from .models.ctrl import (
-        CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
-        CTRLForSequenceClassification,
-        CTRLLMHeadModel,
-        CTRLModel,
-        CTRLPreTrainedModel,
-    )
-    from .models.deberta import (
-        DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
-        DebertaForSequenceClassification,
-        DebertaModel,
-        DebertaPreTrainedModel,
-    )
-    from .models.distilbert import (
-        DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        DistilBertForMaskedLM,
-        DistilBertForMultipleChoice,
-        DistilBertForQuestionAnswering,
-        DistilBertForSequenceClassification,
-        DistilBertForTokenClassification,
-        DistilBertModel,
-        DistilBertPreTrainedModel,
->>>>>>> init: include BORT imports
     )
     _import_structure["models.blenderbot"].extend(["TFBlenderbotForConditionalGeneration", "TFBlenderbotModel"])
     _import_structure["models.blenderbot_small"].extend(
         ["TFBlenderbotSmallForConditionalGeneration", "TFBlenderbotSmallModel"]
+    )
+    _import_structure["models.bort"].extend(
+        [
+            "TF_BORT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFBortModel",
+            "TFBortForMaskedLM",
+            "TFBortForSequenceClassification",
+            "TFBortForTokenClassification",
+            "TFBortForMultipleChoice",
+            "TFBortForQuestionAnswering",
+        ]
     )
     _import_structure["models.camembert"].extend(
         [
@@ -1295,6 +1255,7 @@ if TYPE_CHECKING:
         BlenderbotSmallConfig,
         BlenderbotSmallTokenizer,
     )
+    from .models.bort import BORT_PRETRAINED_CONFIG_ARCHIVE_MAP, BortConfig
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
@@ -1401,6 +1362,7 @@ if TYPE_CHECKING:
         from .models.albert import AlbertTokenizer
         from .models.barthez import BarthezTokenizer
         from .models.bert_generation import BertGenerationTokenizer
+        from .models.bort import BortTokenizer
         from .models.camembert import CamembertTokenizer
         from .models.marian import MarianTokenizer
         from .models.mbart import MBartTokenizer
@@ -1419,6 +1381,7 @@ if TYPE_CHECKING:
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
+        from .models.bort import BortTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.distilbert import DistilBertTokenizerFast
         from .models.dpr import DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast
@@ -1570,6 +1533,15 @@ if TYPE_CHECKING:
             BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST,
             BlenderbotSmallForConditionalGeneration,
             BlenderbotSmallModel,
+        )
+        from .models.bort import (
+            BORT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BortForMaskedLM,
+            BortForMultipleChoice,
+            BortForQuestionAnswering,
+            BortForSequenceClassification,
+            BortForTokenClassification,
+            BortModel,
         )
         from .models.camembert import (
             CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -1927,6 +1899,15 @@ if TYPE_CHECKING:
         )
         from .models.blenderbot import TFBlenderbotForConditionalGeneration, TFBlenderbotModel
         from .models.blenderbot_small import TFBlenderbotSmallForConditionalGeneration, TFBlenderbotSmallModel
+        from .models.bort import (
+            TF_BORT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFBortForMaskedLM,
+            TFBortForMultipleChoice,
+            TFBortForQuestionAnswering,
+            TFBortForSequenceClassification,
+            TFBortForTokenClassification,
+            TFBortModel,
+        )
         from .models.camembert import (
             TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFCamembertForMaskedLM,

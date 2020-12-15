@@ -48,7 +48,7 @@ from ..blenderbot.modeling_tf_blenderbot import TFBlenderbotForConditionalGenera
 from ..blenderbot_small.modeling_tf_blenderbot_small import (
     TFBlenderbotSmallForConditionalGeneration,
     TFBlenderbotSmallModel,
-from ..blenderbot.modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration
+)
 from ..bort.modeling_tf_bort import (
     TFBortForMaskedLM,
     TFBortForMultipleChoice,

@@ -103,7 +103,7 @@ and conversion utilities for the following models:
 7. :doc:`BlenderbotSmall <model_doc/blenderbot_small>` (from Facebook) released with the paper `Recipes for building an
    open-domain chatbot <https://arxiv.org/abs/2004.13637>`__ by Stephen Roller, Emily Dinan, Naman Goyal, Da Ju, Mary
    Williamson, Yinhan Liu, Jing Xu, Myle Ott, Kurt Shuster, Eric M. Smith, Y-Lan Boureau, Jason Weston.
-8. :doc:`BORT <model_doc/blenderbot>` (from Alexa) released with the paper `Optimal Subarchitecture Extraction For BERT
+8. :doc:`BORT <model_doc/bort>` (from Alexa) released with the paper `Optimal Subarchitecture Extraction For BERT
    <https://arxiv.org/abs/2010.10499>`__ by Adrian de Wynter and Daniel J. Perry.
 9. :doc:`CamemBERT <model_doc/camembert>` (from Inria/Facebook/Sorbonne) released with the paper `CamemBERT: a Tasty
    French Language Model <https://arxiv.org/abs/1911.03894>`__ by Louis Martin*, Benjamin Muller*, Pedro Javier Ortiz
@@ -222,6 +222,8 @@ TensorFlow and/or Flax.
 |            BART             |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |            BERT             |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
++-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
+|            BORT             |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |       Bert Generation       |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
