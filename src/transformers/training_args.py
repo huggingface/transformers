@@ -214,7 +214,7 @@ class TrainingArguments:
         fp16_backend (:obj:`str`, `optional`, defaults to :obj:`"auto"`):
             The backend to use for mixed precision training. Must be one of :obj:`"auto"`, :obj:`"amp"` or
             :obj:`"apex"`. :obj:`"auto"` will use AMP or APEX depending on the PyTorch version detected, while the
-            other choices will force one particular backend.
+            other choices will force the requested backend.
     """
 
     output_dir: str = field(
