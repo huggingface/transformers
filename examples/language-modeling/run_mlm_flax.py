@@ -568,6 +568,11 @@ if __name__ == "__main__":
 
     # Create learning rate scheduler
     # warmup_steps = 0 causes the Flax optimizer to return NaNs; warmup_steps = 1 is functionally equivalent.
+    if training_args.warmup_steps == 0:
+        logger.warning(
+            "Having warmup_steps = 0 causes the Flax optimizer to return NaNs. Using warmup_steps = 1"
+            " instead to signal no warmup."
+        )
     lr_scheduler_fn = create_learning_rate_scheduler(
         base_learning_rate=training_args.learning_rate, warmup_steps=min(training_args.warmup_steps, 1)
     )
