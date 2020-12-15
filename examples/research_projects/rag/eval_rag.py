@@ -96,7 +96,7 @@ def evaluate_batch_retrieval(args, rag_model, questions):
     )["input_ids"].to(args.device)
 
     question_enc_outputs = rag_model.rag.question_encoder(retriever_input_ids)
-    question_enc_pool_output = question_enc_outputs.pooler_output
+    question_enc_pool_output = question_enc_outputs[0]
 
     result = rag_model.retriever(
         retriever_input_ids,
