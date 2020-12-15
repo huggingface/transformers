@@ -196,6 +196,7 @@ logger = logging.get_logger(__name__)
 
 TOKENIZER_MAPPING = OrderedDict(
     [
+        (BortConfig, (BortTokenizer, BortTokenizerFast)),
         (RetriBertConfig, (RetriBertTokenizer, RetriBertTokenizerFast)),
         (T5Config, (T5Tokenizer, T5TokenizerFast)),
         (MT5Config, (MT5Tokenizer, MT5TokenizerFast)),
