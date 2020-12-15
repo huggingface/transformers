@@ -303,6 +303,8 @@ class Trainer:
         if args.sharded_ddp:
             if args.local_rank == -1:
                 logger.warn("Using sharded DDP only works in distributed training.")
+            elif not is_fairscale_available():
+                raise ImportError("Sharded DDP training requires fairscale: `pip install fairscale`.")
             else:
                 self.sharded_dpp = True
 
