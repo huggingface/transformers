@@ -1305,14 +1305,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             # get decoder inputs from shifting lm labels to the right
             inputs["decoder_input_ids"] = self._shift_right(inputs["labels"])
 
-        # If decoding with past key value states, only the last tokens
-        # should be given as an input
-        if inputs["past_key_values"] is not None:
-            if inputs["decoder_input_ids"] is not None:
-                inputs["decoder_input_ids"] = inputs["decoder_input_ids"][:, -1:]
-            if inputs["decoder_inputs_embeds"] is not None:
-                inputs["decoder_inputs_embeds"] = inputs["decoder_inputs_embeds"][:, -1:]
-
         # Decode
         decoder_outputs = self.decoder(
             inputs["decoder_input_ids"],

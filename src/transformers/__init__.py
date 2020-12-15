@@ -717,7 +717,7 @@ if is_tf_available():
         TFAutoModelForTokenClassification,
         TFAutoModelWithLMHead,
     )
-    from .models.bart import TFBartForConditionalGeneration, TFBartModel
+    from .models.bart import TFBartForConditionalGeneration, TFBartModel, TFBartPretrainedModel
     from .models.bert import (
         TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFBertEmbeddings,
