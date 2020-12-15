@@ -164,6 +164,7 @@ from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBert
 from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
 from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
 from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
+from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
 from .models.transfo_xl import (
     TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     TransfoXLConfig,
@@ -604,6 +605,13 @@ if is_torch_available():
         T5Model,
         T5PreTrainedModel,
         load_tf_weights_in_t5,
+    )
+    from .models.tapas import (
+        TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TapasForMaskedLM,
+        TapasForQuestionAnswering,
+        TapasForSequenceClassification,
+        TapasModel,
     )
     from .models.transfo_xl import (
         TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
