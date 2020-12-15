@@ -143,7 +143,7 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         
         # If the sequence length is short enough that FAVOR+ would use considerably more time and/or memory than just
         # using softmax attention, use softmax. This works because FAVOR+ is an unbiased estimator of softmax attention.
-        m = round(dim_per_head * math.log(dim_per_head))  # m is the number of random features
+        m = self.num_random_features or round(dim_per_head * math.log(dim_per_head))
         if self.should_fallback_to_softmax(q_length, m, self.training):
             scores = q @ tf.linalg.matrix_transpose(k) / (dim ** 0.5)
             
@@ -255,7 +255,7 @@ class TFPerformerAttention(tf.keras.layers.Layer):
 
     def _generate_feature_matrix(self):
         dim_per_head = self.d_model // self.num_heads
-        num_rows = round(dim_per_head * math.log(dim_per_head))
+        num_rows = self.num_random_features or round(dim_per_head * math.log(dim_per_head))
         
         if not self.use_orthogonal_features:
             return tf.random.normal((num_rows, dim_per_head))

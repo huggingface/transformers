@@ -14,7 +14,7 @@ from .modeling_utils import (
 
 KERNEL_CALLABLES = {
     'cosh': lambda x, h: torch.cat((torch.exp(h + x), torch.exp(h - x)), dim=-1),
-    'exp': lambda x, h: torch.exp(h + x), # Default
+    'exp': lambda x, h: torch.exp(h + x),  # Default
     'elu': lambda x: F.elu(x) + 1,
     'relu': F.relu
 }
@@ -99,7 +99,8 @@ class PerformerAttention(nn.Module):
     
     def redraw_features_now(self):
         device = self.random_features.device
-        self._generate_feature_matrix(device)
+        batch = self.random_features.shape[0]
+        self._generate_feature_matrix(batch, device)
         
         if self.training and self.redraw_verbose:
             logging.info("PerformerAttention: Just redrew random features.")
@@ -142,7 +143,7 @@ class PerformerAttention(nn.Module):
         
         # If the sequence length is short enough that FAVOR+ would use considerably more time and/or memory than just
         # using softmax attention, use softmax. This works because FAVOR+ is an unbiased estimator of softmax attention.
-        m = round(dim_per_head * math.log(dim_per_head))    # m is the number of random features
+        m = self.num_random_features or round(dim_per_head * math.log(dim_per_head))
         if self.should_fallback_to_softmax(q_length, m, self.training):
             scores = q @ k.transpose(-2, -1) / (dim ** 0.5)
             
@@ -255,7 +256,7 @@ class PerformerAttention(nn.Module):
 
     def _generate_feature_matrix(self, batch, device):
         dim_per_head = self.d_model // self.num_heads
-        num_rows = round(dim_per_head * math.log(dim_per_head))
+        num_rows = self.num_random_features or round(dim_per_head * math.log(dim_per_head))
 
         if not self.use_thick_features:
             batch = 1
@@ -263,6 +264,8 @@ class PerformerAttention(nn.Module):
         if not self.use_orthogonal_features:
             return torch.randn(batch, num_rows, dim_per_head, device=device)
 
+        # The Givens rotation algorithm currently only supports matrices with an even number of rows/columns.
+        # This should be fine for all widely used Transformer models, but we can use QR decomposition as a backup.
         num_full_blocks = num_rows // dim_per_head
         orthog_func = _get_square_orthogonal_block_givens if dim_per_head % 2 == 0 else _get_square_orthogonal_block_qr
         block_list = [orthog_func(batch, dim_per_head, device) for _ in range(num_full_blocks)]
@@ -369,10 +372,7 @@ class CausalNumerator(torch.autograd.Function):
             """
         result = []
         sums = torch.zeros_like(torch.einsum("ijk,ijl->ijkl", k_prime[0], v[0]))
-        ctx.save_for_backward(sums)
-        ctx.save_for_backward(q_prime)
-        ctx.save_for_backward(k_prime)
-        ctx.save_for_backward(v)
+        ctx.save_for_backward(sums, q_prime, k_prime, v)
 
         for index in range(q_prime.shape[0]):
             sums = sums + torch.einsum("ijk,ijl->ijkl", k_prime[index], v[index])
@@ -386,9 +386,7 @@ class CausalNumerator(torch.autograd.Function):
         gr_sums, q_prime, k_prime, v = ctx.saved_tensors
 
         grads = torch.zeros_like(torch.einsum("ijk,ijl->ijkl", k_prime[0], v[0]))
-        q_grads = []
-        k_grads = []
-        v_grads = []
+        q_grads, k_grads, v_grads = [], [], []
 
         for i in range(q_prime.shape[0] - 1, -1, -1):
             q_grads.append(
@@ -416,9 +414,7 @@ class CausalDenominator(torch.autograd.Function):
 
         result = []
         sums = torch.zeros_like(k_prime[0])
-        ctx.save_for_backward(sums)
-        ctx.save_for_backward(q_prime)
-        ctx.save_for_backward(k_prime)
+        ctx.save_for_backward(sums, q_prime, k_prime)
 
         for index in range(q_prime.shape[0]):
             sums = sums + k_prime[index]
@@ -432,8 +428,7 @@ class CausalDenominator(torch.autograd.Function):
         gr_sums, q_prime, k_prime = ctx.saved_tensors
 
         k_grad = torch.zeros_like(k_prime[0])
-        q_grads = []
-        k_grads = []
+        q_grads, k_grads = [], []
 
         for i in range(q_prime.shape[0] - 1, -1, -1):
             q_grads.append(

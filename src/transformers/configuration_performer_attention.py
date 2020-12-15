@@ -38,6 +38,9 @@ class PerformerAttentionConfig:
             rows of the implicit attention map sum to 1.
         normalization_stabilizer (:obj:`float`, `optional`, defaults to 1e-6):
             Stabilizer term used when normalizing the output to avoid dividing by very small numbers.
+        num_random_features (:obj:`int`, `optional`, defaults to None):
+            The dimensionality of the random feature vectors to use. When None, the dimensionality is set to
+            D * log(D), where D is the dimensionality of each attention head.
         use_thick_features (:obj:`bool`, `optional`, defaults to False):
             Whether to generate a random feature tensor that has a batch dimension.
         use_orthogonal_features (:obj:`bool`, `optional`, defaults to True):
@@ -81,6 +84,7 @@ class PerformerAttentionConfig:
     normalize_output: bool = True
     normalization_stabilizer: float = 1e-6
 
+    num_random_features: Optional[int] = None
     use_thick_features: bool = False
     use_orthogonal_features: bool = True
     use_qkv_linear_layers: bool = True
