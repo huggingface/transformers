@@ -14,7 +14,7 @@
 
 import unittest
 
-from packaging.version import parse
+from packaging import version
 
 from transformers import is_tf_available
 from transformers.testing_utils import require_tf
