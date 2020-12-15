@@ -211,6 +211,10 @@ class TrainingArguments:
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to :obj:`True`, the training will begin faster (as that skipping
             step can take a long time) but will not yield the same results as the interrupted training would have.
+        fp16_backend (:obj:`str`, `optional`, defaults to :obj:`"auto"`):
+            The backend to use for mixed precision training. Must be one of :obj:`"auto"`, :obj:`"amp"` or
+            :obj:`"apex"`. :obj:`"auto"` will use AMP or APEX depending on the PyTorch version detected, while the
+            other choices will force the requested backend.
     """
 
     output_dir: str = field(
@@ -377,6 +381,10 @@ class TrainingArguments:
         metadata={
             "help": "When resuming training, whether or not to skip the first epochs and batches to get to the same training data."
         },
+    )
+    fp16_backend: str = field(
+        default="auto",
+        metadata={"help": "The backend to be used for mixed precision. Should be one of 'auto', 'amp' or 'apex'."},
     )
 
     def __post_init__(self):
