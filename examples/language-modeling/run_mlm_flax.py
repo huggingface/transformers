@@ -413,7 +413,7 @@ def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndar
     if samples_to_remove != 0:
         samples_idx = samples_idx[:-samples_to_remove]
     sections_split = nb_samples // batch_size
-    batch_idx = jnp.split(samples_idx, sections_split)
+    batch_idx = np.split(samples_idx, sections_split)
     return batch_idx
 
 
@@ -525,9 +525,9 @@ if __name__ == "__main__":
 
     def tokenize_function(examples):
         # Remove empty lines
-        examples["text"] = [line for line in examples["text"] if len(line) > 0 and not line.isspace()]
+        examples = [line for line in examples if len(line) > 0 and not line.isspace()]
         return tokenizer(
-            examples["text"],
+            examples,
             return_special_tokens_mask=True,
             padding=padding,
             truncation=True,
@@ -536,9 +536,10 @@ if __name__ == "__main__":
 
     tokenized_datasets = datasets.map(
         tokenize_function,
+        input_columns=[text_column_name],
         batched=True,
         num_proc=data_args.preprocessing_num_workers,
-        remove_columns=[text_column_name],
+        remove_columns=column_names,
         load_from_cache_file=not data_args.overwrite_cache,
     )
 
@@ -566,8 +567,9 @@ if __name__ == "__main__":
     ).create(model.params)
 
     # Create learning rate scheduler
+    # warmup_steps = 0 causes the Flax optimizer to return NaNs; warmup_steps = 1 is functionally equivalent.
     lr_scheduler_fn = create_learning_rate_scheduler(
-        base_learning_rate=training_args.learning_rate, warmup_steps=training_args.warmup_steps
+        base_learning_rate=training_args.learning_rate, warmup_steps=min(training_args.warmup_steps, 1)
     )
 
     # Create parallel version of the training and evaluation steps
