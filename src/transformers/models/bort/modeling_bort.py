@@ -61,6 +61,16 @@ class BortModel(BertModel):
     """
     This class overrides :class:`~transformers.BertModel`. Please check the superclass for the appropriate
     documentation alongside usage examples.
+
+    Examples::
+        >>> from transformers import BortModel, BortTokenizer
+
+        >>> model = BortModel.from_pretrained("bort")
+        >>> tokenizer = BortTokenizer.from_pretrained("bort")
+
+        >>> inputs = tokenizer.encode_plus("The eastern endpoint of the canal is the Hubertusbrunnen.", return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> hidden_states = outputs.last_hidden_state
     """
 
     config_class = BortConfig
@@ -74,6 +84,20 @@ class BortForMaskedLM(BertForMaskedLM):
     """
     This class overrides :class:`~transformers.BertForMaskedLM`. Please check the superclass for the appropriate
     documentation alongside usage examples.
+
+    Examples::
+        >>> from transformers import BortForMaskedLM, BortTokenizer
+        >>> import torch
+
+        >>> model = BortForMaskedLM.from_pretrained("bort")
+        >>> tokenizer = BortTokenizer.from_pretrained("bort")
+
+        >>> inputs = tokenizer("The Nymphenburg Palace is <mask>.", return_tensors="pt")
+        >>> labels = tokenizer("The Nymphenburg Palace is beautiful.", return_tensors="pt")["input_ids"]
+
+        >>> outputs = model(**inputs, labels=labels)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
     """
 
     config_class = BortConfig
@@ -90,6 +114,20 @@ class BortForSequenceClassification(BertForSequenceClassification):
     """
     This class overrides :class:`~transformers.BertForSequenceClassification`. Please check the superclass for the
     appropriate documentation alongside usage examples.
+
+    Examples::
+        >>> from transformers import BortForSequenceClassification, BortTokenizer
+        >>> import torch
+
+        >>> model = BortForSequenceClassification.from_pretrained("bort")
+        >>> tokenizer = BortTokenizer.from_pretrained("bort")
+
+        >>> inputs = tokenizer("The Nymphenburg Palace is beautiful.", return_tensors="pt")
+        >>> labels = torch.tensor([1]).unsqueeze(0)  # Batch size 1
+
+        >>> outputs = model(**inputs, labels=labels)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
     """
 
     config_class = BortConfig
@@ -106,6 +144,25 @@ class BortForMultipleChoice(BertForMultipleChoice):
     """
     This class overrides :class:`~transformers.BertForMultipleChoice`. Please check the superclass for the appropriate
     documentation alongside usage examples.
+
+    Examples::
+        >>> from transformers import BortForMultipleChoice, BortTokenizer
+        >>> import torch
+
+        >>> model = BortForMultipleChoice.from_pretrained("bort")
+        >>> tokenizer = BortTokenizer.from_pretrained("bort")
+
+        >>> prompt = "The Nymphenburg Palace is a:"
+        >>> choice0 = "Baroque palace."
+        >>> choice1 = "Gothic palace."  # no!
+        >>> labels = torch.tensor(0).unsqueeze(0)  # it is a beautiful Baroque palace
+
+        >>> encoding = tokenizer([[prompt, prompt], [choice0, choice1]], return_tensors='pt', padding=True)
+        >>> outputs = model(**{k: v.unsqueeze(0) for k,v in encoding.items()}, labels=labels)  # batch size is 1
+
+        >>> # the linear classifier still needs to be trained
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
     """
 
     config_class = BortConfig
@@ -122,6 +179,20 @@ class BortForTokenClassification(BertForTokenClassification):
     """
     This class overrides :class:`~transformers.BertForTokenClassification`. Please check the superclass for the
     appropriate documentation alongside usage examples.
+
+    Examples::
+        >>> from transformers import BortForTokenClassification, BortTokenizer
+        >>> import torch
+
+        >>> model = BortForTokenClassification.from_pretrained("bort")
+        >>> tokenizer = BortTokenizer.from_pretrained("bort")
+
+        >>> inputs = tokenizer("The Nymphenburg Palace in Munich.", return_tensors="pt")
+        >>> labels = torch.tensor([1] * inputs["input_ids"].size(1)).unsqueeze(0)  # Batch size 1
+
+        >>> outputs = model(**inputs, labels=labels)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
     """
 
     config_class = BortConfig
@@ -138,6 +209,23 @@ class BortForQuestionAnswering(BertForQuestionAnswering):
     """
     This class overrides :class:`~transformers.BertForQuestionAnswering`. Please check the superclass for the
     appropriate documentation alongside usage examples.
+
+    Examples::
+        >>> from transformers import BortForQuestionAnswering, BortTokenizer
+        >>> import torch
+
+        >>> model = BortForQuestionAnswering.from_pretrained("bort")
+        >>> tokenizer = BortTokenizer.from_pretrained("bort")
+
+        >>> question, text = "Where is Nymphenburg Palace?", "Nymphenburg Palace is located in Munich"
+        >>> inputs = tokenizer(question, text, return_tensors='pt')
+        >>> start_positions = torch.tensor([1])
+        >>> end_positions = torch.tensor([6])
+
+        >>> outputs = model(**inputs, start_positions=start_positions, end_positions=end_positions)
+        >>> loss = outputs.loss
+        >>> start_scores = outputs.start_logits
+        >>> end_scores = outputs.end_logits
     """
 
     config_class = BortConfig

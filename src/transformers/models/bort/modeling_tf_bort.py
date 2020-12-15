@@ -80,6 +80,17 @@ class TFBortModel(TFBertModel):
     """
     This class overrides :class:`~transformers.TFBertModel`. Please check the superclass for the appropriate
     documentation alongside usage examples.
+
+    Examples::
+        >>> from transformers import TFBortModel, BortTokenizer
+
+        >>> model = TFBortModel.from_pretrained("bort")
+        >>> tokenizer = BortTokenizer.from_pretrained("bort")
+
+        >>> inputs = tokenizer.encode_plus("The eastern endpoint of the canal is the Hubertusbrunnen.", return_tensors="tf")
+
+        >>> outputs = model(**inputs)
+        >>> hidden_states = outputs.last_hidden_state
     """
 
     config_class = BortConfig
@@ -93,6 +104,20 @@ class TFBortForMaskedLM(TFBertForMaskedLM):
     """
     This class overrides :class:`~transformers.TFBertForMaskedLM`. Please check the superclass for the appropriate
     documentation alongside usage examples.
+
+    Examples::
+        >>> from transformers import TFBortForMaskedLM, BortTokenizer
+        >>> import tensorflow as tf
+
+        >>> model = TFBortForMaskedLM.from_pretrained("bort")
+        >>> tokenizer = BortTokenizer.from_pretrained("bort")
+
+        >>> inputs = tokenizer("The Nymphenburg Palace is <mask>.", return_tensors="tf")
+        >>> labels = tokenizer("The Nymphenburg Palace is beautiful.", return_tensors="tf")["input_ids"]
+
+        >>> outputs = model(**inputs, labels=labels)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
     """
 
     config_class = BortConfig
@@ -109,6 +134,20 @@ class TFBortForSequenceClassification(TFBertForSequenceClassification):
     """
     This class overrides :class:`~transformers.TFBertForSequenceClassification`. Please check the superclass for the
     appropriate documentation alongside usage examples.
+
+    Examples::
+        >>> from transformers import TFBortForSequenceClassification, BortTokenizer
+        >>> import tensorflow as tf
+
+        >>> model = TFBortForSequenceClassification.from_pretrained("bort")
+        >>> tokenizer = BortTokenizer.from_pretrained("bort")
+
+        >>> inputs = tokenizer("The Nymphenburg Palace is beautiful.", return_tensors="tf")
+        >>> inputs["labels"] = tf.reshape(tf.constant(1), (-1, 1)) # Batch size 1
+
+        >>> outputs = model(inputs)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
     """
 
     config_class = BortConfig
@@ -125,6 +164,21 @@ class TFBortForTokenClassification(TFBertForTokenClassification):
     """
     This class overrides :class:`~transformers.TFBertForTokenClassification`. Please check the superclass for the
     appropriate documentation alongside usage examples.
+
+    Examples::
+        >>> from transformers import TFBortForTokenClassification, BortTokenizer
+        >>> import tensorflow as tf
+
+        >>> model = TFBortForTokenClassification.from_pretrained("bort")
+        >>> tokenizer = BortTokenizer.from_pretrained("bort")
+
+        >>> inputs = tokenizer("The Nymphenburg Palace in Munich.", return_tensors="tf")
+        >>> input_ids = inputs["input_ids"]
+        >>> inputs["labels"] = tf.reshape(tf.constant([1] * tf.size(input_ids).numpy()), (-1, tf.size(input_ids))) # Batch size 1
+
+        >>> outputs = model(inputs)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
     """
 
     config_class = BortConfig
@@ -141,6 +195,24 @@ class TFBortForMultipleChoice(TFBertForMultipleChoice):
     """
     This class overrides :class:`~transformers.TFBertForMultipleChoice`. Please check the superclass for the
     appropriate documentation alongside usage examples.
+
+    Examples::
+        >>> from transformers import TFBortForMultipleChoice, BortTokenizer
+        >>> import tensorflow as tf
+
+        >>> model = TFBortForMultipleChoice.from_pretrained("bort")
+        >>> tokenizer = BortTokenizer.from_pretrained("bort")
+
+        >>> prompt = "The Nymphenburg Palace is a:"
+        >>> choice0 = "Baroque palace."
+        >>> choice1 = "Gothic palace."  # no!
+
+        >>> encoding = tokenizer([[prompt, prompt], [choice0, choice1]], return_tensors='tf', padding=True)
+        >>> inputs = {k: tf.expand_dims(v, 0) for k, v in encoding.items()}
+        >>> outputs = model(inputs)  # batch size is 1
+
+        >>> # the linear classifier still needs to be trained
+        >>> logits = outputs.logits
     """
 
     config_class = BortConfig
@@ -157,6 +229,22 @@ class TFBortForQuestionAnswering(TFBertForQuestionAnswering):
     """
     This class overrides :class:`~transformers.TFBertForQuestionAnswering`. Please check the superclass for the
     appropriate documentation alongside usage examples.
+
+    Examples::
+        >>> from transformers import TFBortForQuestionAnswering, BortTokenizer
+        >>> import tensorflow as tf
+
+        >>> model = TFBortForQuestionAnswering.from_pretrained("bort")
+        >>> tokenizer = BortTokenizer.from_pretrained("bort")
+
+        >>> question, text = "Where is Nymphenburg Palace?", "Nymphenburg Palace is located in Munich"
+        >>> input_dict = tokenizer(question, text, return_tensors='tf')
+        >>> outputs = model(input_dict)
+        >>> start_logits = outputs.start_logits
+        >>> end_logits = outputs.end_logits
+
+        >>> all_tokens = tokenizer.convert_ids_to_tokens(input_dict["input_ids"].numpy()[0])
+        >>> answer = ' '.join(all_tokens[tf.math.argmax(start_logits, 1)[0] : tf.math.argmax(end_logits, 1)[0]+1])
     """
 
     config_class = BortConfig
