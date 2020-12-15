@@ -623,9 +623,9 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         core_out = tf.transpose(core_out, perm=(1, 0, 2))
 
         if inputs["output_hidden_states"]:
-            # Add last layer and transpose to library standard shape [bsz, len, hidden_dim]
-            hids.append(core_out)
+            # Transpose to library standard shape [bsz, len, hidden_dim] and add last layer
             hids = tuple(tf.transpose(t, perm=(1, 0, 2)) for t in hids)
+            hids = hids + (core_out,)
         else:
             hids = None
         if inputs["output_attentions"]:
