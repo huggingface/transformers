@@ -430,10 +430,9 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             with self.subTest(f"{tokenizer.__class__.__name__}"):
                 table = self.get_table(tokenizer, length=0)
 
-                # new_toks = ["[ABC]", "[DEF]"]  # TODO(thom) add this one back when Rust toks are ready: , "GHI IHG"]
                 new_toks = [AddedToken("[ABC]", normalized=False), AddedToken("[DEF]", normalized=False)]
                 tokenizer.add_tokens(new_toks)
-                input = "[ABC][DEF][ABC][DEF]"  # TODO(thom) add back cf above: "[ABC] [DEF] [ABC] GHI IHG [DEF]"
+                input = "[ABC][DEF][ABC][DEF]"
                 if self.space_between_special_tokens:
                     output = "[ABC] [DEF] [ABC] [DEF]"
                 else:
@@ -982,54 +981,6 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Do the same test as modeling common.
                 self.assertIn(0, output["token_type_ids"][0])
 
-    # TODO: Check if require_torch is the best to test for numpy here ... Maybe move to require_flax when available
-    @require_torch
-    @slow
-    def test_np_encode_plus_sent_to_model(self):
-        from transformers import MODEL_MAPPING, TOKENIZER_MAPPING
-
-        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(MODEL_MAPPING, TOKENIZER_MAPPING)
-
-        tokenizer = self.get_tokenizer()
-        if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
-            return
-
-        config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
-        config = config_class()
-
-        if config.is_encoder_decoder or config.pad_token_id is None:
-            return
-
-        # Build sequence
-        first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
-        table = self.get_table(tokenizer, length=0)
-        sequence = " ".join(first_ten_tokens)
-        encoded_sequence = tokenizer.encode_plus(table, sequence, return_tensors="np")
-        batch_encoded_sequence = tokenizer.batch_encode_plus(table, [sequence, sequence], return_tensors="np")
-
-        # TODO: add forward through JAX/Flax when PR is merged
-        # This is currently here to make flake8 happy !
-        if encoded_sequence is None:
-            raise ValueError("Cannot convert list to numpy tensor on  encode_plus()")
-
-        if batch_encoded_sequence is None:
-            raise ValueError("Cannot convert list to numpy tensor on  batch_encode_plus()")
-
-        if self.test_rust_tokenizer:
-            fast_tokenizer = self.get_rust_tokenizer()
-            encoded_sequence_fast = fast_tokenizer.encode_plus(table, sequence, return_tensors="np")
-            batch_encoded_sequence_fast = fast_tokenizer.batch_encode_plus(
-                table, [sequence, sequence], return_tensors="np"
-            )
-
-            # TODO: add forward through JAX/Flax when PR is merged
-            # This is currently here to make flake8 happy !
-            if encoded_sequence_fast is None:
-                raise ValueError("Cannot convert list to numpy tensor on  encode_plus() (fast)")
-
-            if batch_encoded_sequence_fast is None:
-                raise ValueError("Cannot convert list to numpy tensor on  batch_encode_plus() (fast)")
-
     @require_torch
     @slow
     def test_torch_encode_plus_sent_to_model(self):
@@ -1093,7 +1044,6 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
         table = pd.DataFrame.from_dict(data)
 
-        # TODO: Should update this in the future
         tokenizer = TapasTokenizer.from_pretrained("lysandre/tapas-temporary-repo", model_max_length=512)
 
         for i in range(12):
@@ -1180,8 +1130,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
         table = pd.DataFrame.from_dict(data)
 
-        # TODO: Should update this in the future
-        tokenizer = TapasTokenizer.from_pretrained("lysandre/tapas-temporary-repo", model_max_length=512)
+        tokenizer = TapasTokenizer.from_pretrained("google/tapas-base-finetuned-wtq", model_max_length=512)
 
         # fmt: off
         expected_results = {'input_ids':[101,2043,2001,8226,15091,2141,1029,102,5889,2287,2193,1997,5691,3058,1997,4182,8226,15091,5179,6584,2324,2285,3699,14720,4487,6178,9488,3429,5187,2340,2281,3326,2577,18856,7828,3240,5354,6353,1020,2089,3777],'attention_mask':[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],'token_type_ids':[[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[1,1,0,0,0,0,0],[1,2,0,0,0,0,0],[1,3,0,0,0,0,0],[1,3,0,0,0,0,0],[1,3,0,0,0,0,0],[1,4,0,0,0,0,0],[1,4,0,0,0,0,0],[1,4,0,0,0,0,0],[1,1,1,0,0,0,0],[1,1,1,0,0,0,0],[1,2,1,0,2,2,0],[1,3,1,0,3,1,0],[1,4,1,0,2,2,0],[1,4,1,0,2,2,0],[1,4,1,0,2,2,0],[1,1,2,0,0,0,0],[1,1,2,0,0,0,0],[1,1,2,0,0,0,0],[1,1,2,0,0,0,0],[1,2,2,0,1,3,0],[1,3,2,0,1,3,0],[1,4,2,0,3,1,0],[1,4,2,0,3,1,0],[1,4,2,0,3,1,0],[1,1,3,0,0,0,0],[1,1,3,0,0,0,0],[1,1,3,0,0,0,0],[1,1,3,0,0,0,0],[1,2,3,0,3,1,0],[1,3,3,0,2,2,0],[1,4,3,0,1,3,0],[1,4,3,0,1,3,0],[1,4,3,0,1,3,0]]}  # noqa: E231
@@ -1218,8 +1167,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         query = "what were the drivers names?"
         table = pd.DataFrame.from_records(data[1:], columns=data[0])
 
-        # TODO: Will update when moving to Google namespace
-        tokenizer = TapasTokenizer.from_pretrained("lysandre/tapas-temporary-repo", model_max_length=512)
+        tokenizer = TapasTokenizer.from_pretrained("google/tapas-base-finetuned-wtq", model_max_length=512)
         model_inputs = tokenizer(table, query, padding="max_length")
 
         input_ids = model_inputs["input_ids"]

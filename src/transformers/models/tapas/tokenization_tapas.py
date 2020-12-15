@@ -55,51 +55,51 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "nielsr/tapas-base-finetuned-sqa": "https://huggingface.co/nielsr/tapas-base-finetuned-sqa/resolve/main/vocab.txt",
-        "nielsr/tapas-base-finetuned-wtq": "https://huggingface.co/nielsr/tapas-base-finetuned-wtq/resolve/main/vocab.txt",
-        "nielsr/tapas-base-finetuned-wikisql-supervised": "https://huggingface.co/nielsr/tapas-base-finetuned-wikisql-supervised/resolve/main/vocab.txt",
-        "nielsr/tapas-base-finetuned-tabfact": "https://huggingface.co/nielsr/tapas-base-finetuned-tabfact/resolve/main/vocab.txt",
+        "google/tapas-base-finetuned-sqa": "https://huggingface.co/google/tapas-base-finetuned-sqa/resolve/main/vocab.txt",
+        "google/tapas-base-finetuned-wtq": "https://huggingface.co/google/tapas-base-finetuned-wtq/resolve/main/vocab.txt",
+        "google/tapas-base-finetuned-wikisql-supervised": "https://huggingface.co/google/tapas-base-finetuned-wikisql-supervised/resolve/main/vocab.txt",
+        "google/tapas-base-finetuned-tabfact": "https://huggingface.co/google/tapas-base-finetuned-tabfact/resolve/main/vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     # large models
-    "nielsr/tapas-large-finetuned-sqa": 512,
-    "nielsr/tapas-large-finetuned-wtq": 512,
-    "nielsr/tapas-large-finetuned-wikisql-supervised": 512,
-    "nielsr/tapas-large-finetuned-tabfact": 512,
+    "google/tapas-large-finetuned-sqa": 512,
+    "google/tapas-large-finetuned-wtq": 512,
+    "google/tapas-large-finetuned-wikisql-supervised": 512,
+    "google/tapas-large-finetuned-tabfact": 512,
     # base models
-    "nielsr/tapas-base-finetuned-sqa": 512,
-    "nielsr/tapas-base-finetuned-wtq": 512,
-    "nielsr/tapas-base-finetuned-wikisql-supervised": 512,
-    "nielsr/tapas-base-finetuned-tabfact": 512,
+    "google/tapas-base-finetuned-sqa": 512,
+    "google/tapas-base-finetuned-wtq": 512,
+    "google/tapas-base-finetuned-wikisql-supervised": 512,
+    "google/tapas-base-finetuned-tabfact": 512,
     # medium models
-    "nielsr/tapas-medium-finetuned-sqa": 512,
-    "nielsr/tapas-medium-finetuned-wtq": 512,
-    "nielsr/tapas-medium-finetuned-wikisql-supervised": 512,
-    "nielsr/tapas-medium-finetuned-tabfact": 512,
+    "google/tapas-medium-finetuned-sqa": 512,
+    "google/tapas-medium-finetuned-wtq": 512,
+    "google/tapas-medium-finetuned-wikisql-supervised": 512,
+    "google/tapas-medium-finetuned-tabfact": 512,
     # small models
-    "nielsr/tapas-base-finetuned-sqa": 512,
-    "nielsr/tapas-base-finetuned-wtq": 512,
-    "nielsr/tapas-base-finetuned-wikisql-supervised": 512,
-    "nielsr/tapas-base-finetuned-tabfact": 512,
+    "google/tapas-base-finetuned-sqa": 512,
+    "google/tapas-base-finetuned-wtq": 512,
+    "google/tapas-base-finetuned-wikisql-supervised": 512,
+    "google/tapas-base-finetuned-tabfact": 512,
     # tiny models
-    "nielsr/tapas-tiny-finetuned-sqa": 512,
-    "nielsr/tapas-tiny-finetuned-wtq": 512,
-    "nielsr/tapas-tiny-finetuned-wikisql-supervised": 512,
-    "nielsr/tapas-tiny-finetuned-tabfact": 512,
+    "google/tapas-tiny-finetuned-sqa": 512,
+    "google/tapas-tiny-finetuned-wtq": 512,
+    "google/tapas-tiny-finetuned-wikisql-supervised": 512,
+    "google/tapas-tiny-finetuned-tabfact": 512,
     # mini models
-    "nielsr/tapas-mini-finetuned-sqa": 512,
-    "nielsr/tapas-mini-finetuned-wtq": 512,
-    "nielsr/tapas-mini-finetuned-wikisql-supervised": 512,
-    "nielsr/tapas-mini-finetuned-tabfact": 512,
+    "google/tapas-mini-finetuned-sqa": 512,
+    "google/tapas-mini-finetuned-wtq": 512,
+    "google/tapas-mini-finetuned-wikisql-supervised": 512,
+    "google/tapas-mini-finetuned-tabfact": 512,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "nielsr/tapas-base-finetuned-sqa": {"do_lower_case": True},
-    "nielsr/tapas-base-finetuned-wtq": {"do_lower_case": True},
-    "nielsr/tapas-base-finetuned-wikisql-supervised": {"do_lower_case": True},
-    "nielsr/tapas-base-finetuned-tabfact": {"do_lower_case": True},
+    "google/tapas-base-finetuned-sqa": {"do_lower_case": True},
+    "google/tapas-base-finetuned-wtq": {"do_lower_case": True},
+    "google/tapas-base-finetuned-wikisql-supervised": {"do_lower_case": True},
+    "google/tapas-base-finetuned-tabfact": {"do_lower_case": True},
 }
 
 
