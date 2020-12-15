@@ -37,44 +37,44 @@ logging.set_verbosity_info()
 def convert_tf_checkpoint_to_pytorch(
     task, reset_position_index_per_cell, tf_checkpoint_path, tapas_config_file, pytorch_dump_path
 ):
-    # Initialise PyTorch model. 
+    # Initialise PyTorch model.
     # If you want to convert a checkpoint that uses absolute position embeddings, make sure to set reset_position_index_per_cell of
     # TapasConfig to False.
 
     # initialize configuration from json file
     config = TapasConfig.from_json_file(tapas_config_file)
     # set absolute/relative position embeddings parameter
-    config.reset_position_index_per_cell=reset_position_index_per_cell
-    
+    config.reset_position_index_per_cell = reset_position_index_per_cell
+
     # set remaining parameters of TapasConfig as well as the model based on the task
     if task == "SQA":
         model = TapasForQuestionAnswering(config=config)
     elif task == "WTQ":
         # run_task_main.py hparams
-        config.num_aggregation_labels=4
-        config.use_answer_as_supervision=True
+        config.num_aggregation_labels = 4
+        config.use_answer_as_supervision = True
         # hparam_utils.py hparams
-        config.answer_loss_cutoff=0.664694
-        config.cell_selection_preference=0.207951
-        config.huber_loss_delta=0.121194
-        config.init_cell_selection_weights_to_zero=True
-        config.select_one_column=True
-        config.allow_empty_column_selection=False
-        config.temperature=0.0352513
+        config.answer_loss_cutoff = 0.664694
+        config.cell_selection_preference = 0.207951
+        config.huber_loss_delta = 0.121194
+        config.init_cell_selection_weights_to_zero = True
+        config.select_one_column = True
+        config.allow_empty_column_selection = False
+        config.temperature = 0.0352513
 
         model = TapasForQuestionAnswering(config=config)
     elif task == "WIKISQL_SUPERVISED":
         # run_task_main.py hparams
-        config.num_aggregation_labels=4
-        config.use_answer_as_supervision=False
+        config.num_aggregation_labels = 4
+        config.use_answer_as_supervision = False
         # hparam_utils.py hparams
-        config.answer_loss_cutoff=36.4519
-        config.cell_selection_preference=0.903421
-        config.huber_loss_delta=222.088
-        config.init_cell_selection_weights_to_zero=True
-        config.select_one_column=True
-        config.allow_empty_column_selection=True
-        config.temperature=0.763141
+        config.answer_loss_cutoff = 36.4519
+        config.cell_selection_preference = 0.903421
+        config.huber_loss_delta = 222.088
+        config.init_cell_selection_weights_to_zero = True
+        config.select_one_column = True
+        config.allow_empty_column_selection = True
+        config.temperature = 0.763141
 
         model = TapasForQuestionAnswering(config=config)
     elif task == "TABFACT":
@@ -100,6 +100,8 @@ def convert_tf_checkpoint_to_pytorch(
     print("Save tokenizer files to {}".format(pytorch_dump_path))
     tokenizer.save_pretrained(pytorch_dump_path[:-17])
 
+    print("Used relative position embeddings:", model.config.reset_position_index_per_cell)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -109,7 +111,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--reset_position_index_per_cell",
-        default=True,
+        default=False,
         type=bool,
         help="Whether to use relative position embeddings or not. Defaults to True.",
     )
