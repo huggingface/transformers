@@ -679,7 +679,7 @@ class FlaxBertForMaskedLM(FlaxBertPreTrainedModel):
         if dropout_rng is not None:
             rngs["dropout"] = dropout_rng
 
-        logits = self.module.apply(
+        return self.module.apply(
             {"params": params or self.params},
             jnp.array(input_ids, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
@@ -688,8 +688,6 @@ class FlaxBertForMaskedLM(FlaxBertPreTrainedModel):
             not train,
             rngs=rngs,
         )
-
-        return (logits,)
 
 
 class FlaxBertForMaskedLMModule(nn.Module):
@@ -732,4 +730,4 @@ class FlaxBertForMaskedLMModule(nn.Module):
             vocab_size=self.vocab_size, hidden_act=self.hidden_act, name="cls", dtype=self.dtype
         )(encoder)
 
-        return logits
+        return (logits,)
