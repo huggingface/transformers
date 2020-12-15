@@ -50,11 +50,11 @@ Tips:
   of the table). Note that this is something that was added after the publication of the original TAPAS paper.
   According to the authors, this usually results in a slightly better performance, and allows you to encode longer
   sequences without running out of embeddings. This is reflected in the ``reset_position_index_per_cell`` parameter of
-  :class:`~transformers.TapasConfig`, which is set to ``True`` by default. The latest versions of the models available
+  :class:`~transformers.TapasConfig`, which is set to ``True`` by default. The default versions of the models available
   in the `model hub <https://huggingface.co/models?search=tapas>`_ all use relative position embeddings. You can still
-  use the ones with absolute position embeddings by passing in a certain version when calling the
-  ``.from_pretrained()`` method as explained in the model cards. Note that it's usually advised to pad the inputs on
-  the right rather than the left.
+  use the ones with absolute position embeddings by passing in an additional argument ``revision="no_reset"`` when
+  calling the ``.from_pretrained()`` method. Note that it's usually advised to pad the inputs on the right rather than
+  the left.
 - TAPAS is based on BERT, so ``TAPAS-base`` for example corresponds to a ``BERT-base`` architecture. Of course,
   TAPAS-large will result in the best performance (the results reported in the paper are from TAPAS-large). Results of
   the various sized models are shown on the `original Github repository <https://github.com/google-research/tapas>`_.
@@ -257,7 +257,9 @@ Note that here, we encode each table-question pair independently. This is fine a
 conversational**. In case your dataset involves conversational questions (such as in SQA), then you should first group
 together the ``queries``, ``answer_coordinates`` and ``answer_text`` per table (in the order of their ``position``
 index) and batch encode each table with its questions. This will make sure that the ``prev_labels`` token types (see
-docs of :class:`~transformers.TapasTokenizer`) are set correctly.
+docs of :class:`~transformers.TapasTokenizer`) are set correctly. See `this notebook
+<https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb>`__
+for more info.
 
 **STEP 4: Train (fine-tune) TapasForQuestionAnswering**
 
@@ -372,7 +374,8 @@ of that:
 
 In case of a conversational set-up, then each table-question pair must be provided **sequentially** to the model, such
 that the ``prev_labels`` token types can be overwritten by the predicted ``labels`` of the previous table-question
-pair.
+pair. Again, more info can be found in `this notebook
+<https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb>`__.
 
 
 Tapas specific outputs

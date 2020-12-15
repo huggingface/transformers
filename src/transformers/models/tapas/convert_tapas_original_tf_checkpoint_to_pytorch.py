@@ -17,8 +17,6 @@
 
 import argparse
 
-import torch
-
 from transformers.models.tapas.modeling_tapas import (
     TapasConfig,
     TapasForMaskedLM,
