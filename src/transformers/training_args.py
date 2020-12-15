@@ -52,7 +52,7 @@ class TrainingArguments:
     itself**.
 
     Using :class:`~transformers.HfArgumentParser` we can turn this class into `argparse
-    <https://docs.python.org/3/library/argparse.html#module-argparse>`_ arguments that can be specified on the command
+    <https://docs.python.org/3/library/argparse.html#module-argparse>`__ arguments that can be specified on the command
     line.
 
 
