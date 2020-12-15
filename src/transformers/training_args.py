@@ -211,6 +211,9 @@ class TrainingArguments:
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to :obj:`True`, the training will begin faster (as that skipping
             step can take a long time) but will not yield the same results as the interrupted training would have.
+        sharded_ddp (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Use Sharded DDP training from `FairScale <https://github.com/facebookresearch/fairscale>`__ (in distributed
+            training only). This is an experimental feature.
     """
 
     output_dir: str = field(
@@ -377,6 +380,10 @@ class TrainingArguments:
         metadata={
             "help": "When resuming training, whether or not to skip the first epochs and batches to get to the same training data."
         },
+    )
+    sharded_ddp: bool = field(
+        default=False,
+        metadata={"help": "Whether or not to use sharded DDP training (in distributed training only)."},
     )
 
     def __post_init__(self):
