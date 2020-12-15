@@ -384,7 +384,7 @@ class TrainingArguments:
     )
     fp16_backend: str = field(
         default="auto",
-        metadata={"help": "The backend to be used for mixed precision. Should be one of 'auto', 'amp' or 'apex'."},
+        metadata={"help": "The backend to be used for mixed precision.", "choices": ["auto", "amp", "apex"]},
     )
 
     def __post_init__(self):
