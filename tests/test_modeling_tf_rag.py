@@ -1,4 +1,5 @@
 import unittest
+import tempfile
 
 from transformers.file_utils import cached_property, is_datasets_available, is_faiss_available, is_tf_available
 from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
@@ -102,6 +103,46 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         tf.debugging.assert_near(output.loss, expected_loss, atol=1e-3)
         tf.debugging.assert_near(output.doc_scores, expected_doc_scores, atol=1e-3)
 
+    @slow
+    def test_rag_token_inference_save_pretrained(self):
+        rag_config = self.get_rag_config()
+        rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
+            "facebook/dpr-question_encoder-single-nq-base"
+        )
+        rag_retriever = RagRetriever(
+            rag_config,
+            question_encoder_tokenizer=rag_question_encoder_tokenizer,
+            generator_tokenizer=rag_decoder_tokenizer,
+        )
+
+        rag_token = self.token_model
+        rag_token.set_retriever(rag_retriever)
+
+        input_ids = rag_question_encoder_tokenizer(
+            "who sings does he love me with reba", return_tensors="tf"
+        ).input_ids
+        decoder_input_ids = rag_decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
+
+        # check that outputs after saving and loading are equal
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            rag_token.save_pretrained(tmpdirname)
+            rag_token = TFRagTokenForGeneration.from_pretrained(tmpdirname, retriever=rag_retriever)
+
+        output = rag_token(
+            input_ids,
+            labels=decoder_input_ids,
+        )
+
+        expected_shape = tf.TensorShape([5, 5, 50264])
+        self.assertEqual(output.logits.shape, expected_shape)
+
+        expected_doc_scores = tf.convert_to_tensor([[75.0286, 74.4998, 74.0804, 74.0306, 73.9504]])
+        expected_loss = tf.convert_to_tensor([36.3557])
+
+        tf.debugging.assert_near(output.loss, expected_loss, atol=1e-3)
+        tf.debugging.assert_near(output.doc_scores, expected_doc_scores, atol=1e-3)
+
     @property
     def test_data_questions(self):
         return [
@@ -138,7 +179,7 @@ class TFRagModelIntegrationTests(unittest.TestCase):
 
         input_ids = input_dict.input_ids
         attention_mask = input_dict.attention_mask
-        
+
         rag_token.config.num_beams = 1
         output_ids = rag_token.generate(
             input_ids,

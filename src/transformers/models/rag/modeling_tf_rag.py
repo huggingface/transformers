@@ -346,7 +346,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
                 **kwargs_question_encoder,
             )
 
-        generator = kwargs_generator.pop("model", None)
+        generator = kwargs_generator.pop("generator", None)
         if generator is None:
             assert (
                 generator_pretrained_model_name_or_path is not None
@@ -756,30 +756,31 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         self.rag = TFRagModel(
             config=config, question_encoder=question_encoder, generator=generator, retriever=retriever, name="rag"
         )
+        import ipdb; ipdb.set_trace()
 
     # NEED_HELP: (temporarily put the hack back to make model.generate() works) 
     # really ugly fixed and require torch model: manually and ineffcient fixed of two weights name mismatched
-    @classmethod
-    def from_pretrained(cls, path_or_weight_name, model_pt=None, **kwargs):
-        
+#    @classmethod
+#    def from_pretrained(cls, path_or_weight_name, model_pt=None, **kwargs):
+#        
         # print(path_or_weight_name, kwargs)
-        model = super(TFRagTokenForGeneration, cls).from_pretrained(path_or_weight_name, **kwargs)
-
-        if True:
-            import gc
-            import tensorflow.keras.backend as K
-            from transformers import RagTokenForGeneration
-
-            gc.collect()
-            if model_pt is None:
-                model_pt = RagTokenForGeneration.from_pretrained(path_or_weight_name, **kwargs)
-            K.set_value(model.rag.generator.model.shared.weight, model_pt.rag.generator.model.shared.weight.detach().numpy())
-            K.set_value(model.rag.generator.final_logits_bias, model_pt.rag.generator.final_logits_bias.detach().numpy())
-            del model_pt
-            gc.collect()
-            print('*** Ugly fix of weights loading -- not a generalizable solution ***')
-
-        return model
+#        model = super(TFRagTokenForGeneration, cls).from_pretrained(path_or_weight_name, **kwargs)
+#
+#        if True:
+#            import gc
+#            import tensorflow.keras.backend as K
+#            from transformers import RagTokenForGeneration
+#
+#            gc.collect()
+#            if model_pt is None:
+#                model_pt = RagTokenForGeneration.from_pretrained(path_or_weight_name, **kwargs)
+#            K.set_value(model.rag.generator.model.shared.weight, model_pt.rag.generator.model.shared.weight.detach().numpy())
+#            K.set_value(model.rag.generator.final_logits_bias, model_pt.rag.generator.final_logits_bias.detach().numpy())
+#            del model_pt
+#            gc.collect()
+#            print('*** Ugly fix of weights loading -- not a generalizable solution ***')
+#
+#        return model
 
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
