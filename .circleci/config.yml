@@ -79,6 +79,7 @@ jobs:
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece]
+            - run: pip install tapas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.7.0+cpu.html
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
@@ -105,6 +106,7 @@ jobs:
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece]
+            - run: pip install tapas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.7.0+cpu.html
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
@@ -183,6 +185,7 @@ jobs:
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece]
+            - run: pip install tapas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.7.0+cpu.html
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:

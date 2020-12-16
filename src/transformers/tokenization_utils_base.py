@@ -262,7 +262,7 @@ class BatchEncoding(UserDict):
         :class:`~transformers.BatchEncoding`. Currently can be one of :obj:`None` (unknown), :obj:`1` (a single
         sentence) or :obj:`2` (a pair of sentences)
         """
-        return self.n_sequences
+        return self._n_sequences
 
     @property
     def is_fast(self) -> bool:
