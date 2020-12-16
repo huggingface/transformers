@@ -69,22 +69,22 @@ class TQAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
         },
     ]
 
-    def _test_pipeline(self, nlp: Pipeline):
+    def _test_pipeline(self, table_querier: Pipeline):
         output_keys = {"answer", "coordinates", "cells"}
         valid_inputs = self.valid_inputs
         invalid_inputs = [
             {"query": "What does it do with empty context ?", "table": ""},
             {"query": "What does it do with empty context ?", "table": None},
         ]
-        self.assertIsNotNone(nlp)
+        self.assertIsNotNone(table_querier)
 
-        mono_result = nlp(valid_inputs[0])
+        mono_result = table_querier(valid_inputs[0])
         self.assertIsInstance(mono_result, dict)
 
         for key in output_keys:
             self.assertIn(key, mono_result)
 
-        multi_result = nlp(valid_inputs)
+        multi_result = table_querier(valid_inputs)
         self.assertIsInstance(multi_result, list)
         for result in multi_result:
             self.assertIsInstance(result, (list, dict))
@@ -98,20 +98,20 @@ class TQAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
                 for key in output_keys:
                     self.assertIn(key, result)
         for bad_input in invalid_inputs:
-            self.assertRaises(ValueError, nlp, bad_input)
-        self.assertRaises(ValueError, nlp, invalid_inputs)
+            self.assertRaises(ValueError, table_querier, bad_input)
+        self.assertRaises(ValueError, table_querier, invalid_inputs)
 
     def test_aggregation(self):
-        nlp = pipeline(
+        table_querier = pipeline(
             "table-question-answering",
             model="lysandre/tiny-tapas-random-wtq",
             tokenizer="lysandre/tiny-tapas-random-wtq",
         )
-        self.assertIsInstance(nlp.model.config.aggregation_labels, dict)
-        self.assertIsInstance(nlp.model.config.no_aggregation_label_index, int)
+        self.assertIsInstance(table_querier.model.config.aggregation_labels, dict)
+        self.assertIsInstance(table_querier.model.config.no_aggregation_label_index, int)
 
-        mono_result = nlp(self.valid_inputs[0])
-        multi_result = nlp(self.valid_inputs)
+        mono_result = table_querier(self.valid_inputs[0])
+        multi_result = table_querier(self.valid_inputs)
 
         self.assertIn("aggregator", mono_result)
 
@@ -123,16 +123,16 @@ class TQAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
                 self.assertIn("aggregator", result)
 
     def test_aggregation_with_sequential(self):
-        nlp = pipeline(
+        table_querier = pipeline(
             "table-question-answering",
             model="lysandre/tiny-tapas-random-wtq",
             tokenizer="lysandre/tiny-tapas-random-wtq",
         )
-        self.assertIsInstance(nlp.model.config.aggregation_labels, dict)
-        self.assertIsInstance(nlp.model.config.no_aggregation_label_index, int)
+        self.assertIsInstance(table_querier.model.config.aggregation_labels, dict)
+        self.assertIsInstance(table_querier.model.config.no_aggregation_label_index, int)
 
-        mono_result = nlp(self.valid_inputs[0], sequential=True)
-        multi_result = nlp(self.valid_inputs, sequential=True)
+        mono_result = table_querier(self.valid_inputs[0], sequential=True)
+        multi_result = table_querier(self.valid_inputs, sequential=True)
 
         self.assertIn("aggregator", mono_result)
 
@@ -144,17 +144,17 @@ class TQAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
                 self.assertIn("aggregator", result)
 
     def test_sequential(self):
-        nlp = pipeline(
+        table_querier = pipeline(
             "table-question-answering",
             model="lysandre/tiny-tapas-random-sqa",
             tokenizer="lysandre/tiny-tapas-random-sqa",
         )
-        sequential_mono_result_0 = nlp(self.valid_inputs[0], sequential=True)
-        sequential_mono_result_1 = nlp(self.valid_inputs[1], sequential=True)
-        sequential_multi_result = nlp(self.valid_inputs, sequential=True)
-        mono_result_0 = nlp(self.valid_inputs[0])
-        mono_result_1 = nlp(self.valid_inputs[1])
-        multi_result = nlp(self.valid_inputs)
+        sequential_mono_result_0 = table_querier(self.valid_inputs[0], sequential=True)
+        sequential_mono_result_1 = table_querier(self.valid_inputs[1], sequential=True)
+        sequential_multi_result = table_querier(self.valid_inputs, sequential=True)
+        mono_result_0 = table_querier(self.valid_inputs[0])
+        mono_result_1 = table_querier(self.valid_inputs[1])
+        multi_result = table_querier(self.valid_inputs)
 
         # First valid input has a single question, the dict should be equal
         self.assertDictEqual(sequential_mono_result_0, mono_result_0)
