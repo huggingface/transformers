@@ -390,9 +390,9 @@ class GenerationMixin:
         num_beam_groups: Optional[int] = None,
         diversity_penalty: Optional[float] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        output_scores: Optional[bool] = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_scores: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, torch.LongTensor]:
         r"""
@@ -556,6 +556,12 @@ class GenerationMixin:
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
 
+        output_scores = output_scores if output_scores is not None else self.config.output_scores
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
         if input_ids is None:
             # init `input_ids` with bos_token_id
             input_ids = self._prepare_input_ids_for_generation(bos_token_id)
@@ -572,11 +578,9 @@ class GenerationMixin:
             pad_token_id = eos_token_id
 
         if self.config.is_encoder_decoder:
-            # Pass output_attentions and output_hidden_states to the encoder
-            if output_attentions and model_kwargs.get("output_attentions") is not True:
-                model_kwargs["output_atentions"] = True
-            if output_hidden_states and model_kwargs.get("output_hidden_states") is not True:
-                model_kwargs["output_hidden_states"] = True
+            # Pass output_attentions and output_hidden_states flags to the encoder
+            model_kwargs["output_atentions"] = output_attentions
+            model_kwargs["output_hidden_states"] = output_hidden_states
 
             # add encoder_outputs to model_kwargs
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
@@ -773,9 +777,9 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        output_scores: Optional[bool] = False,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_scores: Optional[bool] = None,
         **model_kwargs,
     ) -> GreedySearchOutput:
         r"""
@@ -808,9 +812,7 @@ class GenerationMixin:
                 model. If model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
 
         Return:
-            :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
-            sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all
-            batches finished early due to the :obj:`eos_token_id`.
+            :obj:`GreedySearchOutput`
 
         Examples::
 
@@ -839,22 +841,27 @@ class GenerationMixin:
 
             >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         """
-        logits = None
-        decoder_attentions = () if output_attentions else None
-        decoder_hidden_states = None
-
-        if "encoder_outputs" in model_kwargs:
-            encoder_outputs = model_kwargs["encoder_outputs"]
-            encoder_attentions = encoder_outputs.get("encoder_attentions", None) if output_attentions else None
-            encoder_hidden_states = (
-                encoder_outputs.get("encoder_hidden_states", None) if output_hidden_states else None
-            )
-
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         max_length = max_length if max_length is not None else self.config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        output_scores = output_scores if output_scores is not None else self.config.output_scores
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        # init attention / hidden states / scores tuples
+        logits = () if output_scores else None
+        decoder_attentions = () if output_attentions else None
+        decoder_hidden_states = () if output_hidden_states else None
+
+        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
+        if self.config.is_encoder_decoder:
+            encoder_outputs = model_kwargs["encoder_outputs"]
+            encoder_attentions = encoder_outputs.get("encoder_attentions") if output_attentions else None
+            encoder_hidden_states = encoder_outputs.get("encoder_hidden_states") if output_hidden_states else None
 
         # init sequence length tensors
         sequence_lengths, unfinished_sequences, cur_len = self._init_sequence_length_for_generation(
@@ -874,22 +881,21 @@ class GenerationMixin:
             )
             next_token_logits = outputs.logits[:, -1, :]
 
+            # Store logits, attentions and hidden_states when required
             if output_scores:
-                if logits is None:
-                    logits = outputs.logits
-                logits = torch.cat((logits, next_token_logits.view((logits.shape[0], 1, logits.shape[2]))), dim=1)
+                logits += (next_token_logits,)
             if output_attentions:
-                # TODO
-                # decoder_attentions = decoder_attentions + (outputs.attentions,)
-                raise ValueError("Not implemenyed (yet)")
+                decoder_attentions += (
+                    decoder_attentions + (outputs.decoder_attentions,)
+                    if self.config.is_encoder_decoder
+                    else (outputs.attentions,)
+                )
             if output_hidden_states:
-                if decoder_hidden_states is None:
-                    decoder_hidden_states = outputs.hidden_states
-                else:
-                    decoder_hidden_states = tuple(
-                        torch.cat((decoder_hidden_states[i], outputs.hidden_states[i]), 1)
-                        for i in range(len(decoder_hidden_states))
-                    )
+                decoder_hidden_states += (
+                    decoder_hidden_states + (outputs.decoder_hidden_states,)
+                    if self.config.is_encoder_decoder
+                    else (outputs.hidden_states,)
+                )
 
             # pre-process distribution
             scores = logits_processor(input_ids, next_token_logits)

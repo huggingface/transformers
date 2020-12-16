@@ -159,6 +159,7 @@ class GenerationTesterMixin:
 
     def _greedy_generate(self, model_class, output_scores=False, output_attentions=False, output_hidden_states=False):
         config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+        init_length = input_ids.shape[-1]
 
         logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
             input_ids.shape[-1], config.eos_token_id
@@ -198,16 +199,18 @@ class GenerationTesterMixin:
                 output_scores=output_scores,
                 **kwargs,
             )
-        return model, output_greedy, output_generate
+        return model, output_greedy, output_generate, init_length
 
     def test_greedy_generate(self):
         # check `generate()` and `greedy_search()` are equal
         for model_class in self.all_generative_model_classes:
-            model, output_greedy, output_ids_generate = self._greedy_generate(model_class)
+            model, output_greedy, output_generate, _ = self._greedy_generate(model_class)
+            self.assertIsInstance(output_greedy, GreedySearchDecoderOnlyOutput)
+            self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
             self.assertIsNone(output_greedy.logits)
+            self.assertIsNone(output_generate.logits)
+
             if model.config.is_encoder_decoder:
-                self.assertTrue(isinstance(output_greedy, GreedySearchEncoderDecoderOutput))
-                self.assertTrue(isinstance(output_ids_generate, GreedySearchEncoderDecoderOutput))
                 for key in [
                     "encoder_attentions",
                     "decoder_attentions",
@@ -215,48 +218,79 @@ class GenerationTesterMixin:
                     "decoder_hidden_states",
                 ]:
                     self.assertIsNone(output_greedy.get(key))
-                    self.assertIsNone(output_ids_generate.get(key))
+                    self.assertIsNone(output_generate.get(key))
             else:
-                self.assertTrue(isinstance(output_greedy, GreedySearchDecoderOnlyOutput))
-                self.assertTrue(isinstance(output_ids_generate, GreedySearchDecoderOnlyOutput))
                 for key in [
                     "attentions",
                     "hidden_states",
                 ]:
                     self.assertIsNone(output_greedy.get(key))
-                    self.assertIsNone(output_ids_generate.get(key))
+                    self.assertIsNone(output_generate.get(key))
 
-            self.assertListEqual(output_ids_generate.sequences.tolist(), output_greedy.sequences.tolist())
+            self.assertListEqual(output_generate.sequences.tolist(), output_greedy.sequences.tolist())
 
-    def test_greedy_generate_output_scores(self):
+    def test_greedy_generate_outputs(self):
         for model_class in self.all_generative_model_classes:
-            model, output_greedy, output_generate = self._greedy_generate(model_class, output_scores=True)
+            model, output_greedy, output_generate, init_length = self._greedy_generate(
+                model_class, output_scores=True, output_hidden_states=True, output_attentions=True
+            )
+
+            generated_length = output_greedy.sequences.shape[-1] - init_length
+            batch_size = output_greedy.sequences.shape[0]
 
             for output in (output_greedy, output_generate):
-                self.assertTrue(isinstance(output.logits, torch.FloatTensor))
-                self.assertEqual(output.logits.shape, (*output_generate.sequences.shape, model.config.vocab_size))
+                # Logits
+                self.assertIsInstance(output.logits, tuple)
+                self.assertEqual(len(output.logits), generated_length)
+                for token_logits in output.logits:
+                    self.assertIsInstance(token_logits, torch.FloatTensor)
+                    self.assertEqual(token_logits.shape, (batch_size, model.config.vocab_size))
 
-            self.assertEqual(output_generate.logits, output_greedy.logits)
-
-    def test_greedy_generate_output_attentions(self):
-        # TODO
-        for model_class in self.all_generative_model_classes:
-            model, output_greedy, output_generate = self._greedy_generate(model_class, output_attentions=True)
-        self.fail("Test yet to be implemented")
-
-    def test_greedy_generate_output_hidden_states(self):
-        # TODO
-        for model_class in self.all_generative_model_classes:
-            model, output_greedy, output_generate = self._greedy_generate(model_class, output_hidden_states=True)
-            for output in (output_greedy, output_generate):
+                # Attentions
                 if model.config.is_encoder_decoder:
-                    self.fail("Test yet to be implemented")
+                    self.assertIsInstance(output.encoder_attentions, tuple)
+                    self.assertListEqual(
+                        [weights.shape for weights in output.encoder_attentions],
+                        [(batch_size, model.config.num_attention_heads, init_length, init_length)]
+                        * model.config.num_hidden_layers,
+                    )
+                    decoder_attentions = output.decoder_attentions
                 else:
-                    self.assertTrue(isinstance(output.hidden_states, tuple))
-                    self.assertEqual(len(output.hidden_states), self.model_tester.num_hidden_layers + 1)
-                    for hidden_state in output.hidden_states:
-                        self.assertTrue(isinstance(hidden_state, torch.FloatTensor))
-                        self.assertEqual(hidden_state.shape, (*output.sequences.shape, self.model_tester.hidden_size))
+                    decoder_attentions = output.attentions
+
+                self.assertIsInstance(decoder_attentions, tuple)
+                self.assertEqual(len(decoder_attentions), generated_length)
+                for idx, token_attentions in enumerate(decoder_attentions):
+                    already_generated_length = init_length + idx
+                    expected_att_shape = (batch_size, model.config.num_attention_heads) + (
+                        (init_length, init_length) if idx == 0 else (1, already_generated_length)
+                    )
+                    self.assertListEqual(
+                        [weights.shape for weights in token_attentions],
+                        [expected_att_shape] * model.config.num_hidden_layers,
+                    )
+
+                # Hidden states
+                if model.config.is_encoder_decoder:
+                    # Encoder hidden states
+                    self.assertIsInstance(output.encoder_hidden_states, tuple)
+                    self.assertListEqual(
+                        [weights.shape for weights in output.encoder_hidden_states],
+                        [(batch_size, init_length, model.config.hidden_size)]
+                        * (model.config.num_hidden_layers + 1),  # Counting also the last layer
+                    )
+                    decoder_hidden_states = output.decoder_hidden_states
+                else:
+                    decoder_hidden_states = output.hidden_states
+                # Decoder hidden states
+                self.assertIsInstance(decoder_hidden_states, tuple)
+                self.assertEqual(len(decoder_hidden_states), generated_length)
+                for idx, token_hidden_states in enumerate(decoder_hidden_states):
+                    self.assertListEqual(
+                        [weights.shape for weights in token_hidden_states],
+                        [(batch_size, init_length if idx == 0 else 1, model.config.hidden_size)]
+                        * (model.config.num_hidden_layers + 1),  # Counting also the last layer
+                    )
 
     def test_sample_generate(self):
         for model_class in self.all_generative_model_classes:
