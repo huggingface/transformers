@@ -770,11 +770,20 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             initializer=get_initializer(init_range),
             dtype=tf.float32,
         )
-        init_weights = tf.make_ndarray(tf.make_tensor_proto(new_embeddings.value()))
 
         # Copy token embeddings from the previous weights
-        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-        init_weights[:num_tokens_to_copy] = word_embeddings.value()[:num_tokens_to_copy, :]
+        size_diff = new_num_tokens - old_num_tokens
+        
+        if tf.math.greater(size_diff, 0):
+            current_weights = tf.pad(word_embeddings.value(), tf.convert_to_tensor([[0, size_diff], [0, 0]]), constant_values=-1)
+            num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+            mask = tf.fill(tf.convert_to_tensor([num_tokens_to_copy, 1]), True)
+            mask = tf.pad(mask, tf.convert_to_tensor([[0, size_diff], [0, 0]]), constant_values=False)
+        else:
+            current_weights = tf.slice(word_embeddings.value(), tf.convert_to_tensor([0, 0]), tf.convert_to_tensor([new_num_tokens, old_embedding_dim]))
+            mask = tf.fill(tf.convert_to_tensor([new_num_tokens, 1]), True)
+        
+        init_weights = tf.where(mask, current_weights, new_embeddings.value())
         new_embeddings.assign(init_weights)
 
         if bias_layer is not None:

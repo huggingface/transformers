@@ -19,6 +19,7 @@
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
+import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
@@ -854,7 +855,7 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
             )
             self.predictions.bias.assign(init_bias)
 
-            init_decoder_bias = tf.zeros((new_num_tokens,))
+            init_decoder_bias = np.zeros((new_num_tokens,))
             init_decoder_bias[:num_tokens_to_copy] = self.predictions.decoder_bias.value()[:num_tokens_to_copy]
             name = self.name + "/" + self.predictions.name + "/decoder_bias"
             self.predictions.decoder_bias = self.add_weight(
@@ -991,7 +992,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
         if new_num_tokens is not None:
             num_tokens_to_copy = min(self.predictions.bias.shape[0], new_num_tokens)
             self.predictions.vocab_size = num_tokens_to_copy
-            init_bias = tf.zeros((new_num_tokens,))
+            init_bias = np.zeros((new_num_tokens,))
             init_bias[:num_tokens_to_copy] = self.predictions.bias.value()[:num_tokens_to_copy]
             name = self.name + "/" + self.predictions.name + "/bias"
             self.predictions.bias = self.add_weight(
@@ -999,7 +1000,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
             )
             self.predictions.bias.assign(init_bias)
 
-            init_decoder_bias = tf.zeros((new_num_tokens,))
+            init_decoder_bias = np.zeros((new_num_tokens,))
             init_decoder_bias[:num_tokens_to_copy] = self.predictions.decoder_bias.value()[:num_tokens_to_copy]
             name = self.name + "/" + self.predictions.name + "/decoder_bias"
             self.predictions.decoder_bias = self.add_weight(
