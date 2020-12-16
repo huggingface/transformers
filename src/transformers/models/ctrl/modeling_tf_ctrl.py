@@ -749,10 +749,10 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
-        self.score = tf.keras.layers.Dense(
+        self.classifier = tf.keras.layers.Dense(
             config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
-            name="score",
+            name="classifier",
             use_bias=False,
         )
         self.transformer = TFCTRLMainLayer(config, name="transformer")
@@ -824,7 +824,7 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
         )
 
         hidden_states = transformer_outputs[0]
-        logits = self.score(hidden_states)
+        logits = self.classifier(hidden_states)
         logits_shape = shape_list(logits)
         in_logits = None
         if self.config.pad_token_id is None:
