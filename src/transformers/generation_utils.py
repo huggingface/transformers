@@ -202,7 +202,7 @@ class GenerationMixin:
         is_encoder_decoder: bool = False,
         attention_mask: torch.LongTensor = None,
         encoder_outputs: ModelOutput = None,
-        **model_kwargs
+        **model_kwargs,
     ) -> Tuple[torch.LongTensor, Dict[str, Any]]:
         expanded_return_idx = (
             torch.arange(input_ids.shape[0]).view(-1, 1).repeat(1, expand_size).view(-1).to(input_ids.device)
@@ -579,7 +579,7 @@ class GenerationMixin:
 
         if self.config.is_encoder_decoder:
             # Pass output_attentions and output_hidden_states flags to the encoder
-            model_kwargs["output_atentions"] = output_attentions
+            model_kwargs["output_attentions"] = output_attentions
             model_kwargs["output_hidden_states"] = output_hidden_states
 
             # add encoder_outputs to model_kwargs
@@ -951,7 +951,7 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        **model_kwargs
+        **model_kwargs,
     ):
         r"""
         Generates sequences for models with a language modeling head using multinomial sampling.
@@ -1082,7 +1082,7 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        **model_kwargs
+        **model_kwargs,
     ):
         r"""
         Generates sequences for models with a language modeling head using beam search decoding.
@@ -1247,7 +1247,7 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        **model_kwargs
+        **model_kwargs,
     ):
         r"""
         Generates sequences for models with a language modeling head using beam search with multinomial sampling.
@@ -1423,7 +1423,7 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        **model_kwargs
+        **model_kwargs,
     ):
         r"""
         Generates sequences for models with a language modeling head using beam search decoding.
