@@ -16,7 +16,7 @@ Summary of the models
 This is a summary of the models available in 🤗 Transformers. It assumes you’re familiar with the original `transformer
 model <https://arxiv.org/abs/1706.03762>`_. For a gentle introduction check the `annotated transformer
 <http://nlp.seas.harvard.edu/2018/04/03/attention.html>`_. Here we focus on the high-level differences between the
-models. You can check them more in detail in their respective documentation. Also checkout the :doc:`pretrained model
+models. You can check them more in detail in their respective documentation. Also check out the :doc:`pretrained model
 page </pretrained_models>` to see the checkpoints available for each type of model and all `the community models
 <https://huggingface.co/models>`_.
 
