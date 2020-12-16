@@ -37,7 +37,7 @@ logger = logging.get_logger(__name__)
 
 @add_start_docstrings("Marian model for machine translation", START_DOCSTRING)
 class TFMarianMTModel(TFBartForConditionalGeneration):
-    authorized_missing_keys = [
+    _keys_to_ignore_on_load_missing = [
         r"model.encoder.embed_positions.weight",
         r"model.decoder.embed_positions.weight",
     ]

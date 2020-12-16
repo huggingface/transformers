@@ -95,6 +95,8 @@ class ModelInfo:
 
 
 class HfApi:
+    ALLOWED_S3_FILE_TYPES = ["datasets", "metrics"]
+
     def __init__(self, endpoint=None):
         self.endpoint = endpoint if endpoint is not None else ENDPOINT
 
@@ -130,13 +132,14 @@ class HfApi:
         r = requests.post(path, headers={"authorization": "Bearer {}".format(token)})
         r.raise_for_status()
 
-    def presign(self, token: str, filename: str, organization: Optional[str] = None) -> PresignedUrl:
+    def presign(self, token: str, filetype: str, filename: str, organization: Optional[str] = None) -> PresignedUrl:
         """
         HuggingFace S3-based system, used for datasets and metrics.
 
         Call HF API to get a presigned url to upload `filename` to S3.
         """
-        path = "{}/api/datasets/presign".format(self.endpoint)
+        assert filetype in self.ALLOWED_S3_FILE_TYPES, f"Please specify filetype from {self.ALLOWED_S3_FILE_TYPES}"
+        path = f"{self.endpoint}/api/{filetype}/presign"
         r = requests.post(
             path,
             headers={"authorization": "Bearer {}".format(token)},
@@ -146,7 +149,9 @@ class HfApi:
         d = r.json()
         return PresignedUrl(**d)
 
-    def presign_and_upload(self, token: str, filename: str, filepath: str, organization: Optional[str] = None) -> str:
+    def presign_and_upload(
+        self, token: str, filetype: str, filename: str, filepath: str, organization: Optional[str] = None
+    ) -> str:
         """
         HuggingFace S3-based system, used for datasets and metrics.
 
@@ -154,7 +159,8 @@ class HfApi:
 
         Outputs: url: Read-only url for the stored file on S3.
         """
-        urls = self.presign(token, filename=filename, organization=organization)
+        assert filetype in self.ALLOWED_S3_FILE_TYPES, f"Please specify filetype from {self.ALLOWED_S3_FILE_TYPES}"
+        urls = self.presign(token, filetype=filetype, filename=filename, organization=organization)
         # streaming upload:
         # https://2.python-requests.org/en/master/user/advanced/#streaming-uploads
         #
@@ -169,26 +175,28 @@ class HfApi:
             pf.close()
         return urls.access
 
-    def list_objs(self, token: str, organization: Optional[str] = None) -> List[S3Obj]:
+    def list_objs(self, token: str, filetype: str, organization: Optional[str] = None) -> List[S3Obj]:
         """
         HuggingFace S3-based system, used for datasets and metrics.
 
         Call HF API to list all stored files for user (or one of their organizations).
         """
-        path = "{}/api/datasets/listObjs".format(self.endpoint)
+        assert filetype in self.ALLOWED_S3_FILE_TYPES, f"Please specify filetype from {self.ALLOWED_S3_FILE_TYPES}"
+        path = "{}/api/{}/listObjs".format(self.endpoint, filetype)
         params = {"organization": organization} if organization is not None else None
         r = requests.get(path, params=params, headers={"authorization": "Bearer {}".format(token)})
         r.raise_for_status()
         d = r.json()
         return [S3Obj(**x) for x in d]
 
-    def delete_obj(self, token: str, filename: str, organization: Optional[str] = None):
+    def delete_obj(self, token: str, filetype: str, filename: str, organization: Optional[str] = None):
         """
         HuggingFace S3-based system, used for datasets and metrics.
 
         Call HF API to delete a file stored by user
         """
-        path = "{}/api/datasets/deleteObj".format(self.endpoint)
+        assert filetype in self.ALLOWED_S3_FILE_TYPES, f"Please specify filetype from {self.ALLOWED_S3_FILE_TYPES}"
+        path = "{}/api/{}/deleteObj".format(self.endpoint, filetype)
         r = requests.delete(
             path,
             headers={"authorization": "Bearer {}".format(token)},
@@ -219,17 +227,25 @@ class HfApi:
         d = r.json()
         return [RepoObj(**x) for x in d]
 
-    def create_repo(self, token: str, name: str, organization: Optional[str] = None) -> str:
+    def create_repo(
+        self, token: str, name: str, organization: Optional[str] = None, lfsmultipartthresh: Optional[int] = None
+    ) -> str:
         """
         HuggingFace git-based system, used for models.
 
         Call HF API to create a whole repo.
+
+        Params:
+            lfsmultipartthresh: Optional: internal param for testing purposes.
         """
         path = "{}/api/repos/create".format(self.endpoint)
+        json = {"name": name, "organization": organization}
+        if lfsmultipartthresh is not None:
+            json["lfsmultipartthresh"] = lfsmultipartthresh
         r = requests.post(
             path,
             headers={"authorization": "Bearer {}".format(token)},
-            json={"name": name, "organization": organization},
+            json=json,
         )
         r.raise_for_status()
         d = r.json()

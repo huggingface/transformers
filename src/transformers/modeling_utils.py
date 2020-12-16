@@ -404,17 +404,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.
-        - **authorized_missing_keys** (:obj:`Optional[List[str]]`) -- A list of re pattern of tensor names to ignore
-          when loading the model (and avoid unnecessary warnings).
-        - **keys_to_never_save** (:obj:`Optional[List[str]]`) -- A list of of tensor names to ignore when saving the
-          model (useful for keys that aren't trained, but which are deterministic)
-
     """
     config_class = None
     base_model_prefix = ""
-    authorized_missing_keys = None
-    authorized_unexpected_keys = None
-    keys_to_never_save = None
+    # a list of re pattern of tensor names to ignore from the model when loading the model weights
+    # (and avoid unnecessary warnings).
+    _keys_to_ignore_on_load_missing = None
+    # a list of re pattern of tensor names to ignore from the weights when loading the model weights
+    # (and avoid unnecessary warnings).
+    _keys_to_ignore_on_load_unexpected = None
+    # a list of of tensor names to ignore when saving the model (useful for keys that aren't
+    # trained, but which are deterministic)
+    _keys_to_ignore_on_save = None
 
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
@@ -604,14 +605,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         Return:
             :obj:`torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
         """
-        base_model = getattr(self, self.base_model_prefix, self)  # get the base model if needed
-        model_embeds = base_model._resize_token_embeddings(new_num_tokens)
+        model_embeds = self._resize_token_embeddings(new_num_tokens)
         if new_num_tokens is None:
             return model_embeds
 
         # Update base model and current model config
         self.config.vocab_size = new_num_tokens
-        base_model.vocab_size = new_num_tokens
+        self.vocab_size = new_num_tokens
 
         # Tie weights again if needed
         self.tie_weights()
@@ -622,6 +622,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         old_embeddings = self.get_input_embeddings()
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
         self.set_input_embeddings(new_embeddings)
+
+        # if word embeddings are not tied, make sure that lm head is resized as well
+        if self.get_output_embeddings() is not None and not self.config.tie_word_embeddings:
+            old_lm_head = self.get_output_embeddings()
+            new_lm_head = self._get_resized_lm_head(old_lm_head, new_num_tokens)
+            self.set_output_embeddings(new_lm_head)
+
         return self.get_input_embeddings()
 
     def _get_resized_embeddings(
@@ -652,9 +659,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         if old_num_tokens == new_num_tokens:
             return old_embeddings
 
+        if not isinstance(old_embeddings, nn.Embedding):
+            raise TypeError(
+                f"Old embeddings are of type {type(old_embeddings)}, which is not an instance of {nn.Embedding}."
+                f"You should either use a different resize function or make sure that `old_embeddings` are an instance of {nn.Embedding}."
+            )
+
         # Build new embeddings
-        new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim)
-        new_embeddings.to(old_embeddings.weight.device)
+        new_embeddings = nn.Embedding(new_num_tokens, old_embedding_dim).to(self.device)
 
         # initialize all new embeddings (in particular added tokens)
         self._init_weights(new_embeddings)
@@ -664,6 +676,68 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         new_embeddings.weight.data[:num_tokens_to_copy, :] = old_embeddings.weight.data[:num_tokens_to_copy, :]
 
         return new_embeddings
+
+    def _get_resized_lm_head(
+        self, old_lm_head: torch.nn.Linear, new_num_tokens: Optional[int] = None, transposed: Optional[bool] = False
+    ) -> torch.nn.Linear:
+        """
+        Build a resized Linear Module from a provided old Linear Module. Increasing the size will add newly initialized
+        vectors at the end. Reducing the size will remove vectors from the end
+
+        Args:
+            old_lm_head (:obj:`torch.nn.Linear`):
+                Old lm head liner layer to be resized.
+            new_num_tokens (:obj:`int`, `optional`):
+                New number of tokens in the linear matrix.
+
+                Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
+                vectors from the end. If not provided or :obj:`None`, just returns a pointer to the input tokens
+                :obj:`torch.nn.Linear`` module of the model without doing anything.
+            transposed (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether ``old_lm_head`` is transposed or not. If True ``old_lm_head.size()`` is ``lm_head_dim,
+                vocab_size`` else ``vocab_size, lm_head_dim``.
+
+        Return:
+            :obj:`torch.nn.Linear`: Pointer to the resized Linear Module or the old Linear Module if
+            :obj:`new_num_tokens` is :obj:`None`
+        """
+        if new_num_tokens is None:
+            return old_lm_head
+
+        old_num_tokens, old_lm_head_dim = (
+            old_lm_head.weight.size() if not transposed else old_lm_head.weight.t().size()
+        )
+
+        if old_num_tokens == new_num_tokens:
+            return old_lm_head
+
+        if not isinstance(old_lm_head, nn.Linear):
+            raise TypeError(
+                f"Old language model head is of type {type(old_lm_head)}, which is not an instance of {nn.Linear}."
+                f"You should either use a different resize function or make sure that `old_embeddings` are an instance of {nn.Linear}."
+            )
+
+        # Build new lm head
+        new_lm_head_shape = (old_lm_head_dim, new_num_tokens) if not transposed else (new_num_tokens, old_lm_head_dim)
+        has_new_lm_head_bias = old_lm_head.bias is not None
+        new_lm_head = nn.Linear(*new_lm_head_shape, bias=has_new_lm_head_bias).to(self.device)
+
+        # initialize new lm head (in particular added tokens)
+        self._init_weights(new_lm_head)
+
+        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+
+        # Copy old lm head weights to new lm head
+        if not transposed:
+            new_lm_head.weight.data[:num_tokens_to_copy, :] = old_lm_head.weight.data[:num_tokens_to_copy, :]
+        else:
+            new_lm_head.weight.data[:, :num_tokens_to_copy] = old_lm_head.weight.data[:, :num_tokens_to_copy]
+
+        # Copy bias weights to new lm head
+        if has_new_lm_head_bias:
+            new_lm_head.bias.data[:num_tokens_to_copy] = old_lm_head.bias.data[:num_tokens_to_copy]
+
+        return new_lm_head
 
     def init_weights(self):
         """
@@ -696,13 +770,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         self.base_model._prune_heads(heads_to_prune)
 
-    def save_pretrained(self, save_directory):
+    def save_pretrained(self, save_directory: Union[str, os.PathLike]):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
         `:func:`~transformers.PreTrainedModel.from_pretrained`` class method.
 
         Arguments:
-            save_directory (:obj:`str`):
+            save_directory (:obj:`str` or :obj:`os.PathLike`):
                 Directory to which to save. Will be created if it doesn't exist.
         """
         if os.path.isfile(save_directory):
@@ -719,8 +793,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         state_dict = model_to_save.state_dict()
 
         # Handle the case where some state_dict keys shouldn't be saved
-        if self.keys_to_never_save is not None:
-            state_dict = {k: v for k, v in state_dict.items() if k not in self.keys_to_never_save}
+        if self._keys_to_ignore_on_save is not None:
+            state_dict = {k: v for k, v in state_dict.items() if k not in self._keys_to_ignore_on_save}
 
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
@@ -740,7 +814,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         logger.info("Model weights saved in {}".format(output_model_file))
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
         r"""
         Instantiate a pretrained pytorch model from a pre-trained model configuration.
 
@@ -755,7 +829,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         weights are discarded.
 
         Parameters:
-            pretrained_model_name_or_path (:obj:`str`, `optional`):
+            pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`, `optional`):
                 Can be either:
 
                     - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
@@ -771,11 +845,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                       arguments ``config`` and ``state_dict``).
             model_args (sequence of positional arguments, `optional`):
                 All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
-            config (:obj:`Union[PretrainedConfig, str]`, `optional`):
+            config (:obj:`Union[PretrainedConfig, str, os.PathLike]`, `optional`):
                 Can be either:
 
                     - an instance of a class derived from :class:`~transformers.PretrainedConfig`,
-                    - a string valid as input to :func:`~transformers.PretrainedConfig.from_pretrained`.
+                    - a string or path valid as input to :func:`~transformers.PretrainedConfig.from_pretrained`.
 
                 Configuration for the model to use instead of an automatically loaded configuation. Configuration can
                 be automatically loaded when:
@@ -793,7 +867,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 weights. In this case though, you should check if using
                 :func:`~transformers.PreTrainedModel.save_pretrained` and
                 :func:`~transformers.PreTrainedModel.from_pretrained` is not a simpler option.
-            cache_dir (:obj:`str`, `optional`):
+            cache_dir (:obj:`Union[str, os.PathLike]`, `optional`):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
             from_tf (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -880,6 +954,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         # Load model
         if pretrained_model_name_or_path is not None:
+            pretrained_model_name_or_path = str(pretrained_model_name_or_path)
             if os.path.isdir(pretrained_model_name_or_path):
                 if from_tf and os.path.isfile(os.path.join(pretrained_model_name_or_path, TF_WEIGHTS_NAME + ".index")):
                     # Load from a TF 1.0 checkpoint in priority if from_tf
@@ -1034,12 +1109,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
             # Some models may have keys that are not in the state by design, removing them before needlessly warning
             # the user.
-            if cls.authorized_missing_keys is not None:
-                for pat in cls.authorized_missing_keys:
+            if cls._keys_to_ignore_on_load_missing is not None:
+                for pat in cls._keys_to_ignore_on_load_missing:
                     missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
 
-            if cls.authorized_unexpected_keys is not None:
-                for pat in cls.authorized_unexpected_keys:
+            if cls._keys_to_ignore_on_load_unexpected is not None:
+                for pat in cls._keys_to_ignore_on_load_unexpected:
                     unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
             if len(unexpected_keys) > 0:

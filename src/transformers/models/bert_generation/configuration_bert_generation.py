@@ -54,6 +54,13 @@ class BertGenerationConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
+        position_embedding_type (:obj:`str`, `optional`, defaults to :obj:`"absolute"`):
+            Type of position embedding. Choose one of :obj:`"absolute"`, :obj:`"relative_key"`,
+            :obj:`"relative_key_query"`. For positional embeddings use :obj:`"absolute"`. For more information on
+            :obj:`"relative_key"`, please refer to `Self-Attention with Relative Position Representations (Shaw et al.)
+            <https://arxiv.org/abs/1803.02155>`__. For more information on :obj:`"relative_key_query"`, please refer to
+            `Method 4` in `Improve Transformer Models with Better Relative Position Embeddings (Huang et al.)
+            <https://arxiv.org/abs/2009.13658>`__.
 
     Examples::
 
@@ -87,6 +94,7 @@ class BertGenerationConfig(PretrainedConfig):
         bos_token_id=2,
         eos_token_id=1,
         gradient_checkpointing=False,
+        position_embedding_type="absolute",
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -103,3 +111,4 @@ class BertGenerationConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.gradient_checkpointing = gradient_checkpointing
+        self.position_embedding_type = position_embedding_type

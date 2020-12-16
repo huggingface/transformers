@@ -36,7 +36,7 @@ ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict(
     for key, value, in pretrained_map.items()
 )
 
-MODEL_MAPPING = OrderedDict(
+FLAX_MODEL_MAPPING = OrderedDict(
     [
         (RobertaConfig, FlaxRobertaModel),
         (BertConfig, FlaxBertModel),
@@ -79,13 +79,13 @@ class FlaxAutoModel(object):
             model = FlaxAutoModel.from_config(config)
             # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
-        for config_class, model_class in MODEL_MAPPING.items():
+        for config_class, model_class in FLAX_MODEL_MAPPING.items():
             if isinstance(config, config_class):
                 return model_class(config)
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} "
             f"for this kind of FlaxAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_MAPPING.keys())}."
+            f"Model type should be one of {', '.join(c.__name__ for c in FLAX_MODEL_MAPPING.keys())}."
         )
 
     @classmethod
@@ -173,11 +173,11 @@ class FlaxAutoModel(object):
         if not isinstance(config, PretrainedConfig):
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-        for config_class, model_class in MODEL_MAPPING.items():
+        for config_class, model_class in FLAX_MODEL_MAPPING.items():
             if isinstance(config, config_class):
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} "
             f"for this kind of FlaxAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_MAPPING.keys())}"
+            f"Model type should be one of {', '.join(c.__name__ for c in FLAX_MODEL_MAPPING.keys())}"
         )

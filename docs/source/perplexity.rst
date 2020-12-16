@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Perplexity of fixed-length models
 =======================================================================================================================
 
@@ -62,7 +74,7 @@ sliding the context window so that the model has more context when making each p
 This is a closer approximation to the true decomposition of the sequence probability and will typically yield a more
 favorable score. The downside is that it requires a separate forward pass for each token in the corpus. A good
 practical compromise is to employ a strided sliding window, moving the context by larger strides rather than sliding by
-1 token a time. This allows computation to procede much faster while still giving the model a large context to make
+1 token a time. This allows computation to proceed much faster while still giving the model a large context to make
 predictions at each step.
 
 Example: Calculating perplexity with GPT-2 in 🤗 Transformers

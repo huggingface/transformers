@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -282,6 +282,25 @@ class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mobilebert_for_token_classification(*config_and_inputs)
+
+    def test_model_common_attributes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        list_lm_models = [TFMobileBertForMaskedLM, TFMobileBertForPreTraining]
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+
+            if model_class in list_lm_models:
+                x = model.get_output_layer_with_bias()
+                assert isinstance(x, tf.keras.layers.Layer)
+                name = model.get_prefix_bias_name()
+                assert isinstance(name, str)
+            else:
+                x = model.get_output_layer_with_bias()
+                assert x is None
+                name = model.get_prefix_bias_name()
+                assert x is None
 
     @slow
     def test_model_from_pretrained(self):

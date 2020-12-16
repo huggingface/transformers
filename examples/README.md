@@ -1,58 +1,73 @@
+<!---
+Copyright 2020 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
 # Examples
 
-Version 2.9 of 🤗 Transformers introduced a new [`Trainer`](https://github.com/huggingface/transformers/blob/master/src/transformers/trainer.py) class for PyTorch, and its equivalent [`TFTrainer`](https://github.com/huggingface/transformers/blob/master/src/transformers/trainer_tf.py) for TF 2.
-Running the examples requires PyTorch 1.3.1+ or TensorFlow 2.2+.
-
-Here is the list of all our examples:
-- **grouped by task** (all official examples work for multiple models)
-- with information on whether they are **built on top of `Trainer`/`TFTrainer`** (if not, they still work, they might
-  just lack some features),
-- whether or not they leverage the [🤗 Datasets](https://github.com/huggingface/datasets) library.
-- links to **Colab notebooks** to walk through the scripts and run them easily,
-- links to **Cloud deployments** to be able to deploy large-scale trainings in the Cloud with little to no setup.
-
+This folder contains actively maintained examples of use of 🤗 Transformers organized along NLP tasks. If you are looking for an example that used to
+be in this folder, it may have moved to our [research projects](https://github.com/huggingface/transformers/tree/master/examples/research_projects) subfolder (which contains frozen snapshots of research projects).
 
 ## Important note
 
 **Important**
 
-To make sure you can successfully run the latest versions of the example scripts, you have to **install the library from source** and install some example-specific requirements.
-Execute the following steps in a new virtual environment:
-
+To make sure you can successfully run the latest versions of the example scripts, you have to **install the library from source** and install some example-specific requirements. To do this, execute the following steps in a new virtual environment:
 ```bash
 git clone https://github.com/huggingface/transformers
 cd transformers
 pip install .
-pip install -r ./examples/requirements.txt
+```
+Then cd in the example folder of your choice and run
+```bash
+pip install -r requirements.txt
 ```
 
-Alternatively, you can run the version of the examples as they were for your current version of Transformers via (for instance with v3.4.0):
+Alternatively, you can run the version of the examples as they were for your current version of Transformers via (for instance with v3.5.1):
 ```bash
-git checkout tags/v3.4.0
+git checkout tags/v3.5.1
 ```
 
 ## The Big Table of Tasks
 
+Here is the list of all our examples:
+- with information on whether they are **built on top of `Trainer`/`TFTrainer`** (if not, they still work, they might
+  just lack some features),
+- whether or not they leverage the [🤗 Datasets](https://github.com/huggingface/datasets) library.
+- links to **Colab notebooks** to walk through the scripts and run them easily,
+<!--
+Coming soon!
+- links to **Cloud deployments** to be able to deploy large-scale trainings in the Cloud with little to no setup.
+-->
+
 | Task | Example datasets | Trainer support | TFTrainer support | 🤗 Datasets | Colab
 |---|---|:---:|:---:|:---:|:---:|
 | [**`language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/language-modeling)       | Raw text        | ✅ | -  | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/01_how_to_train.ipynb)
-| [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/text-classification)   | GLUE, XNLI      | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/huggingface/notebooks/blob/master/examples/text_classification.ipynb)
-| [**`token-classification`**](https://github.com/huggingface/transformers/tree/master/examples/token-classification) | CoNLL NER       | ✅ | ✅ | ✅ | -
 | [**`multiple-choice`**](https://github.com/huggingface/transformers/tree/master/examples/multiple-choice)           | SWAG, RACE, ARC | ✅ | ✅ | - | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ViktorAlm/notebooks/blob/master/MPC_GPU_Demo_for_TF_and_PT.ipynb)
-| [**`question-answering`**](https://github.com/huggingface/transformers/tree/master/examples/question-answering)     | SQuAD           | ✅ | ✅ | - | -
-| [**`text-generation`**](https://github.com/huggingface/transformers/tree/master/examples/text-generation)           | -               | n/a | n/a | - | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/02_how_to_generate.ipynb)
-| [**`distillation`**](https://github.com/huggingface/transformers/tree/master/examples/distillation)                 | All             | - | -  | - | -
+| [**`question-answering`**](https://github.com/huggingface/transformers/tree/master/examples/question-answering)     | SQuAD           | ✅ | ✅ | ✅ | -
 | [**`summarization`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)                     | CNN/Daily Mail  | ✅  | - | - | -
+| [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/text-classification)   | GLUE, XNLI      | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/huggingface/notebooks/blob/master/examples/text_classification.ipynb)
+| [**`text-generation`**](https://github.com/huggingface/transformers/tree/master/examples/text-generation)           | -               | n/a | n/a | - | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/02_how_to_generate.ipynb)
+| [**`token-classification`**](https://github.com/huggingface/transformers/tree/master/examples/token-classification) | CoNLL NER       | ✅ | ✅ | ✅ | -
 | [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)                       | WMT             | ✅  | - | - | -
-| [**`bertology`**](https://github.com/huggingface/transformers/tree/master/examples/bertology)                       | -               | - | - | - | -
-| [**`adversarial`**](https://github.com/huggingface/transformers/tree/master/examples/adversarial)                   | HANS            | ✅ | - | - | -
 
 
-<br>
-
+<!--
 ## One-click Deploy to Cloud (wip)
 
 **Coming soon!**
+-->
 
 ## Running on TPUs
 

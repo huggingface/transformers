@@ -1,8 +1,19 @@
-Preprocessing data
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
+reprocessing data
 =======================================================================================================================
 
 In this tutorial, we'll explore how to preprocess your data using 🤗 Transformers. The main tool for this is what we
-
 call a :doc:`tokenizer <main_classes/tokenizer>`. You can build one using the tokenizer class associated to the model
 you would like to use, or directly with the :class:`~transformers.AutoTokenizer` class.
 
@@ -52,7 +63,7 @@ The tokenizer can decode a list of token ids in a proper sentence:
     "[CLS] Hello, I'm a single sentence! [SEP]"
 
 As you can see, the tokenizer automatically added some special tokens that the model expects. Not all models need
-special tokens; for instance, if we had used` gtp2-medium` instead of `bert-base-cased` to create our tokenizer, we
+special tokens; for instance, if we had used `gpt2-medium` instead of `bert-base-cased` to create our tokenizer, we
 would have seen the same sentence as the original one here. You can disable this behavior (which is only advised if you
 have added those special tokens yourself) by passing ``add_special_tokens=False``.
 

@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import unittest
 
 from transformers import is_torch_available
@@ -47,7 +61,7 @@ class ModelTester:
 class SelectiveCommonTest(unittest.TestCase):
     all_model_classes = (MBartForConditionalGeneration,) if is_torch_available() else ()
 
-    test_save_load_keys_to_never_save = ModelTesterMixin.test_save_load_keys_to_never_save
+    test_save_load__keys_to_ignore_on_save = ModelTesterMixin.test_save_load__keys_to_ignore_on_save
 
     def setUp(self):
         self.model_tester = ModelTester(self)
@@ -62,7 +76,7 @@ class AbstractSeq2SeqIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.tokenizer = AutoTokenizer.from_pretrained(cls.checkpoint_name)
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.checkpoint_name, use_fast=False)
         return cls
 
     @cached_property

@@ -1,6 +1,19 @@
+# Copyright 2020 The HuggingFace Team, the AllenNLP library authors. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """
-Utilities for working with the local dataset cache. This file is adapted from the AllenNLP library at
-https://github.com/allenai/allennlp Copyright by the AllenNLP authors.
+Utilities for working with the local dataset cache. Parts of this file is adapted from the AllenNLP library at
+https://github.com/allenai/allennlp.
 """
 
 import fnmatch
@@ -203,8 +216,52 @@ except ImportError:
     _tokenizers_available = False
 
 
-default_cache_path = os.path.join(torch_cache_home, "transformers")
+try:
+    import pandas  # noqa: F401
 
+    _pandas_available = True
+
+except ImportError:
+    _pandas_available = False
+
+
+try:
+    import torch_scatter
+
+    # Check we're not importing a "torch_scatter" directory somewhere
+    _scatter_available = hasattr(torch_scatter, "__version__") and hasattr(torch_scatter, "scatter")
+    if _scatter_available:
+        logger.debug(f"Succesfully imported torch-scatter version {torch_scatter.__version__}")
+    else:
+        logger.debug("Imported a torch_scatter object but this doesn't seem to be the torch-scatter library.")
+
+except ImportError:
+    _scatter_available = False
+
+
+old_default_cache_path = os.path.join(torch_cache_home, "transformers")
+# New default cache, shared with the Datasets library
+hf_cache_home = os.path.expanduser(
+    os.getenv("HF_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "huggingface"))
+)
+default_cache_path = os.path.join(hf_cache_home, "transformers")
+
+# Onetime move from the old location to the new one if no ENV variable has been set.
+if (
+    os.path.isdir(old_default_cache_path)
+    and not os.path.isdir(default_cache_path)
+    and "PYTORCH_PRETRAINED_BERT_CACHE" not in os.environ
+    and "PYTORCH_TRANSFORMERS_CACHE" not in os.environ
+    and "TRANSFORMERS_CACHE" not in os.environ
+):
+    logger.warn(
+        "In Transformers v4.0.0, the default path to cache downloaded models changed from "
+        "'~/.cache/torch/transformers' to '~/.cache/huggingface/transformers'. Since you don't seem to have overridden "
+        "and '~/.cache/torch/transformers' is a directory that exists, we're moving it to "
+        "'~/.cache/huggingface/transformers' to avoid redownloading models you have already in the cache. You should "
+        "only see this message once."
+    )
+    shutil.move(old_default_cache_path, default_cache_path)
 
 PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
 PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
@@ -289,6 +346,14 @@ def is_tokenizers_available():
 
 def is_in_notebook():
     return _in_notebook
+
+
+def is_scatter_available():
+    return _scatter_available
+
+
+def is_pandas_available():
+    return _pandas_available
 
 
 def torch_only_method(fn):
@@ -393,6 +458,13 @@ installation page: https://github.com/google/flax and follow the ones that match
 """
 
 
+# docstyle-ignore
+SCATTER_IMPORT_ERROR = """
+{0} requires the torch-scatter library but it was not found in your environment. You can install it with pip as
+explained here: https://github.com/rusty1s/pytorch_scatter.
+"""
+
+
 def requires_datasets(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_datasets_available():
@@ -445,6 +517,12 @@ def requires_protobuf(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_protobuf_available():
         raise ImportError(PROTOBUF_IMPORT_ERROR.format(name))
+
+
+def requires_scatter(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_scatter_available():
+        raise ImportError(SCATTER_IMPORT_ERROR.format(name))
 
 
 def add_start_docstrings(*docstr):
@@ -815,7 +893,7 @@ def add_code_sample_docstrings(
         elif "MaskedLM" in model_class or model_class in ["FlaubertWithLMHeadModel", "XLMWithLMHeadModel"]:
             doc_kwargs["mask"] = "[MASK]" if mask is None else mask
             code_sample = TF_MASKED_LM_SAMPLE if is_tf_class else PT_MASKED_LM_SAMPLE
-        elif "LMHead" in model_class:
+        elif "LMHead" in model_class or "CausalLM" in model_class:
             code_sample = TF_CAUSAL_LM_SAMPLE if is_tf_class else PT_CAUSAL_LM_SAMPLE
         elif "Model" in model_class or "Encoder" in model_class:
             code_sample = TF_BASE_MODEL_SAMPLE if is_tf_class else PT_BASE_MODEL_SAMPLE

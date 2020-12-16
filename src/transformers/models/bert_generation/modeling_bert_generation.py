@@ -173,7 +173,7 @@ class BertGenerationPreTrainedModel(PreTrainedModel):
 
     config_class = BertGenerationConfig
     base_model_prefix = "bert"
-    authorized_missing_keys = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -421,6 +421,9 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.lm_head.decoder
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(BERT_GENERATION_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)

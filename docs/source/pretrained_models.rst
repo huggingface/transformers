@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Pretrained models
 =======================================================================================================================
 
@@ -332,6 +344,12 @@ For a list that includes all community-uploaded models, refer to `https://huggin
 |                    +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 |                    | ``facebook/bart-large-cnn``                                | | 24-layer, 1024-hidden, 16-heads, 406M parameters       (same as large)                                                              |
 |                    |                                                            | | bart-large base architecture finetuned on cnn summarization task                                                                    |
++--------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| BARThez            | ``moussaKam/barthez``                                      | | 12-layer,  768-hidden, 12-heads, 216M parameters                                                                                    |
+|                    |                                                            |                                                                                                                                       |
+|                    |                                                            | (see `details <https://github.com/moussaKam/BARThez>`__)                                                                              |
+|                    +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                    | ``moussaKam/mbarthez``                                     | | 24-layer, 1024-hidden, 16-heads, 561M parameters                                                                                    |
 +--------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 | DialoGPT           | ``DialoGPT-small``                                         | | 12-layer, 768-hidden, 12-heads, 124M parameters                                                                                     |
 |                    |                                                            | | Trained on English text: 147M conversation-like exchanges extracted from Reddit.                                                    |
