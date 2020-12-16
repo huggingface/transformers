@@ -36,9 +36,9 @@ WikiHop and TriviaQA.*
 
 Tips:
 
-- Since the Longformer is based on RoBERTa, it doesn't have :obj:`token_type_ids`. You don't need to indicate which 
-  token belongs to which segment. Just separate your segments with the separation token :obj:`tokenizer.sep_token` 
-  (or :obj:`</s>`).
+- Since the Longformer is based on RoBERTa, it doesn't have :obj:`token_type_ids`. You don't need to indicate which
+  token belongs to which segment. Just separate your segments with the separation token :obj:`tokenizer.sep_token` (or
+  :obj:`</s>`).
 
 The Authors' code can be found `here <https://github.com/allenai/longformer>`__.
 
