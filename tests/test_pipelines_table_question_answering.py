@@ -15,7 +15,7 @@
 import unittest
 
 from transformers.pipelines import Pipeline, pipeline
-from transformers.testing_utils import require_pandas, require_torch, require_torch_scatter
+from transformers.testing_utils import require_pandas, require_torch, require_torch_scatter, slow
 
 from .test_pipelines_common import CustomInputPipelineCommonMixin
 
@@ -168,3 +168,67 @@ class TQAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
                 self.assertDictEqual(sequential_multi, multi)
             else:
                 self.assertNotEqual(sequential_multi, multi)
+
+    @slow
+    def test_integration_wtq(self):
+        tqa_pipeline = pipeline("table-question-answering")
+
+        data = {
+            "Repository": ["Transformers", "Datasets", "Tokenizers"],
+            "Stars": ["36542", "4512", "3934"],
+            "Contributors": ["651", "77", "34"],
+            "Programming language": ["Python", "Python", "Rust, Python and NodeJS"],
+        }
+        queries = [
+            "What repository has the largest number of stars?",
+            "Given that the numbers of stars defines if a repository is active, what repository is the most active?",
+            "What is the number of repositories?",
+            "What is the average number of stars?",
+            "What is the total amount of stars?",
+        ]
+
+        results = tqa_pipeline(data, queries)
+
+        expected_results = [
+            {"answer": "Transformers", "coordinates": [(0, 0)], "cells": ["Transformers"]},
+            {"answer": "Transformers", "coordinates": [(0, 0)], "cells": ["Transformers"]},
+            {
+                "answer": "Transformers, Datasets, Tokenizers",
+                "coordinates": [(0, 0), (1, 0), (2, 0)],
+                "cells": ["Transformers", "Datasets", "Tokenizers"],
+            },
+            {
+                "answer": "36542, 4512, 3934",
+                "coordinates": [(0, 1), (1, 1), (2, 1)],
+                "cells": ["36542", "4512", "3934"],
+            },
+            {
+                "answer": "36542, 4512, 3934",
+                "coordinates": [(0, 1), (1, 1), (2, 1)],
+                "cells": ["36542", "4512", "3934"],
+            },
+        ]
+        self.assertListEqual(results, expected_results)
+
+    @slow
+    def test_integration_sqa(self):
+        tqa_pipeline = pipeline(
+            "table-question-answering",
+            model="nielsr/tapas-base-finetuned-sqa",
+            tokenizer="nielsr/tapas-base-finetuned-sqa",
+        )
+        data = {
+            "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
+            "Age": ["56", "45", "59"],
+            "Number of movies": ["87", "53", "69"],
+            "Date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
+        }
+        queries = ["How many movies has George Clooney played in?", "How old is he?", "What's his date of birth?"]
+        results = tqa_pipeline(data, queries, sequential=True)
+
+        expected_results = [
+            {"answer": "69", "coordinates": [(2, 2)], "cells": ["69"]},
+            {"answer": "59", "coordinates": [(2, 1)], "cells": ["59"]},
+            {"answer": "28 november 1967", "coordinates": [(2, 3)], "cells": ["28 november 1967"]},
+        ]
+        self.assertListEqual(results, expected_results)
