@@ -205,7 +205,7 @@ WordPiece is the subword tokenization algorithm used for :doc:`BERT <model_doc/b
 Voice Search (Schuster et al., 2012)
 <https://static.googleusercontent.com/media/research.google.com/ja//pubs/archive/37842.pdf>`__ and is very similar to
 BPE. WordPiece first initializes the vocabulary to include every character present in the training data and
-progressively learn a given number of merge rules. In contrast to BPE, WordPiece does not choose the most frequent
+progressively learns a given number of merge rules. In contrast to BPE, WordPiece does not choose the most frequent
 symbol pair, but the one that maximizes the likelihood of the training data once added to the vocabulary.
 
 So what does this mean exactly? Referring to the previous example, maximizing the likelihood of the training data is
