@@ -190,6 +190,7 @@ from .pipelines import (
     PipelineDataFormat,
     QuestionAnsweringPipeline,
     SummarizationPipeline,
+    TableQuestionAnsweringPipeline,
     Text2TextGenerationPipeline,
     TextClassificationPipeline,
     TextGenerationPipeline,

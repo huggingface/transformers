@@ -468,6 +468,13 @@ explained here: https://github.com/rusty1s/pytorch_scatter.
 """
 
 
+# docstyle-ignore
+PANDAS_IMPORT_ERROR = """
+{0} requires the pandas library but it was not found in your environment. You can install it with pip as
+explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/install.html.
+"""
+
+
 def requires_datasets(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_datasets_available():
@@ -520,6 +527,12 @@ def requires_protobuf(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_protobuf_available():
         raise ImportError(PROTOBUF_IMPORT_ERROR.format(name))
+
+
+def requires_pandas(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_pandas_available():
+        raise ImportError(PANDAS_IMPORT_ERROR.format(name))
 
 
 def requires_scatter(obj):
