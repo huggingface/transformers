@@ -202,7 +202,7 @@ WordPiece
 
 WordPiece is the subword tokenization algorithm used for :doc:`BERT <model_doc/bert>`, :doc:`DistilBERT
 <model_doc/distilbert>`, and :doc:`Electra <model_doc/electra>`. The algorithm was outlined in `Japanese and Korean
-Voice Seach (Schuster et al., 2012)
+Voice Search (Schuster et al., 2012)
 <https://static.googleusercontent.com/media/research.google.com/ja//pubs/archive/37842.pdf>`__ and is very similar to
 BPE. WordPiece first initializes the vocabulary to include every character present in the training data and
 progressively learn a given number of merge rules. In contrast to BPE, WordPiece does not choose the most frequent
