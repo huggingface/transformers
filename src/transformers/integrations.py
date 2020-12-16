@@ -18,6 +18,7 @@ import math
 import os
 import re
 import tempfile
+import numbers
 from pathlib import Path
 
 from .file_utils import ENV_VARS_TRUE_VALUES
@@ -399,6 +400,8 @@ class WandbCallback(TrainerCallback):
             self.setup(args, state, model, reinit=hp_search, **kwargs)
 
     def on_train_end(self, args, state, control, model=None, tokenizer=None, **kwargs):
+        # commit last step
+        wandb.log({})
         if self._log_model and self._initialized and state.is_world_process_zero:
             from .trainer import Trainer
 
@@ -408,7 +411,11 @@ class WandbCallback(TrainerCallback):
                 # use run name and ensure it's a valid Artifact name
                 artifact_name = re.sub(r"[^a-zA-Z0-9_\.\-]", "", wandb.run.name)
                 metadata = (
-                    wandb.run.history._data
+                    {
+                        k: v
+                        for k, v in dict(wandb.summary).items()
+                        if isinstance(v, numbers.Number) and not k.startswith("_")
+                    }
                     if not args.load_best_model_at_end
                     else {
                         f"eval/{args.metric_for_best_model}": state.best_metric,
