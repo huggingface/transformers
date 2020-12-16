@@ -1909,8 +1909,8 @@ class TapasTokenizer(PreTrainedTokenizer):
             (``List[List[[tuple]]`` of length ``batch_size``): Predicted answer coordinates as a list of lists of
             tuples. Each element in the list contains the predicted answer coordinates of a single example in the
             batch, as a list of tuples. Each tuple is a cell, i.e. (row index, column index).
-            predicted_aggregation_indices (`optional`, returned when ``logits_aggregation`` is provided) ``List[int]``
-            of length ``batch_size``: Predicted aggregation operator indices of the aggregation head.
+            predicted_aggregation_indices (``List[int]``of length ``batch_size``, `optional`, returned when
+            ``logits_aggregation`` is provided): Predicted aggregation operator indices of the aggregation head.
         """
         # input data is of type float32
         # np.log(np.finfo(np.float32).max) = 88.72284
@@ -1969,11 +1969,11 @@ class TapasTokenizer(PreTrainedTokenizer):
             answer_coordinates = sorted(answer_coordinates)
             predicted_answer_coordinates.append(answer_coordinates)
 
-        output = predicted_answer_coordinates
+        output = (predicted_answer_coordinates,)
 
         if logits_agg is not None:
             predicted_aggregation_indices = logits_agg.argmax(dim=-1)
-            output = (output, predicted_aggregation_indices.tolist())
+            output = (predicted_answer_coordinates, predicted_aggregation_indices.tolist())
 
         return output
 

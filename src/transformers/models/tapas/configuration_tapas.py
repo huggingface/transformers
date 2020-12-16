@@ -87,41 +87,49 @@ class TapasConfig(PretrainedConfig):
             Importance weight for the regression loss.
         use_normalized_answer_loss (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to normalize the answer loss by the maximum of the predicted and expected value.
-        huber_loss_delta: (:obj:`float`, `optional`):
+        huber_loss_delta (:obj:`float`, `optional`):
             Delta parameter used to calculate the regression loss.
-        temperature: (:obj:`float`, `optional`, defaults to 1.0):
+        temperature (:obj:`float`, `optional`, defaults to 1.0):
             Value used to control (OR change) the skewness of cell logits probabilities.
-        aggregation_temperature: (:obj:`float`, `optional`, defaults to 1.0):
+        aggregation_temperature (:obj:`float`, `optional`, defaults to 1.0):
             Scales aggregation logits to control the skewness of probabilities.
-        use_gumbel_for_cells: (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        use_gumbel_for_cells (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to apply Gumbel-Softmax to cell selection.
-        use_gumbel_for_aggregation: (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        use_gumbel_for_aggregation (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to apply Gumbel-Softmax to aggregation selection.
-        average_approximation_function: (:obj:`string`, `optional`, defaults to :obj:`"ratio"`):
+        average_approximation_function (:obj:`string`, `optional`, defaults to :obj:`"ratio"`):
             Method to calculate the expected average of cells in the weak supervision case. One of :obj:`"ratio"`,
             :obj:`"first_order"` or :obj:`"second_order"`.
-        cell_selection_preference: (:obj:`float`, `optional`):
+        cell_selection_preference (:obj:`float`, `optional`):
             Preference for cell selection in ambiguous cases. Only applicable in case of weak supervision for
             aggregation (WTQ, WikiSQL). If the total mass of the aggregation probabilities (excluding the "NONE"
             operator) is higher than this hyperparameter, then aggregation is predicted for an example.
-        answer_loss_cutoff: (:obj:`float`, `optional`):
+        answer_loss_cutoff (:obj:`float`, `optional`):
             Ignore examples with answer loss larger than cutoff.
-        max_num_rows: (:obj:`int`, `optional`, defaults to 64):
+        max_num_rows (:obj:`int`, `optional`, defaults to 64):
             Maximum number of rows.
-        max_num_columns: (:obj:`int`, `optional`, defaults to 32):
+        max_num_columns (:obj:`int`, `optional`, defaults to 32):
             Maximum number of columns.
-        average_logits_per_cell: (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        average_logits_per_cell (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to average logits per cell.
-        select_one_column: (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        select_one_column (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to constrain the model to only select cells from a single column.
-        allow_empty_column_selection: (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        allow_empty_column_selection (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to allow not to select any column.
-        init_cell_selection_weights_to_zero: (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        init_cell_selection_weights_to_zero (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to initialize cell selection weights to 0 so that the initial probabilities are 50%.
-        reset_position_index_per_cell: (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        reset_position_index_per_cell (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to restart position indexes at every cell (i.e. use relative position embeddings).
-        disable_per_token_loss: (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        disable_per_token_loss (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to disable any (strong or weak) supervision on cells.
+        aggregation_labels (:obj:`Dict[int, label]`, `optional`):
+            The aggregation labels used to aggregate the results. For example, the WTQ models have the following
+            aggregation labels: :obj:`{0: "NONE", 1: "SUM", 2: "AVERAGE", 3: "COUNT"}`
+        no_aggregation_label_index (:obj:`int`, `optional`):
+            If the aggregation labels are defined and one of these labels represents "No aggregation", this should be
+            set to its index. For example, the WTQ models have the "NONE" aggregation label at index 0, so that value
+            should be set to 0 for these models.
+
 
     Example::
 
@@ -174,6 +182,8 @@ class TapasConfig(PretrainedConfig):
         init_cell_selection_weights_to_zero=False,
         reset_position_index_per_cell=True,
         disable_per_token_loss=False,
+        aggregation_labels=None,
+        no_aggregation_label_index=None,
         **kwargs
     ):
 
@@ -217,3 +227,10 @@ class TapasConfig(PretrainedConfig):
         self.init_cell_selection_weights_to_zero = init_cell_selection_weights_to_zero
         self.reset_position_index_per_cell = reset_position_index_per_cell
         self.disable_per_token_loss = disable_per_token_loss
+
+        # Aggregation hyperparameters
+        self.aggregation_labels = aggregation_labels
+        self.no_aggregation_label_index = no_aggregation_label_index
+
+        if isinstance(self.aggregation_labels, dict):
+            self.aggregation_labels = {int(k): v for k, v in aggregation_labels.items()}

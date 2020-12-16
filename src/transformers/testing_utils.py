@@ -172,6 +172,19 @@ def require_torch(test_case):
         return test_case
 
 
+def require_torch_scatter(test_case):
+    """
+    Decorator marking a test that requires PyTorch scatter.
+
+    These tests are skipped when PyTorch scatter isn't installed.
+
+    """
+    if not _scatter_available:
+        return unittest.skip("test requires PyTorch scatter")(test_case)
+    else:
+        return test_case
+
+
 def require_tf(test_case):
     """
     Decorator marking a test that requires TensorFlow.
