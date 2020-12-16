@@ -270,6 +270,7 @@ TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
 WEIGHTS_NAME = "pytorch_model.bin"
 TF2_WEIGHTS_NAME = "tf_model.h5"
 TF_WEIGHTS_NAME = "model.ckpt"
+FLAX_WEIGHTS_NAME = "flax_model.msgpack"
 CONFIG_NAME = "config.json"
 MODEL_CARD_NAME = "modelcard.json"
 
