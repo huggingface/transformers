@@ -2059,7 +2059,7 @@ class QuestionAnsweringPipeline(Pipeline):
         }
 
 
-class TablequestionAnsweringArgumentHandler(ArgumentHandler):
+class TableQuestionAnsweringArgumentHandler(ArgumentHandler):
     """
     Handles arguments for the TableQuestionAnsweringPipeline
     """
@@ -2126,7 +2126,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
 
     default_input_names = "table,query"
 
-    def __init__(self, args_parser=TablequestionAnsweringArgumentHandler(), *args, **kwargs):
+    def __init__(self, args_parser=TableQuestionAnsweringArgumentHandler(), *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._args_parser = args_parser
 
