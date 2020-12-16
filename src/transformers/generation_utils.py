@@ -573,6 +573,12 @@ class GenerationMixin:
             pad_token_id = eos_token_id
 
         if self.config.is_encoder_decoder:
+            # Pass output_attentions and output_hidden_states to the encoder
+            if output_attentions and model_kwargs.get("output_attentions") is not True:
+                model_kwargs["output_atentions"] = True
+            if output_hidden_states and model_kwargs.get("output_hidden_states") is not True:
+                model_kwargs["output_hidden_states"] = True
+
             # add encoder_outputs to model_kwargs
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
 
@@ -834,6 +840,16 @@ class GenerationMixin:
 
             >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         """
+        logits = None
+        decoder_attentions = () if output_attentions else None
+        decoder_hidden_states = None
+
+        if "encoder_outputs" in model_kwargs:
+            encoder_outputs = model_kwargs["encoder_outputs"]
+            encoder_attentions = encoder_outputs.get("encoder_attentions", None) if output_attentions else None
+            encoder_hidden_states = (
+                encoder_outputs.get("encoder_hidden_states", None) if output_hidden_states else None
+            )
 
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
@@ -851,8 +867,30 @@ class GenerationMixin:
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             # forward pass to get next token
-            outputs = self(**model_inputs, return_dict=True)
+            outputs = self(
+                **model_inputs,
+                return_dict=True,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
             next_token_logits = outputs.logits[:, -1, :]
+
+            if output_scores:
+                if logits is None:
+                    logits = outputs.logits
+                logits = torch.cat((logits, next_token_logits.view((logits.shape[0], 1, logits.shape[2]))), dim=1)
+            if output_attentions:
+                # TODO
+                # decoder_attentions = decoder_attentions + (outputs.attentions,)
+                raise ValueError("Not implemenyed (yet)")
+            if output_hidden_states:
+                if decoder_hidden_states is None:
+                    decoder_hidden_states = outputs.hidden_states
+                else:
+                    decoder_hidden_states = tuple(
+                        torch.cat((decoder_hidden_states[i], outputs.hidden_states[i]), 1)
+                        for i in range(len(decoder_hidden_states))
+                    )
 
             # pre-process distribution
             scores = logits_processor(input_ids, next_token_logits)
@@ -886,7 +924,19 @@ class GenerationMixin:
             # increase cur_len
             cur_len = cur_len + 1
 
-        return input_ids
+        if self.config.is_encoder_decoder:
+            return GreedySearchEncoderDecoderOutput(
+                sequences=input_ids,
+                logits=logits,
+                encoder_attentions=encoder_attentions,
+                encoder_hidden_states=encoder_hidden_states,
+                decoder_attentions=decoder_attentions,
+                decoder_hidden_states=decoder_hidden_states,
+            )
+        else:
+            return GreedySearchDecoderOnlyOutput(
+                sequences=input_ids, logits=logits, attentions=decoder_attentions, hidden_states=decoder_hidden_states
+            )
 
     def sample(
         self,
