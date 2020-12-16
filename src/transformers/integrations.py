@@ -92,6 +92,13 @@ try:
 except ImportError:
     _has_mlflow = False
 
+try:
+    import fairscale  # noqa: F401
+
+    _has_fairscale = True
+except ImportError:
+    _has_fairscale = False
+
 # No transformer imports above this point
 
 from .file_utils import is_torch_tpu_available  # noqa: E402
@@ -126,6 +133,10 @@ def is_azureml_available():
 
 def is_mlflow_available():
     return _has_mlflow
+
+
+def is_fairscale_available():
+    return _has_fairscale
 
 
 def hp_params(trial):
