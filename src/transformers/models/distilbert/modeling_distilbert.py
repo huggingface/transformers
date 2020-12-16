@@ -627,7 +627,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
         pooled_output = nn.ReLU()(pooled_output)  # (bs, dim)
         pooled_output = self.dropout(pooled_output)  # (bs, dim)
-        logits = self.classifier(pooled_output)  # (bs, dim)
+        logits = self.classifier(pooled_output)  # (bs, num_labels)
 
         loss = None
         if labels is not None:
