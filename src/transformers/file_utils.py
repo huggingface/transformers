@@ -994,7 +994,7 @@ def cached_path(
         force_download: if True, re-download the file even if it's already cached in the cache dir.
         resume_download: if True, resume the download if incompletely received file is found.
         user_agent: Optional string or dict that will be appended to the user-agent on remote requests.
-        use_auth_token: Optional string or boolean to use as Bearer token for remote files. If true,
+        use_auth_token: Optional string or boolean to use as Bearer token for remote files. If True,
             will get token from ~/.huggingface.
         extract_compressed_file: if True and the path point to a zip or tar file, extract the compressed
             file in a folder along the archive.
