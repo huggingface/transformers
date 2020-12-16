@@ -657,7 +657,7 @@ Here are the expected results:
         {'word': 'Bridge', 'score': 0.990249514579773, 'entity': 'I-LOC'}
     ]
 
-Note, how the tokens of the sequence "Hugging Face" have been identified as an organisation, and "New York City",
+Note how the tokens of the sequence "Hugging Face" have been identified as an organisation, and "New York City",
 "DUMBO" and "Manhattan Bridge" have been identified as locations.
 
 Here is an example of doing named entity recognition, using a model and a tokenizer. The process is the following:
