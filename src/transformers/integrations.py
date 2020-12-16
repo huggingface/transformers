@@ -15,10 +15,10 @@
 Integrations with other Python libraries.
 """
 import math
+import numbers
 import os
 import re
 import tempfile
-import numbers
 from pathlib import Path
 
 from .file_utils import ENV_VARS_TRUE_VALUES
