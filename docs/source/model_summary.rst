@@ -512,8 +512,8 @@ BART
 <https://arxiv.org/abs/1910.13461>`_, Mike Lewis et al.
 
 Sequence-to-sequence model with an encoder and a decoder. Encoder is fed a corrupted version of the tokens, decoder is
-fed the original tokens (but has a mask to hide the future words like a regular transformers decoder). For the encoder
-, on the pretraining tasks, a composition of the following transformations are applied:
+fed the original tokens (but has a mask to hide the future words like a regular transformers decoder). A composition of
+the following transformations are applied on the pretraining tasks for the encoder:
 
   * mask random tokens (like in BERT)
   * delete random tokens
