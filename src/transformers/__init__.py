@@ -945,6 +945,7 @@ else:
 
 
 if is_flax_available():
+    from .modeling_flax_utils import FlaxPreTrainedModel
     from .models.auto import FLAX_MODEL_MAPPING, FlaxAutoModel
     from .models.bert import FlaxBertForMaskedLM, FlaxBertModel
     from .models.roberta import FlaxRobertaModel
