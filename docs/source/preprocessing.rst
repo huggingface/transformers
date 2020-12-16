@@ -131,7 +131,7 @@ ones it should not (because they represent padding in this case).
 
 
 Note that if your model does not have a maximum length associated to it, the command above will throw a warning. You
-can safely ignore it. You can also pass ``verbose=False`` to stop the tokenizer to throw those kinds of warnings.
+can safely ignore it. You can also pass ``verbose=False`` to stop the tokenizer from throwing those kinds of warnings.
 
 .. _sentence-pairs:
 
