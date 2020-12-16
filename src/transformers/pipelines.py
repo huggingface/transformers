@@ -2113,7 +2113,8 @@ class TablequestionAnsweringArgumentHandler(ArgumentHandler):
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class TableQuestionAnsweringPipeline(Pipeline):
     """
-    Table Question Answering pipeline using a :obj:`ModelForTableQuestionAnswering`.
+    Table Question Answering pipeline using a :obj:`ModelForTableQuestionAnswering`. This pipeline is only available in
+    PyTorch.
 
     This tabular question answering pipeline can currently be loaded from :func:`~transformers.pipeline` using the
     following task identifier: :obj:`"table-question-answering"`.
@@ -2130,7 +2131,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
         self._args_parser = args_parser
 
         if self.framework == "tf":
-            raise ValueError("The TableQuestionAnsweringPipeline is only available in PyTorch for now.")
+            raise ValueError("The TableQuestionAnsweringPipeline is only available in PyTorch.")
 
         self.check_model_type(MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING)
 
@@ -3023,8 +3024,13 @@ SUPPORTED_TASKS = {
     "table-question-answering": {
         "impl": TableQuestionAnsweringPipeline,
         "pt": AutoModelForTableQuestionAnswering if is_torch_available() else None,
+        "tf": None,
         "default": {
-            "model": {"pt": "nielsr/tapas-base-finetuned-wtq"},
+            "model": {
+                "pt": "nielsr/tapas-base-finetuned-wtq",
+                "tokenizer": "nielsr/tapas-base-finetuned-wtq",
+                "tf": "nielsr/tapas-base-finetuned-wtq",
+            },
         },
     },
     "fill-mask": {
@@ -3281,6 +3287,12 @@ def pipeline(
                 "Model might be a PyTorch model (ending with `.bin`) but PyTorch is not available. "
                 "Trying to load the model with Tensorflow."
             )
+
+        if model_class is None:
+            raise ValueError(
+                f"Pipeline using {framework} framework, but this framework is not supported by this pipeline."
+            )
+
         model = model_class.from_pretrained(model, config=config, revision=revision, **model_kwargs)
         if task == "translation" and model.config.task_specific_params:
             for key in model.config.task_specific_params:
