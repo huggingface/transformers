@@ -391,8 +391,11 @@ class GenerationMixin:
         num_beam_groups: Optional[int] = None,
         diversity_penalty: Optional[float] = None,
         prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], List[int]]] = None,
-        **model_kwargs
-    ) -> torch.LongTensor:
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
+        output_scores: Optional[bool] = False,
+        **model_kwargs,
+    ) -> Union[GreedySearchOutput, torch.LongTensor]:
         r"""
         Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
         multinomial sampling, beam-search decoding, and beam-search multinomial sampling.
@@ -471,6 +474,13 @@ class GenerationMixin:
                 conditioned on the previously generated tokens :obj:`inputs_ids` and the batch ID :obj:`batch_id`. This
                 argument is useful for constrained generation conditioned on the prefix, as described in
                 `Autoregressive Entity Retrieval <https://arxiv.org/abs/2010.00904>`__.
+            output_attentions (:obj:`bool`, `optional`, defaults to `False`):
+                Whether to return attention weights in output
+            output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
+                Whether to return hidden states in output
+            output_scores (:obj:`bool`, `optional`, defaults to `False`):
+                Whether to return the logits in output
+
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
                 model is an Encoder-Decoder model, encoder specific kwargs should not be prefixed and decoder specific
@@ -616,6 +626,9 @@ class GenerationMixin:
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                output_scores=output_scores,
                 **model_kwargs,
             )
 
@@ -755,8 +768,11 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        **model_kwargs
-    ):
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
+        output_scores: Optional[bool] = False,
+        **model_kwargs,
+    ) -> GreedySearchOutput:
         r"""
         Generates sequences for models with a language modeling head using greedy decoding.
 
@@ -775,6 +791,13 @@ class GenerationMixin:
                 The id of the `padding` token.
             eos_token_id (:obj:`int`, `optional`):
                 The id of the `end-of-sequence` token.
+            output_attentions (:obj:`bool`, `optional`, defaults to `False`):
+                Whether to return attention weights in output
+            output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
+                Whether to return hidden states in output
+            output_scores (:obj:`bool`, `optional`, defaults to `False`):
+                Whether to return the logits in output
+
             model_kwargs:
                 Additional model specific keyword arguments will be forwarded to the :obj:`forward` function of the
                 model. If model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
