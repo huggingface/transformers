@@ -17,8 +17,8 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.generation_utils import GreedySearchDecoderOnlyOutput, GreedySearchEncoderDecoderOutput
+from transformers.testing_utils import require_torch, slow, torch_device
 
 
 if is_torch_available():
@@ -205,8 +205,12 @@ class GenerationTesterMixin:
         # check `generate()` and `greedy_search()` are equal
         for model_class in self.all_generative_model_classes:
             model, output_greedy, output_generate, _ = self._greedy_generate(model_class)
-            self.assertIsInstance(output_greedy, GreedySearchDecoderOnlyOutput)
-            self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
+            if model.config.is_encoder_decoder:
+                self.assertIsInstance(output_greedy, GreedySearchEncoderDecoderOutput)
+                self.assertIsInstance(output_generate, GreedySearchEncoderDecoderOutput)
+            else:
+                self.assertIsInstance(output_greedy, GreedySearchDecoderOnlyOutput)
+                self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
             self.assertIsNone(output_greedy.logits)
             self.assertIsNone(output_generate.logits)
 
