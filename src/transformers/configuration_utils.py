@@ -123,6 +123,8 @@ class PretrainedConfig(object):
         - **num_return_sequences** (:obj:`int`, `optional`, defaults to 1) -- Number of independently computed returned
           sequences for each element in the batch that will be used by default in the :obj:`generate` method of the
           model.
+        - **output_scores** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether the model should return the logits when used for generation
+
 
     Parameters for fine-tuning tasks
 
@@ -202,6 +204,7 @@ class PretrainedConfig(object):
         self.bad_words_ids = kwargs.pop("bad_words_ids", None)
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
         self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forward", 0)
+        self.output_scores = kwargs.pop("output_scores", False)
 
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)
