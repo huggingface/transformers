@@ -887,8 +887,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (i.e., do not try to download the model).
             use_auth_token (:obj:`str` or `bool`, `optional`):
-                Specify token to use as Bearer authorization for remote files. If true, will get token from
-                ~/.huggingface.
+                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
             revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
@@ -910,6 +910,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                       ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute
                       with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration
                       attribute will be passed to the underlying model's ``__init__`` function.
+
+        .. note::
+
+            Passing :obj:`use_auth_token=True` is required when you want to use a private model.
 
         Examples::
 

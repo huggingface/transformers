@@ -318,8 +318,8 @@ class PretrainedConfig(object):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             use_auth_token (:obj:`str` or `bool`, `optional`):
-                Specify token to use as Bearer authorization for remote files. If true, will get token from
-                ~/.huggingface.
+                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
             revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
@@ -334,6 +334,10 @@ class PretrainedConfig(object):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
                 by the ``return_unused_kwargs`` keyword parameter.
+
+        .. note::
+
+            Passing :obj:`use_auth_token=True` is required when you want to use a private model.
 
         Returns:
             :class:`PretrainedConfig`: The configuration object instantiated from this pretrained model.
