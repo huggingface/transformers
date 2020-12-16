@@ -2072,20 +2072,21 @@ class TablequestionAnsweringArgumentHandler(ArgumentHandler):
         import pandas as pd
 
         if table is None:
-            raise ValueError("Table cannot be None.")
+            raise ValueError("Keyword argument `table` cannot be None.")
         elif query is None:
             if isinstance(table, dict) and table.get("query") is not None and table.get("table") is not None:
                 tqa_pipeline_inputs = [table]
-            elif isinstance(table, list) and len(table) > 0 and isinstance(table[0], dict):
+            elif isinstance(table, list) and len(table) > 0:
+            assert all(isinstance(d, dict) for d in table), f"Keyword argument `table` should be a list of dict, but is {(type(d) for d in table)}"
                 if table[0].get("query") is not None and table[0].get("table") is not None:
                     tqa_pipeline_inputs = table
                 else:
                     raise ValueError(
-                        "If the first argument is a list, it should contain dictionaries containing "
+                        f"If keyword argument `table` is a list of dictionaries, each dictionary should have a `table` and `query` key, but only dictionary has keys {table[0].keys()}"
                         "`table` and `query` keys."
                     )
             else:
-                raise ValueError("Invalid input. Either query or table is None, or badly formed input in list.")
+                raise ValueError(f"Invalid input. Keyword argument `table` should be either of type `dict` or `list`, but is {type(table)})"
         else:
             tqa_pipeline_inputs = [{"table": table, "query": query}]
 
@@ -2105,10 +2106,10 @@ class TableQuestionAnsweringPipeline(Pipeline):
     Table Question Answering pipeline using a :obj:`ModelForQuestionAnswering`. As per the time of writing, the only
     model that can be used is a model based off of the TAPAS architecture.
 
-    This question answering pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
+    This tabular question answering pipeline can currently be loaded from :func:`~transformers.pipeline` using the following
     task identifier: :obj:`"table-question-answering"`.
 
-    The models that this pipeline can use are models that have been fine-tuned on a question answering task. See the
+    The models that this pipeline can use are models that have been fine-tuned on a tabular question answering task. See the
     up-to-date list of available models on `huggingface.co/models
     <https://huggingface.co/models?filter=table-question-answering>`__.
     """
