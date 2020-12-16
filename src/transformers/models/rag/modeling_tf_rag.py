@@ -501,20 +501,16 @@ class TFRagModel(TFRagPreTrainedModel):
                 config, self.config_class
             )
         super().__init__(config, **kwargs)
+
         if question_encoder is None:
             from ..auto.modeling_tf_auto import TFAutoModel
 
-            question_encoder = TFAutoModel.from_config(config.question_encoder
-                                                      #  , name="question_encoder"
-                                                       )
-            question_encoder._name = "question_encoder"
+            question_encoder = TFAutoModel.from_config(config.question_encoder, name="question_encoder")
         if generator is None:
             from ..auto.modeling_tf_auto import TFAutoModelForSeq2SeqLM
 
-            generator = TFAutoModelForSeq2SeqLM.from_config(config.generator, 
-                                                            # name="generator"
-                                                            )
-            generator._name = "generator"
+            generator = TFAutoModelForSeq2SeqLM.from_config(config.generator, name="generator")
+
         self.retriever = retriever
         if self.retriever is not None:
             assert isinstance(
@@ -606,8 +602,8 @@ class TFRagModel(TFRagPreTrainedModel):
         output_attentions = inputs["output_attentions"]
         output_hidden_states = inputs["output_hidden_states"]
         return_dict = inputs["return_dict"]
-        n_docs = inputs["n_docs"]
-        output_retrieved = inputs["output_retrieved"]
+        n_docs = inputs["n_docs"] if inputs["n_docs"] is not None else self.config.n_docs
+        output_retrieved = inputs["output_retrieved"] 
         training=inputs["training"]
 
         # whether retriever has to be used
@@ -756,7 +752,6 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         self.rag = TFRagModel(
             config=config, question_encoder=question_encoder, generator=generator, retriever=retriever, name="rag"
         )
-        import ipdb; ipdb.set_trace()
 
     # NEED_HELP: (temporarily put the hack back to make model.generate() works) 
     # really ugly fixed and require torch model: manually and ineffcient fixed of two weights name mismatched
@@ -966,14 +961,14 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             training=training,
             kwargs_call=kwargs,
         )
+
+        inputs["do_marginalize"] = inputs["do_marginalize"] if inputs["do_marginalize"] else  self.config.do_marginalize
+        inputs["reduce_loss"] = inputs["reduce_loss"] if inputs["reduce_loss"] else  self.config.reduce_loss
+
         if inputs["labels"] is not None:
             if inputs["decoder_input_ids"] is None:
                 inputs["decoder_input_ids"] = inputs["labels"]
             inputs["use_cache"] = False
-
-        if inputs["n_docs"] is None: inputs["n_docs"] = self.config.n_docs 
-        if inputs["do_marginalize"] is None: inputs["do_marginalize"] = self.config.do_marginalize
-        if inputs["reduce_loss"] is None: inputs["reduce_loss"] = self.config.reduce_loss
 
         outputs = self.rag(
             inputs["input_ids"],
@@ -1006,7 +1001,6 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 n_docs=inputs["n_docs"],
             )
 
-        import ipdb; ipdb.set_trace()
         if inputs["do_marginalize"]:
             logits = self.marginalize(logits, outputs.doc_scores, inputs["n_docs"])
 

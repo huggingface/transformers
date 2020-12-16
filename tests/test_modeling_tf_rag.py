@@ -16,6 +16,9 @@ if is_tf_available() and is_datasets_available() and is_faiss_available():
         RagRetriever,
         RagTokenizer,
         TFRagTokenForGeneration,
+        TFRagModel,
+        TFDPRQuestionEncoder,
+        TFBartForConditionalGeneration
     )
 
 
@@ -142,6 +145,30 @@ class TFRagModelIntegrationTests(unittest.TestCase):
 
         tf.debugging.assert_near(output.loss, expected_loss, atol=1e-3)
         tf.debugging.assert_near(output.doc_scores, expected_doc_scores, atol=1e-3)
+
+    @slow
+    def test_init_and_from_pretrained(self):
+        rag_config = self.get_rag_config()
+        rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
+            "facebook/dpr-question_encoder-single-nq-base"
+        )
+        rag_retriever = RagRetriever(
+            rag_config,
+            question_encoder_tokenizer=rag_question_encoder_tokenizer,
+            generator_tokenizer=rag_decoder_tokenizer,
+        )
+
+#        question_enc = TFDPRQuestionEncoder.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
+#        gen = TFBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
+
+        rag_config = RagConfig.from_pretrained("facebook/rag-sequence-base")
+#        rag_token = TFRagTokenForGeneration(question_encoder=question_enc, generator=gen, retriever=rag_retriever)
+        rag_token = TFRagModel(rag_config, retriever=rag_retriever)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            rag_token.save_pretrained(tmpdirname)
+            rag_token = TFRagModel.from_pretrained(tmpdirname, retriever=rag_retriever)
 
     @property
     def test_data_questions(self):
