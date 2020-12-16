@@ -50,7 +50,7 @@ jobs:
           pip install --upgrade pip
           pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
           pip install git+https://github.com/huggingface/datasets
-          pip install pandas torch-scatter -f https://pytorch-geometric.com/whl/torch-$(python -c "import torch; print(''.join(torch.__version__)")+$(python -c "import torch; print(''.join(torch.version.cuda.split('.')))").html
+          pip install pandas torch-scatter -f https://pytorch-geometric.com/whl/torch-$(python -c "import torch; print(''.join(torch.__version__)")+cu102.html
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -188,7 +188,7 @@ jobs:
           pip install --upgrade pip
           pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
           pip install git+https://github.com/huggingface/datasets
-          pip install pandas torch-scatter -f https://pytorch-geometric.com/whl/torch-$(python -c "import torch; print(''.join(torch.__version__)")+$(python -c "import torch; print(''.join(torch.version.cuda.split('.')))").html
+          pip install pandas torch-scatter -f https://pytorch-geometric.com/whl/torch-$(python -c "import torch; print(''.join(torch.__version__)")+cu102.html
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
