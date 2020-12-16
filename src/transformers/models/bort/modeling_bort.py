@@ -69,10 +69,12 @@ class BortModel(BertModel):
         >>> tokenizer = BortTokenizer.from_pretrained("bort")
 
         >>> inputs = tokenizer.encode_plus("The eastern endpoint of the canal is the Hubertusbrunnen.", return_tensors="pt")
+
         >>> outputs = model(**inputs)
         >>> hidden_states = outputs.last_hidden_state
     """
 
+    model_type = "bort"
     config_class = BortConfig
 
 
@@ -100,6 +102,7 @@ class BortForMaskedLM(BertForMaskedLM):
         >>> logits = outputs.logits
     """
 
+    model_type = "bort"
     config_class = BortConfig
 
 
@@ -130,6 +133,7 @@ class BortForSequenceClassification(BertForSequenceClassification):
         >>> logits = outputs.logits
     """
 
+    model_type = "bort"
     config_class = BortConfig
 
 
@@ -165,6 +169,7 @@ class BortForMultipleChoice(BertForMultipleChoice):
         >>> logits = outputs.logits
     """
 
+    model_type = "bort"
     config_class = BortConfig
 
 
@@ -195,6 +200,7 @@ class BortForTokenClassification(BertForTokenClassification):
         >>> logits = outputs.logits
     """
 
+    model_type = "bort"
     config_class = BortConfig
 
 
@@ -228,4 +234,5 @@ class BortForQuestionAnswering(BertForQuestionAnswering):
         >>> end_scores = outputs.end_logits
     """
 
+    model_type = "bort"
     config_class = BortConfig

@@ -93,6 +93,7 @@ class TFBortModel(TFBertModel):
         >>> hidden_states = outputs.last_hidden_state
     """
 
+    model_type = "bort"
     config_class = BortConfig
 
 
@@ -120,6 +121,7 @@ class TFBortForMaskedLM(TFBertForMaskedLM):
         >>> logits = outputs.logits
     """
 
+    model_type = "bort"
     config_class = BortConfig
 
 
@@ -150,6 +152,7 @@ class TFBortForSequenceClassification(TFBertForSequenceClassification):
         >>> logits = outputs.logits
     """
 
+    model_type = "bort"
     config_class = BortConfig
 
 
@@ -181,6 +184,7 @@ class TFBortForTokenClassification(TFBertForTokenClassification):
         >>> logits = outputs.logits
     """
 
+    model_type = "bort"
     config_class = BortConfig
 
 
@@ -215,6 +219,7 @@ class TFBortForMultipleChoice(TFBertForMultipleChoice):
         >>> logits = outputs.logits
     """
 
+    model_type = "bort"
     config_class = BortConfig
 
 
@@ -247,4 +252,5 @@ class TFBortForQuestionAnswering(TFBertForQuestionAnswering):
         >>> answer = ' '.join(all_tokens[tf.math.argmax(start_logits, 1)[0] : tf.math.argmax(end_logits, 1)[0]+1])
     """
 
+    model_type = "bort"
     config_class = BortConfig
