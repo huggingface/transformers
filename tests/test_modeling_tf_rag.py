@@ -127,6 +127,12 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         ).input_ids
         decoder_input_ids = rag_decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
 
+        # model must run once to be functional before loading/saving works 
+        rag_token(
+            input_ids,
+            labels=decoder_input_ids,
+        )
+
         # check that outputs after saving and loading are equal
         with tempfile.TemporaryDirectory() as tmpdirname:
             rag_token.save_pretrained(tmpdirname)
@@ -159,16 +165,24 @@ class TFRagModelIntegrationTests(unittest.TestCase):
             generator_tokenizer=rag_decoder_tokenizer,
         )
 
-#        question_enc = TFDPRQuestionEncoder.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
-#        gen = TFBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
 
         rag_config = RagConfig.from_pretrained("facebook/rag-sequence-base")
-#        rag_token = TFRagTokenForGeneration(question_encoder=question_enc, generator=gen, retriever=rag_retriever)
-        rag_token = TFRagModel(rag_config, retriever=rag_retriever)
+        rag = TFRagTokenForGeneration(rag_config, retriever=rag_retriever)
 
+        input_ids = rag_question_encoder_tokenizer(
+            "who sings does he love me with reba", return_tensors="tf"
+        ).input_ids
+        decoder_input_ids = rag_decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
+
+        rag(
+            input_ids,
+            decoder_input_ids=decoder_input_ids,
+        )
+
+        # this should not give any warnings
         with tempfile.TemporaryDirectory() as tmpdirname:
-            rag_token.save_pretrained(tmpdirname)
-            rag_token = TFRagModel.from_pretrained(tmpdirname, retriever=rag_retriever)
+            rag.save_pretrained(tmpdirname)
+            rag = TFRagTokenForGeneration.from_pretrained(tmpdirname, retriever=rag_retriever)
 
     @property
     def test_data_questions(self):
