@@ -971,8 +971,8 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             inputs["use_cache"] = False
 
         if inputs["n_docs"] is None: inputs["n_docs"] = self.config.n_docs 
-        if inputs["do_marginalize"] is None: inputs["do_marginalize"] = self.config.n_docs 
-        if inputs["reduce_loss"] is None: inputs["reduce_loss"] = self.config.n_docs 
+        if inputs["do_marginalize"] is None: inputs["do_marginalize"] = self.config.do_marginalize
+        if inputs["reduce_loss"] is None: inputs["reduce_loss"] = self.config.reduce_loss
 
         outputs = self.rag(
             inputs["input_ids"],
@@ -1005,6 +1005,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 n_docs=inputs["n_docs"],
             )
 
+        import ipdb; ipdb.set_trace()
         if inputs["do_marginalize"]:
             logits = self.marginalize(logits, outputs.doc_scores, inputs["n_docs"])
 
