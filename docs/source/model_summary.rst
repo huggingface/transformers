@@ -30,7 +30,7 @@ Each one of the models in the library falls into one of the following categories
 
 Autoregressive models are pretrained on the classic language modeling task: guess the next token having read all the
 previous ones. They correspond to the decoder of the original transformer model, and a mask is used on top of the full
-sentence so that the attention heads can only see what was before in the next, and not what’s after. Although those
+sentence so that the attention heads can only see what was before in the text, and not what’s after. Although those
 models can be fine-tuned and achieve great results on many tasks, the most natural application is text generation. A
 typical example of such models is GPT.
 
