@@ -46,24 +46,23 @@ class GreedySearchDecoderOnlyOutput(ModelOutput):
     Base class for outputs of encoder-decoder generation models using greedy search.
 
     Args:
-        sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
+        sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all
             batches finished early due to the :obj:`eos_token_id`.
-        logits (:obj:`torch.FloatTensor` of shape :ob:`(batch_size * num_return_sequence, sequence_length, config.vocab_size)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
-            Classification scores for each token of the generated sequences. :obj:`(max_length,)`-shaped
-            tuple of :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequence, config.num_labels)`.
-        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer of the decoder) of shape
-            :obj:`(batch_size * num_return_sequence, num_heads, sequence_length, sequence_length)`.
-        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        logits (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+            Tuple of :obj:`torch.FloatTensor` of length :obj:`max_length` or shorter if all batches finished early, with each tensor of shape :obj:`(batch_size, config.vocab_size)`).
+        attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of :obj:`torch.FloatTensor` of shape
+            :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
+        hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of :obj:`torch.FloatTensor`
+            of shape :obj:`(batch_size, generated_length, hidden_size)`.
     """
 
     sequences: torch.LongTensor = None
-    logits: Optional[torch.FloatTensor] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    logits: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
 @dataclass
@@ -84,20 +83,20 @@ class GreedySearchEncoderDecoderOutput(ModelOutput):
         encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-        decoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer of the decoder) of shape
-            :obj:`(batch_size * num_return_sequence, num_heads, sequence_length, sequence_length)`.
-        decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+        decoder_attentions (:obj:`tupletuple((torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of :obj:`torch.FloatTensor` of shape
+            :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
+        decoder_hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of :obj:`torch.FloatTensor`
+            of shape :obj:`(batch_size, generated_length, hidden_size)`.
     """
 
     sequences: torch.LongTensor = None
-    logits: Optional[torch.FloatTensor] = None
-    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    logits: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
 GreedySearchOutput = Union[GreedySearchEncoderDecoderOutput, GreedySearchDecoderOnlyOutput]
