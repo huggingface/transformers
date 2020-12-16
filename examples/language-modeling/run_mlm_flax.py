@@ -385,7 +385,7 @@ def training_step(optimizer, batch, dropout_rng):
         # Hide away tokens which doesn't participate in the optimization
         token_mask = jnp.where(targets > 0, 1.0, 0.0)
 
-        pooled, logits = model(**batch, params=params, dropout_rng=dropout_rng, train=True)
+        logits = model(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
         loss, weight_sum = cross_entropy(logits, targets, token_mask)
         return loss / weight_sum
 
@@ -407,7 +407,7 @@ def eval_step(params, batch):
 
     # Hide away tokens which doesn't participate in the optimization
     token_mask = jnp.where(targets > 0, 1.0, 0.0)
-    _, logits = model(**batch, params=params, train=False)
+    logits = model(**batch, params=params, train=False)[0]
 
     return compute_metrics(logits, targets, token_mask)
 
@@ -572,8 +572,13 @@ if __name__ == "__main__":
     rng = jax.random.PRNGKey(training_args.seed)
     dropout_rngs = jax.random.split(rng, jax.local_device_count())
 
-    model = FlaxBertForMaskedLM.from_pretrained("bert-base-cased", dtype=jnp.float32, dropout_rate=0.1)
-    model.init(jax.random.PRNGKey(training_args.seed), (training_args.train_batch_size, model.config.max_length))
+    model = FlaxBertForMaskedLM.from_pretrained(
+        "bert-base-cased",
+        dtype=jnp.float32,
+        input_shape=(training_args.train_batch_size, config.max_position_embeddings),
+        seed=training_args.seed,
+        dropout_rate=0.1,
+    )
 
     # Setup optimizer
     optimizer = Adam(
