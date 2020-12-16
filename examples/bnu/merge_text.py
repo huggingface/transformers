@@ -63,3 +63,4 @@ def multip_process(task: list):
 if __name__ == '__main__':
     root_path = r"/home/wuyan/usr/material/bert_corpus"
     path = [str(x) for x in Path(root_path).glob("**/*.txt")]
+    multip_process(path)
