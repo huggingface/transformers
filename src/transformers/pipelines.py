@@ -744,8 +744,8 @@ class TextGenerationPipeline(Pipeline):
     task identifier: :obj:`"text-generation"`.
 
     The models that this pipeline can use are models that have been trained with an autoregressive language modeling
-    objective, which includes the uni-directional models in the library (e.g. gpt2). See the list of available
-    community models on `huggingface.co/models <https://huggingface.co/models?filter=causal-lm>`__.
+    objective, which includes the uni-directional models in the library (e.g. gpt2). See the list of available models
+    on `huggingface.co/models <https://huggingface.co/models?filter=causal-lm>`__.
     """
 
     # Prefix text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
