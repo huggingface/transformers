@@ -752,7 +752,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         if old_num_tokens == new_num_tokens:
             return word_embeddings
 
-        # initialize new embeddings
         # todo: initializer range is not always passed in config.
         init_range = getattr(self.config, "initializer_range", 0.02)
         name = (
@@ -764,27 +763,33 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             + "/"
             + word_embeddings.name.split(":")[0]
         )
-        new_embeddings = self.add_weight(
+        
+        size_diff = new_num_tokens - old_num_tokens
+        
+        # initialize new embeddings
+        # Copy token embeddings from the previous ones
+        if tf.math.greater(size_diff, 0):
+            # if the new size is greater than the old one, we extend the current embeddings with a padding until getting new size
+            # and we create a mask to properly identify the padded values and be replaced by the values of the newly created
+            # embeddings
+            current_embeddings = tf.pad(word_embeddings.value(), tf.convert_to_tensor([[0, size_diff], [0, 0]]), constant_values=-1)
+            num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+            embeddings_mask = tf.fill(tf.convert_to_tensor([num_tokens_to_copy, 1]), True)
+            embeddings_mask = tf.pad(embeddings_mask, tf.convert_to_tensor([[0, size_diff], [0, 0]]), constant_values=False)
+        else:
+            # if the new size if lower than the old one, we take the current embeddings until the new size
+            current_embeddings = tf.slice(word_embeddings.value(), tf.convert_to_tensor([0, 0]), tf.convert_to_tensor([new_num_tokens, old_embedding_dim]))
+            embeddings_mask = tf.fill(tf.convert_to_tensor([new_num_tokens, 1]), True)
+        
+        word_embeddings = self.add_weight(
             name=name,
             shape=[new_num_tokens, old_embedding_dim],
             initializer=get_initializer(init_range),
             dtype=tf.float32,
         )
+        init_embeddings = tf.where(embeddings_mask, current_embeddings, word_embeddings.value())
 
-        # Copy token embeddings from the previous weights
-        size_diff = new_num_tokens - old_num_tokens
-        
-        if tf.math.greater(size_diff, 0):
-            current_weights = tf.pad(word_embeddings.value(), tf.convert_to_tensor([[0, size_diff], [0, 0]]), constant_values=-1)
-            num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-            mask = tf.fill(tf.convert_to_tensor([num_tokens_to_copy, 1]), True)
-            mask = tf.pad(mask, tf.convert_to_tensor([[0, size_diff], [0, 0]]), constant_values=False)
-        else:
-            current_weights = tf.slice(word_embeddings.value(), tf.convert_to_tensor([0, 0]), tf.convert_to_tensor([new_num_tokens, old_embedding_dim]))
-            mask = tf.fill(tf.convert_to_tensor([new_num_tokens, 1]), True)
-        
-        init_weights = tf.where(mask, current_weights, new_embeddings.value())
-        new_embeddings.assign(init_weights)
+        word_embeddings.assign(init_embeddings)
 
         if bias_layer is not None:
             if not hasattr(bias_layer, "bias"):
@@ -794,11 +799,15 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             if not hasattr(bias_layer, "bias"):
                 raise ValueError("bias is not defined.")
 
-            # initialize bias
-            init_bias = np.zeros((new_num_tokens,))
-            init_bias[:num_tokens_to_copy] = bias_layer.bias.value()[
-                :num_tokens_to_copy
-            ]  # tf.make_ndarray(tf.make_tensor_proto(bias_layer.bias.value()))[:num_tokens_to_copy]
+            # initialize new bias
+            if tf.math.greater(size_diff, 0):
+                current_bias = tf.pad(bias_layer.bias.value().value(), tf.convert_to_tensor([[0, size_diff]]), constant_values=-1)
+                num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+                bias_mask = tf.fill(tf.convert_to_tensor([num_tokens_to_copy]), True)
+                bias_mask = tf.pad(bias_mask, tf.convert_to_tensor([[0, size_diff]]), constant_values=False)
+            else:
+                current_bias = tf.slice(bias_layer.bias.value().value(), tf.convert_to_tensor([0]), tf.convert_to_tensor([new_num_tokens]))
+                bias_mask = tf.fill(tf.convert_to_tensor([new_num_tokens]), True)
 
             bias_layer.bias = self.add_weight(
                 shape=(new_num_tokens,),
@@ -806,6 +815,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 trainable=True,
                 name=self.get_prefix_bias_name() + "/bias",
             )
+            init_bias = tf.where(bias_mask, current_bias, bias_layer.bias.value())
 
             bias_layer.bias.assign(init_bias)
 
@@ -819,20 +829,26 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 # Second check in order to be sure the attribute has been properly created
                 if not hasattr(output_embeddings, "decoder"):
                     raise ValueError("decoder is not defined.")
-
-                # initialize decoder
-                init_weights = np.zeros((new_num_tokens, old_embedding_dim))
-                init_weights[:num_tokens_to_copy] = output_embeddings.decoder.value()[:num_tokens_to_copy, :]
+                
+                # initialize new decoder
+                if tf.math.greater(size_diff, 0):
+                    current_decoder = tf.pad(output_embeddings.decoder.value(), tf.convert_to_tensor([[0, size_diff], [0, 0]]), constant_values=-1)
+                    num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+                    decoder_mask = tf.fill(tf.convert_to_tensor([num_tokens_to_copy, 1]), True)
+                    decoder_mask = tf.pad(decoder_mask, tf.convert_to_tensor([[0, size_diff], [0, 0]]), constant_values=False)
+                else:
+                    current_decoder = tf.slice(word_embeddings.value(), tf.convert_to_tensor([0, 0]), tf.convert_to_tensor([new_num_tokens, old_embedding_dim]))
+                    decoder_mask = tf.fill(tf.convert_to_tensor([new_num_tokens, 1]), True)
 
                 output_embeddings.decoder = self.add_weight(
-                    shape=(new_num_tokens, old_embedding_dim),
+                    shape=(new_num_tokens,),
                     initializer="zeros",
                     trainable=True,
                     name=self.get_prefix_bias_name() + "/decoder/weight",
                 )
-                output_embeddings.decoder.assign(init_weights)
+                init_decoder = tf.where(decoder_mask, current_decoder, output_embeddings.decoder.bias.value())
 
-        return new_embeddings
+                output_embeddings.decoder.assign(init_decoder)
 
     def prune_heads(self, heads_to_prune):
         """
