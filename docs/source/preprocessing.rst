@@ -17,7 +17,7 @@ In this tutorial, we'll explore how to preprocess your data using 🤗 Transform
 call a :doc:`tokenizer <main_classes/tokenizer>`. You can build one using the tokenizer class associated to the model
 you would like to use, or directly with the :class:`~transformers.AutoTokenizer` class.
 
-As we saw in the :doc:`quicktour </quicktour>`, the tokenizer will first split a given text in words (or part of words,
+As we saw in the :doc:`quick tour </quicktour>`, the tokenizer will first split a given text in words (or part of words,
 punctuation symbols, etc.) usually called `tokens`. Then it will convert those `tokens` into numbers, to be able to
 build a tensor out of them and feed them to the model. It will also add any additional inputs the model might expect to
 work properly.
