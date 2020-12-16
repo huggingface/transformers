@@ -26,7 +26,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutputWithCrossAttentions, CausalLMOutputWithCrossAttentions
+from ...modeling_outputs import CausalLMOutputWithPastAndCrossAttentions, BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from ..bert.modeling_bert import BertEncoder
@@ -297,7 +297,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/bert_for_seq_generation_L-24_bbc_encoder",
-        output_type=BaseModelOutputWithCrossAttentions,
+        output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -309,6 +309,8 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         inputs_embeds=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        past_key_values=None,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -344,7 +346,9 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+        extended_attention_mask = None
+        if not use_cache:
+            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -372,6 +376,8 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_extended_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -381,8 +387,9 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
 
-        return BaseModelOutputWithCrossAttentions(
+        return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=sequence_output,
+            past_key_values=encoder_outputs.past_key_values,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
@@ -426,7 +433,7 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
         self.lm_head.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(BERT_GENERATION_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=CausalLMOutputWithPastAndCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -437,6 +444,8 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         labels=None,
+        past_key_values=None,
+        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -483,6 +492,8 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
             inputs_embeds=inputs_embeds,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -503,15 +514,20 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
             output = (prediction_scores,) + outputs[1:]
             return ((lm_loss,) + output) if lm_loss is not None else output
 
-        return CausalLMOutputWithCrossAttentions(
+        return CausalLMOutputWithPastAndCrossAttentions(
             loss=lm_loss,
             logits=prediction_scores,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
+            past_key_values=outputs.past_key_values,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
+    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
+        # cut decoder_input_ids if past is used
+        if past is not None:
+            input_ids = input_ids[:, -1:]
+        
         input_shape = input_ids.shape
 
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
@@ -519,3 +535,13 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
             attention_mask = input_ids.new_ones(input_shape)
 
         return {"input_ids": input_ids, "attention_mask": attention_mask}
+    
+    @staticmethod
+    def _reorder_cache(self, past, beam_idx):
+        def _reorder_buffer(cache, new_order):
+            return tuple(past_state.index_select(0, new_order) for past_state in cache)
+        
+        reordered_past = ()
+        for layer_past in past:
+            reordered_past += (tuple(_reorder_buffer(cache, beam_idx) for cache in layer_past),)
+        return reordered_past
