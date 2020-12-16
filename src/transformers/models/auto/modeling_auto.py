@@ -1411,7 +1411,7 @@ class AutoModelForTableQuestionAnswering:
     @replace_list_option_in_docstrings(MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING, use_model_types=False)
     def from_config(cls, config):
         r"""
-        Instantiates one of the model classes of the library---with a question answering head---from a configuration.
+        Instantiates one of the model classes of the library---with a table question answering head---from a configuration.
 
         Note:
             Loading a model from its configuration file does **not** load the model weights. It only affects the
