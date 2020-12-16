@@ -25,9 +25,9 @@ from transformers import (
     MODEL_FOR_MASKED_LM_MAPPING,
     MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
     MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
-    MODEL_FOR_QUESTION_ANSWERING_MAPPING,
     MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+    MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
     is_torch_available,
 )
@@ -436,7 +436,7 @@ class TapasModelTest(ModelTesterMixin, unittest.TestCase):
         if return_labels:
             if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
                 inputs_dict["labels"] = torch.ones(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
-            elif model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
+            elif model_class in MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING.values():
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
                 )
