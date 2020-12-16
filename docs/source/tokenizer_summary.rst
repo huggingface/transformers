@@ -18,7 +18,7 @@ On this page, we will have a closer look at tokenization. As we saw in :doc:`the
 look-up table. Converting words or subwords to ids is straightforward, so in this summary, we will focus on splitting a
 text into words or subwords (i.e. tokenizing a text). More specifically, we will look at the three main types of
 tokenizers used in 🤗 Transformers: :ref:`Byte-Pair Encoding (BPE) <byte-pair-encoding>`, :ref:`WordPiece <wordpiece>`,
-and :ref:`SentencePiece <sentencepiece>`, and show exemplary which tokenizer type is used by which model.
+and :ref:`SentencePiece <sentencepiece>`, and show examples of which tokenizer type is used by which model.
 
 Note that on each model page, you can look at the documentation of the associated tokenizer to know which tokenizer
 type was used by the pretrained model. For instance, if we look at :class:`~transformers.BertTokenizer`, we can see
