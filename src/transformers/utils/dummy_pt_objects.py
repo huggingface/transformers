@@ -303,6 +303,9 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = None
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = None
 
 
+MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = None
+
+
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
 
 
@@ -385,6 +388,15 @@ class AutoModelForSeq2SeqLM:
 
 
 class AutoModelForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class AutoModelForTableQuestionAnswering:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
