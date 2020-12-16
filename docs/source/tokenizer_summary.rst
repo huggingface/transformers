@@ -72,7 +72,7 @@ greater than 50,000, especially if they are pretrained only on a single language
 So if simple space and punctuation tokenization is unsatisfactory, why not simply tokenize on characters? While
 character tokenization is very simple and would greatly reduce memory and time complexity it makes it much harder for
 the model to learn meaningful input representations. *E.g.* learning a meaningful context-independent representation
-for the letter ``"t"`` is much harder as learning a context-independent representation for the word ``"today"``.
+for the letter ``"t"`` is much harder than learning a context-independent representation for the word ``"today"``.
 Therefore, character tokenization is often accompanied by a loss of performance. So to get the best of both worlds,
 transformers models use a hybrid between word-level and character-level tokenization called **subword** tokenization.
 
