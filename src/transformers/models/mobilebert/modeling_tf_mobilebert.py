@@ -700,7 +700,7 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
         self.pooler = TFMobileBertPooler(config, name="pooler") if add_pooling_layer else None
 
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
@@ -1039,13 +1039,20 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
         self.seq_relationship = TFMobileBertOnlyNSPHead(2, name="seq_relationship___cls")
 
     def get_output_embeddings(self):
-        return self.predictions.predictions
+        return self.predictions.predictions.decoder
+    
+    def set_output_embeddings(self, value):
+        if value is not None:
+            try:
+                self.predictions.predictions.decoder = value
+                self.predictions.predictions.vocab_size = shape_list(value)[0]
+            except AttributeError:
+                self.predictions.predictions.build([])
+                self.predictions.predictions.decoder = value
+                self.predictions.predictions.vocab_size = shape_list(value)[0]
 
-    def get_output_layer_with_bias(self):
+    def get_lm_head(self):
         return self.predictions.predictions
-
-    def get_prefix_bias_name(self):
-        return self.name + "/" + self.predictions.name + "/" + self.predictions.predictions.name
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFMobileBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -1149,13 +1156,14 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
         self.mlm = TFMobileBertMLMHead(config, name="mlm___cls")
 
     def get_output_embeddings(self):
-        return self.mlm.predictions
+        return self.mlm.predictions.decoder
+    
+    def set_output_embeddings(self, value):
+        self.mlm.predictions.decoder = value
+        self.mlm.predictions.vocab_size = shape_list(value)[0]
 
-    def get_output_layer_with_bias(self):
+    def get_lm_head(self):
         return self.mlm.predictions
-
-    def get_prefix_bias_name(self):
-        return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
