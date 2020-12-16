@@ -15,6 +15,7 @@
 
 import os
 from abc import ABC, abstractmethod
+from functools import partial
 from pickle import UnpicklingError
 from typing import Dict, Set, Tuple, Union
 
@@ -34,17 +35,12 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 
-@jax.jit
-def gelu_new(x):
-    return nn.gelu(x, approximate=True)
-
-
 ACT2FN = {
     "gelu": nn.gelu,
     "relu": nn.relu,
     "silu": nn.swish,
     "swish": nn.swish,
-    "gelu_new": gelu_new,
+    "gelu_new": partial(nn.gelu, approximate=True),
 }
 
 
