@@ -37,9 +37,8 @@ def write_file(content, file):
 
 def convert_encode2utf8(file, original_encode, des_encode):
     file_content = read_file(file)
-    if file_content==None:
-        logging.info("{} have any content".format(file))
-        return file
+    if original_encode==None:
+        original_encode='utf-8'
     file_decode = file_content.decode(original_encode, 'ignore')
     file_encode = file_decode.encode(des_encode)
     write_file(file_encode, file)
@@ -55,12 +54,8 @@ def covert_all(file_path):
 
 def merge_text(filenames):
     with open('result.txt', 'w') as outfile:
-        # Iterate through list
         for names in filenames:
-            # Open each file in read mode
             with open(names) as infile:
-                # read the data from file1 and
-                # file2 and write it in file3
                 outfile.write(infile.read())
             outfile.write("\n")
 
