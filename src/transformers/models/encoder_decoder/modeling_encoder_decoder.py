@@ -446,14 +446,6 @@ class EncoderDecoderModel(PreTrainedModel):
             "past_key_values": past,
             "use_cache": use_cache,
         }
-
-        # Ideally all models should have a :obj:`use_cache`
-        # leave following to ifs until all have it implemented
-        # if "use_cache" in decoder_inputs:
-        #     input_dict["decoder_use_cache"] = decoder_inputs["use_cache"]
-
-        # if "past_key_values" in decoder_inputs:
-        #     input_dict["past_key_values"] = decoder_inputs["past_key_values"]
         return input_dict
 
     def _reorder_cache(self, past, beam_idx):

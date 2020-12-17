@@ -1183,6 +1183,12 @@ class BertLMHeadModel(BertPreTrainedModel):
             input_ids = input_ids[:, -1:]
         
         return {"input_ids": input_ids, "attention_mask": attention_mask}
+    
+    def _reorder_cache(self, past, beam_idx):
+        reordered_past = ()
+        for layer_past in past:
+            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
+        return reordered_past
 
 
 @add_start_docstrings("""Bert Model with a `language modeling` head on top. """, BERT_START_DOCSTRING)

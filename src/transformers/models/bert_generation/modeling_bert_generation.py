@@ -526,24 +526,19 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
+        input_shape = input_ids.shape
+        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
+        if attention_mask is None:
+            attention_mask = input_ids.new_ones(input_shape)
+        
         # cut decoder_input_ids if past is used
         if past is not None:
             input_ids = input_ids[:, -1:]
         
-        input_shape = input_ids.shape
-
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
-
         return {"input_ids": input_ids, "attention_mask": attention_mask}
     
-    @staticmethod
-    def _reorder_cache(self, past, beam_idx):
-        def _reorder_buffer(cache, new_order):
-            return tuple(past_state.index_select(0, new_order) for past_state in cache)
-        
+    def (self, past, beam_idx):
         reordered_past = ()
         for layer_past in past:
-            reordered_past += (tuple(_reorder_buffer(cache, beam_idx) for cache in layer_past),)
+            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
