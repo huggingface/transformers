@@ -77,7 +77,7 @@ ELECTRA_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayerNorm with Bert->ELECTRA
+
 class FlaxElectraLayerNorm(nn.Module):
     """
     Layer normalization (https://arxiv.org/abs/1607.06450). Operates on the last axis of the input data.
@@ -252,7 +252,6 @@ class FlaxElectraOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayer with Bert->Electra
 class FlaxElectraLayer(nn.Module):
     num_heads: int
     head_size: int
