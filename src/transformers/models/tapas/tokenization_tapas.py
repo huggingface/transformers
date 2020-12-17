@@ -55,52 +55,41 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
+        # large models
+        "google/tapas-large-finetuned-sqa": "https://huggingface.co/google/tapas-large-finetuned-sqa/resolve/main/vocab.txt",
+        "google/tapas-large-finetuned-wtq": "https://huggingface.co/google/tapas-large-finetuned-wtq/resolve/main/vocab.txt",
+        "google/tapas-large-finetuned-wikisql-supervised": "https://huggingface.co/google/tapas-large-finetuned-wikisql-supervised/resolve/main/vocab.txt",
+        "google/tapas-large-finetuned-tabfact": "https://huggingface.co/google/tapas-large-finetuned-tabfact/resolve/main/vocab.txt",
+        # base models
         "google/tapas-base-finetuned-sqa": "https://huggingface.co/google/tapas-base-finetuned-sqa/resolve/main/vocab.txt",
         "google/tapas-base-finetuned-wtq": "https://huggingface.co/google/tapas-base-finetuned-wtq/resolve/main/vocab.txt",
         "google/tapas-base-finetuned-wikisql-supervised": "https://huggingface.co/google/tapas-base-finetuned-wikisql-supervised/resolve/main/vocab.txt",
         "google/tapas-base-finetuned-tabfact": "https://huggingface.co/google/tapas-base-finetuned-tabfact/resolve/main/vocab.txt",
+        # medium models
+        "google/tapas-medium-finetuned-sqa": "https://huggingface.co/google/tapas-medium-finetuned-sqa/resolve/main/vocab.txt",
+        "google/tapas-medium-finetuned-wtq": "https://huggingface.co/google/tapas-medium-finetuned-wtq/resolve/main/vocab.txt",
+        "google/tapas-medium-finetuned-wikisql-supervised": "https://huggingface.co/google/tapas-medium-finetuned-wikisql-supervised/resolve/main/vocab.txt",
+        "google/tapas-medium-finetuned-tabfact": "https://huggingface.co/google/tapas-medium-finetuned-tabfact/resolve/main/vocab.txt",
+        # small models
+        "google/tapas-small-finetuned-sqa": "https://huggingface.co/google/tapas-small-finetuned-sqa/resolve/main/vocab.txt",
+        "google/tapas-small-finetuned-wtq": "https://huggingface.co/google/tapas-small-finetuned-wtq/resolve/main/vocab.txt",
+        "google/tapas-small-finetuned-wikisql-supervised": "https://huggingface.co/google/tapas-small-finetuned-wikisql-supervised/resolve/main/vocab.txt",
+        "google/tapas-small-finetuned-tabfact": "https://huggingface.co/google/tapas-small-finetuned-tabfact/resolve/main/vocab.txt",
+        # tiny models
+        "google/tapas-tiny-finetuned-sqa": "https://huggingface.co/google/tapas-tiny-finetuned-sqa/resolve/main/vocab.txt",
+        "google/tapas-tiny-finetuned-wtq": "https://huggingface.co/google/tapas-tiny-finetuned-wtq/resolve/main/vocab.txt",
+        "google/tapas-tiny-finetuned-wikisql-supervised": "https://huggingface.co/google/tapas-tiny-finetuned-wikisql-supervised/resolve/main/vocab.txt",
+        "google/tapas-tiny-finetuned-tabfact": "https://huggingface.co/google/tapas-tiny-finetuned-tabfact/resolve/main/vocab.txt",
+        # mini models
+        "google/tapas-mini-finetuned-sqa": "https://huggingface.co/google/tapas-mini-finetuned-sqa/resolve/main/vocab.txt",
+        "google/tapas-mini-finetuned-wtq": "https://huggingface.co/google/tapas-mini-finetuned-wtq/resolve/main/vocab.txt",
+        "google/tapas-mini-finetuned-wikisql-supervised": "https://huggingface.co/google/tapas-mini-finetuned-wikisql-supervised/resolve/main/vocab.txt",
+        "google/tapas-mini-finetuned-tabfact": "https://huggingface.co/google/tapas-mini-finetuned-tabfact/resolve/main/vocab.txt",
     }
 }
 
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    # large models
-    "google/tapas-large-finetuned-sqa": 512,
-    "google/tapas-large-finetuned-wtq": 512,
-    "google/tapas-large-finetuned-wikisql-supervised": 512,
-    "google/tapas-large-finetuned-tabfact": 512,
-    # base models
-    "google/tapas-base-finetuned-sqa": 512,
-    "google/tapas-base-finetuned-wtq": 512,
-    "google/tapas-base-finetuned-wikisql-supervised": 512,
-    "google/tapas-base-finetuned-tabfact": 512,
-    # medium models
-    "google/tapas-medium-finetuned-sqa": 512,
-    "google/tapas-medium-finetuned-wtq": 512,
-    "google/tapas-medium-finetuned-wikisql-supervised": 512,
-    "google/tapas-medium-finetuned-tabfact": 512,
-    # small models
-    "google/tapas-base-finetuned-sqa": 512,
-    "google/tapas-base-finetuned-wtq": 512,
-    "google/tapas-base-finetuned-wikisql-supervised": 512,
-    "google/tapas-base-finetuned-tabfact": 512,
-    # tiny models
-    "google/tapas-tiny-finetuned-sqa": 512,
-    "google/tapas-tiny-finetuned-wtq": 512,
-    "google/tapas-tiny-finetuned-wikisql-supervised": 512,
-    "google/tapas-tiny-finetuned-tabfact": 512,
-    # mini models
-    "google/tapas-mini-finetuned-sqa": 512,
-    "google/tapas-mini-finetuned-wtq": 512,
-    "google/tapas-mini-finetuned-wikisql-supervised": 512,
-    "google/tapas-mini-finetuned-tabfact": 512,
-}
-
-PRETRAINED_INIT_CONFIGURATION = {
-    "google/tapas-base-finetuned-sqa": {"do_lower_case": True},
-    "google/tapas-base-finetuned-wtq": {"do_lower_case": True},
-    "google/tapas-base-finetuned-wikisql-supervised": {"do_lower_case": True},
-    "google/tapas-base-finetuned-tabfact": {"do_lower_case": True},
-}
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {name: 512 for name in PRETRAINED_VOCAB_FILES_MAP.keys()}
+PRETRAINED_INIT_CONFIGURATION = {name: {"do_lower_case": True} for name in PRETRAINED_VOCAB_FILES_MAP.keys()}
 
 
 class TapasTruncationStrategy(ExplicitEnum):
@@ -1905,12 +1894,14 @@ class TapasTokenizer(PreTrainedTokenizer):
                 this threshold will be selected.
 
         Returns:
-            :obj:`tuple` comprising various elements depending on the inputs: predicted_answer_coordinates
-            (``List[List[[tuple]]`` of length ``batch_size``): Predicted answer coordinates as a list of lists of
-            tuples. Each element in the list contains the predicted answer coordinates of a single example in the
-            batch, as a list of tuples. Each tuple is a cell, i.e. (row index, column index).
-            predicted_aggregation_indices (`optional`, returned when ``logits_aggregation`` is provided) ``List[int]``
-            of length ``batch_size``: Predicted aggregation operator indices of the aggregation head.
+            :obj:`tuple` comprising various elements depending on the inputs:
+
+            - predicted_answer_coordinates (``List[List[[tuple]]`` of length ``batch_size``): Predicted answer
+              coordinates as a list of lists of tuples. Each element in the list contains the predicted answer
+              coordinates of a single example in the batch, as a list of tuples. Each tuple is a cell, i.e. (row index,
+              column index).
+            - predicted_aggregation_indices (``List[int]``of length ``batch_size``, `optional`, returned when
+              ``logits_aggregation`` is provided): Predicted aggregation operator indices of the aggregation head.
         """
         # input data is of type float32
         # np.log(np.finfo(np.float32).max) = 88.72284
@@ -1969,11 +1960,11 @@ class TapasTokenizer(PreTrainedTokenizer):
             answer_coordinates = sorted(answer_coordinates)
             predicted_answer_coordinates.append(answer_coordinates)
 
-        output = predicted_answer_coordinates
+        output = (predicted_answer_coordinates,)
 
         if logits_agg is not None:
             predicted_aggregation_indices = logits_agg.argmax(dim=-1)
-            output = (output, predicted_aggregation_indices.tolist())
+            output = (predicted_answer_coordinates, predicted_aggregation_indices.tolist())
 
         return output
 
