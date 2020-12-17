@@ -13,11 +13,12 @@
 # limitations under the License.
 
 import math
+from packaging import version
 
 import tensorflow as tf
 
 
-def gelu(x):
+def _gelu(x):
     """
     Gaussian Error Linear Unit. Original Implementation of the gelu activation function in Google Bert repo when
     initially created. For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
@@ -25,7 +26,7 @@ def gelu(x):
     https://arxiv.org/abs/1606.08415
     """
     x = tf.convert_to_tensor(x)
-    cdf = 0.5 * (1.0 + tf.math.erf(x / tf.math.sqrt(2.0)))
+    cdf = 0.5 * (1.0 + tf.math.erf(x / tf.cast(tf.sqrt(2.0), x.dtype)))
 
     return x * cdf
 
@@ -62,8 +63,14 @@ def gelu_fast(x):
     return 0.5 * x * (1.0 + tf.tanh(x * coeff2 * (1.0 + coeff1 * x * x)))
 
 
+if version.parse(tf.version.VERSION) >= version.parse("2.4"):
+    gelu = tf.keras.activations.gelu
+else:
+    gelu = tf.keras.layers.Activation(_gelu)
+
+
 ACT2FN = {
-    "gelu": tf.keras.layers.Activation(gelu),
+    "gelu": gelu,
     "relu": tf.keras.activations.relu,
     "swish": tf.keras.activations.swish,
     "silu": tf.keras.activations.swish,
