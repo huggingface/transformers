@@ -593,7 +593,11 @@ class FlaxElectraModule(nn.Module):
 
 
 @add_start_docstrings(
-    "The bare Electra Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare Electra Model transformer outputting raw hidden-states without any specific head on top. Identical to "
+    "the BERT model except that it uses an additional linear layer between the embedding layer and the encoder if the "
+    "hidden size and embedding size are different."
+    ""
+    "Both the generator and discriminator checkpoints may be loaded into this model.",
     ELECTRA_START_DOCSTRING,
 )
 class FlaxElectraModel(FlaxElectraPreTrainedModel):
@@ -702,6 +706,15 @@ class FlaxElectraForMaskedLMModule(nn.Module):
         return prediction_scores
 
 
+@add_start_docstrings(
+    """
+    Electra model with a language modeling head on top.
+
+    Even though both the discriminator and generator may be loaded into this model, the generator is the only model of
+    the two to have been trained for the masked language modeling task.
+    """,
+    ELECTRA_START_DOCSTRING,
+)
 class FlaxElectraForMaskedLM(FlaxElectraPreTrainedModel):
     def __init__(self, config: ElectraConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):
         module = FlaxElectraForMaskedLMModule(
@@ -799,6 +812,14 @@ class FlaxElectraForPreTrainingModule(nn.Module):
         return logits
     
 
+@add_start_docstrings(
+    """
+    Electra model with a binary classification head on top as used during pretraining for identifying generated tokens.
+
+    It is recommended to load the discriminator checkpoint into that model.
+    """,
+    ELECTRA_START_DOCSTRING,
+)
 class FlaxElectraForPreTraining(FlaxElectraPreTrainedModel):
     
     def __init__(self, config: ElectraConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):
