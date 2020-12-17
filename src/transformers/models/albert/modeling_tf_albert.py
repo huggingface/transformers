@@ -502,14 +502,11 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
         )
 
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.shape[0]
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -836,7 +833,7 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
         self.sop_classifier = TFAlbertSOPHead(config, name="sop_classifier")
 
     def get_output_embeddings(self):
-        return self.albert.embeddings
+        return self.get_input_embeddings()
 
     def resize_token_embeddings(self, new_num_tokens):
         super().resize_token_embeddings(new_num_tokens=new_num_tokens)
@@ -845,24 +842,58 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
         # even though self.bias is not used anywhere and is here
         # just to make the loading weights from a PT model happy
         if new_num_tokens is not None:
-            num_tokens_to_copy = min(self.predictions.bias.shape[0], new_num_tokens)
-            self.predictions.vocab_size = num_tokens_to_copy
-            init_bias = tf.zeros((new_num_tokens,))
-            init_bias[:num_tokens_to_copy] = self.predictions.bias.value()[:num_tokens_to_copy]
+            if not hasattr(self.predictions, "bias"):
+                self.predictions.build([])
+
+            # Second check in order to be sure the attribute has been properly created
+            if not hasattr(self.predictions, "bias"):
+                raise ValueError("bias is not defined.")
+            
+            old_num_tokens = shape_list(self.predictions.bias)[0]
+            size_diff = new_num_tokens - old_num_tokens
+            self.predictions.vocab_size = new_num_tokens
+
+            # initialize new bias
+            if tf.math.greater(size_diff, 0):
+                current_bias = tf.pad(self.predictions.bias.value(), tf.convert_to_tensor([[0, size_diff]]), constant_values=-1)
+                num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+                bias_mask = tf.fill(tf.convert_to_tensor([num_tokens_to_copy]), True)
+                bias_mask = tf.pad(bias_mask, tf.convert_to_tensor([[0, size_diff]]), constant_values=False)
+            else:
+                current_bias = tf.slice(self.predictions.bias.value(), tf.convert_to_tensor([0]), tf.convert_to_tensor([new_num_tokens]))
+                bias_mask = tf.fill(tf.convert_to_tensor([new_num_tokens]), True)
+
             name = self.name + "/" + self.predictions.name + "/bias"
             self.predictions.bias = self.add_weight(
-                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
+                shape=(new_num_tokens,),
+                initializer="zeros",
+                trainable=True,
+                name=name,
             )
+            init_bias = tf.where(bias_mask, current_bias, self.predictions.bias.value())
+            
             self.predictions.bias.assign(init_bias)
 
-            init_decoder_bias = np.zeros((new_num_tokens,))
-            init_decoder_bias[:num_tokens_to_copy] = self.predictions.decoder_bias.value()[:num_tokens_to_copy]
+            # initialize new decoder bias
+            if tf.math.greater(size_diff, 0):
+                current_bias = tf.pad(self.predictions.decoder_bias.value(), tf.convert_to_tensor([[0, size_diff]]), constant_values=-1)
+                num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+                bias_mask = tf.fill(tf.convert_to_tensor([num_tokens_to_copy]), True)
+                bias_mask = tf.pad(bias_mask, tf.convert_to_tensor([[0, size_diff]]), constant_values=False)
+            else:
+                current_bias = tf.slice(self.predictions.decoder_bias.value(), tf.convert_to_tensor([0]), tf.convert_to_tensor([new_num_tokens]))
+                bias_mask = tf.fill(tf.convert_to_tensor([new_num_tokens]), True)
+
             name = self.name + "/" + self.predictions.name + "/decoder_bias"
             self.predictions.decoder_bias = self.add_weight(
-                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
+                shape=(new_num_tokens,),
+                initializer="zeros",
+                trainable=True,
+                name=name,
             )
-
-            self.predictions.decoder_bias.assign(init_decoder_bias)
+            init_bias = tf.where(bias_mask, current_bias, self.predictions.decoder_bias.value())
+            
+            self.predictions.decoder_bias.assign(init_bias)
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFAlbertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -981,7 +1012,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
         self.predictions = TFAlbertMLMHead(config, self.albert.embeddings, name="predictions")
 
     def get_output_embeddings(self):
-        return self.albert.embeddings
+        return self.get_input_embeddings()
 
     def resize_token_embeddings(self, new_num_tokens):
         super().resize_token_embeddings(new_num_tokens=new_num_tokens)
@@ -990,24 +1021,58 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
         # even though self.bias is not used anywhere and is here
         # just to make the loading weights from a PT model happy
         if new_num_tokens is not None:
-            num_tokens_to_copy = min(self.predictions.bias.shape[0], new_num_tokens)
-            self.predictions.vocab_size = num_tokens_to_copy
-            init_bias = np.zeros((new_num_tokens,))
-            init_bias[:num_tokens_to_copy] = self.predictions.bias.value()[:num_tokens_to_copy]
+            if not hasattr(self.predictions, "bias"):
+                self.predictions.build([])
+
+            # Second check in order to be sure the attribute has been properly created
+            if not hasattr(self.predictions, "bias"):
+                raise ValueError("bias is not defined.")
+            
+            old_num_tokens = shape_list(self.predictions.bias)[0]
+            size_diff = new_num_tokens - old_num_tokens
+            self.predictions.vocab_size = new_num_tokens
+
+            # initialize new bias
+            if tf.math.greater(size_diff, 0):
+                current_bias = tf.pad(self.predictions.bias.value(), tf.convert_to_tensor([[0, size_diff]]), constant_values=-1)
+                num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+                bias_mask = tf.fill(tf.convert_to_tensor([num_tokens_to_copy]), True)
+                bias_mask = tf.pad(bias_mask, tf.convert_to_tensor([[0, size_diff]]), constant_values=False)
+            else:
+                current_bias = tf.slice(self.predictions.bias.value(), tf.convert_to_tensor([0]), tf.convert_to_tensor([new_num_tokens]))
+                bias_mask = tf.fill(tf.convert_to_tensor([new_num_tokens]), True)
+
             name = self.name + "/" + self.predictions.name + "/bias"
             self.predictions.bias = self.add_weight(
-                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
+                shape=(new_num_tokens,),
+                initializer="zeros",
+                trainable=True,
+                name=name,
             )
+            init_bias = tf.where(bias_mask, current_bias, self.predictions.bias.value())
+            
             self.predictions.bias.assign(init_bias)
 
-            init_decoder_bias = np.zeros((new_num_tokens,))
-            init_decoder_bias[:num_tokens_to_copy] = self.predictions.decoder_bias.value()[:num_tokens_to_copy]
+            # initialize new decoder bias
+            if tf.math.greater(size_diff, 0):
+                current_bias = tf.pad(self.predictions.decoder_bias.value(), tf.convert_to_tensor([[0, size_diff]]), constant_values=-1)
+                num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+                bias_mask = tf.fill(tf.convert_to_tensor([num_tokens_to_copy]), True)
+                bias_mask = tf.pad(bias_mask, tf.convert_to_tensor([[0, size_diff]]), constant_values=False)
+            else:
+                current_bias = tf.slice(self.predictions.decoder_bias.value(), tf.convert_to_tensor([0]), tf.convert_to_tensor([new_num_tokens]))
+                bias_mask = tf.fill(tf.convert_to_tensor([new_num_tokens]), True)
+
             name = self.name + "/" + self.predictions.name + "/decoder_bias"
             self.predictions.decoder_bias = self.add_weight(
-                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
+                shape=(new_num_tokens,),
+                initializer="zeros",
+                trainable=True,
+                name=name,
             )
-
-            self.predictions.decoder_bias.assign(init_decoder_bias)
+            init_bias = tf.where(bias_mask, current_bias, self.predictions.decoder_bias.value())
+            
+            self.predictions.decoder_bias.assign(init_bias)
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

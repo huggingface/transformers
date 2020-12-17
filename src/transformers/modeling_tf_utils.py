@@ -632,6 +632,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         else:
             raise NotImplementedError
     
+    def get_full_word_embeddings_name(self):
+        return None
+    
     def set_input_embeddings(self, value):
         """
         Set model's input embeddings.

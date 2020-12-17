@@ -1011,6 +1011,15 @@ class TFBartModel(TFBartPretrainedModel):
 
     def get_decoder(self):
         return self.decoder
+    
+    def get_input_embeddings(self):
+        return self.shared
+
+    def set_input_embeddings(self, value):
+        self.shared = value
+
+    def get_output_embeddings(self):
+        return self.shared
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1133,15 +1142,6 @@ class TFBartModel(TFBartPretrainedModel):
             encoder_hidden_states=enc_hs,
             encoder_attentions=enc_attns,
         )
-
-    def get_input_embeddings(self):
-        return self.shared
-
-    def set_input_embeddings(self, value):
-        self.shared = value
-
-    def get_output_embeddings(self):
-        return self.shared
 
 
 @add_start_docstrings(
