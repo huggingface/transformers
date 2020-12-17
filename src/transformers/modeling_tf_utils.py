@@ -532,6 +532,7 @@ def load_tf_weights(model, resolved_archive_file, prefix=None):
                         else:
                             array = saved_weight_value
 
+                        # We create the tuple that will be loaded and add it to the final list
                         weight_value_tuples.append((symbolic_weight, array))
 
     # Load all the weights
