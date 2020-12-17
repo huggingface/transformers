@@ -31,7 +31,10 @@ from ...file_utils import (
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
+    BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPoolingAndPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
+    CausalLMOutputWithPastAndCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
@@ -209,8 +212,9 @@ class RobertaSelfAttention(nn.Module):
             value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
-        # key_layer = self.transpose_for_scores(mixed_key_layer)
-        # value_layer = self.transpose_for_scores(mixed_value_layer)
+
+        if self.is_decoder:
+            past_key_value = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -757,7 +761,7 @@ class RobertaModel(RobertaPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
-            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
+            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds, past_key_values_length=past_key_values_length,
         )
         encoder_outputs = self.encoder(
             embedding_output,
@@ -1441,7 +1445,5 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     """
     # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
     mask = input_ids.ne(padding_idx).int()
-    if past_key_values_length > 0:
-        mask = torch.cat([torch.ones((mask.shape[0], past_key_values_length)).int(), mask], dim=1)
-    incremental_indices = torch.cumsum(mask, dim=1).type_as(mask) * mask
+    incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
