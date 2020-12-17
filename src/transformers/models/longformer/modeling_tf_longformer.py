@@ -638,20 +638,25 @@ class TFLongformerIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput
 class TFLongformerOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
-            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        self.dense = tf.keras.layers.experimental.EinsumDense(
+            equation="abc,cd->abd",
+            bias_axes="d",
+            output_shape=(None, config.hidden_size),
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="dense",
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def call(self, hidden_states, input_tensor, training=False):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states, training=training)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = self.dense(inputs=hidden_states)
+        hidden_states = self.dropout(inputs=hidden_states, training=training)
+        hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
 
