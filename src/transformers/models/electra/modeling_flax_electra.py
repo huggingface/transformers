@@ -6,6 +6,7 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
+from flax.core import freeze
 from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
@@ -182,6 +183,7 @@ class FlaxElectraEmbeddings(nn.Module):
         embeddings = nn.Dropout(rate=self.dropout_rate)(layer_norm, deterministic=deterministic)
         return embeddings
 
+
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertAttention with Bert->Electra
 class FlaxElectraAttention(nn.Module):
     num_heads: int
@@ -210,6 +212,7 @@ class FlaxElectraAttention(nn.Module):
         layer_norm = FlaxElectraLayerNorm(name="layer_norm", dtype=self.dtype)(self_att + hidden_states)
         return layer_norm
 
+
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertIntermediate with Bert->Electra
 class FlaxElectraIntermediate(nn.Module):
     output_size: int
@@ -228,6 +231,7 @@ class FlaxElectraIntermediate(nn.Module):
         hidden_states = ACT2FN[self.hidden_act](hidden_states)
         return hidden_states
 
+
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertOutput with Bert->Electra
 class FlaxElectraOutput(nn.Module):
     dropout_rate: float = 0.0
@@ -245,6 +249,7 @@ class FlaxElectraOutput(nn.Module):
         hidden_states = nn.Dropout(rate=self.dropout_rate)(hidden_states, deterministic=deterministic)
         hidden_states = FlaxElectraLayerNorm(name="layer_norm", dtype=self.dtype)(hidden_states + attention_output)
         return hidden_states
+
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayer with Bert->Electra
 class FlaxElectraLayer(nn.Module):
@@ -279,10 +284,11 @@ class FlaxElectraLayer(nn.Module):
 
         return output
 
+
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayerCollection with Bert->Electra
 class FlaxElectraLayerCollection(nn.Module):
     """
-    Stores N BertLayer(s)
+    Stores N ElectraLayer(s)
     """
 
     num_layers: int
@@ -316,6 +322,7 @@ class FlaxElectraLayerCollection(nn.Module):
             input_i = layer(input_i, attention_mask, deterministic=deterministic)
         return input_i
 
+
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEncoder with Bert->Electra
 class FlaxElectraEncoder(nn.Module):
     num_layers: int
@@ -341,6 +348,7 @@ class FlaxElectraEncoder(nn.Module):
             dtype=self.dtype,
         )(hidden_states, attention_mask, deterministic=deterministic)
         return layer
+
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPooler with Bert->Electra
 class FlaxElectraPooler(nn.Module):
@@ -389,19 +397,6 @@ class FlaxElectraLMPredictionHead(nn.Module):
         return hidden_states
 
 
-class FlaxElectraOnlyMLMHead(nn.Module):
-    vocab_size: int
-    hidden_act: str = "gelu"
-    dtype: jnp.dtype = jnp.float32
-
-    @nn.compact
-    def __call__(self, hidden_states):
-        hidden_states = FlaxElectraLMPredictionHead(
-            vocab_size=self.vocab_size, hidden_act=self.hidden_act, name="predictions", dtype=self.dtype
-        )(hidden_states)
-        return hidden_states
-
-
 class FlaxElectraGeneratorPredictions(nn.Module):
     embedding_size: int
     hidden_act: str = "gelu"
@@ -415,6 +410,23 @@ class FlaxElectraGeneratorPredictions(nn.Module):
         hidden_states = self.dense(hidden_states)
         hidden_states = ACT2FN[self.hidden_act](hidden_states)
         hidden_states = self.layer_norm(hidden_states)
+        return hidden_states
+
+
+class FlaxElectraDiscriminatorPredictions(nn.Module):
+    """Prediction module for the discriminator, made up of two dense layers."""
+    hidden_size: int
+    hidden_act: str = "gelu"
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.dense = nn.Dense(self.hidden_size, dtype=self.dtype)
+        self.dense_prediction = nn.Dense(1, dtype=self.dtype)
+
+    def __call__(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = ACT2FN[self.hidden_act](hidden_states)
+        hidden_states = self.dense_prediction(hidden_states).squeeze(-1)
         return hidden_states
 
 
@@ -529,18 +541,63 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
         return jax_state
 
 
+class FlaxElectraModule(nn.Module):
+    vocab_size: int
+    embedding_size: int
+    hidden_size: int
+    type_vocab_size: int
+    max_length: int
+    num_encoder_layers: int
+    num_heads: int
+    head_size: int
+    intermediate_size: int
+    hidden_act: str = "gelu"
+    kernel_init_scale: float = 0.2
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.embeddings = FlaxElectraEmbeddings(
+            vocab_size=self.vocab_size, 
+            hidden_size=self.embedding_size, 
+            type_vocab_size=self.type_vocab_size, 
+            max_length=self.max_length,
+            kernel_init_scale=self.kernel_init_scale,
+            dropout_rate=self.hidden_dropout_prob
+        )
+        
+        if self.embedding_size != self.hidden_size:
+            self.embeddings_project = nn.Dense(self.hidden_size)
+
+        self.encoder = FlaxElectraEncoder(
+            num_layers=self.num_encoder_layers,
+            num_heads=self.num_heads,
+            head_size=self.head_size,
+            intermediate_size=self.intermediate_size,
+            dropout_rate=self.attention_probs_dropout_prob,
+            hidden_act=self.hidden_act,
+            kernel_init_scale=self.kernel_init_scale
+        )
+        
+    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True):
+        embeddings = self.embeddings(input_ids, token_type_ids, position_ids, attention_mask)
+
+        if self.embedding_size != self.hidden_size:
+            embeddings = self.embeddings_project(embeddings)
+
+        # N stacked encoding layers
+        encoder = self.encoder(embeddings, attention_mask)
+
+        return encoder
+
+
 @add_start_docstrings(
-    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare Electra Model transformer outputting raw hidden-states without any specific head on top.",
     ELECTRA_START_DOCSTRING,
 )
-class FlaxBertModel(FlaxElectraPreTrainedModel):
-    """
-    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
-    cross-attention is added between the self-attention layers, following the architecture described in `Attention is
-    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
-    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
-    """
-
+class FlaxElectraModel(FlaxElectraPreTrainedModel):
+    
     def __init__(
         self, config: ElectraConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
     ):
@@ -555,6 +612,7 @@ class FlaxBertModel(FlaxElectraPreTrainedModel):
             intermediate_size=config.intermediate_size,
             dropout_rate=config.hidden_dropout_prob,
             hidden_act=config.hidden_act,
+            kernel_init_scale=config.initializer_range,
             dtype=dtype,
             **kwargs,
         )
@@ -592,69 +650,72 @@ class FlaxBertModel(FlaxElectraPreTrainedModel):
         )
 
 
-class FlaxElectraModule(nn.Module):
+class FlaxElectraForMaskedLMModule(nn.Module):
     vocab_size: int
     embedding_size: int
     hidden_size: int
+    intermediate_size: int
+    head_size: int
+    num_heads: int
+    num_encoder_layers: int
     type_vocab_size: int
     max_length: int
-    num_encoder_layers: int
-    num_heads: int
-    head_size: int
-    intermediate_size: int
+    hidden_act: str = "gelu"
     hidden_dropout_prob: float = 0.0
     attention_probs_dropout_prob: float = 0.0
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.embeddings = FlaxElectraEmbeddings(
-            vocab_size=self.vocab_size, 
-            hidden_size=self.embedding_size, 
-            type_vocab_size=self.type_vocab_size, 
+        self.electra = FlaxElectraModule(
+            vocab_size=self.vocab_size,
+            embedding_size=self.embedding_size,
+            hidden_size=self.hidden_size,
+            type_vocab_size=self.type_vocab_size,
             max_length=self.max_length,
-            dropout_rate=self.hidden_dropout_prob
-        )
-        
-        if self.embedding_size != self.hidden_size:
-            self.embeddings_project = nn.Dense(self.hidden_size)
-
-        self.encoder = FlaxElectraEncoder(
-            num_layers=self.num_encoder_layers,
+            num_encoder_layers=self.num_encoder_layers,
             num_heads=self.num_heads,
-            head_size=self.head_size,
+            head_size=self.head_size, 
             intermediate_size=self.intermediate_size,
-            dropout_rate=self.attention_probs_dropout_prob
+            hidden_dropout_prob=self.hidden_dropout_prob,
+            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            hidden_act=self.hidden_act,
+            kernel_init_scale=self.kernel_init_scale,
+            dtype=self.dtype
         )
-        
-    def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True):
-        embeddings = self.embeddings(input_ids, token_type_ids, position_ids, attention_mask)
 
-        if self.embedding_size != self.hidden_size:
-            embeddings = self.embeddings_project(embeddings)
+        self.generator_predictions = FlaxElectraGeneratorPredictions(embedding_size=self.embedding_size)
+        self.generator_lm_head = nn.Dense(self.vocab_size)
 
-        # N stacked encoding layers
-        encoder = self.encoder(embeddings, attention_mask)
-
-        return encoder
-
-
-class FlaxBertForMaskedLM(FlaxElectraPreTrainedModel):
-    def __init__(
-        self, config: ElectraConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
+    def __call__(
+        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
     ):
+        generator_hidden_states = self.electra(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic)
+        generator_sequence_output = generator_hidden_states
+
+        prediction_scores = self.generator_predictions(generator_sequence_output)
+        prediction_scores = self.generator_lm_head(prediction_scores)
+
+        return prediction_scores
+
+
+class FlaxElectraForMaskedLM(FlaxElectraPreTrainedModel):
+    def __init__(self, config: ElectraConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):
         module = FlaxElectraForMaskedLMModule(
             vocab_size=config.vocab_size,
             type_vocab_size=config.type_vocab_size,
+            embedding_size=config.embedding_size,
             hidden_size=config.hidden_size,
             intermediate_size=config.intermediate_size,
             head_size=config.hidden_size,
             num_heads=config.num_attention_heads,
             num_encoder_layers=config.num_hidden_layers,
             max_length=config.max_position_embeddings,
+            hidden_dropout_prob=config.hidden_dropout_prob,
+            attention_probs_dropout_prob=config.attention_probs_dropout_prob,
             hidden_act=config.hidden_act,
+            kernel_init_scale=config.initializer_range,
             **kwargs,
         )
-
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
     def __call__(
@@ -676,8 +737,8 @@ class FlaxBertForMaskedLM(FlaxElectraPreTrainedModel):
         if dropout_rng is not None:
             rngs["dropout"] = dropout_rng
 
-        return self.module.apply(
-            {"params": params or self.params},
+        logits = self.module.apply(
+            {"params": freeze(params or self.params)},
             jnp.array(input_ids, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(token_type_ids, dtype="i4"),
@@ -686,9 +747,12 @@ class FlaxBertForMaskedLM(FlaxElectraPreTrainedModel):
             rngs=rngs,
         )
 
-
-class FlaxElectraForMaskedLMModule(nn.Module):
+        return (logits, )
+    
+    
+class ElectraForPreTrainingModule(nn.Module):
     vocab_size: int
+    embedding_size: int
     hidden_size: int
     intermediate_size: int
     head_size: int
@@ -696,35 +760,89 @@ class FlaxElectraForMaskedLMModule(nn.Module):
     num_encoder_layers: int
     type_vocab_size: int
     max_length: int
-    hidden_act: str
-    dropout_rate: float = 0.0
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float = 0.0
+    attention_probs_dropout_prob: float = 0.0
     dtype: jnp.dtype = jnp.float32
 
-    @nn.compact
+    def setup(self):
+        self.electra = FlaxElectraModule(
+            vocab_size=self.vocab_size,
+            embedding_size=self.embedding_size,
+            hidden_size=self.hidden_size,
+            type_vocab_size=self.type_vocab_size,
+            max_length=self.max_length,
+            num_encoder_layers=self.num_encoder_layers,
+            num_heads=self.num_heads,
+            head_size=self.head_size, 
+            intermediate_size=self.intermediate_size,
+            hidden_dropout_prob=self.hidden_dropout_prob,
+            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            hidden_act=self.hidden_act,
+            kernel_init_scale=self.kernel_init_scale,
+            dtype=self.dtype
+        )
+
+        self.discriminator_predictions = FlaxElectraDiscriminatorPredictions(hidden_size=self.hidden_size)
+
     def __call__(
         self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
     ):
-        # Model
-        encoder = FlaxElectraModule(
-            vocab_size=self.vocab_size,
-            type_vocab_size=self.type_vocab_size,
-            hidden_size=self.hidden_size,
-            intermediate_size=self.intermediate_size,
-            head_size=self.hidden_size,
-            num_heads=self.num_heads,
-            num_encoder_layers=self.num_encoder_layers,
-            max_length=self.max_length,
-            dropout_rate=self.dropout_rate,
-            hidden_act=self.hidden_act,
-            dtype=self.dtype,
-            add_pooling_layer=False,
-            name="bert",
-        )(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic)
+        hidden_states = self.electra(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic)
+        logits = self.discriminator_predictions(hidden_states)
+        
+        return logits
+    
 
-        # Compute the prediction scores
-        encoder = nn.Dropout(rate=self.dropout_rate)(encoder, deterministic=deterministic)
-        logits = FlaxElectraOnlyMLMHead(
-            vocab_size=self.vocab_size, hidden_act=self.hidden_act, name="cls", dtype=self.dtype
-        )(encoder)
+class ElectraForPreTraining(FlaxElectraPreTrainedModel):
+    
+    def __init__(self, config: ElectraConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):
+        module = ElectraForPreTrainingModule(
+            vocab_size=config.vocab_size,
+            type_vocab_size=config.type_vocab_size,
+            embedding_size=config.embedding_size,
+            hidden_size=config.hidden_size,
+            intermediate_size=config.intermediate_size,
+            head_size=config.hidden_size,
+            num_heads=config.num_attention_heads,
+            num_encoder_layers=config.num_hidden_layers,
+            max_length=config.max_position_embeddings,
+            hidden_dropout_prob=config.hidden_dropout_prob,
+            attention_probs_dropout_prob=config.attention_probs_dropout_prob,
+            hidden_act=config.hidden_act,
+            kernel_init_scale=config.initializer_range,
+            **kwargs,
+        )
+        
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
-        return (logits,)
+    def __call__(
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        params: dict = None,
+        dropout_rng: PRNGKey = None,
+        train: bool = False,
+    ):
+        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
+            input_ids, attention_mask, token_type_ids, position_ids
+        )
+
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        logits = self.module.apply(
+            {"params": freeze(params or self.params)},
+            jnp.array(input_ids, dtype="i4"),
+            jnp.array(attention_mask, dtype="i4"),
+            jnp.array(token_type_ids, dtype="i4"),
+            jnp.array(position_ids, dtype="i4"),
+            not train,
+            rngs=rngs,
+        )
+
+        return (logits, )
