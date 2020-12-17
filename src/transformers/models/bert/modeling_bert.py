@@ -458,7 +458,7 @@ class BertLayer(nn.Module):
         
         if self.is_decoder:
             outputs = self_attention_outputs[1:-1]
-            self_attn_present_key_value = self_attention_outputs[-1]
+            present_key_value = self_attention_outputs[-1]
         else:
             outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
@@ -481,14 +481,14 @@ class BertLayer(nn.Module):
             attention_output = cross_attention_outputs[0]
             cross_attn_present_key_value = cross_attention_outputs[-1]          
             outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
+            present_key_value = present_key_value + cross_attn_present_key_value
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
         outputs = (layer_output,) + outputs
-
         if self.is_decoder:
-            present_key_value = self_attn_present_key_value + cross_attn_present_key_value
+            # present_key_value = self_attn_present_key_value + cross_attn_present_key_value
             outputs = outputs + (present_key_value, )
 
         return outputs
@@ -521,7 +521,7 @@ class BertEncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        # use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
@@ -877,6 +877,10 @@ class BertModel(BertPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+
+        if not self.config.is_decoder:
+            use_cache = False
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -889,8 +893,14 @@ class BertModel(BertPreTrainedModel):
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
+        # past_key_values_length
+        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+
+        batch_size, seq_length = input_shape
+        real_seq_length = seq_length + past_key_values_length
+
         if attention_mask is None:
-            attention_mask = torch.ones(input_shape, device=device)
+            attention_mask = torch.ones(((batch_size, real_seq_length)), device=device)
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
@@ -916,8 +926,6 @@ class BertModel(BertPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
         embedding_output = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds, past_key_values_length=past_key_values_length
         )
@@ -1131,6 +1139,8 @@ class BertLMHeadModel(BertPreTrainedModel):
             >>> prediction_logits = outputs.logits
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        if labels is not None:
+            use_cache = False
 
         outputs = self.bert(
             input_ids,
