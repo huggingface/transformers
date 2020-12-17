@@ -53,7 +53,7 @@ from ..camembert.modeling_tf_camembert import (
     TFCamembertForTokenClassification,
     TFCamembertModel,
 )
-from ..ctrl.modeling_tf_ctrl import TFCTRLLMHeadModel, TFCTRLModel
+from ..ctrl.modeling_tf_ctrl import TFCTRLForSequenceClassification, TFCTRLLMHeadModel, TFCTRLModel
 from ..distilbert.modeling_tf_distilbert import (
     TFDistilBertForMaskedLM,
     TFDistilBertForMultipleChoice,
@@ -342,6 +342,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (GPT2Config, TFGPT2ForSequenceClassification),
         (MPNetConfig, TFMPNetForSequenceClassification),
         (OpenAIGPTConfig, TFOpenAIGPTForSequenceClassification),
+        (CTRLConfig, TFCTRLForSequenceClassification),
     ]
 )
 
