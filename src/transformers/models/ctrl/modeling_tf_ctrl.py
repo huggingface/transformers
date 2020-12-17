@@ -238,14 +238,11 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="layernorm")
 
     def get_input_embeddings(self):
-        return self.w
+        return self.w.weight
 
     def set_input_embeddings(self, value):
         self.w.weight = value
         self.w.vocab_size = value.shape[0]
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -641,13 +638,23 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
         self.lm_head = TFCTRLLMHead(config, self.transformer.w, name="lm_head")
 
     def get_output_embeddings(self):
-        return self.lm_head.input_embeddings
+        return self.get_input_embeddings()
+    
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
+    
+    def get_bias(self):
+        try:
+            return self.lm_head.bias
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.lm_head.bias
+    
+    def set_bias(self, value):
+        super().set_bias(value)
 
-    def get_output_layer_with_bias(self):
-        return self.lm_head
-
-    def get_prefix_bias_name(self):
-        return self.name + "/" + self.lm_head.name
+        self.lm_head.bias = value
+        self.lm_head.vocab_size = shape_list(value)[0]
 
     def prepare_inputs_for_generation(self, inputs, past, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs

@@ -72,9 +72,6 @@ class TFEmbeddings(tf.keras.layers.Layer):
         self.vocab_size = config.vocab_size
         self.dim = config.dim
         self.initializer_range = config.initializer_range
-        self.word_embeddings = TFSharedEmbeddings(
-            config.vocab_size, config.dim, initializer_range=config.initializer_range, name="word_embeddings"
-        )  # padding_idx=0)
         self.position_embeddings = tf.keras.layers.Embedding(
             config.max_position_embeddings,
             config.dim,
@@ -399,7 +396,7 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         self.transformer = TFTransformer(config, name="transformer")  # Encoder
 
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
@@ -676,13 +673,23 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         self.vocab_projector = TFDistilBertLMHead(config, self.distilbert.embeddings, name="vocab_projector")
 
     def get_output_embeddings(self):
-        return self.vocab_projector.input_embeddings
+        return self.get_input_embeddings()
 
-    def get_output_layer_with_bias(self):
-        return self.vocab_projector
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
 
-    def get_prefix_bias_name(self):
-        return self.name + "/" + self.vocab_projector.name
+    def get_bias(self):
+        try:
+            return self.vocab_projector.bias
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.vocab_projector.bias
+    
+    def set_bias(self, value):
+        super().set_bias(value)
+
+        self.vocab_projector.bias = value
+        self.vocab_projector.vocab_size = shape_list(value)[0]
 
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

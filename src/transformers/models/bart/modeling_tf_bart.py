@@ -1012,14 +1012,22 @@ class TFBartModel(TFBartPretrainedModel):
     def get_decoder(self):
         return self.decoder
     
+    def get_encoder(self):
+        return self.encoder
+    
     def get_input_embeddings(self):
-        return self.shared
+        try:
+            return self.shared.weight
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.shared.weight
 
     def set_input_embeddings(self, value):
-        self.shared = value
-
-    def get_output_embeddings(self):
-        return self.shared
+        try:
+            self.shared.weight = value
+        except AttributeError:
+            self(self.dummy_inputs)
+            self.shared.weight = value
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1165,23 +1173,27 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel):
 
     def get_decoder(self):
         return self.model.decoder
+    
+    def get_encoder(self):
+        return self.model.encoder
+    
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
 
-    def resize_token_embeddings(self, new_num_tokens):
-        super().resize_token_embeddings(new_num_tokens=new_num_tokens)
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
 
-        # BART is a special case where the bias has two dimensions
-        # and not named just `bias`
-        if new_num_tokens is not None:
-            num_tokens_to_copy = min(self.final_logits_bias.shape[0], new_num_tokens)
-            init_bias = tf.zeros((new_num_tokens,))
-            init_bias[:num_tokens_to_copy] = self.final_logits_bias.value()[:num_tokens_to_copy]
-            self.final_logits_bias = self.add_weight(
-                shape=(1, new_num_tokens),
-                initializer="zeros",
-                trainable=False,
-                name="final_logits_bias",
-            )
-            self.final_logits_bias.assign(init_bias)
+    def get_output_embeddings(self):
+        return self.get_input_embeddings()
+    
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
+    
+    def get_bias(self):
+        return self.final_logits_bias
+
+    def set_bias(self, value):
+        self.final_logits_bias = value
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1355,12 +1367,6 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel):
             return tf.where(vocab_range != self.config.eos_token_id, LARGE_NEGATIVE, logits)
         else:
             return logits
-
-    def get_output_embeddings(self):
-        return self.model.shared
-
-    def get_encoder(self):
-        return self.model.encoder
 
     def compute_loss(self, labels, logits):
         """CrossEntropyLoss that ignores pad tokens"""
