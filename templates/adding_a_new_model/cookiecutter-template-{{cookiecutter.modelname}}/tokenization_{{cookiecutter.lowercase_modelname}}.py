@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The HuggingFace Inc. team.
+# Copyright {{cookiecutter.authors}} and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@
 {%- if cookiecutter.tokenizer_type == "Based on BERT" %}
 from ...utils import logging
 from ..bert.tokenization_bert import BertTokenizer
-from ..bert.tokenization_bert_fast import BertTokenizerFast
 
 
 logger = logging.get_logger(__name__)
@@ -55,30 +54,12 @@ class {{cookiecutter.camelcase_modelname}}Tokenizer(BertTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
-
-
-class {{cookiecutter.camelcase_modelname}}TokenizerFast(BertTokenizerFast):
-    r"""
-    Construct a "fast" {{cookiecutter.modelname}} tokenizer (backed by HuggingFace's `tokenizers` library).
-
-    :class:`~transformers.{{cookiecutter.camelcase_modelname}}TokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
-    end-to-end tokenization: punctuation splitting and wordpiece.
-
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
-    parameters.
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
 {%- elif cookiecutter.tokenizer_type == "Standalone" %}
 from typing import List, Optional
 
 from tokenizers import ByteLevelBPETokenizer
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 

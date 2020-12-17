@@ -40,6 +40,7 @@ from ..lxmert.configuration_lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, 
 from ..marian.configuration_marian import MarianConfig
 from ..mbart.configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig
 from ..mobilebert.configuration_mobilebert import MobileBertConfig
+from ..mpnet.configuration_mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig
 from ..mt5.configuration_mt5 import MT5Config
 from ..openai.configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from ..pegasus.configuration_pegasus import PegasusConfig
@@ -50,6 +51,7 @@ from ..retribert.configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCH
 from ..roberta.configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
 from ..squeezebert.configuration_squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig
 from ..t5.configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
+from ..tapas.configuration_tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig
 from ..transfo_xl.configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
 from ..xlm.configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
 from ..xlm_prophetnet.configuration_xlm_prophetnet import (
@@ -93,6 +95,8 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
         PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ]
     for key, value, in pretrained_map.items()
 )
@@ -113,6 +117,7 @@ CONFIG_MAPPING = OrderedDict(
         ("pegasus", PegasusConfig),
         ("marian", MarianConfig),
         ("mbart", MBartConfig),
+        ("mpnet", MPNetConfig),
         ("bart", BartConfig),
         ("blenderbot", BlenderbotConfig),
         ("reformer", ReformerConfig),
@@ -138,6 +143,7 @@ CONFIG_MAPPING = OrderedDict(
         ("dpr", DPRConfig),
         ("layoutlm", LayoutLMConfig),
         ("rag", RagConfig),
+        ("tapas", TapasConfig),
     ]
 )
 
@@ -181,6 +187,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("xlm-prophetnet", "XLMProphetNet"),
         ("prophetnet", "ProphetNet"),
         ("mt5", "mT5"),
+        ("mpnet", "MPNet"),
+        ("tapas", "TAPAS"),
     ]
 )
 
@@ -274,7 +282,7 @@ class AutoConfig:
         List options
 
         Args:
-            pretrained_model_name_or_path (:obj:`str`):
+            pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
                 Can be either:
 
                     - A string, the `model id` of a pretrained model configuration hosted inside a model repo on
@@ -285,7 +293,7 @@ class AutoConfig:
                       :meth:`~transformers.PreTrainedModel.save_pretrained` method, e.g., ``./my_model_directory/``.
                     - A path or url to a saved configuration JSON `file`, e.g.,
                       ``./my_model_directory/configuration.json``.
-            cache_dir (:obj:`str`, `optional`):
+            cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
                 standard cache should not be used.
             force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -346,7 +354,7 @@ class AutoConfig:
         else:
             # Fallback: use pattern matching on the string.
             for pattern, config_class in CONFIG_MAPPING.items():
-                if pattern in pretrained_model_name_or_path:
+                if pattern in str(pretrained_model_name_or_path):
                     return config_class.from_dict(config_dict, **kwargs)
 
         raise ValueError(

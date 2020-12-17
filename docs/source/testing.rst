@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Testing
 =======================================================================================================================
 
@@ -909,9 +921,10 @@ pipelines), then we should run that test in the non-slow test suite. If it's foc
 such as the documentation or the examples, then we should run these tests in the slow test suite. And then, to refine
 this approach we should have exceptions:
 
-* All tests that need to download a heavy set of weights (e.g., model or tokenizer integration tests, pipeline
-  integration tests) should be set to slow. If you're adding a new model, you should create and upload to the hub a
-  tiny version of it (with random weights) for integration tests. This is discussed in the following paragraphs.
+* All tests that need to download a heavy set of weights or a dataset that is larger than ~50MB (e.g., model or
+  tokenizer integration tests, pipeline integration tests) should be set to slow. If you're adding a new model, you
+  should create and upload to the hub a tiny version of it (with random weights) for integration tests. This is
+  discussed in the following paragraphs.
 * All tests that need to do a training not specifically optimized to be fast should be set to slow.
 * We can introduce exceptions if some of these should-be-non-slow tests are excruciatingly slow, and set them to
   ``@slow``. Auto-modeling tests, which save and load large files to disk, are a good example of tests that are marked
@@ -1129,3 +1142,66 @@ To start a debugger at the point of the warning, do this:
 .. code-block:: bash
 
     pytest tests/test_logging.py -W error::UserWarning --pdb
+
+
+
+Testing Experimental CI Features
+-----------------------------------------------------------------------------------------------------------------------
+
+Testing CI features can be potentially problematic as it can interfere with the normal CI functioning. Therefore if a
+new CI feature is to be added, it should be done as following.
+
+1. Create a new dedicated job that tests what needs to be tested
+2. The new job must always succeed so that it gives us a green ✓ (details below).
+3. Let it run for some days to see that a variety of different PR types get to run on it (user fork branches,
+   non-forked branches, branches originating from github.com UI direct file edit, various forced pushes, etc. - there
+   are so many) while monitoring the experimental job's logs (not the overall job green as it's purposefully always
+   green)
+4. When it's clear that everything is solid, then merge the new changes into existing jobs.
+
+That way experiments on CI functionality itself won't interfere with the normal workflow.
+
+Now how can we make the job always succeed while the new CI feature is being developed?
+
+Some CIs, like TravisCI support ignore-step-failure and will report the overall job as successful, but CircleCI and
+Github Actions as of this writing don't support that.
+
+So the following workaround can be used:
+
+1. ``set +euo pipefail`` at the beginning of the run command to suppress most potential failures in the bash script.
+2. the last command must be a success: ``echo "done"`` or just ``true`` will do
+
+Here is an example:
+
+.. code-block:: yaml
+
+    - run:
+        name: run CI experiment
+        command: |
+            set +euo pipefail
+            echo "setting run-all-despite-any-errors-mode"
+            this_command_will_fail
+            echo "but bash continues to run"
+            # emulate another failure
+            false
+            # but the last command must be a success
+            echo "during experiment do not remove: reporting success to CI, even if there were failures"
+
+For simple commands you could also do:
+
+.. code-block:: bash
+
+    cmd_that_may_fail || true
+
+Of course, once satisfied with the results, integrate the experimental step or job with the rest of the normal jobs,
+while removing ``set +euo pipefail`` or any other things you may have added to ensure that the experimental job doesn't
+interfere with the normal CI functioning.
+
+This whole process would have been much easier if we only could set something like ``allow-failure`` for the
+experimental step, and let it fail without impacting the overall status of PRs. But as mentioned earlier CircleCI and
+Github Actions don't support it at the moment.
+
+You can vote for this feature and see where it is at at these CI-specific threads:
+
+* `Github Actions: <https://github.com/actions/toolkit/issues/399>`__
+* `CircleCI: <https://ideas.circleci.com/ideas/CCI-I-344>`__

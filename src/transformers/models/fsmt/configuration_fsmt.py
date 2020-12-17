@@ -109,6 +109,8 @@ class FSMTConfig(PretrainedConfig):
         early_stopping (:obj:`bool`, `optional`, defaults to :obj:`False`)
             Flag that will be used by default in the :obj:`generate` method of the model. Whether to stop the beam
             search when at least ``num_beams`` sentences are finished per batch or not.
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not the model should return the last key/values attentions (not used by all models).
 
         Examples::
 
@@ -142,9 +144,6 @@ class FSMTConfig(PretrainedConfig):
         dropout=0.1,
         activation_dropout=0.0,
         init_std=0.02,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
         decoder_start_token_id=2,
         is_encoder_decoder=True,
         scale_embedding=True,
@@ -152,6 +151,10 @@ class FSMTConfig(PretrainedConfig):
         num_beams=5,
         length_penalty=1.0,
         early_stopping=False,
+        use_cache=True,
+        pad_token_id=1,
+        bos_token_id=0,
+        eos_token_id=2,
         **common_kwargs
     ):
         if "hidden_size" in common_kwargs:
@@ -195,6 +198,8 @@ class FSMTConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         self.dropout = dropout
+
+        self.use_cache = use_cache
 
     @property
     def num_attention_heads(self) -> int:

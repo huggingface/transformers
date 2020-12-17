@@ -24,7 +24,7 @@ from fairseq.models.roberta import RobertaModel as FairseqRobertaModel
 from fairseq.modules import TransformerSentenceEncoderLayer
 from packaging import version
 
-from transformers.models.bertmodeling_bert import (
+from transformers.models.bert.modeling_bert import (
     BertIntermediate,
     BertLayer,
     BertOutput,

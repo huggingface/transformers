@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright {{cookiecutter.authors}} and The HuggingFace Inc. team.
+# Copyright {{cookiecutter.authors}} and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
