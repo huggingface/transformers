@@ -446,7 +446,7 @@ class BertLayer(nn.Module):
         past_key_value=None,
         output_attentions=False,
     ):
-        self_attn_past_key_value = past_key_value[0] if past_key_value is not None else None
+        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
@@ -468,7 +468,7 @@ class BertLayer(nn.Module):
                 self, "crossattention"
             ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
             # cross_attn cached key/values tuple is at second position
-            cross_attn_past_key_value = past_key_value[1] if past_key_value is not None else None
+            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             cross_attention_outputs = self.crossattention(
                 attention_output,
                 attention_mask,
@@ -488,7 +488,7 @@ class BertLayer(nn.Module):
         outputs = (layer_output,) + outputs
 
         if self.is_decoder:
-            present_key_value = (self_attn_present_key_value, cross_attn_present_key_value)
+            present_key_value = self_attn_present_key_value + cross_attn_present_key_value
             outputs = outputs + (present_key_value, )
 
         return outputs
@@ -917,7 +917,7 @@ class BertModel(BertPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         # past_key_values_length
-        past_key_values_length = past_key_values[0][0][0].shape[2] if past_key_values is not None else 0
+        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
         embedding_output = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds, past_key_values_length=past_key_values_length
         )
