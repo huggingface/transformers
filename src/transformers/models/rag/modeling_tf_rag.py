@@ -31,11 +31,10 @@ from ...file_utils import (
 from ...generation_tf_utils import *  # this is needed since we adjust _generate_no_beam and _generate_with_beam to TFRag
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPast, TFSeq2SeqLMOutput
 from ...modeling_tf_utils import (
-    TFCausalLanguageModelingLoss,  input_processing,
-)
-from ...modeling_tf_utils import (
     DUMMY_INPUTS,
+    TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
+    input_processing,
     keras_serializable,
     shape_list,
 )
@@ -342,6 +341,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
             question_encoder = TFAutoModel.from_pretrained(
                 question_encoder_pretrained_model_name_or_path,
                 name="question_encoder",
+                load_weight_prefix=cls.load_weight_prefix,
                 *model_args,
                 **kwargs_question_encoder,
             )
@@ -361,7 +361,10 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
                 kwargs_generator["config"] = generator_config
 
             generator = TFAutoModelForSeq2SeqLM.from_pretrained(
-                generator_pretrained_model_name_or_path, name="generator", **kwargs_generator
+                generator_pretrained_model_name_or_path,
+                name="generator",
+                load_weight_prefix=cls.load_weight_prefix,
+                **kwargs_generator,
             )
 
         # instantiate config with corresponding kwargs
@@ -478,14 +481,19 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
             Number of documents to retrieve and/or number of documents for which to generate an answer.
 """
 
+
 @add_start_docstrings_to_model_forward(RAG_START_DOCSTRING)
 class TFRagModel(TFRagPreTrainedModel):
+
+    load_weight_prefix = "tf_rag_model_1"
+
     def __init__(
         self,
         config: Optional[PretrainedConfig] = None,
         question_encoder: Optional[TFPreTrainedModel] = None,
         generator: Optional[TFPreTrainedModel] = None,
         retriever: Optional = None,
+        load_weight_prefix: Optional[str] = None,
         **kwargs,
     ):
         assert config is not None or (
@@ -506,10 +514,14 @@ class TFRagModel(TFRagPreTrainedModel):
             from ..auto.modeling_tf_auto import TFAutoModel
 
             question_encoder = TFAutoModel.from_config(config.question_encoder, name="question_encoder")
+
         if generator is None:
             from ..auto.modeling_tf_auto import TFAutoModelForSeq2SeqLM
 
-            generator = TFAutoModelForSeq2SeqLM.from_config(config.generator, name="generator")
+            load_weight_prefix = load_weight_prefix if load_weight_prefix is not None else self.load_weight_prefix
+            generator = TFAutoModelForSeq2SeqLM.from_config(
+                config.generator, name="generator", load_weight_prefix=load_weight_prefix
+            )
 
         self.retriever = retriever
         if self.retriever is not None:
@@ -520,6 +532,9 @@ class TFRagModel(TFRagPreTrainedModel):
 
         self.question_encoder = question_encoder
         self.generator = generator
+
+    def set_retriever(self, retriever: RagRetriever):
+        self.retriever = retriever
 
     @add_start_docstrings_to_model_forward(RAG_FORWARD_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFRetrievAugLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -588,23 +603,23 @@ class TFRagModel(TFRagPreTrainedModel):
         )
 
         # aliasing to minimize code changing
-        input_ids=inputs["input_ids"]
-        attention_mask=inputs["attention_mask"]
-        decoder_input_ids=inputs["decoder_input_ids"]
-        decoder_attention_mask=inputs["decoder_attention_mask"]
-        encoder_outputs=inputs["encoder_outputs"]
-        past_key_values=inputs["past_key_values"]
-        doc_scores=inputs["doc_scores"]
-        context_input_ids=inputs["context_input_ids"]
-        context_attention_mask=inputs["context_attention_mask"]
+        input_ids = inputs["input_ids"]
+        attention_mask = inputs["attention_mask"]
+        decoder_input_ids = inputs["decoder_input_ids"]
+        decoder_attention_mask = inputs["decoder_attention_mask"]
+        encoder_outputs = inputs["encoder_outputs"]
+        past_key_values = inputs["past_key_values"]
+        doc_scores = inputs["doc_scores"]
+        context_input_ids = inputs["context_input_ids"]
+        context_attention_mask = inputs["context_attention_mask"]
 
         use_cache = inputs["use_cache"]
         output_attentions = inputs["output_attentions"]
         output_hidden_states = inputs["output_hidden_states"]
         return_dict = inputs["return_dict"]
         n_docs = inputs["n_docs"] if inputs["n_docs"] is not None else self.config.n_docs
-        output_retrieved = inputs["output_retrieved"] 
-        training=inputs["training"]
+        output_retrieved = inputs["output_retrieved"]
+        training = inputs["training"]
 
         # whether retriever has to be used
         has_to_retrieve = (
@@ -722,6 +737,7 @@ class TFRagModel(TFRagPreTrainedModel):
             generator_dec_attentions=gen_outputs.decoder_attentions,
         )
 
+
 @add_start_docstrings_to_model_forward(
     """
     A TF RAG-token model implementation. It performs RAG-token specific marginalization in the forward pass.
@@ -729,6 +745,9 @@ class TFRagModel(TFRagPreTrainedModel):
     RAG_START_DOCSTRING,
 )
 class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss):
+
+    load_weight_prefix = "tf_rag_token_for_generation_1/rag"
+
     def __init__(
         self,
         config: Optional[PretrainedConfig] = None,
@@ -750,32 +769,13 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
 
         # instantiate model
         self.rag = TFRagModel(
-            config=config, question_encoder=question_encoder, generator=generator, retriever=retriever, name="rag"
+            config=config,
+            question_encoder=question_encoder,
+            generator=generator,
+            retriever=retriever,
+            load_weight_prefix=self.load_weight_prefix,
+            name="rag",
         )
-
-    # NEED_HELP: (temporarily put the hack back to make model.generate() works) 
-    # really ugly fixed and require torch model: manually and ineffcient fixed of two weights name mismatched
-#    @classmethod
-#    def from_pretrained(cls, path_or_weight_name, model_pt=None, **kwargs):
-#        
-        # print(path_or_weight_name, kwargs)
-#        model = super(TFRagTokenForGeneration, cls).from_pretrained(path_or_weight_name, **kwargs)
-#
-#        if True:
-#            import gc
-#            import tensorflow.keras.backend as K
-#            from transformers import RagTokenForGeneration
-#
-#            gc.collect()
-#            if model_pt is None:
-#                model_pt = RagTokenForGeneration.from_pretrained(path_or_weight_name, **kwargs)
-#            K.set_value(model.rag.generator.model.shared.weight, model_pt.rag.generator.model.shared.weight.detach().numpy())
-#            K.set_value(model.rag.generator.final_logits_bias, model_pt.rag.generator.final_logits_bias.detach().numpy())
-#            del model_pt
-#            gc.collect()
-#            print('*** Ugly fix of weights loading -- not a generalizable solution ***')
-#
-#        return model
 
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
@@ -816,7 +816,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             "doc_scores": doc_scores,
             "context_attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
-            "past_key_values": decoder_cached_states, # This is due to TFBart and is the main difference to Pytorch's RAG
+            "past_key_values": decoder_cached_states,  # This is due to TFBart and is the main difference to Pytorch's RAG
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
             "do_marginalize": True,
             "n_docs": n_docs,
@@ -962,8 +962,8 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             kwargs_call=kwargs,
         )
 
-        inputs["do_marginalize"] = inputs["do_marginalize"] if inputs["do_marginalize"] else  self.config.do_marginalize
-        inputs["reduce_loss"] = inputs["reduce_loss"] if inputs["reduce_loss"] else  self.config.reduce_loss
+        inputs["do_marginalize"] = inputs["do_marginalize"] if inputs["do_marginalize"] else self.config.do_marginalize
+        inputs["reduce_loss"] = inputs["reduce_loss"] if inputs["reduce_loss"] else self.config.reduce_loss
 
         if inputs["labels"] is not None:
             if inputs["decoder_input_ids"] is None:
@@ -1518,3 +1518,27 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         loss = (1.0 - smooth_epsilon) * nll_loss + eps_i * smooth_loss
 
         return loss
+
+
+class TFWrappedModel:
+    """
+    this class wraps a the TFSharedEmbeddingTokens layer into a python 'no-keras-layer' class to avoid problem with
+    weight restoring. Also it makes sure that the layer is called from the correct scope to avoid problem with
+    saving/storing the correct weights
+    """
+
+    def __init__(self, layer, abs_scope_name=None):
+        self._layer = layer
+        self._abs_scope_name = abs_scope_name
+
+    def call(self, *args, **kwargs):
+        # if an abs scope name is given to the embedding variable, call variable from absolute scope
+        with tf.compat.v1.variable_scope(self._abs_scope_name, auxiliary_name_scope=False) as abs_scope_name:
+            with tf.name_scope(abs_scope_name.original_name_scope):
+                return self._layer.call(*args, **kwargs)
+
+    def __call__(self, *args, **kwargs):
+        # if an abs scope name is given to the embedding variable, call variable from absolute scope
+        with tf.compat.v1.variable_scope(self._abs_scope_name, auxiliary_name_scope=False) as abs_scope_name:
+            with tf.name_scope(abs_scope_name.original_name_scope):
+                return self._layer(*args, **kwargs)

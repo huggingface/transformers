@@ -443,7 +443,7 @@ def input_processing(func, config, input_ids, **kwargs):
     return output
 
 
-def load_tf_weights(model, resolved_archive_file):
+def load_tf_weights(model, resolved_archive_file, prefix=None):
     """
     Detect missing and unexpected layers and load the TF weights accordingly to their names and shapes.
 
@@ -489,6 +489,10 @@ def load_tf_weights(model, resolved_archive_file):
                 for weight_name in hdf5_format.load_attributes_from_hdf5_group(h5_layer_object, "weight_names"):
                     # TF names always start with the model name so we ignore it
                     name = "/".join(weight_name.split("/")[1:])
+
+                    if prefix is not None:
+                        name = prefix + "/" + name
+
                     saved_weights[name] = np.asarray(h5_layer_object[weight_name])
 
                     # Add the updated name to the final list for computing missing/unexpected values
@@ -497,7 +501,14 @@ def load_tf_weights(model, resolved_archive_file):
                 # Loop over each weights from the instantiated model and compare with the weights from the H5 file
                 for symbolic_weight in symbolic_weights:
                     # TF names always start with the model name so we ignore it
-                    symbolic_weight_name = "/".join(symbolic_weight.name.split("/")[1:])
+                    if prefix is not None:
+                        delimeter = len(prefix.split("/"))
+                        symbolic_weight_name = "/".join(
+                            symbolic_weight.name.split("/")[:delimeter]
+                            + symbolic_weight.name.split("/")[delimeter + 1 :]
+                        )
+                    else:
+                        symbolic_weight_name = "/".join(symbolic_weight.name.split("/")[1:])
 
                     # here we check if the current weight is among the weights from the H5 file
                     # If yes, get the weight_value of the corresponding weight from the H5 file
@@ -521,7 +532,6 @@ def load_tf_weights(model, resolved_archive_file):
                         else:
                             array = saved_weight_value
 
-                        # We create the tuple that will be loaded and add it to the final list
                         weight_value_tuples.append((symbolic_weight, array))
 
     # Load all the weights
@@ -941,6 +951,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         mirror = kwargs.pop("mirror", None)
+        load_weight_prefix = kwargs.pop("load_weight_prefix", None)
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
@@ -1015,6 +1026,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         config.name_or_path = pretrained_model_name_or_path
 
         # Instantiate model.
+        if "load_weight_prefix" in inspect.signature(cls.__init__).parameters.keys():
+            model_kwargs["load_weight_prefix"] = load_weight_prefix
         model = cls(config, *model_args, **model_kwargs)
 
         if from_pt:
@@ -1023,13 +1036,18 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             # Load from a PyTorch checkpoint
             return load_pytorch_checkpoint_in_tf2_model(model, resolved_archive_file, allow_missing_keys=True)
 
-        model(model.dummy_inputs, training=False)  # build the network with dummy inputs
+        # we might need to extend the variable scope for composite models
+        if load_weight_prefix is not None:
+            with tf.compat.v1.variable_scope(load_weight_prefix):
+                model(model.dummy_inputs, training=False)  # build the network with dummy inputs
+        else:
+            model(model.dummy_inputs, training=False)  # build the network with dummy inputs
 
         assert os.path.isfile(resolved_archive_file), "Error retrieving file {}".format(resolved_archive_file)
         # 'by_name' allow us to do transfer learning by skipping/adding layers
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
         try:
-            missing_keys, unexpected_keys = load_tf_weights(model, resolved_archive_file)
+            missing_keys, unexpected_keys = load_tf_weights(model, resolved_archive_file, load_weight_prefix)
         except OSError:
             raise OSError(
                 "Unable to load weights from h5 file. "
@@ -1037,6 +1055,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             )
 
         model(model.dummy_inputs, training=False)  # Make sure restore ops are run
+        # we might need to extend the variable scope for composite models
+        #        if load_weight_prefix is not None:
+        #            with tf.compat.v1.variable_scope(load_weight_prefix):
+        #                model(model.dummy_inputs, training=False)
+        #        else:
+        #            model(model.dummy_inputs, training=False) # Make sure restore ops are run
 
         if cls._keys_to_ignore_on_load_missing is not None:
             for pat in cls._keys_to_ignore_on_load_missing:

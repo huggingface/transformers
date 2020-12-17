@@ -1,5 +1,5 @@
-import unittest
 import tempfile
+import unittest
 
 from transformers.file_utils import cached_property, is_datasets_available, is_faiss_available, is_tf_available
 from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
@@ -15,10 +15,10 @@ if is_tf_available() and is_datasets_available() and is_faiss_available():
         RagConfig,
         RagRetriever,
         RagTokenizer,
-        TFRagTokenForGeneration,
-        TFRagModel,
+        TFBartForConditionalGeneration,
         TFDPRQuestionEncoder,
-        TFBartForConditionalGeneration
+        TFRagModel,
+        TFRagTokenForGeneration,
     )
 
 
@@ -127,7 +127,7 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         ).input_ids
         decoder_input_ids = rag_decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
 
-        # model must run once to be functional before loading/saving works 
+        # model must run once to be functional before loading/saving works
         rag_token(
             input_ids,
             labels=decoder_input_ids,
@@ -165,7 +165,6 @@ class TFRagModelIntegrationTests(unittest.TestCase):
             generator_tokenizer=rag_decoder_tokenizer,
         )
 
-
         rag_config = RagConfig.from_pretrained("facebook/rag-sequence-base")
         rag = TFRagTokenForGeneration(rag_config, retriever=rag_retriever)
 
@@ -201,7 +200,7 @@ class TFRagModelIntegrationTests(unittest.TestCase):
             "who is the president of usa right now?",
             "where do the greasers live in the outsiders",
             "panda is a national animal of which country",
-#             "what is the name of manchester united stadium",
+            #             "what is the name of manchester united stadium",
         ]
 
     @slow
@@ -244,6 +243,6 @@ class TFRagModelIntegrationTests(unittest.TestCase):
             " obama",
             " northern new jersey",
             " india",
-#             " united stadium",
+            #             " united stadium",
         ]
         self.assertListEqual(outputs, EXPECTED_OUTPUTS)
