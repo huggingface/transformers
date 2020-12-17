@@ -5,8 +5,8 @@ import numpy as np
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict
 from flax.core import freeze
+from flax.core.frozen_dict import FrozenDict
 from jax.random import PRNGKey
 
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward
@@ -118,6 +118,7 @@ class FlaxElectraLayerNorm(nn.Module):
         if self.bias:
             y = y + jnp.asarray(self.param("beta", self.bias_init, (features,)))
         return y
+
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEmbedding with Bert->Electra
 class FlaxElectraEmbedding(nn.Module):
@@ -415,6 +416,7 @@ class FlaxElectraGeneratorPredictions(nn.Module):
 
 class FlaxElectraDiscriminatorPredictions(nn.Module):
     """Prediction module for the discriminator, made up of two dense layers."""
+
     hidden_size: int
     hidden_act: str = "gelu"
     dtype: jnp.dtype = jnp.float32
@@ -481,7 +483,11 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
                     jax_state[key] = tensor
 
             # Need to transpose "weight" parameter to work correctly
-            if "embeddings_project.weight" in key or "generator_lm_head.weight" in key or "dense_prediction.weight" in key:
+            if (
+                "embeddings_project.weight" in key
+                or "generator_lm_head.weight" in key
+                or "dense_prediction.weight" in key
+            ):
                 del jax_state[key]
                 key = key.replace("weight", "kernel")
                 jax_state[key] = tensor.T
@@ -559,14 +565,14 @@ class FlaxElectraModule(nn.Module):
 
     def setup(self):
         self.embeddings = FlaxElectraEmbeddings(
-            vocab_size=self.vocab_size, 
-            hidden_size=self.embedding_size, 
-            type_vocab_size=self.type_vocab_size, 
+            vocab_size=self.vocab_size,
+            hidden_size=self.embedding_size,
+            type_vocab_size=self.type_vocab_size,
             max_length=self.max_length,
             kernel_init_scale=self.kernel_init_scale,
-            dropout_rate=self.hidden_dropout_prob
+            dropout_rate=self.hidden_dropout_prob,
         )
-        
+
         if self.embedding_size != self.hidden_size:
             self.embeddings_project = nn.Dense(self.hidden_size)
 
@@ -577,11 +583,13 @@ class FlaxElectraModule(nn.Module):
             intermediate_size=self.intermediate_size,
             dropout_rate=self.attention_probs_dropout_prob,
             hidden_act=self.hidden_act,
-            kernel_init_scale=self.kernel_init_scale
+            kernel_init_scale=self.kernel_init_scale,
         )
-        
+
     def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True):
-        embeddings = self.embeddings(input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic)
+        embeddings = self.embeddings(
+            input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic
+        )
 
         if self.embedding_size != self.hidden_size:
             embeddings = self.embeddings_project(embeddings)
@@ -601,9 +609,13 @@ class FlaxElectraModule(nn.Module):
     ELECTRA_START_DOCSTRING,
 )
 class FlaxElectraModel(FlaxElectraPreTrainedModel):
-    
     def __init__(
-        self, config: ElectraConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
+        self,
+        config: ElectraConfig,
+        input_shape: Tuple = (1, 1),
+        seed: int = 0,
+        dtype: jnp.dtype = jnp.float32,
+        **kwargs
     ):
         module = FlaxElectraModule(
             vocab_size=config.vocab_size,
@@ -654,7 +666,7 @@ class FlaxElectraModel(FlaxElectraPreTrainedModel):
             not train,
             rngs=rngs,
         )
-        return (logits, )
+        return (logits,)
 
 
 class FlaxElectraForMaskedLMModule(nn.Module):
@@ -682,13 +694,13 @@ class FlaxElectraForMaskedLMModule(nn.Module):
             max_length=self.max_length,
             num_encoder_layers=self.num_encoder_layers,
             num_heads=self.num_heads,
-            head_size=self.head_size, 
+            head_size=self.head_size,
             intermediate_size=self.intermediate_size,
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             hidden_act=self.hidden_act,
             kernel_init_scale=self.kernel_init_scale,
-            dtype=self.dtype
+            dtype=self.dtype,
         )
 
         self.generator_predictions = FlaxElectraGeneratorPredictions(embedding_size=self.embedding_size)
@@ -697,7 +709,9 @@ class FlaxElectraForMaskedLMModule(nn.Module):
     def __call__(
         self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
     ):
-        generator_hidden_states = self.electra(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic)
+        generator_hidden_states = self.electra(
+            input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
+        )
         generator_sequence_output = generator_hidden_states
 
         prediction_scores = self.generator_predictions(generator_sequence_output)
@@ -716,7 +730,14 @@ class FlaxElectraForMaskedLMModule(nn.Module):
     ELECTRA_START_DOCSTRING,
 )
 class FlaxElectraForMaskedLM(FlaxElectraPreTrainedModel):
-    def __init__(self, config: ElectraConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):
+    def __init__(
+        self,
+        config: ElectraConfig,
+        input_shape: Tuple = (1, 1),
+        seed: int = 0,
+        dtype: jnp.dtype = jnp.float32,
+        **kwargs
+    ):
         module = FlaxElectraForMaskedLMModule(
             vocab_size=config.vocab_size,
             type_vocab_size=config.type_vocab_size,
@@ -764,9 +785,9 @@ class FlaxElectraForMaskedLM(FlaxElectraPreTrainedModel):
             rngs=rngs,
         )
 
-        return (logits, )
-    
-    
+        return (logits,)
+
+
 class FlaxElectraForPreTrainingModule(nn.Module):
     vocab_size: int
     embedding_size: int
@@ -792,13 +813,13 @@ class FlaxElectraForPreTrainingModule(nn.Module):
             max_length=self.max_length,
             num_encoder_layers=self.num_encoder_layers,
             num_heads=self.num_heads,
-            head_size=self.head_size, 
+            head_size=self.head_size,
             intermediate_size=self.intermediate_size,
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             hidden_act=self.hidden_act,
             kernel_init_scale=self.kernel_init_scale,
-            dtype=self.dtype
+            dtype=self.dtype,
         )
 
         self.discriminator_predictions = FlaxElectraDiscriminatorPredictions(hidden_size=self.hidden_size)
@@ -806,11 +827,13 @@ class FlaxElectraForPreTrainingModule(nn.Module):
     def __call__(
         self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
     ):
-        hidden_states = self.electra(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic)
+        hidden_states = self.electra(
+            input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
+        )
         logits = self.discriminator_predictions(hidden_states)
-        
+
         return logits
-    
+
 
 @add_start_docstrings(
     """
@@ -821,8 +844,14 @@ class FlaxElectraForPreTrainingModule(nn.Module):
     ELECTRA_START_DOCSTRING,
 )
 class FlaxElectraForPreTraining(FlaxElectraPreTrainedModel):
-    
-    def __init__(self, config: ElectraConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):
+    def __init__(
+        self,
+        config: ElectraConfig,
+        input_shape: Tuple = (1, 1),
+        seed: int = 0,
+        dtype: jnp.dtype = jnp.float32,
+        **kwargs
+    ):
         module = FlaxElectraForPreTrainingModule(
             vocab_size=config.vocab_size,
             type_vocab_size=config.type_vocab_size,
@@ -839,7 +868,7 @@ class FlaxElectraForPreTraining(FlaxElectraPreTrainedModel):
             kernel_init_scale=config.initializer_range,
             **kwargs,
         )
-        
+
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
     def __call__(
@@ -871,4 +900,4 @@ class FlaxElectraForPreTraining(FlaxElectraPreTrainedModel):
             rngs=rngs,
         )
 
-        return (logits, )
+        return (logits,)

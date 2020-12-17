@@ -9,7 +9,11 @@ from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_
 
 
 if is_flax_available():
-    from transformers.models.electra.modeling_flax_electra import FlaxElectraForMaskedLM, FlaxElectraModel, FlaxElectraForPreTraining
+    from transformers.models.electra.modeling_flax_electra import (
+        FlaxElectraForMaskedLM,
+        FlaxElectraForPreTraining,
+        FlaxElectraModel,
+    )
 
 
 class FlaxElectraModelTester(unittest.TestCase):
@@ -95,7 +99,9 @@ class FlaxElectraModelTester(unittest.TestCase):
 @require_flax
 class FlaxElectraModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (FlaxElectraModel, FlaxElectraForMaskedLM, FlaxElectraForPreTraining) if is_flax_available() else ()
+    all_model_classes = (
+        (FlaxElectraModel, FlaxElectraForMaskedLM, FlaxElectraForPreTraining) if is_flax_available() else ()
+    )
 
     def setUp(self):
         self.model_tester = FlaxElectraModelTester(self)
