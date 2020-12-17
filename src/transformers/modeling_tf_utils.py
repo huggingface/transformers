@@ -1055,12 +1055,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             )
 
         model(model.dummy_inputs, training=False)  # Make sure restore ops are run
-        # we might need to extend the variable scope for composite models
-        #        if load_weight_prefix is not None:
-        #            with tf.compat.v1.variable_scope(load_weight_prefix):
-        #                model(model.dummy_inputs, training=False)
-        #        else:
-        #            model(model.dummy_inputs, training=False) # Make sure restore ops are run
 
         if cls._keys_to_ignore_on_load_missing is not None:
             for pat in cls._keys_to_ignore_on_load_missing:
