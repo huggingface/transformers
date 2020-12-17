@@ -83,7 +83,7 @@ class FlaxElectraLayerNorm(nn.Module):
     Layer normalization (https://arxiv.org/abs/1607.06450). Operates on the last axis of the input data.
     """
 
-    epsilon: float = 1e-6
+    epsilon: float = 1e-12
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
     bias: bool = True  # If True, bias (beta) is added.
     scale: bool = True  # If True, multiply by scale (gamma). When the next layer is linear
@@ -271,7 +271,7 @@ class FlaxElectraLayer(nn.Module):
             name="attention",
             dtype=self.dtype,
         )(hidden_states, attention_mask, deterministic=deterministic)
-        intermediate = FlaxElectraAttention(
+        intermediate = FlaxElectraIntermediate(
             self.intermediate_size,
             kernel_init_scale=self.kernel_init_scale,
             hidden_act=self.hidden_act,
@@ -581,13 +581,13 @@ class FlaxElectraModule(nn.Module):
         )
         
     def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True):
-        embeddings = self.embeddings(input_ids, token_type_ids, position_ids, attention_mask)
+        embeddings = self.embeddings(input_ids, token_type_ids, position_ids, attention_mask, deterministic=deterministic)
 
         if self.embedding_size != self.hidden_size:
             embeddings = self.embeddings_project(embeddings)
 
         # N stacked encoding layers
-        encoder = self.encoder(embeddings, attention_mask)
+        encoder = self.encoder(embeddings, attention_mask, deterministic=deterministic)
 
         return encoder
 
@@ -604,13 +604,15 @@ class FlaxElectraModel(FlaxElectraPreTrainedModel):
         module = FlaxElectraModule(
             vocab_size=config.vocab_size,
             hidden_size=config.hidden_size,
+            embedding_size=config.embedding_size,
             type_vocab_size=config.type_vocab_size,
             max_length=config.max_position_embeddings,
             num_encoder_layers=config.num_hidden_layers,
             num_heads=config.num_attention_heads,
             head_size=config.hidden_size,
             intermediate_size=config.intermediate_size,
-            dropout_rate=config.hidden_dropout_prob,
+            hidden_dropout_prob=config.hidden_dropout_prob,
+            attention_probs_dropout_prob=config.attention_probs_dropout_prob,
             hidden_act=config.hidden_act,
             kernel_init_scale=config.initializer_range,
             dtype=dtype,
@@ -639,7 +641,7 @@ class FlaxElectraModel(FlaxElectraPreTrainedModel):
         if dropout_rng is not None:
             rngs["dropout"] = dropout_rng
 
-        return self.module.apply(
+        logits = self.module.apply(
             {"params": params or self.params},
             jnp.array(input_ids, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
@@ -648,6 +650,7 @@ class FlaxElectraModel(FlaxElectraPreTrainedModel):
             not train,
             rngs=rngs,
         )
+        return (logits, )
 
 
 class FlaxElectraForMaskedLMModule(nn.Module):
@@ -663,6 +666,7 @@ class FlaxElectraForMaskedLMModule(nn.Module):
     hidden_act: str = "gelu"
     hidden_dropout_prob: float = 0.0
     attention_probs_dropout_prob: float = 0.0
+    kernel_init_scale: float = 0.2
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
@@ -750,7 +754,7 @@ class FlaxElectraForMaskedLM(FlaxElectraPreTrainedModel):
         return (logits, )
     
     
-class ElectraForPreTrainingModule(nn.Module):
+class FlaxElectraForPreTrainingModule(nn.Module):
     vocab_size: int
     embedding_size: int
     hidden_size: int
@@ -763,6 +767,7 @@ class ElectraForPreTrainingModule(nn.Module):
     hidden_act: str = "gelu"
     hidden_dropout_prob: float = 0.0
     attention_probs_dropout_prob: float = 0.0
+    kernel_init_scale: float = 0.2
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
@@ -794,10 +799,10 @@ class ElectraForPreTrainingModule(nn.Module):
         return logits
     
 
-class ElectraForPreTraining(FlaxElectraPreTrainedModel):
+class FlaxElectraForPreTraining(FlaxElectraPreTrainedModel):
     
     def __init__(self, config: ElectraConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):
-        module = ElectraForPreTrainingModule(
+        module = FlaxElectraForPreTrainingModule(
             vocab_size=config.vocab_size,
             type_vocab_size=config.type_vocab_size,
             embedding_size=config.embedding_size,
