@@ -15,7 +15,6 @@
 """ PyTorch {{cookiecutter.modelname}} model. """
 
 
-
 import math
 import os
 
@@ -208,7 +207,7 @@ class {{cookiecutter.camelcase_modelname}}SelfAttention(nn.Module):
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings + 1, self.attention_head_size)
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -249,7 +248,8 @@ class {{cookiecutter.camelcase_modelname}}SelfAttention(nn.Module):
             position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
             position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
             distance = position_ids_l - position_ids_r
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
+            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings).clip(-self.max_position_embeddings,
+                                                                                                         self.max_position_embeddings)
             positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
 
             if self.position_embedding_type == "relative_key":
@@ -909,7 +909,8 @@ class {{cookiecutter.camelcase_modelname}}ForCausalLM({{cookiecutter.camelcase_m
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `{{cookiecutter.camelcase_modelname}}ForCausalLM` as a standalone, add `is_decoder=True.`")
+            logger.warning(
+                "If you want to use `{{cookiecutter.camelcase_modelname}}ForCausalLM` as a standalone, add `is_decoder=True.`")
 
         self.{{cookiecutter.lowercase_modelname}} = {{cookiecutter.camelcase_modelname}}Model(config)
         self.cls = {{cookiecutter.camelcase_modelname}}OnlyMLMHead(config)
@@ -1019,6 +1020,7 @@ class {{cookiecutter.camelcase_modelname}}ForCausalLM({{cookiecutter.camelcase_m
 
         return {"input_ids": input_ids, "attention_mask": attention_mask}
 
+
 class {{cookiecutter.camelcase_modelname}}ClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
@@ -1118,6 +1120,7 @@ class {{cookiecutter.camelcase_modelname}}ForSequenceClassification({{cookiecutt
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
 
 @add_start_docstrings(
     """{{cookiecutter.modelname}} Model with a multiple choice classification head on top (a linear layer on top of
