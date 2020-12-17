@@ -547,9 +547,10 @@ class TFBertNSPHead(tf.keras.layers.Layer):
 class TFBertMainLayer(tf.keras.layers.Layer):
     config_class = BertConfig
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config, add_pooling_layer=True, **kwargs):
         super().__init__(**kwargs)
 
+        self.config = config
         self.num_hidden_layers = config.num_hidden_layers
         self.initializer_range = config.initializer_range
         self.output_attentions = config.output_attentions
@@ -557,7 +558,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         self.return_dict = config.use_return_dict
         self.embeddings = TFBertEmbeddings(config, name="embeddings")
         self.encoder = TFBertEncoder(config, name="encoder")
-        self.pooler = TFBertPooler(config, name="pooler")
+        self.pooler = TFBertPooler(config, name="pooler") if add_pooling_layer else None
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -589,6 +590,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -601,13 +603,6 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             training=training,
             kwargs_call=kwargs,
         )
-        output_attentions = (
-            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        )
-        output_hidden_states = (
-            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
-        )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -661,16 +656,16 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             embedding_output,
             extended_attention_mask,
             inputs["head_mask"],
-            output_attentions,
-            output_hidden_states,
-            return_dict,
+            inputs["output_attentions"],
+            inputs["output_hidden_states"],
+            inputs["return_dict"],
             training=inputs["training"],
         )
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return (
                 sequence_output,
                 pooled_output,
@@ -848,6 +843,7 @@ class TFBertModel(TFBertPreTrainedModel):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -884,6 +880,9 @@ Bert Model with two heads on top as done during the pretraining:
     BERT_START_DOCSTRING,
 )
 class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"cls.predictions.decoder.weight"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -893,6 +892,12 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
 
     def get_output_embeddings(self):
         return self.bert.embeddings
+
+    def get_output_layer_with_bias(self):
+        return self.mlm.predictions
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -929,6 +934,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -943,7 +949,6 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -953,7 +958,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         sequence_output, pooled_output = outputs[:2]
@@ -966,7 +971,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
             d_labels["next_sentence_label"] = inputs["next_sentence_label"]
             total_loss = self.compute_loss(labels=d_labels, logits=(prediction_scores, seq_relationship_score))
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return (prediction_scores, seq_relationship_score) + outputs[2:]
 
         return TFBertForPreTrainingOutput(
@@ -980,9 +985,13 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
 
 @add_start_docstrings("""Bert Model with a `language modeling` head on top. """, BERT_START_DOCSTRING)
 class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
-
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [
+        r"pooler",
+        r"cls.seq_relationship",
+        r"cls.predictions.decoder.weight",
+        r"nsp___cls",
+    ]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -993,11 +1002,17 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
                 "bi-directional self-attention."
             )
 
-        self.bert = TFBertMainLayer(config, name="bert")
+        self.bert = TFBertMainLayer(config, add_pooling_layer=False, name="bert")
         self.mlm = TFBertMLMHead(config, self.bert.embeddings, name="mlm___cls")
 
     def get_output_embeddings(self):
         return self.bert.embeddings
+
+    def get_output_layer_with_bias(self):
+        return self.mlm.predictions
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1029,6 +1044,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1042,7 +1058,6 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1052,14 +1067,14 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         sequence_output = outputs[0]
         prediction_scores = self.mlm(sequence_output, training=inputs["training"])
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], prediction_scores)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (prediction_scores,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1072,9 +1087,13 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
 
 
 class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
-
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [
+        r"pooler",
+        r"cls.seq_relationship",
+        r"cls.predictions.decoder.weight",
+        r"nsp___cls",
+    ]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1082,11 +1101,17 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         if not config.is_decoder:
             logger.warning("If you want to use `TFBertLMHeadModel` as a standalone, add `is_decoder=True.`")
 
-        self.bert = TFBertMainLayer(config, name="bert")
+        self.bert = TFBertMainLayer(config, add_pooling_layer=False, name="bert")
         self.mlm = TFBertMLMHead(config, self.bert.embeddings, name="mlm___cls")
 
     def get_output_embeddings(self):
         return self.bert.embeddings
+
+    def get_output_layer_with_bias(self):
+        return self.mlm.predictions
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -1116,6 +1141,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1129,7 +1155,6 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1139,7 +1164,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         sequence_output = outputs[0]
@@ -1152,7 +1177,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             labels = inputs["labels"][:, 1:]
             loss = self.compute_loss(labels, logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1169,6 +1194,9 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
     BERT_START_DOCSTRING,
 )
 class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredictionLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"mlm___cls", r"cls.predictions"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1212,6 +1240,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1225,7 +1254,6 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1235,7 +1263,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         pooled_output = outputs[1]
@@ -1246,7 +1274,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             else self.compute_loss(labels=inputs["next_sentence_label"], logits=seq_relationship_scores)
         )
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (seq_relationship_scores,) + outputs[2:]
             return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
 
@@ -1266,6 +1294,10 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
     BERT_START_DOCSTRING,
 )
 class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassificationLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"mlm___cls", r"nsp___cls", r"cls.predictions", r"cls.seq_relationship"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1306,6 +1338,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1319,7 +1352,6 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1329,7 +1361,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         pooled_output = outputs[1]
@@ -1337,7 +1369,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
         logits = self.classifier(pooled_output)
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1357,6 +1389,10 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
     BERT_START_DOCSTRING,
 )
 class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"mlm___cls", r"nsp___cls", r"cls.predictions", r"cls.seq_relationship"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1406,6 +1442,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1419,7 +1456,6 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
 
         if inputs["input_ids"] is not None:
             num_choices = shape_list(inputs["input_ids"])[1]
@@ -1452,7 +1488,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             flat_inputs_embeds,
             inputs["output_attentions"],
             inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         pooled_output = outputs[1]
@@ -1461,7 +1497,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], reshaped_logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1481,15 +1517,21 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
     BERT_START_DOCSTRING,
 )
 class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationLoss):
-
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [
+        r"pooler",
+        r"mlm___cls",
+        r"nsp___cls",
+        r"cls.predictions",
+        r"cls.seq_relationship",
+    ]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.bert = TFBertMainLayer(config, name="bert")
+        self.bert = TFBertMainLayer(config, add_pooling_layer=False, name="bert")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
@@ -1524,6 +1566,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1537,7 +1580,6 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1547,7 +1589,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         sequence_output = outputs[0]
@@ -1555,7 +1597,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
         logits = self.classifier(sequence_output)
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1575,15 +1617,20 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
     BERT_START_DOCSTRING,
 )
 class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss):
-
-    _keys_to_ignore_on_load_unexpected = [r"pooler"]
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [
+        r"pooler",
+        r"mlm___cls",
+        r"nsp___cls",
+        r"cls.predictions",
+        r"cls.seq_relationship",
+    ]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.bert = TFBertMainLayer(config, name="bert")
+        self.bert = TFBertMainLayer(config, add_pooling_layer=False, name="bert")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
@@ -1623,6 +1670,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1637,7 +1685,6 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.bert.return_dict
         outputs = self.bert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1647,7 +1694,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         sequence_output = outputs[0]
@@ -1662,7 +1709,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             labels["end_position"] = inputs["end_positions"]
             loss = self.compute_loss(labels, (start_logits, end_logits))
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (start_logits, end_logits) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 

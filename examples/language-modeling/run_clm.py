@@ -102,8 +102,8 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
     )
-    block_size: int = field(
-        default=-1,
+    block_size: Optional[int] = field(
+        default=None,
         metadata={
             "help": "Optional input sequence length after tokenization."
             "The training dataset will be truncated in block of this size for training."
@@ -112,6 +112,12 @@ class DataTrainingArguments:
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
+    )
+    validation_split_percentage: Optional[int] = field(
+        default=5,
+        metadata={
+            "help": "The percentage of the train set used as validation set in case there's no validation split"
+        },
     )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
@@ -188,6 +194,17 @@ def main():
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name)
+        if "validation" not in datasets.keys():
+            datasets["validation"] = load_dataset(
+                data_args.dataset_name,
+                data_args.dataset_config_name,
+                split=f"train[:{data_args.validation_split_percentage}%]",
+            )
+            datasets["train"] = load_dataset(
+                data_args.dataset_name,
+                data_args.dataset_config_name,
+                split=f"train[{data_args.validation_split_percentage}%:]",
+            )
     else:
         data_files = {}
         if data_args.train_file is not None:
@@ -261,8 +278,14 @@ def main():
         load_from_cache_file=not data_args.overwrite_cache,
     )
 
-    if data_args.block_size <= 0:
+    if data_args.block_size is None:
         block_size = tokenizer.model_max_length
+        if block_size > 1024:
+            logger.warn(
+                f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
+                "Picking 1024 instead. You can change that default value by passing --block_size xxx."
+            )
+        block_size = 1024
     else:
         if data_args.block_size > tokenizer.model_max_length:
             logger.warn(

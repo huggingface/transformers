@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import copy
 import random
 import unittest
@@ -27,7 +28,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import TransfoXLConfig, TransfoXLLMHeadModel, TransfoXLModel
+    from transformers import TransfoXLConfig, TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
     from transformers.models.transfo_xl.modeling_transfo_xl import TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -56,6 +57,8 @@ class TransfoXLModelTester:
         self.scope = None
         self.seed = 1
         self.eos_token_id = 0
+        self.num_labels = 3
+        self.pad_token_id = self.vocab_size - 1
 
     def prepare_config_and_inputs(self):
         input_ids_1 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -78,6 +81,7 @@ class TransfoXLModelTester:
             div_val=self.div_val,
             n_layer=self.num_hidden_layers,
             eos_token_id=self.eos_token_id,
+            pad_token_id=self.pad_token_id,
         )
 
         return (config, input_ids_1, input_ids_2, lm_labels)
@@ -148,6 +152,14 @@ class TransfoXLModelTester:
             [(self.mem_len, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
+    def create_and_check_transfo_xl_for_sequence_classification(self, config, input_ids_1, input_ids_2, lm_labels):
+        config.num_labels = self.num_labels
+        model = TransfoXLForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids_1)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (config, input_ids_1, input_ids_2, lm_labels) = config_and_inputs
@@ -157,7 +169,9 @@ class TransfoXLModelTester:
 
 @require_torch
 class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (TransfoXLModel, TransfoXLLMHeadModel) if is_torch_available() else ()
+    all_model_classes = (
+        (TransfoXLModel, TransfoXLLMHeadModel, TransfoXLForSequenceClassification) if is_torch_available() else ()
+    )
     all_generative_model_classes = (TransfoXLLMHeadModel,) if is_torch_available() else ()
     test_pruning = False
     test_torchscript = False
@@ -203,6 +217,10 @@ class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         output_result = self.model_tester.create_transfo_xl_lm_head(*config_and_inputs)
         self.model_tester.check_transfo_xl_lm_head_output(output_result)
+
+    def test_transfo_xl_sequence_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_transfo_xl_for_sequence_classification(*config_and_inputs)
 
     def test_retain_grad_hidden_states_attentions(self):
         # xlnet cannot keep gradients in attentions or hidden states
@@ -281,6 +299,10 @@ class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
                 model.resize_token_embeddings(model_vocab_size, layer)
                 self.assertEqual(model_vocab_size, model.config.vocab_size)
                 self.assertEqual(model_embed.emb_layers[layer].weight.shape[0], cloned_embeddings[layer].shape[0])
+
+    def test_resize_embeddings_untied(self):
+        # transfo-xl requires special resize for lm-head
+        return
 
 
 @require_torch

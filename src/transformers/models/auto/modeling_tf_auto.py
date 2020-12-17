@@ -53,7 +53,7 @@ from ..camembert.modeling_tf_camembert import (
     TFCamembertForTokenClassification,
     TFCamembertModel,
 )
-from ..ctrl.modeling_tf_ctrl import TFCTRLLMHeadModel, TFCTRLModel
+from ..ctrl.modeling_tf_ctrl import TFCTRLForSequenceClassification, TFCTRLLMHeadModel, TFCTRLModel
 from ..distilbert.modeling_tf_distilbert import (
     TFDistilBertForMaskedLM,
     TFDistilBertForMultipleChoice,
@@ -89,7 +89,7 @@ from ..funnel.modeling_tf_funnel import (
     TFFunnelForTokenClassification,
     TFFunnelModel,
 )
-from ..gpt2.modeling_tf_gpt2 import TFGPT2LMHeadModel, TFGPT2Model
+from ..gpt2.modeling_tf_gpt2 import TFGPT2ForSequenceClassification, TFGPT2LMHeadModel, TFGPT2Model
 from ..longformer.modeling_tf_longformer import (
     TFLongformerForMaskedLM,
     TFLongformerForMultipleChoice,
@@ -111,8 +111,16 @@ from ..mobilebert.modeling_tf_mobilebert import (
     TFMobileBertForTokenClassification,
     TFMobileBertModel,
 )
+from ..mpnet.modeling_tf_mpnet import (
+    TFMPNetForMaskedLM,
+    TFMPNetForMultipleChoice,
+    TFMPNetForQuestionAnswering,
+    TFMPNetForSequenceClassification,
+    TFMPNetForTokenClassification,
+    TFMPNetModel,
+)
 from ..mt5.modeling_tf_mt5 import TFMT5ForConditionalGeneration, TFMT5Model
-from ..openai.modeling_tf_openai import TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
+from ..openai.modeling_tf_openai import TFOpenAIGPTForSequenceClassification, TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
 from ..pegasus.modeling_tf_pegasus import TFPegasusForConditionalGeneration
 from ..roberta.modeling_tf_roberta import (
     TFRobertaForMaskedLM,
@@ -167,6 +175,7 @@ from .configuration_auto import (
     MarianConfig,
     MBartConfig,
     MobileBertConfig,
+    MPNetConfig,
     MT5Config,
     OpenAIGPTConfig,
     PegasusConfig,
@@ -208,6 +217,7 @@ TF_MODEL_MAPPING = OrderedDict(
         (ElectraConfig, TFElectraModel),
         (FunnelConfig, TFFunnelModel),
         (DPRConfig, TFDPRQuestionEncoder),
+        (MPNetConfig, TFMPNetModel),
     ]
 )
 
@@ -233,6 +243,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (CTRLConfig, TFCTRLLMHeadModel),
         (ElectraConfig, TFElectraForPreTraining),
         (FunnelConfig, TFFunnelForPreTraining),
+        (MPNetConfig, TFMPNetForMaskedLM),
     ]
 )
 
@@ -259,6 +270,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (CTRLConfig, TFCTRLLMHeadModel),
         (ElectraConfig, TFElectraForMaskedLM),
         (FunnelConfig, TFFunnelForMaskedLM),
+        (MPNetConfig, TFMPNetForMaskedLM),
     ]
 )
 
@@ -293,6 +305,7 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (XLMConfig, TFXLMWithLMHeadModel),
         (ElectraConfig, TFElectraForMaskedLM),
         (FunnelConfig, TFFunnelForMaskedLM),
+        (MPNetConfig, TFMPNetForMaskedLM),
     ]
 )
 
@@ -326,6 +339,10 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (XLMConfig, TFXLMForSequenceClassification),
         (ElectraConfig, TFElectraForSequenceClassification),
         (FunnelConfig, TFFunnelForSequenceClassification),
+        (GPT2Config, TFGPT2ForSequenceClassification),
+        (MPNetConfig, TFMPNetForSequenceClassification),
+        (OpenAIGPTConfig, TFOpenAIGPTForSequenceClassification),
+        (CTRLConfig, TFCTRLForSequenceClassification),
     ]
 )
 
@@ -345,6 +362,7 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (XLMConfig, TFXLMForQuestionAnsweringSimple),
         (ElectraConfig, TFElectraForQuestionAnswering),
         (FunnelConfig, TFFunnelForQuestionAnswering),
+        (MPNetConfig, TFMPNetForQuestionAnswering),
     ]
 )
 
@@ -364,6 +382,7 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (XLNetConfig, TFXLNetForTokenClassification),
         (ElectraConfig, TFElectraForTokenClassification),
         (FunnelConfig, TFFunnelForTokenClassification),
+        (MPNetConfig, TFMPNetForTokenClassification),
     ]
 )
 
@@ -383,6 +402,7 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (AlbertConfig, TFAlbertForMultipleChoice),
         (ElectraConfig, TFElectraForMultipleChoice),
         (FunnelConfig, TFFunnelForMultipleChoice),
+        (MPNetConfig, TFMPNetForMultipleChoice),
     ]
 )
 

@@ -388,6 +388,8 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
+        self.config = config
         self.num_hidden_layers = config.num_hidden_layers
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
@@ -420,6 +422,7 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
@@ -430,13 +433,6 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
             training=training,
             kwargs_call=kwargs,
         )
-        output_attentions = (
-            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        )
-        output_hidden_states = (
-            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
-        )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -469,9 +465,9 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
             embedding_output,
             inputs["attention_mask"],
             inputs["head_mask"],
-            output_attentions,
-            output_hidden_states,
-            return_dict,
+            inputs["output_attentions"],
+            inputs["output_hidden_states"],
+            inputs["return_dict"],
             training=inputs["training"],
         )
 
@@ -596,6 +592,7 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
@@ -658,6 +655,12 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
     def get_output_embeddings(self):
         return self.vocab_projector.input_embeddings
 
+    def get_output_layer_with_bias(self):
+        return self.vocab_projector
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.vocab_projector.name
+
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -686,6 +689,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
@@ -697,7 +701,6 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
         distilbert_output = self.distilbert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -705,10 +708,9 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
         hidden_states = distilbert_output[0]  # (bs, seq_length, dim)
         prediction_logits = self.vocab_transform(hidden_states)  # (bs, seq_length, dim)
         prediction_logits = self.act(prediction_logits)  # (bs, seq_length, dim)
@@ -717,7 +719,7 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], prediction_logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (prediction_logits,) + distilbert_output[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -781,6 +783,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
@@ -792,7 +795,6 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
         distilbert_output = self.distilbert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -800,10 +802,9 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
         hidden_state = distilbert_output[0]  # (bs, seq_len, dim)
         pooled_output = hidden_state[:, 0]  # (bs, dim)
         pooled_output = self.pre_classifier(pooled_output)  # (bs, dim)
@@ -812,7 +813,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + distilbert_output[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -869,6 +870,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
@@ -880,7 +882,6 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
         outputs = self.distilbert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -888,18 +889,15 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
         sequence_output = outputs[0]
-
         sequence_output = self.dropout(sequence_output, training=inputs["training"])
         logits = self.classifier(sequence_output)
-
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -974,6 +972,7 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
@@ -985,7 +984,6 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
 
         if inputs["input_ids"] is not None:
             num_choices = shape_list(inputs["input_ids"])[1]
@@ -1010,7 +1008,7 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
             flat_inputs_embeds,
             inputs["output_attentions"],
             inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         hidden_state = distilbert_output[0]  # (bs, seq_len, dim)
@@ -1022,7 +1020,7 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], reshaped_logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (reshaped_logits,) + distilbert_output[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1085,6 +1083,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             head_mask=head_mask,
@@ -1097,7 +1096,6 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.distilbert.return_dict
         distilbert_output = self.distilbert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1105,10 +1103,9 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
         hidden_states = distilbert_output[0]  # (bs, max_query_len, dim)
         hidden_states = self.dropout(hidden_states, training=inputs["training"])  # (bs, max_query_len, dim)
         logits = self.qa_outputs(hidden_states)  # (bs, max_query_len, 2)
@@ -1122,7 +1119,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
             labels["end_position"] = inputs["end_positions"]
             loss = self.compute_loss(labels, (start_logits, end_logits))
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (start_logits, end_logits) + distilbert_output[1:]
             return ((loss,) + output) if loss is not None else output
 

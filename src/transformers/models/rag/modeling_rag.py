@@ -677,7 +677,9 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         ), "Either a configuration or an encoder and a generator has to be provided."
 
         if config is None:
-            config = RagConfig.from_encoder_generator_configs(question_encoder.config, generator.config, **kwargs)
+            config = RagConfig.from_question_encoder_generator_configs(
+                question_encoder.config, generator.config, **kwargs
+            )
         super().__init__(config)
 
         # instantiate model
@@ -1001,7 +1003,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
         ), "Either a configuration or an encoder and a generator has to be provided."
 
         if config is None:
-            config = RagConfig.from_encoder_generator_configs(question_encoder.config, generator.config, **kwargs)
+            config = RagConfig.from_question_encoder_generator_configs(
+                question_encoder.config, generator.config, **kwargs
+            )
 
         super().__init__(config)
 
@@ -1025,6 +1029,10 @@ class RagTokenForGeneration(RagPreTrainedModel):
         n_docs=None,
         **kwargs
     ):
+        if past is not None:
+            # if past is defined use only last decoder_input_ids
+            decoder_input_ids = decoder_input_ids[:, -1:]
+
         return {
             "input_ids": None,
             "encoder_outputs": encoder_outputs,
@@ -1053,23 +1061,17 @@ class RagTokenForGeneration(RagPreTrainedModel):
     def _reorder_cache(past, beam_idx):
         """Reorders cache for generation. BART-inspired but we need to take care of the extra dimension for docs"""
 
-        def _reorder_stacked(hidden_states):
-            n_docs = hidden_states.shape[0] // beam_idx.shape[0]
+        def _reorder_stacked(hidden_states, new_order):
+            n_docs = hidden_states.shape[0] // new_order.shape[0]
             hidden_states = hidden_states.view(-1, n_docs, *hidden_states.shape[1:])
-            hidden_states = hidden_states.index_select(0, beam_idx)
-            return hidden_states.view(-1, *hidden_states.shape[2:])
+            hidden_states = hidden_states.index_select(0, new_order)
+            result = hidden_states.view(-1, *hidden_states.shape[2:])
+            return result
 
-        def _reorder_buffer(attn_cache):
-            for k, input_buffer_k in attn_cache.items():
-                if input_buffer_k is not None:
-                    attn_cache[k] = _reorder_stacked(input_buffer_k)
-            return attn_cache
-
-        reordered_past = []
+        reordered_past = ()
         for layer_past in past:
             # get the correct batch idx from decoder layer's batch dim for cross and self-attn
-            layer_past_new = {attn_key: _reorder_buffer(attn_cache) for attn_key, attn_cache in layer_past.items()}
-            reordered_past.append(layer_past_new)
+            reordered_past += (tuple(_reorder_stacked(past_state, beam_idx) for past_state in layer_past),)
 
         return reordered_past
 
@@ -1222,6 +1224,8 @@ class RagTokenForGeneration(RagPreTrainedModel):
         early_stopping=None,
         use_cache=None,
         num_beams=None,
+        num_beam_groups=None,
+        diversity_penalty=None,
         bos_token_id=None,
         pad_token_id=None,
         eos_token_id=None,
@@ -1298,6 +1302,13 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 should not appear in the generated text, use :obj:`tokenizer.encode(bad_word, add_prefix_space=True)`.
             num_beams (:obj:`int`, `optional`, defaults to 1):
                 Number of beams for beam search. 1 means no beam search.
+            num_beam_groups (:obj:`int`, `optional`, defaults to 1):
+                Number of groups to divide :obj:`num_beams` into in order to ensure diversity among different groups of
+                beams. `this paper <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
+            diversity_penalty (:obj:`float`, `optional`, defaults to 0.0):
+                This value is subtracted from a beam's score if it generates a token same as any beam from other group
+                at a particular time. Note that :obj:`diversity_penalty` is only effective if ``group beam search`` is
+                enabled.
             num_return_sequences(:obj:`int`, `optional`, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch. Note that this
                 is not the value we pass to the ``generator``'s `:func:`~transformers.PreTrainedModel.generate`
@@ -1322,6 +1333,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         # set default parameters
         n_docs = n_docs if n_docs is not None else self.config.n_docs
         num_beams = num_beams if num_beams is not None else self.config.num_beams
+        num_beam_groups = num_beam_groups if num_beam_groups is not None else self.config.num_beam_groups
         max_length = max_length if max_length is not None else self.config.max_length
         num_return_sequences = (
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
@@ -1408,6 +1420,8 @@ class RagTokenForGeneration(RagPreTrainedModel):
             eos_token_id=eos_token_id,
             prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             num_beams=num_beams,
+            num_beam_groups=num_beam_groups,
+            diversity_penalty=diversity_penalty,
         )
 
         if num_beams == 1:
@@ -1454,6 +1468,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.rag.generator.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        return self.rag.generator.set_output_embeddings(new_embeddings)
 
     def shift_tokens_right(self, input_ids, start_token_id=None):
         """Shift input ids one token to the right, and pad with start_token_id"""

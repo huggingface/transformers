@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Model sharing and uploading
 =======================================================================================================================
 
@@ -48,7 +60,7 @@ Basic steps
 In order to upload a model, you'll need to first create a git repo. This repo will live on the model hub, allowing
 users to clone it and you (and your organization members) to push to it.
 
-You can create a model repo directly from the website, `here <https://huggingface.co/new>`.
+You can create a model repo **directly from `the /new page on the website <https://huggingface.co/new>`__.**
 
 Alternatively, you can use the ``transformers-cli``. The next steps describe that process:
 
@@ -70,11 +82,11 @@ This creates a repo on the model hub, which can be cloned.
 
 .. code-block:: bash
 
-    git clone https://huggingface.co/username/your-model-name
-
     # Make sure you have git-lfs installed
     # (https://git-lfs.github.com/)
     git lfs install
+
+    git clone https://huggingface.co/username/your-model-name
 
 When you have your local clone of your repo and lfs installed, you can then add/remove from that clone as you would
 with any other git repo.
@@ -86,8 +98,12 @@ with any other git repo.
     echo "hello" >> README.md
     git add . && git commit -m "Update from $USER"
 
-We are intentionally not wrapping git too much, so as to stay intuitive and easy-to-use.
+We are intentionally not wrapping git too much, so that you can go on with the workflow you're used to and the tools
+you already know.
 
+The only learning curve you might have compared to regular git is the one for git-lfs. The documentation at
+`git-lfs.github.com <https://git-lfs.github.com/>`__ is decent, but we'll work on a tutorial with some tips and tricks
+in the coming weeks!
 
 Make your model work on all frameworks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -98,7 +114,7 @@ Make your model work on all frameworks
 You probably have your favorite framework, but so will other users! That's why it's best to upload your model with both
 PyTorch `and` TensorFlow checkpoints to make it easier to use (if you skip this step, users will still be able to load
 your model in another framework, but it will be slower, as it will have to be converted on the fly). Don't worry, it's
-super easy to do (and in a future version, it will all be automatic). You will need to install both PyTorch and
+super easy to do (and in a future version, it might all be automatic). You will need to install both PyTorch and
 TensorFlow for this step, but you don't need to worry about the GPU, so it should be very easy. Check the `TensorFlow
 installation page <https://www.tensorflow.org/install/pip#tensorflow-2.0-rc-is-available>`__ and/or the `PyTorch
 installation page <https://pytorch.org/get-started/locally/#start-locally>`__ to see how.
@@ -180,7 +196,7 @@ status`` command:
     git add --all
     git status
 
-Finally, the files should be comitted:
+Finally, the files should be committed:
 
 .. code-block:: bash
 
@@ -198,23 +214,20 @@ This will upload the folder containing the weights, tokenizer and configuration 
 Add a model card
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-To make sure everyone knows what your model can do, what its limitations and potential bias or ethetical
-considerations, please add a README.md model card to the 🤗 Transformers repo under `model_cards/`. It should then be
-placed in a subfolder with your username or organization, then another subfolder named like your model
-(`awesome-name-you-picked`). Or just click on the "Create a model card on GitHub" button on the model page, it will get
-you directly to the right location. If you need one, `here <https://github.com/huggingface/model_card>`__ is a model
-card template (meta-suggestions are welcome).
+To make sure everyone knows what your model can do, what its limitations, potential bias or ethical considerations are,
+please add a README.md model card to your model repo. You can just create it, or there's also a convenient button
+titled "Add a README.md" on your model page. A model card template can be found `here
+<https://github.com/huggingface/model_card>`__ (meta-suggestions are welcome). model card template (meta-suggestions
+are welcome).
+
+.. note::
+
+    Model cards used to live in the 🤗 Transformers repo under `model_cards/`, but for consistency and scalability we
+    migrated every model card from the repo to its corresponding huggingface.co model repo.
 
 If your model is fine-tuned from another model coming from the model hub (all 🤗 Transformers pretrained models do),
 don't forget to link to its model card so that people can fully trace how your model was built.
 
-If you have never made a pull request to the 🤗 Transformers repo, look at the :doc:`contributing guide <contributing>`
-to see the steps to follow.
-
-.. note::
-
-    You can also send your model card in the folder you uploaded with the CLI by placing it in a `README.md` file
-    inside `path/to/awesome-name-you-picked/`.
 
 Using your model
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -250,7 +263,8 @@ First you need to install `git-lfs` in the environment used by the notebook:
 
     sudo apt-get install git-lfs
 
-Then you can use the :obj:`transformers-cli` to create your new repo:
+Then you can use either create a repo directly from `huggingface.co <https://huggingface.co/>`__ , or use the
+:obj:`transformers-cli` to create it:
 
 
 .. code-block:: bash
@@ -262,13 +276,14 @@ Once it's created, you can clone it and configure it (replace username by your u
 
 .. code-block:: bash
 
+    git lfs install
+
     git clone https://username:password@huggingface.co/username/your-model-name
     # Alternatively if you have a token,
     # you can use it instead of your password
     git clone https://username:token@huggingface.co/username/your-model-name
 
     cd your-model-name
-    git lfs install
     git config --global user.email "email@example.com"
     # Tip: using the same email than for your huggingface.co account will link your commits to your profile
     git config --global user.name "Your name"

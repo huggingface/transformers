@@ -253,6 +253,7 @@ class TFFlaubertModel(TFFlaubertPreTrainedModel):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             langs=langs,
@@ -407,6 +408,7 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
+        self.config = config
         self.n_heads = config.n_heads
         self.n_langs = config.n_langs
         self.dim = config.emb_dim
@@ -488,6 +490,7 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
         # removed: src_enc=None, src_len=None
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             langs=langs,
@@ -503,13 +506,6 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
             training=training,
             kwargs_call=kwargs,
         )
-        output_attentions = (
-            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        )
-        output_hidden_states = (
-            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
-        )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -611,7 +607,7 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
             if inputs["training"] and tf.less(dropout_probability, self.layerdrop):
                 continue
 
-            if output_hidden_states:
+            if inputs["output_hidden_states"]:
                 hidden_states = hidden_states + (tensor,)
 
             # self attention
@@ -622,12 +618,12 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
                     None,
                     inputs["cache"],
                     inputs["head_mask"][i],
-                    output_attentions,
+                    inputs["output_attentions"],
                     training=inputs["training"],
                 )
                 attn = attn_outputs[0]
 
-                if output_attentions:
+                if inputs["output_attentions"]:
                     attentions = attentions + (attn_outputs[1],)
 
                 attn = self.dropout(attn, training=inputs["training"])
@@ -641,7 +637,7 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
                     None,
                     inputs["cache"],
                     inputs["head_mask"][i],
-                    output_attentions,
+                    inputs["output_attentions"],
                     training=inputs["training"],
                 )
                 attn = attn_outputs[0]
@@ -670,7 +666,7 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
             tensor = tensor * mask[..., tf.newaxis]
 
         # Add last hidden state
-        if output_hidden_states:
+        if inputs["output_hidden_states"]:
             hidden_states = hidden_states + (tensor,)
 
         # update cache length
@@ -681,10 +677,10 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
         # tensor = tensor.transpose(0, 1)
 
         # Set to None here if the output booleans are at False
-        hidden_states = hidden_states if output_hidden_states else None
-        attentions = attentions if output_attentions else None
+        hidden_states = hidden_states if inputs["output_hidden_states"] else None
+        attentions = attentions if inputs["output_attentions"] else None
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return tuple(v for v in [tensor, hidden_states, attentions] if v is not None)
 
         return TFBaseModelOutput(last_hidden_state=tensor, hidden_states=hidden_states, attentions=attentions)
@@ -770,6 +766,12 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
     def get_output_embeddings(self):
         return self.pred_layer.input_embeddings
 
+    def get_output_layer_with_bias(self):
+        return self.pred_layer
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.pred_layer.name
+
     def prepare_inputs_for_generation(self, inputs, **kwargs):
         mask_token_id = self.config.mask_token_id
         lang_id = self.config.lang_id
@@ -810,6 +812,7 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             langs=langs,
@@ -825,7 +828,6 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
         transformer_outputs = self.transformer(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -838,13 +840,13 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         output = transformer_outputs[0]
         outputs = self.pred_layer(output)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return (outputs,) + transformer_outputs[1:]
 
         return TFFlaubertWithLMHeadModelOutput(
