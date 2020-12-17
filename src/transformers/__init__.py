@@ -756,6 +756,7 @@ if is_tf_available():
     )
     from .models.ctrl import (
         TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFCTRLForSequenceClassification,
         TFCTRLLMHeadModel,
         TFCTRLModel,
         TFCTRLPreTrainedModel,
