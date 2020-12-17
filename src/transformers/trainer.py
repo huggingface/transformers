@@ -811,10 +811,10 @@ class Trainer:
                             self.scaler.unscale_(self.optimizer)
 
                         if hasattr(self.optimizer, "clip_grad_norm"):
-                            # Some optimizer (like the sharded optimizer) have a specific gradient clipping
+                            # Some optimizers (like the sharded optimizer) have a specific way to do gradient clipping
                             self.optimizer.clip_grad_norm(self.args.max_grad_norm)
                         else:
-                            # Revert to normal cliiping otherwise, handling Apex or full precision
+                            # Revert to normal clipping otherwise, handling Apex or full precision
                             torch.nn.utils.clip_grad_norm_(
                                 amp.master_params(self.optimizer) if self.use_apex else model.parameters(),
                                 self.args.max_grad_norm,
