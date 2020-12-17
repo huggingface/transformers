@@ -1,6 +1,13 @@
 TAPAS
 -----------------------------------------------------------------------------------------------------------------------
 
+.. note::
+
+    This is a recently introduced model so the API hasn't been tested extensively. There may be some bugs or slight
+    breaking changes to fix them in the future."
+
+
+
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
