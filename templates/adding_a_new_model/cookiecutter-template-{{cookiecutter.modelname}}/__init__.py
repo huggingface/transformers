@@ -54,7 +54,6 @@ if is_torch_available():
         {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
         {{cookiecutter.camelcase_modelname}}Model,
         {{cookiecutter.camelcase_modelname}}PreTrainedModel,
-        load_tf_weights_in_{{cookiecutter.lowercase_modelname}},
     )
 {% endif %}
 {% endif %}

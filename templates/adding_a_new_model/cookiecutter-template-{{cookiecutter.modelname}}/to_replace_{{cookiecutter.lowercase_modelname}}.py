@@ -156,7 +156,10 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_mo
 
 # Below: "# Model for Causal LM mapping"
 # Replace with:
+{% if cookiecutter.is_encoder_decoder_model == "False" -%}
         ({{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}ForCausalLM),
+{% else -%}
+{% endif -%}
 # End.
 
 # Below: "# Model for Masked LM mapping"
