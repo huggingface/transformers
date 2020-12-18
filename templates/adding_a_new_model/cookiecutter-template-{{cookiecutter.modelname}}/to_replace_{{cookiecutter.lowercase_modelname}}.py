@@ -49,7 +49,6 @@
         {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
         {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
         {{cookiecutter.camelcase_modelname}}Model,
-        Pretrained{{cookiecutter.camelcase_modelname}}Model,
     )
 {% endif -%}
 # End.
