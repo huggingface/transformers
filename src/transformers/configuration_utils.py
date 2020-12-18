@@ -124,7 +124,7 @@ class PretrainedConfig(object):
           sequences for each element in the batch that will be used by default in the :obj:`generate` method of the
           model.
         - **output_scores** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether the model should return the logits when used for generation
-        - **return_dict_in_generation** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether the model should
+        - **return_dict_in_generate** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether the model should
           return a :class:`~transformers.generation_utils.GreedySearchOutput` instead of a :obj:`torch.LongTensor` when
           generation method is `greedy_search`.
 
@@ -208,7 +208,7 @@ class PretrainedConfig(object):
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
         self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forward", 0)
         self.output_scores = kwargs.pop("output_scores", False)
-        self.return_dict_in_generation = kwargs.pop("return_dict_in_generation", False)
+        self.return_dict_in_generate = kwargs.pop("return_dict_in_generate", False)
 
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)
