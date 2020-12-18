@@ -43,7 +43,7 @@
         load_tf_weights_in_{{cookiecutter.lowercase_modelname}},
     )
 {% else %}
-    from .modeling_{{cookiecutter.lowercase_modelname}} import (
+    from .models.{{cookiecutter.lowercase_modelname}} import (
         {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
         {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
         {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
@@ -70,6 +70,11 @@
         TF{{cookiecutter.camelcase_modelname}}PreTrainedModel,
     )
 {% else -%}
+    from .models.{{cookiecutter.lowercase_modelname}} import (
+        TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+        TF{{cookiecutter.camelcase_modelname}}Model,
+        TF{{cookiecutter.camelcase_modelname}}PreTrainedModel,
 {% endif -%}
 # End.
 

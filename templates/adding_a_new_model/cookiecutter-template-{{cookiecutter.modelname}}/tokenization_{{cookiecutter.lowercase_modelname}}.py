@@ -80,11 +80,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-PRETRAINED_INIT_CONFIGURATION = {
-    "{{cookiecutter.checkpoint_identifier}}": {"do_lower_case": False},
-}
-
-
 class {{cookiecutter.camelcase_modelname}}Tokenizer(BartTokenizer):
     """
     Construct a {{cookiecutter.modelname}} tokenizer.
@@ -98,9 +93,6 @@ class {{cookiecutter.camelcase_modelname}}Tokenizer(BartTokenizer):
 
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    slow_tokenizer_class = {{cookiecutter.camelcase_modelname}}Tokenizer
-
-
 
 
 {%- elif cookiecutter.tokenizer_type == "Standalone" %}

@@ -82,11 +82,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-PRETRAINED_INIT_CONFIGURATION = {
-    "{{cookiecutter.checkpoint_identifier}}": {"do_lower_case": False},
-}
-
-
 class {{cookiecutter.camelcase_modelname}}TokenizerFast(BartTokenizerFast):
     r"""
     Construct a "fast" {{cookiecutter.modelname}} tokenizer (backed by HuggingFace's `tokenizers` library).
