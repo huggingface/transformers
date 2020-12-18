@@ -1288,12 +1288,22 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             },
             **({"obj_labels": obj_labels} if self.config.task_obj_predict else {}),
         }
-    
+
     def get_output_embeddings(self):
-        return self.get_input_embeddings()
-    
+        try:
+            return self.cls.predictions.input_embeddings.word_embeddings
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.cls.predictions.input_embeddings.word_embeddings
+
     def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
+        if value is not None:
+            try:
+                self.cls.predictions.input_embeddings.word_embeddings = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.cls.predictions.input_embeddings.word_embeddings = value
+            self.cls.predictions.input_embeddings.vocab_size = shape_list(value)[0]
 
     def get_bias(self):
         try:
@@ -1301,12 +1311,15 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
         except AttributeError:
             self(self.dummy_inputs)
             return self.cls.predictions.bias
-    
-    def set_bias(self, value):
-        super().set_bias(value)
 
-        self.cls.predictions.bias = value
-        self.cls.predictions.vocab_size = shape_list(value)[0]
+    def set_bias(self, value):
+        if value is not None:
+            try:
+                self.cls.predictions.bias = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.cls.predictions.bias = value
+            self.cls.predictions.vocab_size = shape_list(value)[0]
 
     @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFLxmertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)

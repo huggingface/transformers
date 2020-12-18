@@ -775,10 +775,20 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
         self.pred_layer = TFFlaubertPredLayer(config, self.transformer.embeddings, name="pred_layer_._proj")
 
     def get_output_embeddings(self):
-        return self.get_input_embeddings()
-    
+        try:
+            return self.pred_layer.input_embeddings.weight
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.pred_layer.input_embeddings.weight
+
     def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
+        if value is not None:
+            try:
+                self.pred_layer.input_embeddings.weight = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.pred_layer.input_embeddings.weight = value
+            self.pred_layer.input_embeddings.vocab_size = shape_list(value)[0]
 
     def get_bias(self):
         try:
@@ -786,12 +796,15 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
         except AttributeError:
             self(self.dummy_inputs)
             return self.pred_layer.bias
-    
-    def set_bias(self, value):
-        super().set_bias(value)
 
-        self.pred_layer.bias = value
-        self.pred_layer.n_words = shape_list(value)[0]
+    def set_bias(self, value):
+        if value is not None:
+            try:
+                self.pred_layer.bias = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.pred_layer.bias = value
+            self.pred_layer.n_words = shape_list(value)[0]
 
     def prepare_inputs_for_generation(self, inputs, **kwargs):
         mask_token_id = self.config.mask_token_id

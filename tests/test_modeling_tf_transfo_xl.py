@@ -191,9 +191,9 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config)
             assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-            x = model.get_output_layer_with_bias()
+            x = model.get_output_embeddings()
             assert x is None
-            name = model.get_prefix_bias_name()
+            name = model.get_bias()
             assert name is None
 
     @slow

@@ -656,10 +656,20 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         self.transformer = TFGPT2MainLayer(config, name="transformer")
 
     def get_output_embeddings(self):
-        return self.get_input_embeddings()
-    
+        try:
+            return self.transformer.wte.weight
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.transformer.wte.weight
+
     def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
+        if value is not None:
+            try:
+                self.transformer.wte.weight = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.transformer.wte.weight = value
+            self.transformer.wte.vocab_size = shape_list(value)[0]
 
     def prepare_inputs_for_generation(self, inputs, past, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
@@ -783,10 +793,20 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         )
 
     def get_output_embeddings(self):
-        return self.get_input_embeddings()
-    
+        try:
+            return self.transformer.wte.weight
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.transformer.wte.weight
+
     def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
+        if value is not None:
+            try:
+                self.transformer.wte.weight = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.transformer.wte.weight = value
+            self.transformer.wte.vocab_size = shape_list(value)[0]
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFGPT2DoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)

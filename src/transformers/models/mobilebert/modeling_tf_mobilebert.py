@@ -1041,12 +1041,15 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
         except AttributeError:
             self(self.dummy_inputs)
             return self.predictions.predictions.decoder
-    
-    def set_output_embeddings(self, value):
-        super().set_output_embeddings(value)
 
-        self.predictions.predictions.decoder = value
-        self.predictions.predictions.vocab_size = shape_list(value)[0]
+    def set_output_embeddings(self, value):
+        if value is not None:
+            try:
+                self.predictions.predictions.decoder = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.predictions.predictions.decoder = value
+            self.predictions.predictions.vocab_size = shape_list(value)[0]
 
     def get_bias(self):
         try:
@@ -1054,12 +1057,15 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
         except AttributeError:
             self(self.dummy_inputs)
             return self.predictions.predictions.bias
-    
+
     def set_bias(self, value):
-        super().set_bias(value)
-        
-        self.predictions.predictions.bias = value
-        self.predictions.predictions.vocab_size = shape_list(value)[0]
+        if value is not None:
+            try:
+                self.predictions.predictions.bias = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.predictions.predictions.bias = value
+            self.predictions.predictions.vocab_size = shape_list(value)[0]
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFMobileBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -1168,12 +1174,15 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
         except AttributeError:
             self(self.dummy_inputs)
             return self.mlm.predictions.decoder
-    
-    def set_output_embeddings(self, value):
-        super().set_output_embeddings(value)
 
-        self.mlm.predictions.decoder = value
-        self.mlm.predictions.vocab_size = shape_list(value)[0]
+    def set_output_embeddings(self, value):
+        if value is not None:
+            try:
+                self.mlm.predictions.decoder = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.mlm.predictions.decoder = value
+            self.mlm.predictions.vocab_size = shape_list(value)[0]
 
     def get_bias(self):
         try:
@@ -1181,12 +1190,15 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
         except AttributeError:
             self(self.dummy_inputs)
             return self.mlm.predictions.bias
-    
-    def set_bias(self, value):
-        super().set_bias(value)
 
-        self.mlm.predictions.bias = value
-        self.mlm.predictions.vocab_size = shape_list(value)[0]
+    def set_bias(self, value):
+        if value is not None:
+            try:
+                self.mlm.predictions.bias = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.mlm.predictions.bias = value
+            self.mlm.predictions.vocab_size = shape_list(value)[0]
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

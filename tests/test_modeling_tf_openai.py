@@ -224,14 +224,22 @@ class TFOpenAIGPTModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        list_lm_models = [TFOpenAIGPTLMHeadModel, TFOpenAIGPTDoubleHeadsModel]
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-            x = model.get_output_layer_with_bias()
-            assert x is None
-            name = model.get_prefix_bias_name()
-            assert name is None
+            assert isinstance(model.get_input_embeddings(), tf.Variable)
+
+            if model_class in list_lm_models:
+                x = model.get_output_embeddings()
+                assert isinstance(x, tf.Variable)
+                name = model.get_bias()
+                assert name is None
+            else:
+                x = model.get_output_embeddings()
+                assert x is None
+                name = model.get_bias()
+                assert name is None
 
     def test_openai_gpt_sequence_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

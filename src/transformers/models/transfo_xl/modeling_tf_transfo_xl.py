@@ -925,7 +925,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         self.crit = TFAdaptiveSoftmaxMask(
             config.vocab_size, config.d_embed, config.d_model, config.cutoffs, div_val=config.div_val, name="crit"
         )
-    
+
     def _resize_token_embeddings(self, new_num_tokens):
         return None
 

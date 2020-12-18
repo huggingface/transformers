@@ -39,7 +39,6 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
-    TFSharedEmbeddings,
     TFTokenClassificationLoss,
     get_initializer,
     input_processing,
@@ -673,10 +672,20 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         self.vocab_projector = TFDistilBertLMHead(config, self.distilbert.embeddings, name="vocab_projector")
 
     def get_output_embeddings(self):
-        return self.get_input_embeddings()
+        try:
+            return self.vocab_projector.input_embeddings.word_embeddings
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.vocab_projector.input_embeddings.word_embeddings
 
     def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
+        if value is not None:
+            try:
+                self.vocab_projector.input_embeddings.word_embeddings = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.vocab_projector.input_embeddings.word_embeddings = value
+            self.vocab_projector.input_embeddings.vocab_size = shape_list(value)[0]
 
     def get_bias(self):
         try:
@@ -684,12 +693,15 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         except AttributeError:
             self(self.dummy_inputs)
             return self.vocab_projector.bias
-    
-    def set_bias(self, value):
-        super().set_bias(value)
 
-        self.vocab_projector.bias = value
-        self.vocab_projector.vocab_size = shape_list(value)[0]
+    def set_bias(self, value):
+        if value is not None:
+            try:
+                self.vocab_projector.bias = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.vocab_projector.bias = value
+            self.vocab_projector.vocab_size = shape_list(value)[0]
 
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

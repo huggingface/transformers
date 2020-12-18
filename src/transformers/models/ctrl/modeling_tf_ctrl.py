@@ -638,23 +638,36 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
         self.lm_head = TFCTRLLMHead(config, self.transformer.w, name="lm_head")
 
     def get_output_embeddings(self):
-        return self.get_input_embeddings()
-    
+        try:
+            return self.lm_head.input_embeddings.weight
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.lm_head.input_embeddings.weight
+
     def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
-    
+        if value is not None:
+            try:
+                self.lm_head.input_embeddings.weight = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.lm_head.input_embeddings.weight = value
+            self.lm_head.input_embeddings.vocab_size = shape_list(value)[0]
+
     def get_bias(self):
         try:
             return self.lm_head.bias
         except AttributeError:
             self(self.dummy_inputs)
             return self.lm_head.bias
-    
-    def set_bias(self, value):
-        super().set_bias(value)
 
-        self.lm_head.bias = value
-        self.lm_head.vocab_size = shape_list(value)[0]
+    def set_bias(self, value):
+        if value is not None:
+            try:
+                self.lm_head.bias = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.lm_head.bias = value
+            self.lm_head.vocab_size = shape_list(value)[0]
 
     def prepare_inputs_for_generation(self, inputs, past, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs

@@ -684,17 +684,17 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+            assert isinstance(model.get_input_embeddings(), tf.Variable)
 
             if model_class in list_lm_models:
-                x = model.get_output_layer_with_bias()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_prefix_bias_name()
-                assert isinstance(name, str)
+                x = model.get_output_embeddings()
+                assert isinstance(x, tf.Variable)
+                name = model.get_bias()
+                assert isinstance(name, tf.Variable)
             else:
-                x = model.get_output_layer_with_bias()
+                x = model.get_output_embeddings()
                 assert x is None
-                name = model.get_prefix_bias_name()
+                name = model.get_bias()
                 assert x is None
 
     def test_saved_model_creation(self):

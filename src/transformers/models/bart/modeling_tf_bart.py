@@ -633,7 +633,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
             if config.add_final_layer_norm
             else None
         )
-    
+
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
 
@@ -796,7 +796,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
 
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
-    
+
     def call(
         self,
         input_ids=None,
@@ -1017,10 +1017,10 @@ class TFBartModel(TFBartPretrainedModel):
 
     def get_decoder(self):
         return self.decoder
-    
+
     def get_encoder(self):
         return self.encoder
-    
+
     def get_input_embeddings(self):
         try:
             return self.shared.weight
@@ -1034,7 +1034,7 @@ class TFBartModel(TFBartPretrainedModel):
         except AttributeError:
             self(self.dummy_inputs)
             self.shared.weight = value
-        
+
         self.shared.vocab_size = shape_list(self.shared.weight)[0]
         with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
             pass
@@ -1186,27 +1186,76 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel):
 
     def get_decoder(self):
         return self.model.decoder
-    
+
     def get_encoder(self):
         return self.model.encoder
-    
+
     def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
+        try:
+            return self.model.shared.weight
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.model.shared.weight
 
     def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
+        try:
+            self.model.shared.weight = value
+        except AttributeError:
+            self(self.dummy_inputs)
+            self.model.shared.weight = value
 
-    def get_output_embeddings(self):
-        return self.get_input_embeddings()
-    
-    def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
-    
-    def get_bias(self):
+        self.model.shared.vocab_size = shape_list(self.model.shared.weight)[0]
+        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
+            pass
+        embed_tokens = TFWrappedEmbeddings(self.model.shared, abs_scope_name=shared_abs_scope_name)
+        self.model.encoder.set_embed_tokens(embed_tokens)
+        self.model.decoder.set_embed_tokens(embed_tokens)
+
+    def get_final_logits_bias(self):
         return self.final_logits_bias
 
-    def set_bias(self, value):
-        self.final_logits_bias = value
+    def set_final_logits_bias(self, value):
+        if value is not None:
+            self.final_logits_bias = value
+
+    def resize_token_embeddings(self, new_num_tokens):
+        new_embeddings = super().resize_token_embeddings(new_num_tokens)
+
+        if new_num_tokens is not None:
+            self._resize_final_logits_bias(new_num_tokens)
+
+        return new_embeddings
+
+    def _resize_final_logits_bias(self, new_num_tokens):
+        old_num_tokens = shape_list(self.final_logits_bias)[1]
+        size_diff = new_num_tokens - old_num_tokens
+
+        # initialize new bias
+        if tf.math.greater(size_diff, 0):
+            current_bias = tf.pad(
+                self.final_logits_bias.value(), tf.convert_to_tensor([[0, 0], [0, size_diff]]), constant_values=-1
+            )
+            num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+            bias_mask = tf.fill(tf.convert_to_tensor([1, num_tokens_to_copy]), True)
+            bias_mask = tf.pad(bias_mask, tf.convert_to_tensor([[0, 0], [0, size_diff]]), constant_values=False)
+        else:
+            current_bias = tf.slice(
+                self.final_logits_bias.value(), tf.convert_to_tensor([0, 0]), tf.convert_to_tensor([1, new_num_tokens])
+            )
+            bias_mask = tf.fill(tf.convert_to_tensor([1, new_num_tokens]), True)
+
+        self.final_logits_bias = self.add_weight(
+            shape=(
+                1,
+                new_num_tokens,
+            ),
+            initializer="zeros",
+            trainable=True,
+            name=self.final_logits_bias.name.split(":")[0],
+        )
+        init_bias = tf.where(bias_mask, current_bias, self.final_logits_bias.value())
+
+        self.final_logits_bias.assign(init_bias)
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)

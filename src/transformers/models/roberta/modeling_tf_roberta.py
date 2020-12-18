@@ -849,10 +849,20 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
         self.lm_head = TFRobertaLMHead(config, self.roberta.embeddings, name="lm_head")
 
     def get_output_embeddings(self):
-        return self.get_input_embeddings()
-    
+        try:
+            return self.roberta.embeddings.word_embeddings
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.roberta.embeddings.word_embeddings
+
     def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
+        if value is not None:
+            try:
+                self.roberta.embeddings.word_embeddings = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.roberta.embeddings.word_embeddings = value
+            self.roberta.embeddings.vocab_size = shape_list(value)[0]
 
     def get_bias(self):
         try:
@@ -860,12 +870,15 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
         except AttributeError:
             self(self.dummy_inputs)
             return self.lm_head.bias
-    
-    def set_bias(self, value):
-        super().set_bias(value)
 
-        self.lm_head.bias = value
-        self.lm_head.vocab_size = shape_list(value)[0]
+    def set_bias(self, value):
+        if value is not None:
+            try:
+                self.lm_head.bias = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.lm_head.bias = value
+            self.lm_head.vocab_size = shape_list(value)[0]
 
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

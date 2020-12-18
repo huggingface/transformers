@@ -919,10 +919,20 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
         self.mlm = TFBertMLMHead(config, self.bert.embeddings, name="mlm___cls")
 
     def get_output_embeddings(self):
-        return self.get_input_embeddings()
-    
+        try:
+            return self.mlm.predictions.input_embeddings.word_embeddings
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.mlm.predictions.input_embeddings.word_embeddings
+
     def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
+        if value is not None:
+            try:
+                self.mlm.predictions.input_embeddings.word_embeddings = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.mlm.predictions.input_embeddings.word_embeddings = value
+            self.mlm.predictions.input_embeddings.vocab_size = shape_list(value)[0]
 
     def get_bias(self):
         try:
@@ -930,12 +940,15 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
         except AttributeError:
             self(self.dummy_inputs)
             return self.mlm.predictions.bias
-    
-    def set_bias(self, value):
-        super().set_bias(value)
 
-        self.mlm.predictions.bias = value
-        self.mlm.predictions.vocab_size = shape_list(value)[0]
+    def set_bias(self, value):
+        if value is not None:
+            try:
+                self.mlm.predictions.bias = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.mlm.predictions.bias = value
+            self.mlm.predictions.vocab_size = shape_list(value)[0]
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -1055,10 +1068,20 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         self.mlm = TFBertMLMHead(config, self.bert.embeddings, name="mlm___cls")
 
     def get_output_embeddings(self):
-        return self.get_input_embeddings()
-    
+        try:
+            return self.mlm.predictions.input_embeddings.word_embeddings
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.mlm.predictions.input_embeddings.word_embeddings
+
     def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
+        if value is not None:
+            try:
+                self.mlm.predictions.input_embeddings.word_embeddings = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.mlm.predictions.input_embeddings.word_embeddings = value
+            self.mlm.predictions.input_embeddings.vocab_size = shape_list(value)[0]
 
     def get_bias(self):
         try:
@@ -1066,12 +1089,15 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         except AttributeError:
             self(self.dummy_inputs)
             return self.mlm.predictions.bias
-    
-    def set_bias(self, value):
-        super().set_bias(value)
 
-        self.mlm.predictions.bias = value
-        self.mlm.predictions.vocab_size = shape_list(value)[0]
+    def set_bias(self, value):
+        if value is not None:
+            try:
+                self.mlm.predictions.bias = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.mlm.predictions.bias = value
+            self.mlm.predictions.vocab_size = shape_list(value)[0]
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1174,10 +1200,20 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         self.mlm = TFBertMLMHead(config, self.bert.embeddings, name="mlm___cls")
 
     def get_output_embeddings(self):
-        return self.get_input_embeddings()
-    
+        try:
+            return self.mlm.predictions.input_embeddings.word_embeddings
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.mlm.predictions.input_embeddings.word_embeddings
+
     def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
+        if value is not None:
+            try:
+                self.mlm.predictions.input_embeddings.word_embeddings = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.mlm.predictions.input_embeddings.word_embeddings = value
+            self.mlm.predictions.input_embeddings.vocab_size = shape_list(value)[0]
 
     def get_bias(self):
         try:
@@ -1185,12 +1221,15 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         except AttributeError:
             self(self.dummy_inputs)
             return self.mlm.predictions.bias
-    
-    def set_bias(self, value):
-        super().set_bias(value)
 
-        self.mlm.predictions.bias = value
-        self.mlm.predictions.vocab_size = shape_list(value)[0]
+    def set_bias(self, value):
+        if value is not None:
+            try:
+                self.mlm.predictions.bias = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.mlm.predictions.bias = value
+            self.mlm.predictions.vocab_size = shape_list(value)[0]
 
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,

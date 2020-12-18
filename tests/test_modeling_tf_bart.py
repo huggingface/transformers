@@ -155,14 +155,67 @@ class TFBartModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        list_lm_models = [TFBartForConditionalGeneration]
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-            x = model.get_output_layer_with_bias()
-            assert x is None
-            name = model.get_prefix_bias_name()
-            assert name is None
+            assert isinstance(model.get_input_embeddings(), tf.Variable)
+
+            if model_class in list_lm_models:
+                x = model.get_output_embeddings()
+                assert x is None
+                name = model.get_bias()
+                assert name is None
+                name = model.get_final_logits_bias()
+                assert isinstance(name, tf.Variable)
+            else:
+                x = model.get_output_embeddings()
+                assert x is None
+                name = model.get_bias()
+                assert name is None
+
+    def test_resize_token_embeddings(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            for size in [config.vocab_size - 10, config.vocab_size + 10, None]:
+                # build the embeddings
+                model = model_class(config=config)
+                old_input_embeddings = model.get_input_embeddings()
+                old_final_logits_bias = None
+
+                if hasattr(model, "get_final_logits_bias"):
+                    old_final_logits_bias = model.get_final_logits_bias()
+
+                # reshape the embeddings
+                model.resize_token_embeddings(size)
+                new_input_embeddings = model.get_input_embeddings()
+                new_final_logits_bias = None
+
+                if hasattr(model, "get_final_logits_bias"):
+                    new_final_logits_bias = model.get_final_logits_bias()
+
+                # check that the resized embeddings size matches the desired size.
+                assert_size = size if size is not None else config.vocab_size
+                self.assertEqual(new_input_embeddings.shape[0], assert_size)
+
+                # check that weights remain the same after resizing
+                models_equal = True
+                for p1, p2 in zip(old_input_embeddings.value(), new_input_embeddings.value()):
+                    if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                        models_equal = False
+                self.assertTrue(models_equal)
+
+                if old_final_logits_bias is not None and new_final_logits_bias is not None:
+                    self.assertEqual(new_final_logits_bias.shape[0], 1)
+                    self.assertEqual(new_final_logits_bias.shape[1], assert_size)
+
+                    models_equal = True
+                    for old, new in zip(old_final_logits_bias.value(), new_final_logits_bias.value()):
+                        for p1, p2 in zip(old, new):
+                            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                                models_equal = False
+                    self.assertTrue(models_equal)
 
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI

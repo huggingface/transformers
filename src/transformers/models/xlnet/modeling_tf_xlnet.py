@@ -1228,10 +1228,20 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         self.lm_loss = TFXLNetLMHead(config, self.transformer.word_embedding, name="lm_loss")
 
     def get_output_embeddings(self):
-        return self.get_input_embeddings()
-    
+        try:
+            return self.lm_loss.input_embeddings.weight
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.lm_loss.input_embeddings.weight
+
     def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
+        if value is not None:
+            try:
+                self.lm_loss.input_embeddings.weight = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.lm_loss.input_embeddings.weight = value
+            self.lm_loss.input_embeddings.vocab_size = shape_list(value)[0]
 
     def get_bias(self):
         try:
@@ -1239,12 +1249,15 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         except AttributeError:
             self(self.dummy_inputs)
             return self.lm_loss.bias
-    
-    def set_bias(self, value):
-        super().set_bias(value)
 
-        self.lm_loss.bias = value
-        self.lm_loss.vocab_size = shape_list(value)[0]
+    def set_bias(self, value):
+        if value is not None:
+            try:
+                self.lm_loss.bias = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.lm_loss.bias = value
+            self.lm_loss.vocab_size = shape_list(value)[0]
 
     def prepare_inputs_for_generation(self, inputs, past, use_mems=None, **kwargs):
         # Add dummy token at the end (no attention on this one)
