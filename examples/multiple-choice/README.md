@@ -21,7 +21,7 @@ Based on the script [`run_swag.py`]().
 #### Fine-tuning on SWAG
 
 ```bash
-python examples/multiple-choice/run_multiple_choice.py \
+python examples/multiple-choice/run_swag.py \
 --model_name_or_path roberta-base \
 --do_train \
 --do_eval \
