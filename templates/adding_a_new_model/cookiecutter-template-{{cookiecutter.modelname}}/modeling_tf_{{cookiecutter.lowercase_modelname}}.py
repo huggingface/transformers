@@ -804,13 +804,36 @@ class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelca
         self.mlm = TF{{cookiecutter.camelcase_modelname}}MLMHead(config, self.{{cookiecutter.lowercase_modelname}}.embeddings, name="mlm___cls")
     
     def get_output_embeddings(self):
-        return self.{{cookiecutter.lowercase_modelname}}.embeddings
+        try:
+            return self.mlm.predictions.input_embeddings.word_embeddings
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.mlm.predictions.input_embeddings.word_embeddings
 
-    def get_output_layer_with_bias(self):
-        return self.mlm.predictions
+    def set_output_embeddings(self, value):
+        if value is not None:
+            try:
+                self.mlm.predictions.input_embeddings.word_embeddings = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.mlm.predictions.input_embeddings.word_embeddings = value
+            self.mlm.predictions.input_embeddings.vocab_size = shape_list(value)[0]
 
-    def get_prefix_bias_name(self):
-        return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
+    def get_bias(self):
+        try:
+            return self.mlm.predictions.bias
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.mlm.predictions.bias
+
+    def set_bias(self, value):
+        if value is not None:
+            try:
+                self.mlm.predictions.bias = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.mlm.predictions.bias = value
+            self.mlm.predictions.vocab_size = shape_list(value)[0]
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -910,13 +933,36 @@ class TF{{cookiecutter.camelcase_modelname}}ForCausalLM(TF{{cookiecutter.camelca
         self.mlm = TF{{cookiecutter.camelcase_modelname}}MLMHead(config, self.{{cookiecutter.lowercase_modelname}}.embeddings, name="mlm___cls")
 
     def get_output_embeddings(self):
-        return self.{{cookiecutter.lowercase_modelname}}.embeddings
+        try:
+            return self.mlm.predictions.input_embeddings.word_embeddings
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.mlm.predictions.input_embeddings.word_embeddings
 
-    def get_output_layer_with_bias(self):
-        return self.mlm.predictions
+    def set_output_embeddings(self, value):
+        if value is not None:
+            try:
+                self.mlm.predictions.input_embeddings.word_embeddings = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.mlm.predictions.input_embeddings.word_embeddings = value
+            self.mlm.predictions.input_embeddings.vocab_size = shape_list(value)[0]
 
-    def get_prefix_bias_name(self):
-        return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
+    def get_bias(self):
+        try:
+            return self.mlm.predictions.bias
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.mlm.predictions.bias
+
+    def set_bias(self, value):
+        if value is not None:
+            try:
+                self.mlm.predictions.bias = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.mlm.predictions.bias = value
+            self.mlm.predictions.vocab_size = shape_list(value)[0]
 
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
