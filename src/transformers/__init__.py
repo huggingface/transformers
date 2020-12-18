@@ -16,7 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__version__ = "4.1.0"
+__version__ = "4.2.0dev0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -756,6 +756,7 @@ if is_tf_available():
     )
     from .models.ctrl import (
         TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFCTRLForSequenceClassification,
         TFCTRLLMHeadModel,
         TFCTRLModel,
         TFCTRLPreTrainedModel,

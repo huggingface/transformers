@@ -346,7 +346,7 @@ of that:
         ...         inputs, 
         ...         outputs.logits.detach(), 
         ...         outputs.logits_aggregation.detach()
-        ...)
+        ... )
 
         >>> # let's print out the results:
         >>> id2aggregation = {0: "NONE", 1: "SUM", 2: "AVERAGE", 3:"COUNT"}
