@@ -64,12 +64,18 @@ class TFBlenderbotModelTest(TFModelTesterMixin, unittest.TestCase):
             model = model_class(config)
             assert isinstance(model.get_input_embeddings(), tf.Variable)
 
-            x = model.get_output_embeddings()
-            assert x is None
-            name = model.get_bias()
-            assert name is None
-            name = model.get_final_logits_bias()
-            assert isinstance(name, tf.Variable)
+            if model_class in self.all_generative_model_classes:
+                x = model.get_output_embeddings()
+                assert isinstance(x, tf.Variable)
+                name = model.get_bias()
+                assert name is None
+                name = model.get_final_logits_bias()
+                assert isinstance(name, tf.Variable)
+            else:
+                x = model.get_output_embeddings()
+                assert x is None
+                name = model.get_bias()
+                assert name is None
 
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
