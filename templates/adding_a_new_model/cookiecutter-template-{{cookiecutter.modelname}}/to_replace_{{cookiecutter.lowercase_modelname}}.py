@@ -79,7 +79,8 @@
 
 # Below: "if is_tokenizers_available():"
 # Replace with:
-    from models.{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}TokenizerFast
+    from .models.{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}TokenizerFast
+# End.
 
 # Below: "from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig"
 # Replace with:

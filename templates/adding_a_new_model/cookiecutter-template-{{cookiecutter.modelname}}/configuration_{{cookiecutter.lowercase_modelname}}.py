@@ -172,10 +172,10 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         {% else -%}
         self.d_model = d_model
-        self.encoder_intermediate_dim = encoder_intermediate_dim,
+        self.encoder_ffn_dim = encoder_ffn_dim,
         self.encoder_layers = encoder_layers,
         self.encoder_attention_heads = encoder_attention_heads,
-        self.decoder_intermediate_dim = decoder_intermediate_dim,
+        self.decoder_ffn_dim = decoder_ffn_dim,
         self.decoder_layers = decoder_layers,
         self.decoder_attention_heads = decoder_attention_heads,
         self.dropout = self.dropout
