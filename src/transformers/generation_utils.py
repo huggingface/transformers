@@ -883,9 +883,10 @@ class GenerationMixin:
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
         if return_dict_in_generate and self.config.is_encoder_decoder:
-            encoder_outputs = model_kwargs["encoder_outputs"]
-            encoder_attentions = encoder_outputs.get("encoder_attentions") if output_attentions else None
-            encoder_hidden_states = encoder_outputs.get("encoder_hidden_states") if output_hidden_states else None
+            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
+            encoder_hidden_states = (
+                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
+            )
 
         # init sequence length tensors
         sequence_lengths, unfinished_sequences, cur_len = self._init_sequence_length_for_generation(
@@ -911,13 +912,12 @@ class GenerationMixin:
                     logits += (next_token_logits,)
                 if output_attentions:
                     decoder_attentions += (
-                        decoder_attentions + (outputs.decoder_attentions,)
-                        if self.config.is_encoder_decoder
-                        else (outputs.attentions,)
+                        (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
                     )
+
                 if output_hidden_states:
                     decoder_hidden_states += (
-                        decoder_hidden_states + (outputs.decoder_hidden_states,)
+                        (outputs.decoder_hidden_states,)
                         if self.config.is_encoder_decoder
                         else (outputs.hidden_states,)
                     )

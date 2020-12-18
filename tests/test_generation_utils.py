@@ -147,9 +147,16 @@ class GenerationTesterMixin:
         return beam_kwargs, beam_scorer
 
     @staticmethod
-    def _get_encoder_outputs(model, input_ids, attention_mask, num_interleave=1):
+    def _get_encoder_outputs(
+        model, input_ids, attention_mask, output_attentions=None, output_hidden_states=None, num_interleave=1
+    ):
         encoder = model.get_encoder()
-        encoder_outputs = encoder(input_ids, attention_mask=attention_mask)
+        encoder_outputs = encoder(
+            input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
         encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
             num_interleave, dim=0
         )
@@ -191,7 +198,13 @@ class GenerationTesterMixin:
         )
 
         if model.config.is_encoder_decoder:
-            encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(model, input_ids, attention_mask)
+            encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
+                model,
+                input_ids,
+                attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
             kwargs["encoder_outputs"] = encoder_outputs
 
         with torch.no_grad():
@@ -221,11 +234,10 @@ class GenerationTesterMixin:
 
     def test_greedy_generate_dict_outputs(self):
         for model_class in self.all_generative_model_classes:
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
             # disable cache
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
             config.use_cache = False
             model = model_class(config).to(torch_device).eval()
-            model.config.use_cache = False
             output_greedy, output_generate = self._greedy_generate(
                 model=model,
                 input_ids=input_ids,
@@ -245,47 +257,101 @@ class GenerationTesterMixin:
                 self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
 
             self.assertListEqual(output_generate.sequences.tolist(), output_greedy.sequences.tolist())
-            if config.is_encoder_decoder:
-                generation_length = output_generate.sequences.shape[-1]
-            else:
-                generation_length = output_generate.sequences.shape[-1] - input_ids.shape[-1]
-            batch_size = input_ids.shape[0]
 
             for output in (output_greedy, output_generate):
-                # Logits
-                self._check_logits(batch_size, output.logits, length=generation_length, config=model.config)
-                # Attentions
-                if model.config.is_encoder_decoder:
-                    # encoder
-                    encoder_expected_shape = (
-                        batch_size,
-                        config.num_attention_heads,
-                        input_ids.shape[-1],
-                        input_ids.shape[-1],
-                    )
-                    self.assertIsInstance(output.encoder_attentions, tuple)
-                    self.assertTrue(
-                        all(
-                            layer_attentions.shape == encoder_expected_shape
-                            for layer_attentions in output.encoder_attentions
-                        )
-                    )
-                    # decoder
-                    self._check_attentions(
-                        batch_size,
-                        output.decoder_attentions,
-                        min_length=1,
-                        max_length=output_generate.sequences[-1],
-                        config=model.config,
-                    )
-                else:
-                    self._check_attentions(
-                        batch_size,
-                        output.attentions,
-                        min_length=input_ids.shape[-1],
-                        max_length=output_generate.sequences.shape[-1],
-                        config=model.config,
-                    )
+                self._check_outptus(output, input_ids, model.config)
+
+            # enable cache
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+            config.use_cache = True
+            model = model_class(config).to(torch_device).eval()
+            output_greedy, output_generate = self._greedy_generate(
+                model=model,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_length=max_length,
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
+            )
+
+            self.assertListEqual(output_generate.sequences.tolist(), output_greedy.sequences.tolist())
+
+            for output in (output_greedy, output_generate):
+                self._check_outptus(output, input_ids, model.config, use_cache=True)
+
+    def _check_outptus(self, output, input_ids, config, use_cache=False):
+        batch_size, seq_length = input_ids.shape
+        gen_len = (
+            output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - seq_length
+        )
+
+        # Logits
+        self._check_logits(batch_size, output.logits, length=gen_len, config=config)
+
+        # Attentions
+        if config.is_encoder_decoder:
+            # encoder
+            encoder_expected_shape = (batch_size, config.num_attention_heads, seq_length, seq_length)
+            self.assertIsInstance(output.encoder_attentions, tuple)
+            self.assertTrue(
+                all(layer_attentions.shape == encoder_expected_shape for layer_attentions in output.encoder_attentions)
+            )
+            # decoder
+            self._check_attentions(
+                batch_size,
+                output.decoder_attentions,
+                min_length=1,
+                max_length=output.sequences.shape[-1],
+                config=config,
+                use_cache=use_cache,
+            )
+        else:
+            # if use_cache first input is equal to no use_cache, so skip here
+            attentions = output.attentions if not use_cache else output.attentions[1:]
+            min_length = seq_length if not use_cache else seq_length + 1
+            self._check_attentions(
+                batch_size,
+                attentions=attentions,
+                min_length=min_length,
+                max_length=output.sequences.shape[-1],
+                config=config,
+                use_cache=use_cache,
+            )
+
+        # Hidden States
+        if config.is_encoder_decoder:
+            # encoder
+            encoder_expected_shape = (batch_size, seq_length, config.hidden_size)
+            self.assertIsInstance(output.encoder_hidden_states, tuple)
+            self.assertTrue(
+                all(
+                    layer_attentions.shape == encoder_expected_shape
+                    for layer_attentions in output.encoder_hidden_states
+                )
+            )
+            # decoder
+            self._check_hidden_states(
+                batch_size,
+                output.decoder_hidden_states,
+                min_length=1,
+                max_length=output.sequences.shape[-1],
+                config=config,
+                use_cache=use_cache,
+            )
+        else:
+            # if use_cache first input is equal to no use_cache, so skip here
+            hidden_states = output.hidden_states if not use_cache else output.hidden_states[1:]
+            min_length = seq_length if not use_cache else seq_length + 1
+            self._check_hidden_states(
+                batch_size,
+                hidden_states,
+                min_length=min_length,
+                max_length=output.sequences.shape[-1],
+                config=config,
+                use_cache=use_cache,
+            )
 
     def _check_logits(self, batch_size, logits, length, config):
         expected_shape = (batch_size, config.vocab_size)
@@ -293,13 +359,30 @@ class GenerationTesterMixin:
         self.assertTrue(len(logits) == length)
         self.assertTrue(all(iter_logits.shape == expected_shape for iter_logits in logits))
 
-    def _check_attentions(self, batch_size, attentions, min_length, max_length, config):
+    def _check_attentions(self, batch_size, attentions, min_length, max_length, config, use_cache=False):
         self.assertIsInstance(attentions, tuple)
         self.assertTrue(all(isinstance(iter_attentions, tuple) for iter_attentions in attentions))
         self.assertTrue(len(attentions) == (max_length - min_length))
+
         for idx, iter_attentions in enumerate(attentions):
-            expected_shape = (batch_size, config.num_attention_heads, min_length + idx, min_length + idx)
+            tgt_len = min_length + idx if not use_cache else 1
+            src_len = min_length + idx
+            expected_shape = (batch_size, config.num_attention_heads, tgt_len, src_len)
+            # check attn size
             self.assertTrue(all(layer_attention.shape == expected_shape for layer_attention in iter_attentions))
+
+    def _check_hidden_states(self, batch_size, hidden_states, min_length, max_length, config, use_cache=False):
+        self.assertIsInstance(hidden_states, tuple)
+        self.assertTrue(all(isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states))
+        self.assertTrue(len(hidden_states) == (max_length - min_length))
+
+        for idx, iter_hidden_states in enumerate(hidden_states):
+            seq_len = min_length + idx if not use_cache else 1
+            expected_shape = (batch_size, seq_len, config.hidden_size)
+            # check hidden size
+            self.assertTrue(
+                all(layer_hidden_states.shape == expected_shape for layer_hidden_states in iter_hidden_states)
+            )
 
     def test_sample_generate(self):
         for model_class in self.all_generative_model_classes:
