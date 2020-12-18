@@ -157,7 +157,14 @@ class GenerationTesterMixin:
         attention_mask = None
         return encoder_outputs, input_ids, attention_mask
 
-    def _greedy_generate(self, model_class, output_scores=False, output_attentions=False, output_hidden_states=False):
+    def _greedy_generate(
+        self,
+        model_class,
+        output_scores=False,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict_in_generate=False,
+    ):
         config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
         init_length = input_ids.shape[-1]
 
@@ -181,6 +188,7 @@ class GenerationTesterMixin:
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             output_scores=output_scores,
+            return_dict_in_generate=return_dict_in_generate,
             **logits_process_kwargs,
         )
 
@@ -197,6 +205,7 @@ class GenerationTesterMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 output_scores=output_scores,
+                return_dict_in_generate=return_dict_in_generate,
                 **kwargs,
             )
         return model, output_greedy, output_generate, init_length
@@ -204,7 +213,12 @@ class GenerationTesterMixin:
     def test_greedy_generate(self):
         # check `generate()` and `greedy_search()` are equal
         for model_class in self.all_generative_model_classes:
+            # Backwards compatibility
             model, output_greedy, output_generate, _ = self._greedy_generate(model_class)
+            self.assertListEqual(output_greedy.tolist(), output_generate.tolist())
+
+            # return_dict_in_generate set to True
+            model, output_greedy, output_generate, _ = self._greedy_generate(model_class, return_dict_in_generate=True)
             if model.config.is_encoder_decoder:
                 self.assertIsInstance(output_greedy, GreedySearchEncoderDecoderOutput)
                 self.assertIsInstance(output_generate, GreedySearchEncoderDecoderOutput)
@@ -236,7 +250,11 @@ class GenerationTesterMixin:
     def test_greedy_generate_outputs(self):
         for model_class in self.all_generative_model_classes:
             model, output_greedy, output_generate, init_length = self._greedy_generate(
-                model_class, output_scores=True, output_hidden_states=True, output_attentions=True
+                model_class,
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
             )
 
             generated_length = output_greedy.sequences.shape[-1] - init_length
