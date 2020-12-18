@@ -290,6 +290,7 @@ def main():
             model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
         )
         metrics = train_result.metrics
+        metrics["train_n_objs"] = data_args.n_train
 
         trainer.save_model()  # this also saves the tokenizer
 
