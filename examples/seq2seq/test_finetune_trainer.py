@@ -1,9 +1,25 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import os
 import sys
+import unittest
 from unittest.mock import patch
 
 from transformers import BertTokenizer, EncoderDecoderModel
-from transformers.file_utils import is_datasets_available
+from transformers.file_utils import is_apex_available, is_datasets_available
+from transformers.integrations import is_fairscale_available
 from transformers.testing_utils import (
     TestCasePlus,
     execute_subprocess_async,
@@ -17,16 +33,38 @@ from transformers.trainer_utils import set_seed
 
 from .finetune_trainer import Seq2SeqTrainingArguments, main
 from .seq2seq_trainer import Seq2SeqTrainer
-from .test_seq2seq_examples import MBART_TINY
 
 
 set_seed(42)
 MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
+MBART_TINY = "sshleifer/tiny-mbart"
+
+
+# a candidate for testing_utils
+def require_fairscale(test_case):
+    """
+    Decorator marking a test that requires fairscale
+    """
+    if not is_fairscale_available():
+        return unittest.skip("test requires fairscale")(test_case)
+    else:
+        return test_case
+
+
+# a candidate for testing_utils
+def require_apex(test_case):
+    """
+    Decorator marking a test that requires apex
+    """
+    if not is_apex_available():
+        return unittest.skip("test requires apex")(test_case)
+    else:
+        return test_case
 
 
 class TestFinetuneTrainer(TestCasePlus):
-    def finetune_trainer_quick(self, distributed=None):
-        output_dir = self.run_trainer(1, "12", MBART_TINY, 1, distributed)
+    def finetune_trainer_quick(self, distributed=None, extra_args_str=None):
+        output_dir = self.run_trainer(1, "12", MBART_TINY, 1, distributed, extra_args_str)
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
         eval_metrics = [log for log in logs if "eval_loss" in log.keys()]
         first_step_stats = eval_metrics[0]
@@ -44,6 +82,21 @@ class TestFinetuneTrainer(TestCasePlus):
     @require_torch_multi_gpu
     def test_finetune_trainer_ddp(self):
         self.finetune_trainer_quick(distributed=True)
+
+    # it's crucial to test --sharded_ddp w/ and w/o --fp16
+    @require_torch_multi_gpu
+    @require_fairscale
+    def test_finetune_trainer_ddp_sharded_ddp(self):
+        self.finetune_trainer_quick(distributed=True, extra_args_str="--sharded_ddp")
+
+    @require_torch_multi_gpu
+    @require_fairscale
+    def test_finetune_trainer_ddp_sharded_ddp_fp16(self):
+        self.finetune_trainer_quick(distributed=True, extra_args_str="--sharded_ddp --fp16")
+
+    @require_apex
+    def test_finetune_trainer_apex(self):
+        self.finetune_trainer_quick(extra_args_str="--fp16 --fp16_backend=apex")
 
     @slow
     def test_finetune_trainer_slow(self):
@@ -181,7 +234,13 @@ class TestFinetuneTrainer(TestCasePlus):
         trainer.train()
 
     def run_trainer(
-        self, eval_steps: int, max_len: str, model_name: str, num_train_epochs: int, distributed: bool = False
+        self,
+        eval_steps: int,
+        max_len: str,
+        model_name: str,
+        num_train_epochs: int,
+        distributed: bool = False,
+        extra_args_str: str = None,
     ):
         data_dir = self.examples_dir / "seq2seq/test_data/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()
@@ -216,6 +275,9 @@ class TestFinetuneTrainer(TestCasePlus):
             --src_lang en_XX
         """.split()
         # --eval_beams  2
+
+        if extra_args_str is not None:
+            args.extend(extra_args_str.split())
 
         if distributed:
             n_gpu = get_gpu_count()

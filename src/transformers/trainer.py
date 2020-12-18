@@ -33,6 +33,7 @@ from .integrations import (  # isort: split
     hp_params,
     is_azureml_available,
     is_comet_available,
+    is_fairscale_available,
     is_mlflow_available,
     is_optuna_available,
     is_ray_available,
@@ -52,7 +53,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
 
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
-from .file_utils import WEIGHTS_NAME, is_datasets_available, is_in_notebook, is_torch_tpu_available
+from .file_utils import WEIGHTS_NAME, is_apex_available, is_datasets_available, is_in_notebook, is_torch_tpu_available
 from .modeling_utils import PreTrainedModel
 from .models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from .optimization import AdamW, get_linear_schedule_with_warmup
@@ -93,8 +94,7 @@ from .training_args import TrainingArguments
 from .utils import logging
 
 
-_use_native_amp = False
-_use_apex = False
+_is_native_amp_available = False
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
 DEFAULT_PROGRESS_CALLBACK = ProgressCallback
@@ -104,21 +104,12 @@ if is_in_notebook():
 
     DEFAULT_PROGRESS_CALLBACK = NotebookProgressCallback
 
-# Check if Pytorch version >= 1.6 to switch between Native AMP and Apex
-if version.parse(torch.__version__) < version.parse("1.6"):
-    from .file_utils import is_apex_available
+if is_apex_available():
+    from apex import amp
 
-    if is_apex_available():
-        from apex import amp
-    _use_apex = True
-else:
-    _use_native_amp = True
+if version.parse(torch.__version__) >= version.parse("1.6"):
+    _is_native_amp_available = True
     from torch.cuda.amp import autocast
-
-if version.parse(torch.__version__) < version.parse("1.2"):
-    _use_ddp_no_sync = False
-else:
-    _use_ddp_no_sync = True
 
 if is_datasets_available():
     import datasets
@@ -159,6 +150,11 @@ if is_azureml_available():
     from .integrations import AzureMLCallback
 
     DEFAULT_CALLBACKS.append(AzureMLCallback)
+
+if is_fairscale_available():
+    from fairscale.nn.data_parallel import ShardedDataParallel as ShardedDDP
+    from fairscale.optim import OSS
+    from fairscale.optim.grad_scaler import ShardedGradScaler
 
 logger = logging.get_logger(__name__)
 
@@ -241,11 +237,12 @@ class Trainer:
         self.hp_name = None
         if model is None and model_init is not None:
             model = self.call_model_init()
+
         # Model parallel
-        if not self.args.model_parallel:
-            self.model = model.to(args.device) if model is not None else None
-        else:
-            self.model = model if model is not None else None
+        if model is not None and not self.args.model_parallel:
+            model = model.to(args.device)
+
+        self.model = model
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
@@ -291,13 +288,41 @@ class Trainer:
             if isinstance(eval_dataset, datasets.Dataset):
                 self._remove_unused_columns(self.eval_dataset, description="evaluation")
 
+        # Setup Sharded DDP training
+        self.sharded_dpp = False
+        if args.sharded_ddp:
+            if args.local_rank == -1:
+                raise ValueError("Using sharded DDP only works in distributed training.")
+            elif not is_fairscale_available():
+                raise ImportError("Sharded DDP training requires fairscale: `pip install fairscale`.")
+            else:
+                self.sharded_dpp = True
+
+        # Mixed precision setup
+        self.use_apex = False
+        self.use_amp = False
+        if args.fp16:
+            if args.fp16_backend == "auto":
+                backend = "amp" if _is_native_amp_available else "apex"
+            else:
+                backend = args.fp16_backend
+            logger.info(f"Using {backend} fp16 backend")
+
+            if backend == "amp":
+                self.use_amp = True
+                self.scaler = ShardedGradScaler() if self.sharded_dpp else torch.cuda.amp.GradScaler()
+            else:
+                if not is_apex_available():
+                    raise ImportError(
+                        "Using FP16 with APEX but APEX is not installed, please refer to https://www.github.com/nvidia/apex."
+                    )
+                self.use_apex = True
+
         self.state = TrainerState()
         self.control = TrainerControl()
         # Internal variable for total_flos used to count as tensors (for distributed + TPU), will be sent in the
         # state at each call to self.log.
         self._total_flos = None
-        if self.args.fp16 and _use_native_amp:
-            self.scaler = torch.cuda.amp.GradScaler()
         self.hp_search_backend = None
         self.use_tune_checkpoints = False
         default_label_names = (
@@ -480,12 +505,21 @@ class Trainer:
                     "weight_decay": 0.0,
                 },
             ]
-            self.optimizer = AdamW(
-                optimizer_grouped_parameters,
-                lr=self.args.learning_rate,
-                betas=(self.args.adam_beta1, self.args.adam_beta2),
-                eps=self.args.adam_epsilon,
-            )
+            if self.sharded_dpp:
+                self.optimizer = OSS(
+                    params=optimizer_grouped_parameters,
+                    optim=AdamW,
+                    lr=self.args.learning_rate,
+                    betas=(self.args.adam_beta1, self.args.adam_beta2),
+                    eps=self.args.adam_epsilon,
+                )
+            else:
+                self.optimizer = AdamW(
+                    optimizer_grouped_parameters,
+                    lr=self.args.learning_rate,
+                    betas=(self.args.adam_beta1, self.args.adam_beta2),
+                    eps=self.args.adam_epsilon,
+                )
         if self.lr_scheduler is None:
             self.lr_scheduler = get_linear_schedule_with_warmup(
                 self.optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps
@@ -542,7 +576,7 @@ class Trainer:
             self.args.output_dir = checkpoint_dir
             output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
             self.save_model(output_dir)
-            if self.is_world_master():
+            if self.is_world_process_zero():
                 self.state.save_to_json(os.path.join(output_dir, "trainer_state.json"))
                 torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
@@ -624,9 +658,7 @@ class Trainer:
 
         # Mixed precision training with apex (torch < 1.6)
         model = self.model
-        if self.args.fp16 and _use_apex:
-            if not is_apex_available():
-                raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
+        if self.use_apex:
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
 
         # Multi-gpu training (should be after apex fp16 initialization)
@@ -634,7 +666,9 @@ class Trainer:
             model = torch.nn.DataParallel(model)
 
         # Distributed training (should be after apex fp16 initialization)
-        if self.args.local_rank != -1:
+        if self.sharded_dpp:
+            model = ShardedDDP(model, self.optimizer)
+        elif self.args.local_rank != -1:
             model = torch.nn.parallel.DistributedDataParallel(
                 model,
                 device_ids=[self.args.local_rank],
@@ -645,8 +679,8 @@ class Trainer:
                     else True
                 ),
             )
-        # find_unused_parameters breaks checkpointing as per
-        # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
+            # find_unused_parameters breaks checkpointing as per
+            # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
 
         # Train!
         if is_torch_tpu_available():
@@ -755,11 +789,8 @@ class Trainer:
                 if (step + 1) % self.args.gradient_accumulation_steps == 0:
                     self.control = self.callback_handler.on_step_begin(self.args, self.state, self.control)
 
-                if (
-                    ((step + 1) % self.args.gradient_accumulation_steps != 0)
-                    and self.args.local_rank != -1
-                    and _use_ddp_no_sync
-                ):
+                if ((step + 1) % self.args.gradient_accumulation_steps != 0) and self.args.local_rank != -1:
+                    # Avoid unnecessary DDP synchronization since there will be no backward pass on this example.
                     with model.no_sync():
                         tr_loss += self.training_step(model, inputs)
                 else:
@@ -771,17 +802,26 @@ class Trainer:
                     steps_in_epoch <= self.args.gradient_accumulation_steps
                     and (step + 1) == steps_in_epoch
                 ):
-                    if self.args.fp16 and _use_native_amp:
-                        self.scaler.unscale_(self.optimizer)
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
-                    elif self.args.fp16 and _use_apex:
-                        torch.nn.utils.clip_grad_norm_(amp.master_params(self.optimizer), self.args.max_grad_norm)
-                    else:
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
+                    # Gradient clipping
+                    if self.args.max_grad_norm is not None and self.args.max_grad_norm > 0:
+                        if self.use_amp:
+                            # AMP: gradients need unscaling
+                            self.scaler.unscale_(self.optimizer)
 
+                        if hasattr(self.optimizer, "clip_grad_norm"):
+                            # Some optimizers (like the sharded optimizer) have a specific way to do gradient clipping
+                            self.optimizer.clip_grad_norm(self.args.max_grad_norm)
+                        else:
+                            # Revert to normal clipping otherwise, handling Apex or full precision
+                            torch.nn.utils.clip_grad_norm_(
+                                amp.master_params(self.optimizer) if self.use_apex else model.parameters(),
+                                self.args.max_grad_norm,
+                            )
+
+                    # Optimizer step
                     if is_torch_tpu_available():
                         xm.optimizer_step(self.optimizer)
-                    elif self.args.fp16 and _use_native_amp:
+                    elif self.use_amp:
                         self.scaler.step(self.optimizer)
                         self.scaler.update()
                     else:
@@ -889,6 +929,8 @@ class Trainer:
         self.save_model(output_dir)
 
         # Save optimizer and scheduler
+        if self.sharded_dpp:
+            self.optimizer.consolidate_state_dict()
         if is_torch_tpu_available():
             xm.rendezvous("saving_optimizer_states")
             xm.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
@@ -1088,7 +1130,7 @@ class Trainer:
         model.train()
         inputs = self._prepare_inputs(inputs)
 
-        if self.args.fp16 and _use_native_amp:
+        if self.use_amp:
             with autocast():
                 loss = self.compute_loss(model, inputs)
         else:
@@ -1100,9 +1142,9 @@ class Trainer:
         if self.args.gradient_accumulation_steps > 1:
             loss = loss / self.args.gradient_accumulation_steps
 
-        if self.args.fp16 and _use_native_amp:
+        if self.use_amp:
             self.scaler.scale(loss).backward()
-        elif self.args.fp16 and _use_apex:
+        elif self.use_apex:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
@@ -1242,7 +1284,10 @@ class Trainer:
             shutil.rmtree(checkpoint)
 
     def evaluate(
-        self, eval_dataset: Optional[Dataset] = None, ignore_keys: Optional[List[str]] = None
+        self,
+        eval_dataset: Optional[Dataset] = None,
+        ignore_keys: Optional[List[str]] = None,
+        metric_key_prefix: str = "eval",
     ) -> Dict[str, float]:
         """
         Run evaluation and returns metrics.
@@ -1260,6 +1305,9 @@ class Trainer:
             ignore_keys (:obj:`Lst[str]`, `optional`):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
+            metric_key_prefix (:obj:`str`, `optional`, defaults to :obj:`"eval"`):
+                An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
+                "eval_bleu" if the prefix is "eval" (default)
 
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
@@ -1277,6 +1325,7 @@ class Trainer:
             # self.args.prediction_loss_only
             prediction_loss_only=True if self.compute_metrics is None else None,
             ignore_keys=ignore_keys,
+            metric_key_prefix=metric_key_prefix,
         )
 
         self.log(output.metrics)
@@ -1288,7 +1337,9 @@ class Trainer:
         self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
         return output.metrics
 
-    def predict(self, test_dataset: Dataset, ignore_keys: Optional[List[str]] = None) -> PredictionOutput:
+    def predict(
+        self, test_dataset: Dataset, ignore_keys: Optional[List[str]] = None, metric_key_prefix: str = "eval"
+    ) -> PredictionOutput:
         """
         Run prediction and returns predictions and potential metrics.
 
@@ -1302,6 +1353,9 @@ class Trainer:
             ignore_keys (:obj:`Lst[str]`, `optional`):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
+            metric_key_prefix (:obj:`str`, `optional`, defaults to :obj:`"eval"`):
+                An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
+                "eval_bleu" if the prefix is "eval" (default)
 
         .. note::
 
@@ -1321,7 +1375,9 @@ class Trainer:
 
         test_dataloader = self.get_test_dataloader(test_dataset)
 
-        return self.prediction_loop(test_dataloader, description="Prediction", ignore_keys=ignore_keys)
+        return self.prediction_loop(
+            test_dataloader, description="Prediction", ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix
+        )
 
     def prediction_loop(
         self,
@@ -1329,6 +1385,7 @@ class Trainer:
         description: str,
         prediction_loss_only: Optional[bool] = None,
         ignore_keys: Optional[List[str]] = None,
+        metric_key_prefix: str = "eval",
     ) -> PredictionOutput:
         """
         Prediction/evaluation loop, shared by :obj:`Trainer.evaluate()` and :obj:`Trainer.predict()`.
@@ -1420,12 +1477,12 @@ class Trainer:
             metrics = {}
 
         if eval_loss is not None:
-            metrics["eval_loss"] = eval_loss.mean().item()
+            metrics[f"{metric_key_prefix}_loss"] = eval_loss.mean().item()
 
-        # Prefix all keys with eval_
+        # Prefix all keys with metric_key_prefix + '_'
         for key in list(metrics.keys()):
-            if not key.startswith("eval_"):
-                metrics[f"eval_{key}"] = metrics.pop(key)
+            if not key.startswith(f"{metric_key_prefix}_"):
+                metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
@@ -1482,7 +1539,7 @@ class Trainer:
                 ignore_keys = []
 
         with torch.no_grad():
-            if self.args.fp16 and _use_native_amp:
+            if self.use_amp:
                 with autocast():
                     outputs = model(**inputs)
             else:

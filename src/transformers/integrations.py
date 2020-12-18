@@ -1,4 +1,19 @@
-# Integrations with other Python libraries
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Integrations with other Python libraries.
+"""
 import math
 import os
 
@@ -77,6 +92,13 @@ try:
 except ImportError:
     _has_mlflow = False
 
+try:
+    import fairscale  # noqa: F401
+
+    _has_fairscale = True
+except ImportError:
+    _has_fairscale = False
+
 # No transformer imports above this point
 
 from .file_utils import is_torch_tpu_available  # noqa: E402
@@ -111,6 +133,10 @@ def is_azureml_available():
 
 def is_mlflow_available():
     return _has_mlflow
+
+
+def is_fairscale_available():
+    return _has_fairscale
 
 
 def hp_params(trial):

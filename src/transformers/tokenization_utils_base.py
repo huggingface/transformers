@@ -50,6 +50,7 @@ if is_tf_available():
 
 if is_torch_available():
     import torch
+
 if is_flax_available():
     import jax.numpy as jnp
 
@@ -261,7 +262,7 @@ class BatchEncoding(UserDict):
         :class:`~transformers.BatchEncoding`. Currently can be one of :obj:`None` (unknown), :obj:`1` (a single
         sentence) or :obj:`2` (a pair of sentences)
         """
-        return self.n_sequences
+        return self._n_sequences
 
     @property
     def is_fast(self) -> bool:
@@ -1647,6 +1648,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             proxies (:obj:`Dict[str, str], `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+            use_auth_token (:obj:`str` or `bool`, `optional`):
+                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
             revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
@@ -1660,6 +1664,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 Will be passed to the Tokenizer ``__init__`` method. Can be used to set special tokens like
                 ``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``,
                 ``mask_token``, ``additional_special_tokens``. See parameters in the ``__init__`` for more details.
+
+        .. note::
+
+            Passing :obj:`use_auth_token=True` is required when you want to use a private model.
 
         Examples::
 
@@ -1688,6 +1696,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         local_files_only = kwargs.pop("local_files_only", False)
+        use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", None)
 
@@ -1769,6 +1778,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                         proxies=proxies,
                         resume_download=resume_download,
                         local_files_only=local_files_only,
+                        use_auth_token=use_auth_token,
                     )
                 except requests.exceptions.HTTPError as err:
                     if "404 Client Error" in str(err):
@@ -2663,10 +2673,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         # If we have PyTorch/TF/NumPy tensors/arrays as inputs, we cast them as python objects
         # and rebuild them afterwards if no return_tensors is specified
         # Note that we lose the specific device the tensor may be on for PyTorch
+
         first_element = encoded_inputs["input_ids"][0]
-        if isinstance(first_element, (list, tuple)) and first_element:
-            first_element = first_element[0]
-        if not isinstance(first_element, int):
+        if isinstance(first_element, (list, tuple)):
+            # first_element might be an empty list/tuple in some edge cases so we grab the first non empty element.
+            index = 0
+            while len(encoded_inputs["input_ids"][index]) == 0:
+                index += 1
+            if index < len(encoded_inputs["input_ids"]):
+                first_element = encoded_inputs["input_ids"][index][0]
+        # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
+        if not isinstance(first_element, (int, list, tuple)):
             if is_tf_available() and isinstance(first_element, tf.Tensor):
                 return_tensors = "tf" if return_tensors is None else return_tensors
             elif is_torch_available() and isinstance(first_element, torch.Tensor):
@@ -2814,7 +2831,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         len_ids = len(ids)
         len_pair_ids = len(pair_ids) if pair else 0
 
-        if return_token_type_ids is not None and not add_special_tokens:
+        if return_token_type_ids and not add_special_tokens:
             raise ValueError(
                 "Asking to return token_type_ids while setting add_special_tokens to False "
                 "results in an undefined behavior. Please set add_special_tokens to True or "
@@ -2866,14 +2883,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 encoded_inputs["special_tokens_mask"] = [0] * len(sequence)
 
         # Check lengths
-        if max_length is None and len(encoded_inputs["input_ids"]) > self.model_max_length and verbose:
-            if not self.deprecation_warnings.get("sequence-length-is-longer-than-the-specified-maximum", False):
-                logger.warning(
-                    "Token indices sequence length is longer than the specified maximum sequence length "
-                    "for this model ({} > {}). Running this sequence through the model will result in "
-                    "indexing errors".format(len(encoded_inputs["input_ids"]), self.model_max_length)
-                )
-            self.deprecation_warnings["sequence-length-is-longer-than-the-specified-maximum"] = True
+        self._eventual_warn_about_too_long_sequence(encoded_inputs["input_ids"], max_length, verbose)
 
         # Padding
         if padding_strategy != PaddingStrategy.DO_NOT_PAD or return_attention_mask:
@@ -3054,9 +3064,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 encoded_inputs["input_ids"] = [self.pad_token_id] * difference + encoded_inputs["input_ids"]
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
-        else:
-            if return_attention_mask:
-                encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"])
+        elif return_attention_mask and "attention_mask" not in encoded_inputs:
+            encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"])
 
         return encoded_inputs
 
@@ -3204,3 +3213,23 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             .replace(" 're", "'re")
         )
         return out_string
+
+    def _eventual_warn_about_too_long_sequence(self, ids: List[int], max_length: Optional[int], verbose: bool):
+        """
+        Depending on the input and internal state we might trigger a warning about a sequence that is too long for it's
+        corresponding model
+
+        Args:
+            ids (:obj:`List[str]`): The ids produced by the tokenization
+            max_length (:obj:`int`, `optional`): The max_length desired (does not trigger a warning if it is set)
+            verbose (:obj:`bool`): Whether or not to print more information and warnings.
+
+        """
+        if max_length is None and len(ids) > self.model_max_length and verbose:
+            if not self.deprecation_warnings.get("sequence-length-is-longer-than-the-specified-maximum", False):
+                logger.warning(
+                    "Token indices sequence length is longer than the specified maximum sequence length "
+                    "for this model ({} > {}). Running this sequence through the model will result in "
+                    "indexing errors".format(len(ids), self.model_max_length)
+                )
+            self.deprecation_warnings["sequence-length-is-longer-than-the-specified-maximum"] = True

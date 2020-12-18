@@ -1,8 +1,22 @@
+# Copyright 2020 The HuggingFace Team, the AllenNLP library authors. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """
-Utilities for working with the local dataset cache. This file is adapted from the AllenNLP library at
-https://github.com/allenai/allennlp Copyright by the AllenNLP authors.
+Utilities for working with the local dataset cache. Parts of this file is adapted from the AllenNLP library at
+https://github.com/allenai/allennlp.
 """
 
+import copy
 import fnmatch
 import io
 import json
@@ -29,6 +43,7 @@ import requests
 from filelock import FileLock
 
 from . import __version__
+from .hf_api import HfFolder
 from .utils import logging
 
 
@@ -203,6 +218,29 @@ except ImportError:
     _tokenizers_available = False
 
 
+try:
+    import pandas  # noqa: F401
+
+    _pandas_available = True
+
+except ImportError:
+    _pandas_available = False
+
+
+try:
+    import torch_scatter
+
+    # Check we're not importing a "torch_scatter" directory somewhere
+    _scatter_available = hasattr(torch_scatter, "__version__") and hasattr(torch_scatter, "scatter")
+    if _scatter_available:
+        logger.debug(f"Succesfully imported torch-scatter version {torch_scatter.__version__}")
+    else:
+        logger.debug("Imported a torch_scatter object but this doesn't seem to be the torch-scatter library.")
+
+except ImportError:
+    _scatter_available = False
+
+
 old_default_cache_path = os.path.join(torch_cache_home, "transformers")
 # New default cache, shared with the Datasets library
 hf_cache_home = os.path.expanduser(
@@ -213,6 +251,7 @@ default_cache_path = os.path.join(hf_cache_home, "transformers")
 # Onetime move from the old location to the new one if no ENV variable has been set.
 if (
     os.path.isdir(old_default_cache_path)
+    and not os.path.isdir(default_cache_path)
     and "PYTORCH_PRETRAINED_BERT_CACHE" not in os.environ
     and "PYTORCH_TRANSFORMERS_CACHE" not in os.environ
     and "TRANSFORMERS_CACHE" not in os.environ
@@ -233,6 +272,7 @@ TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
 WEIGHTS_NAME = "pytorch_model.bin"
 TF2_WEIGHTS_NAME = "tf_model.h5"
 TF_WEIGHTS_NAME = "model.ckpt"
+FLAX_WEIGHTS_NAME = "flax_model.msgpack"
 CONFIG_NAME = "config.json"
 MODEL_CARD_NAME = "modelcard.json"
 
@@ -309,6 +349,14 @@ def is_tokenizers_available():
 
 def is_in_notebook():
     return _in_notebook
+
+
+def is_scatter_available():
+    return _scatter_available
+
+
+def is_pandas_available():
+    return _pandas_available
 
 
 def torch_only_method(fn):
@@ -413,6 +461,20 @@ installation page: https://github.com/google/flax and follow the ones that match
 """
 
 
+# docstyle-ignore
+SCATTER_IMPORT_ERROR = """
+{0} requires the torch-scatter library but it was not found in your environment. You can install it with pip as
+explained here: https://github.com/rusty1s/pytorch_scatter.
+"""
+
+
+# docstyle-ignore
+PANDAS_IMPORT_ERROR = """
+{0} requires the pandas library but it was not found in your environment. You can install it with pip as
+explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/install.html.
+"""
+
+
 def requires_datasets(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_datasets_available():
@@ -465,6 +527,18 @@ def requires_protobuf(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_protobuf_available():
         raise ImportError(PROTOBUF_IMPORT_ERROR.format(name))
+
+
+def requires_pandas(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_pandas_available():
+        raise ImportError(PANDAS_IMPORT_ERROR.format(name))
+
+
+def requires_scatter(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_scatter_available():
+        raise ImportError(SCATTER_IMPORT_ERROR.format(name))
 
 
 def add_start_docstrings(*docstr):
@@ -835,7 +909,7 @@ def add_code_sample_docstrings(
         elif "MaskedLM" in model_class or model_class in ["FlaubertWithLMHeadModel", "XLMWithLMHeadModel"]:
             doc_kwargs["mask"] = "[MASK]" if mask is None else mask
             code_sample = TF_MASKED_LM_SAMPLE if is_tf_class else PT_MASKED_LM_SAMPLE
-        elif "LMHead" in model_class:
+        elif "LMHead" in model_class or "CausalLM" in model_class:
             code_sample = TF_CAUSAL_LM_SAMPLE if is_tf_class else PT_CAUSAL_LM_SAMPLE
         elif "Model" in model_class or "Encoder" in model_class:
             code_sample = TF_BASE_MODEL_SAMPLE if is_tf_class else PT_BASE_MODEL_SAMPLE
@@ -965,6 +1039,7 @@ def cached_path(
     user_agent: Union[Dict, str, None] = None,
     extract_compressed_file=False,
     force_extract=False,
+    use_auth_token: Union[bool, str, None] = None,
     local_files_only=False,
 ) -> Optional[str]:
     """
@@ -977,6 +1052,8 @@ def cached_path(
         force_download: if True, re-download the file even if it's already cached in the cache dir.
         resume_download: if True, resume the download if incompletely received file is found.
         user_agent: Optional string or dict that will be appended to the user-agent on remote requests.
+        use_auth_token: Optional string or boolean to use as Bearer token for remote files. If True,
+            will get token from ~/.huggingface.
         extract_compressed_file: if True and the path point to a zip or tar file, extract the compressed
             file in a folder along the archive.
         force_extract: if True when extract_compressed_file is True and the archive was already extracted,
@@ -1004,6 +1081,7 @@ def cached_path(
             proxies=proxies,
             resume_download=resume_download,
             user_agent=user_agent,
+            use_auth_token=use_auth_token,
             local_files_only=local_files_only,
         )
     elif os.path.exists(url_or_filename):
@@ -1066,11 +1144,11 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
     return ua
 
 
-def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, user_agent: Union[Dict, str, None] = None):
+def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers: Optional[Dict[str, str]] = None):
     """
     Donwload remote file. Do not gobble up errors.
     """
-    headers = {"user-agent": http_user_agent(user_agent)}
+    headers = copy.deepcopy(headers)
     if resume_size > 0:
         headers["Range"] = "bytes=%d-" % (resume_size,)
     r = requests.get(url, stream=True, proxies=proxies, headers=headers)
@@ -1100,6 +1178,7 @@ def get_from_cache(
     etag_timeout=10,
     resume_download=False,
     user_agent: Union[Dict, str, None] = None,
+    use_auth_token: Union[bool, str, None] = None,
     local_files_only=False,
 ) -> Optional[str]:
     """
@@ -1119,11 +1198,19 @@ def get_from_cache(
 
     os.makedirs(cache_dir, exist_ok=True)
 
+    headers = {"user-agent": http_user_agent(user_agent)}
+    if isinstance(use_auth_token, str):
+        headers["authorization"] = "Bearer {}".format(use_auth_token)
+    elif use_auth_token:
+        token = HfFolder.get_token()
+        if token is None:
+            raise EnvironmentError("You specified use_auth_token=True, but a huggingface token was not found.")
+        headers["authorization"] = "Bearer {}".format(token)
+
     url_to_download = url
     etag = None
     if not local_files_only:
         try:
-            headers = {"user-agent": http_user_agent(user_agent)}
             r = requests.head(url, headers=headers, allow_redirects=False, proxies=proxies, timeout=etag_timeout)
             r.raise_for_status()
             etag = r.headers.get("X-Linked-Etag") or r.headers.get("ETag")
@@ -1213,7 +1300,7 @@ def get_from_cache(
         with temp_file_manager() as temp_file:
             logger.info("%s not found in cache or force_download set to True, downloading to %s", url, temp_file.name)
 
-            http_get(url_to_download, temp_file, proxies=proxies, resume_size=resume_size, user_agent=user_agent)
+            http_get(url_to_download, temp_file, proxies=proxies, resume_size=resume_size, headers=headers)
 
         logger.info("storing %s in cache at %s", url, cache_path)
         os.replace(temp_file.name, cache_path)

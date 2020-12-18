@@ -12,20 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import unittest
 
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_tf_bart import TFBartModelTester
 from tests.test_modeling_tf_common import TFModelTesterMixin
-from transformers import (
-    BlenderbotConfig,
-    BlenderbotSmallTokenizer,
-    TFAutoModelForSeq2SeqLM,
-    TFBlenderbotForConditionalGeneration,
-    is_tf_available,
-)
+from transformers import BlenderbotConfig, BlenderbotSmallTokenizer, is_tf_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import is_pt_tf_cross_test, require_tf, require_tokenizers, slow
+
+
+if is_tf_available():
+    import tensorflow as tf
+
+    from transformers import TFAutoModelForSeq2SeqLM, TFBlenderbotForConditionalGeneration
 
 
 class TFBlenderbotModelTester(TFBartModelTester):
@@ -63,6 +64,17 @@ class TFBlenderbotModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_saved_model_with_attentions_output(self):
         # Should be uncommented during patrick TF refactor
         pass
+
+    def test_model_common_attributes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+            x = model.get_output_layer_with_bias()
+            assert x is None
+            name = model.get_prefix_bias_name()
+            assert name is None
 
 
 @is_pt_tf_cross_test

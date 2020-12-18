@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -223,8 +223,8 @@ class TFPTAutoModelTest(unittest.TestCase):
     def test_from_pretrained_identifier(self):
         model = TFAutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER, from_pt=True)
         self.assertIsInstance(model, TFBertForMaskedLM)
-        self.assertEqual(model.num_parameters(), 14830)
-        self.assertEqual(model.num_parameters(only_trainable=True), 14830)
+        self.assertEqual(model.num_parameters(), 14410)
+        self.assertEqual(model.num_parameters(only_trainable=True), 14410)
 
         model = AutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER, from_tf=True)
         self.assertIsInstance(model, BertForMaskedLM)
@@ -234,8 +234,8 @@ class TFPTAutoModelTest(unittest.TestCase):
     def test_from_identifier_from_model_type(self):
         model = TFAutoModelWithLMHead.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER, from_pt=True)
         self.assertIsInstance(model, TFRobertaForMaskedLM)
-        self.assertEqual(model.num_parameters(), 14830)
-        self.assertEqual(model.num_parameters(only_trainable=True), 14830)
+        self.assertEqual(model.num_parameters(), 14410)
+        self.assertEqual(model.num_parameters(only_trainable=True), 14410)
 
         model = AutoModelWithLMHead.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER, from_tf=True)
         self.assertIsInstance(model, RobertaForMaskedLM)

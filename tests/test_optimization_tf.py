@@ -1,4 +1,20 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import unittest
+
+from packaging import version
 
 from transformers import is_tf_available
 from transformers.testing_utils import require_tf
@@ -62,12 +78,18 @@ class OptimizationFTest(unittest.TestCase):
                 local_variables = strategy.experimental_local_results(gradient_placeholder)
                 local_variables[0].assign(grad1)
                 local_variables[1].assign(grad2)
-                strategy.experimental_run_v2(accumulate_on_replica, args=(gradient_placeholder,))
+                if version.parse(tf.version.VERSION) >= version.parse("2.2"):
+                    strategy.run(accumulate_on_replica, args=(gradient_placeholder,))
+                else:
+                    strategy.experimental_run_v2(accumulate_on_replica, args=(gradient_placeholder,))
 
         @tf.function
         def apply_grad():
             with strategy.scope():
-                strategy.experimental_run_v2(apply_on_replica)
+                if version.parse(tf.version.VERSION) >= version.parse("2.2"):
+                    strategy.run(apply_on_replica)
+                else:
+                    strategy.experimental_run_v2(apply_on_replica)
 
         def _check_local_values(grad1, grad2):
             values = strategy.experimental_local_results(accumulator._gradients[0])

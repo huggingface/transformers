@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # coding=utf-8
-# Copyright (c) Facebook, Inc. and its affiliates.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
-# This source code is licensed under the MIT license found in the;
+# Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -13,7 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# LICENSE file in the root directory of this source tree.
 """Tests for BlenderBot"""
 import unittest
 
@@ -105,9 +104,6 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
         self.model_tester = BlenderbotModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BlenderbotConfig)
 
-    def test_inputs_embeds(self):
-        pass
-
     def test_initialization_module(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = BlenderbotForConditionalGeneration(config).model
@@ -126,6 +122,10 @@ class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip("This test is flaky")
     def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip("TODO: Decoder embeddings cannot be resized at the moment")
+    def test_resize_embeddings_untied(self):
         pass
 
 
