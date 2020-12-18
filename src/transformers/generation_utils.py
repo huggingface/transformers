@@ -45,18 +45,20 @@ class GreedySearchDecoderOnlyOutput(ModelOutput):
     """
     Base class for outputs of encoder-decoder generation models using greedy search.
 
+
     Args:
         sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all
-            batches finished early due to the :obj:`eos_token_id`.
+            The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
+            shorter if all batches finished early due to the :obj:`eos_token_id`.
         logits (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
-            Tuple of :obj:`torch.FloatTensor` of length :obj:`max_length` or shorter if all batches finished early, with each tensor of shape :obj:`(batch_size, config.vocab_size)`).
+            Tuple of :obj:`torch.FloatTensor` of length :obj:`max_length` or shorter if all batches finished early,
+            with each tensor of shape :obj:`(batch_size, config.vocab_size)`).
         attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
-            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of :obj:`torch.FloatTensor` of shape
-            :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
         hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of :obj:`torch.FloatTensor`
-            of shape :obj:`(batch_size, generated_length, hidden_size)`.
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size, generated_length, hidden_size)`.
     """
 
     sequences: torch.LongTensor = None
@@ -70,25 +72,26 @@ class GreedySearchEncoderDecoderOutput(ModelOutput):
     """
     Base class for outputs of encoder-decoder generation models using greedy search.
 
+
     Args:
         sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
-            The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all
-            batches finished early due to the :obj:`eos_token_id`.
+            The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
+            shorter if all batches finished early due to the :obj:`eos_token_id`.
         logits (:obj:`torch.FloatTensor` of shape :ob:`(batch_size * num_return_sequence, sequence_length, config.vocab_size)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
-            Classification scores for each token of the generated sequences. :obj:`(max_length,)`-shaped
-            tuple of :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequence, config.num_labels)`.
+            Classification scores for each token of the generated sequences. :obj:`(max_length,)`-shaped tuple of
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequence, config.num_labels)`.
         encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer of the decoder) of shape
-            :obj:`(batch_size * num_return_sequence, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer of the decoder) of shape :obj:`(batch_size *
+            num_return_sequence, num_heads, sequence_length, sequence_length)`.
         encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
         decoder_attentions (:obj:`tupletuple((torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
-            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of :obj:`torch.FloatTensor` of shape
-            :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
         decoder_hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of :obj:`torch.FloatTensor`
-            of shape :obj:`(batch_size, generated_length, hidden_size)`.
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size, generated_length, hidden_size)`.
     """
 
     sequences: torch.LongTensor = None
@@ -407,6 +410,7 @@ class GenerationMixin:
         Most of these parameters are explained in more detail in `this blog post
         <https://huggingface.co/blog/how-to-generate>`__.
 
+
         Parameters:
 
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -488,12 +492,15 @@ class GenerationMixin:
                 model is an Encoder-Decoder model, encoder specific kwargs should not be prefixed and decoder specific
                 kwargs should be prefixed with `decoder_`.
 
+
         Return:
-            Either :obj:`GreedySearchOutput` or :obj:`torch.LongTensor`: :obj:`GreedySearchOutput`if the generate method
-            is `greedy_search` and ``return_dict_in_generate=True`` passed or `` config.return_dict_in_generate=True``;
-            :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)` containing
-            just the generated sentence otherwise. The second dimension (sequence_length) is either equal to :obj:`max_length` or
-            shorter if all batches finished early due to the :obj:`eos_token_id`
+            Either :obj:`GreedySearchOutput` or :obj:`torch.LongTensor`: :obj:`GreedySearchOutput`if the generate
+            method is `greedy_search` and ``return_dict_in_generate=True`` passed or ``
+            config.return_dict_in_generate=True``; :obj:`torch.LongTensor` of shape :obj:`(batch_size *
+            num_return_sequences, sequence_length)` containing just the generated sentence otherwise. The second
+            dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all batches finished early
+            due to the :obj:`eos_token_id`
+
 
         Examples::
 
@@ -792,6 +799,7 @@ class GenerationMixin:
         r"""
         Generates sequences for models with a language modeling head using greedy decoding.
 
+
         Parameters:
 
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -821,9 +829,11 @@ class GenerationMixin:
                 Additional model specific keyword arguments will be forwarded to the :obj:`forward` function of the
                 model. If model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
 
+
         Return:
-            Either a :obj:`torch.LongTensor` object (default behaviour) or a :obj:`GreedySearchOutput`
-            if :obj:`return_dict_in_generate` is set to True
+            Either a :obj:`torch.LongTensor` object (default behaviour) or a :obj:`GreedySearchOutput` if
+            :obj:`return_dict_in_generate` is set to True
+
 
         Examples::
 
@@ -977,6 +987,7 @@ class GenerationMixin:
         r"""
         Generates sequences for models with a language modeling head using multinomial sampling.
 
+
         Parameters:
 
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1000,10 +1011,12 @@ class GenerationMixin:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
 
+
         Return:
             :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
             sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all
             batches finished early due to the :obj:`eos_token_id`.
+
 
         Examples::
 
@@ -1108,6 +1121,7 @@ class GenerationMixin:
         r"""
         Generates sequences for models with a language modeling head using beam search decoding.
 
+
         Parameters:
 
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1131,10 +1145,12 @@ class GenerationMixin:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
 
+
         Return:
             :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
             sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all
             batches finished early due to the :obj:`eos_token_id`.
+
 
         Examples::
 
@@ -1273,6 +1289,7 @@ class GenerationMixin:
         r"""
         Generates sequences for models with a language modeling head using beam search with multinomial sampling.
 
+
         Parameters:
 
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1300,10 +1317,12 @@ class GenerationMixin:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
 
+
         Return:
             :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
             sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all
             batches finished early due to the :obj:`eos_token_id`.
+
 
         Examples::
 
@@ -1449,6 +1468,7 @@ class GenerationMixin:
         r"""
         Generates sequences for models with a language modeling head using beam search decoding.
 
+
         Parameters:
 
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1472,10 +1492,12 @@ class GenerationMixin:
                 Additional model specific kwargs that will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
 
+
         Return:
             :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
             sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all
             batches finished early due to the :obj:`eos_token_id`.
+
 
         Examples::
 
@@ -1653,6 +1675,7 @@ def top_k_top_p_filtering(
 ) -> torch.FloatTensor:
     """
     Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
+
 
     Args:
         logits: logits distribution shape (batch size, vocabulary size)
