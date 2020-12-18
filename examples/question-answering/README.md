@@ -23,8 +23,7 @@ uses special features of those tokenizers. You can check if your favorite model 
 [this table](https://huggingface.co/transformers/index.html#bigtable), if it doesn't you can still use the old version
 of the script.
 
-The old version of this script can be found [here](https://github.com/huggingface/transformers/blob/master/examples/contrib/legacy/question-answering/run_squad.py).
-
+The old version of this script can be found [here](https://github.com/huggingface/transformers/tree/master/examples/legacy/question-answering).
 #### Fine-tuning BERT on SQuAD1.0
 
 This example code fine-tunes BERT on the SQuAD1.0 dataset. It runs in 24 min (with BERT-base) or 68 min (with BERT-large)
