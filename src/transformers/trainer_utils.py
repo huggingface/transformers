@@ -18,6 +18,7 @@ Utilities for the Trainer and TFTrainer class. Should be independent from PyTorc
 
 import copy
 import random
+import time
 from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
@@ -70,6 +71,7 @@ class PredictionOutput(NamedTuple):
 class TrainOutput(NamedTuple):
     global_step: int
     training_loss: float
+    metrics: Dict[str, float]
 
 
 PREFIX_CHECKPOINT_DIR = "checkpoint"
@@ -179,3 +181,23 @@ def total_processes_number(local_rank):
 
         return torch.distributed.get_world_size()
     return 1
+
+
+def speed_metrics(split, start_time, num_samples=None):
+    """
+    Measure and return speed performance metrics.
+
+    This function requires a time snapshot `start_time` before the operation to be measured starts and this function
+    should be run immediately after the operation to be measured has completed.
+
+    Args:
+    - split: name to prefix metric (like train, eval, test...)
+    - start_time: operation start time
+    - num_samples: number of samples processed
+    """
+    runtime = time.time() - start_time
+    result = {f"{split}_runtime": round(runtime, 4)}
+    if num_samples is not None:
+        samples_per_second = 1 / (runtime / num_samples)
+        result[f"{split}_samples_per_second"] = round(samples_per_second, 3)
+    return result
