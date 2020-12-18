@@ -57,24 +57,19 @@ class TFBlenderbotModelTest(TFModelTesterMixin, unittest.TestCase):
         # inputs_embeds not supported
         pass
 
-    def test_saved_model_with_hidden_states_output(self):
-        # Should be uncommented during patrick TF refactor
-        pass
-
-    def test_saved_model_with_attentions_output(self):
-        # Should be uncommented during patrick TF refactor
-        pass
-
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-            x = model.get_output_layer_with_bias()
+            assert isinstance(model.get_input_embeddings(), tf.Variable)
+
+            x = model.get_output_embeddings()
             assert x is None
-            name = model.get_prefix_bias_name()
+            name = model.get_bias()
             assert name is None
+            name = model.get_final_logits_bias()
+            assert isinstance(name, tf.Variable)
 
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI

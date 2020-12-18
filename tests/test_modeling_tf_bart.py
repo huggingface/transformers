@@ -163,7 +163,7 @@ class TFBartModelTest(TFModelTesterMixin, unittest.TestCase):
 
             if model_class in list_lm_models:
                 x = model.get_output_embeddings()
-                assert x is None
+                assert isinstance(x, tf.Variable)
                 name = model.get_bias()
                 assert name is None
                 name = model.get_final_logits_bias()
@@ -182,6 +182,7 @@ class TFBartModelTest(TFModelTesterMixin, unittest.TestCase):
                 # build the embeddings
                 model = model_class(config=config)
                 old_input_embeddings = model.get_input_embeddings()
+                old_output_embeddings = model.get_output_embeddings()
                 old_final_logits_bias = None
 
                 if hasattr(model, "get_final_logits_bias"):
@@ -190,6 +191,7 @@ class TFBartModelTest(TFModelTesterMixin, unittest.TestCase):
                 # reshape the embeddings
                 model.resize_token_embeddings(size)
                 new_input_embeddings = model.get_input_embeddings()
+                new_output_embeddings = model.get_output_embeddings()
                 new_final_logits_bias = None
 
                 if hasattr(model, "get_final_logits_bias"):
@@ -205,6 +207,15 @@ class TFBartModelTest(TFModelTesterMixin, unittest.TestCase):
                     if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
                         models_equal = False
                 self.assertTrue(models_equal)
+
+                if old_output_embeddings is not None and new_output_embeddings is not None:
+                    self.assertEqual(new_output_embeddings.shape[0], assert_size)
+
+                    models_equal = True
+                    for p1, p2 in zip(old_output_embeddings.value(), new_output_embeddings.value()):
+                        if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                            models_equal = False
+                    self.assertTrue(models_equal)
 
                 if old_final_logits_bias is not None and new_final_logits_bias is not None:
                     self.assertEqual(new_final_logits_bias.shape[0], 1)

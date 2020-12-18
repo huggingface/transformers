@@ -1198,18 +1198,41 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel):
             return self.model.shared.weight
 
     def set_input_embeddings(self, value):
+        if value is not None:
+            try:
+                self.model.shared.weight = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.model.shared.weight = value
+
+            self.model.shared.vocab_size = shape_list(self.model.shared.weight)[0]
+            with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
+                pass
+            embed_tokens = TFWrappedEmbeddings(self.model.shared, abs_scope_name=shared_abs_scope_name)
+            self.model.encoder.set_embed_tokens(embed_tokens)
+            self.model.decoder.set_embed_tokens(embed_tokens)
+
+    def get_output_embeddings(self):
         try:
-            self.model.shared.weight = value
+            return self.model.shared.weight
         except AttributeError:
             self(self.dummy_inputs)
-            self.model.shared.weight = value
+            return self.model.shared.weight
 
-        self.model.shared.vocab_size = shape_list(self.model.shared.weight)[0]
-        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
-            pass
-        embed_tokens = TFWrappedEmbeddings(self.model.shared, abs_scope_name=shared_abs_scope_name)
-        self.model.encoder.set_embed_tokens(embed_tokens)
-        self.model.decoder.set_embed_tokens(embed_tokens)
+    def set_output_embeddings(self, value):
+        if value is not None:
+            try:
+                self.model.shared.weight = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.model.shared.weight = value
+
+            self.model.shared.vocab_size = shape_list(self.model.shared.weight)[0]
+            with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
+                pass
+            embed_tokens = TFWrappedEmbeddings(self.model.shared, abs_scope_name=shared_abs_scope_name)
+            self.model.encoder.set_embed_tokens(embed_tokens)
+            self.model.decoder.set_embed_tokens(embed_tokens)
 
     def get_final_logits_bias(self):
         return self.final_logits_bias

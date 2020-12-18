@@ -652,7 +652,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             else:
                 raise NotImplementedError
 
-    def get_output_embeddings(self) -> tf.keras.layers.Layer:
+    def get_output_embeddings(self) -> tf.Variable:
         """
         Returns the model's output embeddings
 

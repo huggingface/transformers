@@ -36,7 +36,7 @@ class ModelTester(TFBartModelTester):
 
 
 @require_tf
-class TestTFMBartCommon(TFModelTesterMixin, unittest.TestCase):
+class TFMBartModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFMBartForConditionalGeneration,) if is_tf_available() else ()
     all_generative_model_classes = (TFMBartForConditionalGeneration,) if is_tf_available() else ()
     model_tester_cls = ModelTester
@@ -52,14 +52,6 @@ class TestTFMBartCommon(TFModelTesterMixin, unittest.TestCase):
 
     def test_inputs_embeds(self):
         # inputs_embeds not supported
-        pass
-
-    def test_saved_model_with_hidden_states_output(self):
-        # Should be uncommented during patrick TF refactor
-        pass
-
-    def test_saved_model_with_attentions_output(self):
-        # Should be uncommented during patrick TF refactor
         pass
 
     def test_compile_tf_model(self):
@@ -98,11 +90,14 @@ class TestTFMBartCommon(TFModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-            x = model.get_output_layer_with_bias()
+            assert isinstance(model.get_input_embeddings(), tf.Variable)
+
+            x = model.get_output_embeddings()
             assert x is None
-            name = model.get_prefix_bias_name()
+            name = model.get_bias()
             assert name is None
+            name = model.get_final_logits_bias()
+            assert isinstance(name, tf.Variable)
 
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
