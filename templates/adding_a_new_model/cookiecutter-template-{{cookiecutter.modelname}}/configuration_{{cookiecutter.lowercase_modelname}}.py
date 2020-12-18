@@ -178,11 +178,13 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         self.decoder_ffn_dim = decoder_ffn_dim,
         self.decoder_layers = decoder_layers,
         self.decoder_attention_heads = decoder_attention_heads,
-        self.dropout = self.dropout
-        self.attention_dropout = self.attention_dropout
-        self.activation_dropout = self.activation_dropout
+        self.dropout = dropout
+        self.attention_dropout = attention_dropout
+        self.activation_dropout = activation_dropout
         self.activation_function = activation_function
         self.init_std = init_std
+        self.encoder_layerdrop = encoder_layerdrop
+        self.decoder_layerdrop = decoder_layerdrop
         {% endif -%}
     {% if cookiecutter.is_encoder_decoder_model == "False" %}
     {% else %}
