@@ -382,18 +382,24 @@ class CausalNumerator(torch.autograd.Function):
             Returns:
               Not-normalized FAVOR causal attention A_{masked}V.
             """
-        #result = []
-        result = torch.empty(*v.shape)  # [L, B, H, D]
-        sums = torch.zeros(*k_prime.shape[1:], v.shape[-1])  # [B, H, M, D]
-        ctx(q_prime, k_prime, v)
+        ctx.save_for_backward(q_prime, k_prime, v)
 
+        seq_len, batch_size, num_heads, num_features = k_prime.shape
+        d_model = v.shape[-1]
+
+        # Merge the batch and attention head dimensions so we can use baddbmm_()
+        prefix_sums = torch.zeros(batch_size * num_heads, num_features, d_model)
+        q_prime = q_prime.view(seq_len, -1, num_features)
+        k_prime = k_prime.view(seq_len, -1, num_features, 1)    # Add singleton dimension for outer product
+        v = v.view(seq_len, -1, 1, d_model)                     # Add singleton dimension for outer product
+
+        result = []
         for index in range(q_prime.shape[0]):
-            sums = sums + torch.einsum("bhm,bhd->bhmd", k_prime[index], v[index])
-            torch.matmul(sums.transpose(-2, -1), q_prime[index].unsqueeze(-1), out=result[index])
-            #result.append(torch.einsum("bhmd,bhm->bhd", sums, q_prime[index]).unsqueeze(0))
+            prefix_sums.baddbmm_(k_prime[index], v[index])  # Fused in-place addition of outer products
+            result.append(torch.einsum("bmd,bm->bd", prefix_sums, q_prime[index]).unsqueeze(0))
 
-        #result = torch.cat(result, dim=0)
-        return result
+        # Unmerge the attention head and batch size dimensions
+        return torch.cat(result, dim=0).view(seq_len, batch_size, num_heads, d_model)
 
     @staticmethod
     def backward(ctx, upstream_grad):
@@ -405,8 +411,7 @@ class CausalNumerator(torch.autograd.Function):
         q_grads, k_grads, v_grads = [], [], []
 
         for i in reversed(range(q_prime.shape[0])):
-            q_grads.append(
-                torch.einsum("ijkl,ijl->ijk", gr_sums, upstream_grad[i]).unsqueeze(0))
+            q_grads.append(torch.einsum("ijkl,ijl->ijk", gr_sums, upstream_grad[i]).unsqueeze(0))
             grads = grads + torch.einsum("ijk,ijl->ijkl", q_prime[i], upstream_grad[i])
             k_grads.append(torch.einsum("ijkl,ijl->ijk", grads, v[i]).unsqueeze(0))
             v_grads.append(torch.einsum("ijkl,ijk->ijl", grads, k_prime[i]).unsqueeze(0))
