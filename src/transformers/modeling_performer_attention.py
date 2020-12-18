@@ -66,7 +66,18 @@ class PerformerAttention(nn.Module):
             self.should_fallback_to_softmax = behavior
         else:
             raise ValueError("PerformerAttention: short_sequence_behavior must be either str or Callable")
-        
+
+        if self.causal:
+            try:
+                from fast_transformers.causal_product import CausalDotProduct
+                self._cuda_kernel_available = True
+            except ImportError:
+                self._cuda_kernel_available = False
+
+                logger = logging.getLogger()
+                logger.warning("Causal attention will perform inefficiently without the custom CUDA kernel in the "
+                               "fast_transformers package. Use `pip install pytorch-fast-transformers` to download.")
+
         self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
         assert self.d_model % self.num_heads == 0
@@ -223,7 +234,8 @@ class PerformerAttention(nn.Module):
         # the implied attention scores sum to 1
         if self.normalize_output:
             if self.causal:
-                d = CausalDenominator.apply(q_permuted, k_permuted).permute(1, 2, 0).unsqueeze(-1)
+                sums = k_prime.cumsum(dim=-2)
+                d = torch.einsum("bhlm,bhlm->bhl", q_prime, sums)
             else:
                 # Equivalent to multiplying K'^T by a ones vector
                 d = q_prime @ k_prime.sum(dim=-2).unsqueeze(-1)
@@ -370,74 +382,37 @@ class CausalNumerator(torch.autograd.Function):
             Returns:
               Not-normalized FAVOR causal attention A_{masked}V.
             """
-        result = []
-        sums = torch.zeros_like(torch.einsum("ijk,ijl->ijkl", k_prime[0], v[0]))
-        ctx.save_for_backward(sums, q_prime, k_prime, v)
+        #result = []
+        result = torch.empty(*v.shape)  # [L, B, H, D]
+        sums = torch.zeros(*k_prime.shape[1:], v.shape[-1])  # [B, H, M, D]
+        ctx(q_prime, k_prime, v)
 
         for index in range(q_prime.shape[0]):
-            sums = sums + torch.einsum("ijk,ijl->ijkl", k_prime[index], v[index])
-            result.append(torch.einsum("ijkl,ijk->ijl", sums, q_prime[index])[None, Ellipsis])
+            sums = sums + torch.einsum("bhm,bhd->bhmd", k_prime[index], v[index])
+            torch.matmul(sums.transpose(-2, -1), q_prime[index].unsqueeze(-1), out=result[index])
+            #result.append(torch.einsum("bhmd,bhm->bhd", sums, q_prime[index]).unsqueeze(0))
 
-        result = torch.cat(result, dim=0)
+        #result = torch.cat(result, dim=0)
         return result
 
     @staticmethod
     def backward(ctx, upstream_grad):
-        gr_sums, q_prime, k_prime, v = ctx.saved_tensors
+        q_prime, k_prime, v = ctx.saved_tensors
 
-        grads = torch.zeros_like(torch.einsum("ijk,ijl->ijkl", k_prime[0], v[0]))
+        grads = torch.zeros(*k_prime.shape[1:], v.shape[-1])
+        gr_sums = torch.zeros_like(grads)
+
         q_grads, k_grads, v_grads = [], [], []
 
-        for i in range(q_prime.shape[0] - 1, -1, -1):
+        for i in reversed(range(q_prime.shape[0])):
             q_grads.append(
-                torch.einsum("ijkl,ijl->ijk", gr_sums, upstream_grad[i])[None, Ellipsis])
+                torch.einsum("ijkl,ijl->ijk", gr_sums, upstream_grad[i]).unsqueeze(0))
             grads = grads + torch.einsum("ijk,ijl->ijkl", q_prime[i], upstream_grad[i])
-            k_grads.append(torch.einsum("ijkl,ijl->ijk", grads, v[i])[None, Ellipsis])
-            v_grads.append(torch.einsum("ijkl,ijk->ijl", grads, k_prime[i])[None, Ellipsis])
+            k_grads.append(torch.einsum("ijkl,ijl->ijk", grads, v[i]).unsqueeze(0))
+            v_grads.append(torch.einsum("ijkl,ijk->ijl", grads, k_prime[i]).unsqueeze(0))
             gr_sums = gr_sums - torch.einsum("ijk,ijl->ijkl", k_prime[i], v[i])
 
         q_grads = torch.cat(q_grads[::-1], dim=0)
         k_grads = torch.cat(k_grads[::-1], dim=0)
         v_grads = torch.cat(v_grads[::-1], dim=0)
         return q_grads, k_grads, v_grads
-
-class CausalDenominator(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, q_prime, k_prime):
-        """Computes FAVOR normalizer in causal attention using the prefix-sum method.
-            Args:
-              q_prime: query_prime tensor of the shape [L,B,H,M].
-              k_prime: key_prime tensor of the shape [L,B,H,M].
-            Returns:
-              FAVOR normalizer in causal attention.
-            """
-
-        result = []
-        sums = torch.zeros_like(k_prime[0])
-        ctx.save_for_backward(sums, q_prime, k_prime)
-
-        for index in range(q_prime.shape[0]):
-            sums = sums + k_prime[index]
-            result.append(torch.sum(q_prime[index] * sums, dim=2)[None, Ellipsis])
-
-        result = torch.cat(result, dim=0)
-        return result
-
-    @staticmethod
-    def backward(ctx, upstream_grad):
-        gr_sums, q_prime, k_prime = ctx.saved_tensors
-
-        k_grad = torch.zeros_like(k_prime[0])
-        q_grads, k_grads = [], []
-
-        for i in range(q_prime.shape[0] - 1, -1, -1):
-            q_grads.append(
-                torch.einsum("ijk,ij->ijk", gr_sums, upstream_grad[i])[None, Ellipsis])
-            k_grad = k_grad + torch.einsum("ijk,ij->ijk", q_prime[i], upstream_grad[i])
-            k_grads.append(k_grad[None, Ellipsis])
-            gr_sums = gr_sums - k_prime[i]
-
-        q_grads = torch.cat(q_grads[::-1], dim=0)
-        k_grads = torch.cat(k_grads[::-1], dim=0)
-
-        return q_grads, k_grads
