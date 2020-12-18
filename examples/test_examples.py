@@ -97,9 +97,7 @@ class ExamplesTests(TestCasePlus):
 
         with patch.object(sys, "argv", testargs):
             result = run_glue.main()
-            del result["eval_loss"]
-            for value in result.values():
-                self.assertGreaterEqual(value, 0.75)
+            self.assertGreaterEqual(result["eval_accuracy"], 0.75)
 
     @require_torch_non_multi_gpu_but_fix_me
     def test_run_clm(self):
