@@ -18,7 +18,7 @@ import unittest
 from unittest.mock import patch
 
 from transformers import BertTokenizer, EncoderDecoderModel
-from transformers.file_utils import is_datasets_available
+from transformers.file_utils import is_apex_available, is_datasets_available
 from transformers.integrations import is_fairscale_available
 from transformers.testing_utils import (
     TestCasePlus,
@@ -51,6 +51,17 @@ def require_fairscale(test_case):
         return test_case
 
 
+# a candidate for testing_utils
+def require_apex(test_case):
+    """
+    Decorator marking a test that requires apex
+    """
+    if not is_apex_available():
+        return unittest.skip("test requires apex")(test_case)
+    else:
+        return test_case
+
+
 class TestFinetuneTrainer(TestCasePlus):
     def finetune_trainer_quick(self, distributed=None, extra_args_str=None):
         output_dir = self.run_trainer(1, "12", MBART_TINY, 1, distributed, extra_args_str)
@@ -72,6 +83,7 @@ class TestFinetuneTrainer(TestCasePlus):
     def test_finetune_trainer_ddp(self):
         self.finetune_trainer_quick(distributed=True)
 
+    # it's crucial to test --sharded_ddp w/ and w/o --fp16
     @require_torch_multi_gpu
     @require_fairscale
     def test_finetune_trainer_ddp_sharded_ddp(self):
@@ -81,6 +93,10 @@ class TestFinetuneTrainer(TestCasePlus):
     @require_fairscale
     def test_finetune_trainer_ddp_sharded_ddp_fp16(self):
         self.finetune_trainer_quick(distributed=True, extra_args_str="--sharded_ddp --fp16")
+
+    @require_apex
+    def test_finetune_trainer_apex(self):
+        self.finetune_trainer_quick(extra_args_str="--fp16 --fp16_backend=apex")
 
     @slow
     def test_finetune_trainer_slow(self):
