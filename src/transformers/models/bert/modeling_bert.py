@@ -36,12 +36,9 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_outputs import (
-    BaseModelOutputWithCrossAttentions,
     BaseModelOutputWithPastAndCrossAttentions,
-    BaseModelOutputWithPoolingAndCrossAttentions,
     BaseModelOutputWithPoolingAndPastAndCrossAttentions,
     CausalLMOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     NextSentencePredictorOutput,
@@ -183,7 +180,9 @@ class BertEmbeddings(nn.Module):
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
-    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0):
+    def forward(
+        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
+    ):
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -192,7 +191,7 @@ class BertEmbeddings(nn.Module):
         seq_length = input_shape[1]
 
         if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length:seq_length + past_key_values_length]
+            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
@@ -232,7 +231,7 @@ class BertSelfAttention(nn.Module):
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
-        
+
         self.is_decoder = config.is_decoder
 
     def transpose_for_scores(self, x):
@@ -324,7 +323,7 @@ class BertSelfAttention(nn.Module):
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         if self.is_decoder:
-            outputs = outputs + (past_key_value, )
+            outputs = outputs + (past_key_value,)
         return outputs
 
 
@@ -453,7 +452,7 @@ class BertLayer(nn.Module):
             past_key_value=self_attn_past_key_value,
         )
         attention_output = self_attention_outputs[0]
-        
+
         if self.is_decoder:
             outputs = self_attention_outputs[1:-1]
             present_key_value = self_attention_outputs[-1]
@@ -476,7 +475,7 @@ class BertLayer(nn.Module):
                 output_attentions,
             )
             attention_output = cross_attention_outputs[0]
-            cross_attn_present_key_value = cross_attention_outputs[-1]          
+            cross_attn_present_key_value = cross_attention_outputs[-1]
             outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
             present_key_value = present_key_value + cross_attn_present_key_value
 
@@ -485,7 +484,7 @@ class BertLayer(nn.Module):
         )
         outputs = (layer_output,) + outputs
         if self.is_decoder:
-            outputs = outputs + (present_key_value, )
+            outputs = outputs + (present_key_value,)
 
         return outputs
 
@@ -551,10 +550,10 @@ class BertEncoder(nn.Module):
                     past_key_value,
                     output_attentions,
                 )
-            
+
             hidden_states = layer_outputs[0]
             if use_cache:
-                next_decoder_cache += (layer_outputs[-1], )
+                next_decoder_cache += (layer_outputs[-1],)
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
                 if self.config.add_cross_attention:
@@ -562,7 +561,7 @@ class BertEncoder(nn.Module):
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
-        
+
         next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
             return tuple(
@@ -930,7 +929,11 @@ class BertModel(BertPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
-            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds, past_key_values_length=past_key_values_length
+            input_ids=input_ids,
+            position_ids=position_ids,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            past_key_values_length=past_key_values_length,
         )
         encoder_outputs = self.encoder(
             embedding_output,
@@ -1199,13 +1202,13 @@ class BertLMHeadModel(BertPreTrainedModel):
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
-        
+
         # cut decoder_input_ids if past is used
         if past is not None:
             input_ids = input_ids[:, -1:]
-        
+
         return {"input_ids": input_ids, "attention_mask": attention_mask}
-    
+
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()
         for layer_past in past:

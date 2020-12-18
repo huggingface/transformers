@@ -29,11 +29,8 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_outputs import (
-    BaseModelOutputWithCrossAttentions,
-    BaseModelOutputWithPoolingAndCrossAttentions,
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
     CausalLMOutputWithPastAndCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
@@ -94,11 +91,15 @@ class RobertaEmbeddings(nn.Module):
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
         )
 
-    def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0):
+    def forward(
+        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
+    ):
         if position_ids is None:
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
-                position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length).to(input_ids.device)
+                position_ids = create_position_ids_from_input_ids(
+                    input_ids, self.padding_idx, past_key_values_length
+                ).to(input_ids.device)
             else:
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
@@ -259,7 +260,7 @@ class RobertaSelfAttention(nn.Module):
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         if self.is_decoder:
-            outputs = outputs + (past_key_value, )
+            outputs = outputs + (past_key_value,)
         return outputs
 
 
@@ -415,7 +416,7 @@ class RobertaLayer(nn.Module):
                 output_attentions,
             )
             attention_output = cross_attention_outputs[0]
-            cross_attn_present_key_value = cross_attention_outputs[-1]          
+            cross_attn_present_key_value = cross_attention_outputs[-1]
             outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
             present_key_value = present_key_value + cross_attn_present_key_value
 
@@ -424,7 +425,7 @@ class RobertaLayer(nn.Module):
         )
         outputs = (layer_output,) + outputs
         if self.is_decoder:
-            outputs = outputs + (present_key_value, )
+            outputs = outputs + (present_key_value,)
         return outputs
 
     def feed_forward_chunk(self, attention_output):
@@ -492,7 +493,7 @@ class RobertaEncoder(nn.Module):
                 )
             hidden_states = layer_outputs[0]
             if use_cache:
-                next_decoder_cache += (layer_outputs[-1], )
+                next_decoder_cache += (layer_outputs[-1],)
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
                 if self.config.add_cross_attention:
@@ -770,7 +771,11 @@ class RobertaModel(RobertaPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
-            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds, past_key_values_length=past_key_values_length,
+            input_ids=input_ids,
+            position_ids=position_ids,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            past_key_values_length=past_key_values_length,
         )
         encoder_outputs = self.encoder(
             embedding_output,
@@ -888,7 +893,7 @@ class RobertaForCausalLM(RobertaPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
             use_cache = False
-        
+
         outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
@@ -934,13 +939,13 @@ class RobertaForCausalLM(RobertaPreTrainedModel):
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
-        
+
         # cut decoder_input_ids if past is used
         if past is not None:
             input_ids = input_ids[:, -1:]
-        
+
         return {"input_ids": input_ids, "attention_mask": attention_mask}
-    
+
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()
         for layer_past in past:

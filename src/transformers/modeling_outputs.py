@@ -226,6 +226,7 @@ class BaseModelOutputWithPastAndCrossAttentions(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
+
 @dataclass
 class BaseModelOutputWithPoolingAndPastAndCrossAttentions(ModelOutput):
     """

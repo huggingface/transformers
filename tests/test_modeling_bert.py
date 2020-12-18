@@ -259,7 +259,7 @@ class BertModelTester:
             encoder_hidden_states=encoder_hidden_states,
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-    
+
     def create_and_check_decoder_model_past_large_inputs(
         self,
         config,
@@ -278,7 +278,7 @@ class BertModelTester:
 
         # first forward pass
         outputs = model(
-            input_ids, 
+            input_ids,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             use_cache=True,
@@ -295,14 +295,14 @@ class BertModelTester:
             next_input_ids,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            output_hidden_states=True
+            output_hidden_states=True,
         )["hidden_states"][0]
         output_from_past = model(
             next_tokens,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
-            output_hidden_states=True
+            output_hidden_states=True,
         )["hidden_states"][0]
 
         # select random slice
@@ -508,7 +508,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_for_causal_lm_decoder(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_model_for_causal_lm_as_decoder(*config_and_inputs)
-    
+
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)

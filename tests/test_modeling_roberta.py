@@ -197,7 +197,7 @@ class RobertaModelTester:
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-    
+
     def create_and_check_decoder_model_past_large_inputs(
         self,
         config,
@@ -216,7 +216,7 @@ class RobertaModelTester:
 
         # first forward pass
         outputs = model(
-            input_ids, 
+            input_ids,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             use_cache=True,
@@ -233,14 +233,14 @@ class RobertaModelTester:
             next_input_ids,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
-            output_hidden_states=True
+            output_hidden_states=True,
         )["hidden_states"][0]
         output_from_past = model(
             next_tokens,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
-            output_hidden_states=True
+            output_hidden_states=True,
         )["hidden_states"][0]
 
         # select random slice
@@ -391,7 +391,7 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
-    
+
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)

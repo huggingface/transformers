@@ -26,7 +26,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import CausalLMOutputWithPastAndCrossAttentions, BaseModelOutputWithPastAndCrossAttentions
+from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithPastAndCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from ..bert.modeling_bert import BertEncoder
@@ -153,7 +153,7 @@ class BertGenerationEmbeddings(nn.Module):
         seq_length = input_shape[1]
 
         if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length:seq_length+past_key_values_length]
+            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -348,7 +348,9 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask = None
         if not use_cache:
-            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
+                attention_mask, input_shape, device
+            )
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -370,7 +372,12 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
 
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-        embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids, inputs_embeds=inputs_embeds, past_key_values_length=past_key_values_length)
+        embedding_output = self.embeddings(
+            input_ids=input_ids,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            past_key_values_length=past_key_values_length,
+        )
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -530,13 +537,13 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
-        
+
         # cut decoder_input_ids if past is used
         if past is not None:
             input_ids = input_ids[:, -1:]
-        
+
         return {"input_ids": input_ids, "attention_mask": attention_mask}
-    
+
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()
         for layer_past in past:
