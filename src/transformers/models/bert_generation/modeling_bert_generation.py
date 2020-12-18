@@ -385,8 +385,6 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
