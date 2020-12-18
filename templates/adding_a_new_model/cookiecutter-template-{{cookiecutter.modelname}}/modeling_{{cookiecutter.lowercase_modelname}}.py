@@ -1876,7 +1876,7 @@ class {{cookiecutter.camelcase_modelname}}ClassificationHead(nn.Module):
         return hidden_states
 
 
-class {{cookiecutter.camelcase_modelname}}PretrainedModel(PreTrainedModel):
+class {{cookiecutter.camelcase_modelname}}PreTrainedModel(PreTrainedModel):
     config_class = {{cookiecutter.camelcase_modelname}}Config
     base_model_prefix = "model"
 
@@ -2001,7 +2001,7 @@ class {{cookiecutter.camelcase_modelname}}PretrainedModel(PreTrainedModel):
 """
 
 
-class {{cookiecutter.camelcase_modelname}}Encoder({{cookiecutter.camelcase_modelname}}PretrainedModel):
+class {{cookiecutter.camelcase_modelname}}Encoder({{cookiecutter.camelcase_modelname}}PreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
     :class:`{{cookiecutter.camelcase_modelname}}EncoderLayer`.
@@ -2139,7 +2139,7 @@ class {{cookiecutter.camelcase_modelname}}Encoder({{cookiecutter.camelcase_model
         )
 
 
-class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_modelname}}PretrainedModel):
+class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_modelname}}PreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`{{cookiecutter.camelcase_modelname}}DecoderLayer`
 
@@ -2346,7 +2346,7 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
     "The bare {{cookiecutter.modelname}} Model outputting raw hidden-states without any specific head on top.",
     {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
-class {{cookiecutter.camelcase_modelname}}Model({{cookiecutter.camelcase_modelname}}PretrainedModel):
+class {{cookiecutter.camelcase_modelname}}Model({{cookiecutter.camelcase_modelname}}PreTrainedModel):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config):
         super().__init__(config)
 
@@ -2450,7 +2450,7 @@ class {{cookiecutter.camelcase_modelname}}Model({{cookiecutter.camelcase_modelna
 @add_start_docstrings(
     "The {{cookiecutter.modelname}} Model with a language modeling head. Can be used for summarization.", {{cookiecutter.uppercase_modelname}}_START_DOCSTRING
 )
-class {{cookiecutter.camelcase_modelname}}ForConditionalGeneration({{cookiecutter.camelcase_modelname}}PretrainedModel):
+class {{cookiecutter.camelcase_modelname}}ForConditionalGeneration({{cookiecutter.camelcase_modelname}}PreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
         r"final_logits_bias",
@@ -2625,7 +2625,7 @@ class {{cookiecutter.camelcase_modelname}}ForConditionalGeneration({{cookiecutte
     """,
     {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
-class {{cookiecutter.camelcase_modelname}}ForSequenceClassification({{cookiecutter.camelcase_modelname}}PretrainedModel):
+class {{cookiecutter.camelcase_modelname}}ForSequenceClassification({{cookiecutter.camelcase_modelname}}PreTrainedModel):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
         super().__init__(config, **kwargs)
         self.model = {{cookiecutter.camelcase_modelname}}Model(config)
@@ -2727,7 +2727,7 @@ class {{cookiecutter.camelcase_modelname}}ForSequenceClassification({{cookiecutt
     """,
     {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
-class {{cookiecutter.camelcase_modelname}}ForQuestionAnswering({{cookiecutter.camelcase_modelname}}PretrainedModel):
+class {{cookiecutter.camelcase_modelname}}ForQuestionAnswering({{cookiecutter.camelcase_modelname}}PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
