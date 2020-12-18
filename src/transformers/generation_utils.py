@@ -570,6 +570,9 @@ class GenerationMixin:
             return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
         )
 
+        model_kwargs["output_attentions"] = output_attentions
+        model_kwargs["output_hidden_states"] = output_hidden_states
+
         if input_ids is None:
             # init `input_ids` with bos_token_id
             input_ids = self._prepare_input_ids_for_generation(bos_token_id)
@@ -586,10 +589,6 @@ class GenerationMixin:
             pad_token_id = eos_token_id
 
         if self.config.is_encoder_decoder:
-            # Pass output_attentions and output_hidden_states flags to the encoder
-            model_kwargs["output_attentions"] = output_attentions
-            model_kwargs["output_hidden_states"] = output_hidden_states
-
             # add encoder_outputs to model_kwargs
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
 
@@ -643,8 +642,6 @@ class GenerationMixin:
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
                 **model_kwargs,
