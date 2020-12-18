@@ -33,6 +33,7 @@ from .integrations import (  # isort: split
     hp_params,
     is_azureml_available,
     is_comet_available,
+    is_fairscale_available,
     is_mlflow_available,
     is_optuna_available,
     is_ray_available,
@@ -52,7 +53,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
 
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
-from .file_utils import WEIGHTS_NAME, is_datasets_available, is_in_notebook, is_torch_tpu_available
+from .file_utils import WEIGHTS_NAME, is_apex_available, is_datasets_available, is_in_notebook, is_torch_tpu_available
 from .modeling_utils import PreTrainedModel
 from .models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from .optimization import AdamW, get_linear_schedule_with_warmup
@@ -103,13 +104,10 @@ if is_in_notebook():
 
     DEFAULT_PROGRESS_CALLBACK = NotebookProgressCallback
 
-# Check if Pytorch version >= 1.6 to switch between Native AMP and Apex
-if version.parse(torch.__version__) < version.parse("1.6"):
-    from .file_utils import is_apex_available
+if is_apex_available():
+    from apex import amp
 
-    if is_apex_available():
-        from apex import amp
-else:
+if version.parse(torch.__version__) >= version.parse("1.6"):
     _is_native_amp_available = True
     from torch.cuda.amp import autocast
 
@@ -152,6 +150,11 @@ if is_azureml_available():
     from .integrations import AzureMLCallback
 
     DEFAULT_CALLBACKS.append(AzureMLCallback)
+
+if is_fairscale_available():
+    from fairscale.nn.data_parallel import ShardedDataParallel as ShardedDDP
+    from fairscale.optim import OSS
+    from fairscale.optim.grad_scaler import ShardedGradScaler
 
 logger = logging.get_logger(__name__)
 
@@ -285,6 +288,16 @@ class Trainer:
             if isinstance(eval_dataset, datasets.Dataset):
                 self._remove_unused_columns(self.eval_dataset, description="evaluation")
 
+        # Setup Sharded DDP training
+        self.sharded_dpp = False
+        if args.sharded_ddp:
+            if args.local_rank == -1:
+                raise ValueError("Using sharded DDP only works in distributed training.")
+            elif not is_fairscale_available():
+                raise ImportError("Sharded DDP training requires fairscale: `pip install fairscale`.")
+            else:
+                self.sharded_dpp = True
+
         # Mixed precision setup
         self.use_apex = False
         self.use_amp = False
@@ -293,10 +306,11 @@ class Trainer:
                 backend = "amp" if _is_native_amp_available else "apex"
             else:
                 backend = args.fp16_backend
+            logger.info(f"Using {backend} fp16 backend")
 
             if backend == "amp":
                 self.use_amp = True
-                self.scaler = torch.cuda.amp.GradScaler()
+                self.scaler = ShardedGradScaler() if self.sharded_dpp else torch.cuda.amp.GradScaler()
             else:
                 if not is_apex_available():
                     raise ImportError(
@@ -491,12 +505,21 @@ class Trainer:
                     "weight_decay": 0.0,
                 },
             ]
-            self.optimizer = AdamW(
-                optimizer_grouped_parameters,
-                lr=self.args.learning_rate,
-                betas=(self.args.adam_beta1, self.args.adam_beta2),
-                eps=self.args.adam_epsilon,
-            )
+            if self.sharded_dpp:
+                self.optimizer = OSS(
+                    params=optimizer_grouped_parameters,
+                    optim=AdamW,
+                    lr=self.args.learning_rate,
+                    betas=(self.args.adam_beta1, self.args.adam_beta2),
+                    eps=self.args.adam_epsilon,
+                )
+            else:
+                self.optimizer = AdamW(
+                    optimizer_grouped_parameters,
+                    lr=self.args.learning_rate,
+                    betas=(self.args.adam_beta1, self.args.adam_beta2),
+                    eps=self.args.adam_epsilon,
+                )
         if self.lr_scheduler is None:
             self.lr_scheduler = get_linear_schedule_with_warmup(
                 self.optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps
@@ -643,7 +666,9 @@ class Trainer:
             model = torch.nn.DataParallel(model)
 
         # Distributed training (should be after apex fp16 initialization)
-        if self.args.local_rank != -1:
+        if self.sharded_dpp:
+            model = ShardedDDP(model, self.optimizer)
+        elif self.args.local_rank != -1:
             model = torch.nn.parallel.DistributedDataParallel(
                 model,
                 device_ids=[self.args.local_rank],
@@ -654,8 +679,8 @@ class Trainer:
                     else True
                 ),
             )
-        # find_unused_parameters breaks checkpointing as per
-        # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
+            # find_unused_parameters breaks checkpointing as per
+            # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
 
         # Train!
         if is_torch_tpu_available():
@@ -777,14 +802,23 @@ class Trainer:
                     steps_in_epoch <= self.args.gradient_accumulation_steps
                     and (step + 1) == steps_in_epoch
                 ):
-                    if self.use_amp:
-                        self.scaler.unscale_(self.optimizer)
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
-                    elif self.use_apex:
-                        torch.nn.utils.clip_grad_norm_(amp.master_params(self.optimizer), self.args.max_grad_norm)
-                    else:
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
+                    # Gradient clipping
+                    if self.args.max_grad_norm is not None and self.args.max_grad_norm > 0:
+                        if self.use_amp:
+                            # AMP: gradients need unscaling
+                            self.scaler.unscale_(self.optimizer)
 
+                        if hasattr(self.optimizer, "clip_grad_norm"):
+                            # Some optimizers (like the sharded optimizer) have a specific way to do gradient clipping
+                            self.optimizer.clip_grad_norm(self.args.max_grad_norm)
+                        else:
+                            # Revert to normal clipping otherwise, handling Apex or full precision
+                            torch.nn.utils.clip_grad_norm_(
+                                amp.master_params(self.optimizer) if self.use_apex else model.parameters(),
+                                self.args.max_grad_norm,
+                            )
+
+                    # Optimizer step
                     if is_torch_tpu_available():
                         xm.optimizer_step(self.optimizer)
                     elif self.use_amp:
@@ -895,6 +929,8 @@ class Trainer:
         self.save_model(output_dir)
 
         # Save optimizer and scheduler
+        if self.sharded_dpp:
+            self.optimizer.consolidate_state_dict()
         if is_torch_tpu_available():
             xm.rendezvous("saving_optimizer_states")
             xm.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))

@@ -215,6 +215,9 @@ class TrainingArguments:
             The backend to use for mixed precision training. Must be one of :obj:`"auto"`, :obj:`"amp"` or
             :obj:`"apex"`. :obj:`"auto"` will use AMP or APEX depending on the PyTorch version detected, while the
             other choices will force the requested backend.
+        sharded_ddp (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Use Sharded DDP training from `FairScale <https://github.com/facebookresearch/fairscale>`__ (in distributed
+            training only). This is an experimental feature.
     """
 
     output_dir: str = field(
@@ -385,6 +388,10 @@ class TrainingArguments:
     fp16_backend: str = field(
         default="auto",
         metadata={"help": "The backend to be used for mixed precision.", "choices": ["auto", "amp", "apex"]},
+    )
+    sharded_ddp: bool = field(
+        default=False,
+        metadata={"help": "Whether or not to use sharded DDP training (in distributed training only)."},
     )
 
     def __post_init__(self):

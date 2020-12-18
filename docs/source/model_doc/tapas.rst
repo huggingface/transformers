@@ -1,6 +1,13 @@
 TAPAS
 -----------------------------------------------------------------------------------------------------------------------
 
+.. note::
+
+    This is a recently introduced model so the API hasn't been tested extensively. There may be some bugs or slight
+    breaking changes to fix them in the future.
+
+
+
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -339,7 +346,7 @@ of that:
         ...         inputs, 
         ...         outputs.logits.detach(), 
         ...         outputs.logits_aggregation.detach()
-        ...)
+        ... )
 
         >>> # let's print out the results:
         >>> id2aggregation = {0: "NONE", 1: "SUM", 2: "AVERAGE", 3:"COUNT"}

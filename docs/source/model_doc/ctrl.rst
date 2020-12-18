@@ -97,3 +97,8 @@ TFCTRLLMHeadModel
 .. autoclass:: transformers.TFCTRLLMHeadModel
     :members: call
 
+TFCTRLForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFCTRLForSequenceClassification
+    :members: call
