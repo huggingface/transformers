@@ -54,6 +54,55 @@ class {{cookiecutter.camelcase_modelname}}Tokenizer(BertTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+
+
+{%- elif cookiecutter.tokenizer_type == "Based on BART" %}
+from ...utils import logging
+from ..bart.tokenization_bart import BartTokenizer
+
+
+logger = logging.get_logger(__name__)
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "{{cookiecutter.checkpoint_identifier}}": "https://huggingface.co/{{cookiecutter.checkpoint_identifier}}/resolve/main/vocab.json",
+    }
+    "merges_file": {
+        "{{cookiecutter.checkpoint_identifier}}": "https://huggingface.co/{{cookiecutter.checkpoint_identifier}}/resolve/main/merges.txt",
+    }
+    "tokenizer_file": {
+        "{{cookiecutter.checkpoint_identifier}}": "https://huggingface.co/{{cookiecutter.checkpoint_identifier}}/resolve/main/tokenizer.json",
+    }
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "{{cookiecutter.checkpoint_identifier}}": 1024,
+}
+
+
+PRETRAINED_INIT_CONFIGURATION = {
+    "{{cookiecutter.checkpoint_identifier}}": {"do_lower_case": False},
+}
+
+
+class {{cookiecutter.camelcase_modelname}}Tokenizer(BartTokenizer):
+    """
+    Construct a {{cookiecutter.modelname}} tokenizer.
+
+    :class:`~transformers.{{cookiecutter.camelcase_modelname}}Tokenizer` is identical to :class:`~transformers.BartTokenizer` and runs end-to-end
+    tokenization: punctuation splitting and wordpiece.
+
+    Refer to superclass :class:`~transformers.BartTokenizer` for usage examples and documentation concerning
+    parameters.
+    """
+
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    slow_tokenizer_class = {{cookiecutter.camelcase_modelname}}Tokenizer
+
+
+
+
 {%- elif cookiecutter.tokenizer_type == "Standalone" %}
 from typing import List, Optional
 

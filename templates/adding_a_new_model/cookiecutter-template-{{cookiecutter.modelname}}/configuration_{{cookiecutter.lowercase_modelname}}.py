@@ -103,19 +103,41 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
 
     def __init__(
         self,
+        {% if cookiecutter.is_encoder_decoder_model == "False" -%}
         vocab_size=30522,
-        hidden_size=768,
-        is_encoder_decoder=False,
+        max_position_embeddings=512,
         num_hidden_layers=12,
         num_attention_heads=12,
         intermediate_size=3072,
+        use_cache=False,
+        is_encoder_decoder=False,
         hidden_act="gelu",
+        hidden_size=768,
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
+        {% else -%}
+        vocab_size=50265,
+        max_position_embeddings=1024,
+        encoder_layers=12,
+        encoder_ffn_dim=4096,
+        encoder_attention_heads=16,
+        decoder_layers=12,
+        decoder_ffn_dim=4096,
+        decoder_attention_heads=16,
+        encoder_layerdrop=0.0,
+        decoder_layerdrop=0.0,
+        use_cache=True,
+        is_encoder_decoder=True,
+        activation_function="gelu",
+        d_model=1024,
+        dropout=0.1,
+        attention_dropout=0.0,
+        activation_dropout=0.0
+        init_std=0.02,
+        {% endif -%}
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -126,28 +148,45 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
+            use_cache=use_cache,
             **kwargs
         )
 
         self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
+        self.max_position_embeddings = max_position_embeddings
         {% if cookiecutter.is_encoder_decoder_model == "False" -%}
+        self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.initializer_range = initializer_range
+        self.type_vocab_size = type_vocab_size
+        self.layer_norm_eps = layer_norm_eps
         {% else -%}
+        self.d_model = d_model
         self.encoder_intermediate_dim = encoder_intermediate_dim,
         self.encoder_layers = encoder_layers,
         self.encoder_attention_heads = encoder_attention_heads,
         self.decoder_intermediate_dim = decoder_intermediate_dim,
         self.decoder_layers = decoder_layers,
         self.decoder_attention_heads = decoder_attention_heads,
-        self.force_bos_token_to_be_generated = force_bos_token_to_be_generated,
+        self.dropout = self.dropout
+        self.attention_dropout = self.attention_dropout
+        self.activation_dropout = self.activation_dropout
+        self.activation_function = activation_function
+        self.init_std = init_std
         {% endif -%}
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
+
+    {% if cookiecutter.is_encoder_decoder_model == "False" -%}
+    {% else -%}
+    @property
+    def num_attention_heads(self) -> int:
+        return self.encoder_attention_heads
+
+    @property
+    def hidden_size(self) -> int:
+        return self.d_model
+    {% endif -%}
