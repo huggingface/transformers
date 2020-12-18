@@ -3,8 +3,6 @@
 to prune GPT-like models. The author is @altsoph.
 """
 
-from __future__ import absolute_import, division, print_function
-
 import argparse
 import logging
 import os
@@ -114,9 +112,7 @@ def compute_heads_importance(
     if not args.dont_normalize_global_importance:
         head_importance = (head_importance - head_importance.min()) / (head_importance.max() - head_importance.min())
 
-    # Print/save matrices
-    # np.save(os.path.join(args.output_dir, "attn_entropy.npy"), attn_entropy.detach().cpu().numpy())
-    # np.save(os.path.join(args.output_dir, "head_importance.npy"), head_importance.detach().cpu().numpy())
+    # Print matrices
     if compute_entropy:
         logger.info("Attention entropies")
         print_2d_tensor(attn_entropy)
@@ -378,7 +374,7 @@ def main():
     train_sampler = RandomSampler(train_data)
     eval_dataloader = DataLoader(
         train_data, sampler=train_sampler, batch_size=args.batch_size
-    )  # , collate_fn=DefaultDataCollator().collate_batch)
+    )
 
     # Compute head entropy and importance score
     compute_heads_importance(args, model, eval_dataloader)
