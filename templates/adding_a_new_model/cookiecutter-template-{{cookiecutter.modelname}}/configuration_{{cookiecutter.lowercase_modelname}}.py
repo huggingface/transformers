@@ -135,7 +135,7 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         d_model=1024,
         dropout=0.1,
         attention_dropout=0.0,
-        activation_dropout=0.0
+        activation_dropout=0.0,
         init_std=0.02,
         decoder_start_token_id=2,
         {% endif -%}
@@ -187,6 +187,7 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
 
     {% if cookiecutter.is_encoder_decoder_model == "False" -%}
     {% else -%}
+
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads

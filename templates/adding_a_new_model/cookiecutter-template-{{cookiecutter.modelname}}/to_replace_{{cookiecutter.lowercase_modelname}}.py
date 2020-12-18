@@ -126,13 +126,11 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_mo
     {{cookiecutter.camelcase_modelname}}Model,
 )
 {% else -%}
-from .modeling_{{cookiecutter.lowercase_modelname}} import (
-    {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
+from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_modelname}} import (
     {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
     {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
     {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
     {{cookiecutter.camelcase_modelname}}Model,
-    Pretrained{{cookiecutter.camelcase_modelname}}Model,
 )
 {% endif -%}
 # End.
@@ -217,15 +215,16 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase
     TF{{cookiecutter.camelcase_modelname}}Model,
 )
 {% else -%}
+from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase_modelname}} import (
+    TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+    TF{{cookiecutter.camelcase_modelname}}Model,
+)
 {% endif -%}
 # End.
 
 # Below: "# Base model mapping"
 # Replace with:
-{% if cookiecutter.is_encoder_decoder_model == "False" -%}
         ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}Model),
-{% else -%}
-{% endif -%}
 # End.
 
 # Below: "# Model with LM heads mapping"
@@ -233,6 +232,7 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
         ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForMaskedLM),
 {% else -%}
+        ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration),
 {% endif -%}
 # End.
 
@@ -281,5 +281,13 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
         ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice),
 {% else -%}
+{% endif -%}
+# End.
+
+# Below: "# Model for Seq2Seq Causal LM mapping"
+# Replace with:
+{% if cookiecutter.is_encoder_decoder_model == "False" -%}
+{% else -%}
+        ({{cookiecutter.camelcase_modelname}}Config, TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration),
 {% endif -%}
 # End.
