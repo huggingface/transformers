@@ -497,12 +497,12 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.get_input_embeddings
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embeddings.word_embeddings
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.set_input_embeddings
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.shape[0]
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer._prune_heads
     def _prune_heads(self, heads_to_prune):
@@ -849,13 +849,23 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
         self.lm_head = TFRobertaLMHead(config, self.roberta.embeddings, name="lm_head")
 
     def get_output_embeddings(self):
-        return self.lm_head.decoder
+        return self.get_input_embeddings()
+    
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
 
-    def get_output_layer_with_bias(self):
-        return self.lm_head
+    def get_bias(self):
+        try:
+            return self.lm_head.bias
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.lm_head.bias
+    
+    def set_bias(self, value):
+        super().set_bias(value)
 
-    def get_prefix_bias_name(self):
-        return self.name + "/" + self.lm_head.name
+        self.lm_head.bias = value
+        self.lm_head.vocab_size = shape_list(value)[0]
 
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

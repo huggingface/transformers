@@ -578,6 +578,9 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
 
     def get_input_embeddings(self):
         return self.ctx_encoder.bert_model.get_input_embeddings()
+    
+    def set_input_embeddings(self, value):
+        self.ctx_encoder.bert_model.set_input_embeddings(value)
 
     @add_start_docstrings_to_model_forward(TF_DPR_ENCODERS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFDPRContextEncoderOutput, config_class=_CONFIG_FOR_DOC)
@@ -676,6 +679,9 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
 
     def get_input_embeddings(self):
         return self.question_encoder.bert_model.get_input_embeddings()
+    
+    def set_input_embeddings(self, value):
+        self.question_encoder.bert_model.set_input_embeddings(value)
 
     @add_start_docstrings_to_model_forward(TF_DPR_ENCODERS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFDPRQuestionEncoderOutput, config_class=_CONFIG_FOR_DOC)
@@ -773,6 +779,9 @@ class TFDPRReader(TFDPRPretrainedReader):
 
     def get_input_embeddings(self):
         return self.span_predictor.encoder.bert_model.get_input_embeddings()
+    
+    def set_input_embeddings(self, value):
+        self.span_predictor.encoder.bert_model.set_input_embeddings(value)
 
     @add_start_docstrings_to_model_forward(TF_DPR_READER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFDPRReaderOutput, config_class=_CONFIG_FOR_DOC)

@@ -507,14 +507,11 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
         self.config = config
 
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.shape[0]
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -951,13 +948,23 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
         self.generator_lm_head = TFElectraMaskedLMHead(config, self.electra.embeddings, name="generator_lm_head")
 
     def get_output_embeddings(self):
-        return self.electra.embeddings
+        return self.get_input_embeddings()
+    
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
+    
+    def get_bias(self):
+        try:
+            return self.generator_lm_head.bias
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.generator_lm_head.bias
+    
+    def set_bias(self, value):
+        super().set_bias(value)
 
-    def get_output_layer_with_bias(self):
-        return self.generator_lm_head
-
-    def get_prefix_bias_name(self):
-        return self.name + "/" + self.generator_lm_head.name
+        self.generator_lm_head.bias = value
+        self.generator_lm_head.vocab_size = shape_list(value)[0]
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

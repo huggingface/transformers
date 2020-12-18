@@ -326,14 +326,11 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
                     self.prune_heads({int(layer): list(map(int, heads))})
 
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embeddings.weight
 
     def set_input_embeddings(self, value):
         self.embeddings.weight = value
-        self.embeddings.vocab_size = value.shape[0]
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -809,6 +806,25 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLMMainLayer(config, name="transformer")
         self.pred_layer = TFXLMPredLayer(config, self.transformer.embeddings, name="pred_layer_._proj")
+
+    def get_output_embeddings(self):
+        return self.get_input_embeddings()
+    
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
+
+    def get_bias(self):
+        try:
+            return self.pred_layer.bias
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.pred_layer.bias
+    
+    def set_bias(self, value):
+        super().set_bias(value)
+
+        self.pred_layer.bias = value
+        self.pred_layer.n_words = shape_list(value)[0]
 
     def get_output_embeddings(self):
         return self.pred_layer.input_embeddings

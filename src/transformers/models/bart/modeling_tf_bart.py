@@ -633,6 +633,9 @@ class TFBartEncoder(tf.keras.layers.Layer):
             if config.add_final_layer_norm
             else None
         )
+    
+    def set_embed_tokens(self, embed_tokens):
+        self.embed_tokens = embed_tokens
 
     def call(
         self,
@@ -791,6 +794,9 @@ class TFBartDecoder(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.do_blenderbot_90_layernorm = config.do_blenderbot_90_layernorm
 
+    def set_embed_tokens(self, embed_tokens):
+        self.embed_tokens = embed_tokens
+    
     def call(
         self,
         input_ids=None,
@@ -1028,6 +1034,13 @@ class TFBartModel(TFBartPretrainedModel):
         except AttributeError:
             self(self.dummy_inputs)
             self.shared.weight = value
+        
+        self.shared.vocab_size = shape_list(self.shared.weight)[0]
+        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
+            pass
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
+        self.encoder.set_embed_tokens(embed_tokens)
+        self.decoder.set_embed_tokens(embed_tokens)
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

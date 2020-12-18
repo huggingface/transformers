@@ -702,14 +702,11 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
         self.config = config
 
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.shape[0]
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
@@ -1291,15 +1288,25 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             },
             **({"obj_labels": obj_labels} if self.config.task_obj_predict else {}),
         }
-
+    
     def get_output_embeddings(self):
-        return self.lxmert.embeddings
+        return self.get_input_embeddings()
+    
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
 
-    def get_output_layer_with_bias(self):
-        return self.cls.predictions
+    def get_bias(self):
+        try:
+            return self.cls.predictions.bias
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.cls.predictions.bias
+    
+    def set_bias(self, value):
+        super().set_bias(value)
 
-    def get_prefix_bias_name(self):
-        return self.name + "/" + self.cls.name + "/" + self.cls.predictions.name
+        self.cls.predictions.bias = value
+        self.cls.predictions.vocab_size = shape_list(value)[0]
 
     @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFLxmertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)

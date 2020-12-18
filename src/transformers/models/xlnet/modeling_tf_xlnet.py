@@ -446,20 +446,17 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         self.use_mems_train = config.use_mems_train
 
     def get_input_embeddings(self):
-        return self.word_embedding
+        return self.word_embedding.weight
 
     def set_input_embeddings(self, value):
         self.word_embedding.weight = value
-        self.word_embedding.vocab_size = value.shape[0]
+        self.word_embedding.vocab_size = shape_list(value)[0]
 
     def build(self, input_shape):
         initializer = get_initializer(self.initializer_range)
         self.mask_emb = self.add_weight(
             shape=(1, 1, self.d_model), initializer=initializer, trainable=True, name="mask_emb"
         )
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
@@ -1231,13 +1228,23 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         self.lm_loss = TFXLNetLMHead(config, self.transformer.word_embedding, name="lm_loss")
 
     def get_output_embeddings(self):
-        return self.lm_loss.input_embeddings
+        return self.get_input_embeddings()
+    
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
 
-    def get_output_layer_with_bias(self):
-        return self.lm_loss
+    def get_bias(self):
+        try:
+            return self.lm_loss.bias
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.lm_loss.bias
+    
+    def set_bias(self, value):
+        super().set_bias(value)
 
-    def get_prefix_bias_name(self):
-        return self.name + "/" + self.lm_loss.name
+        self.lm_loss.bias = value
+        self.lm_loss.vocab_size = shape_list(value)[0]
 
     def prepare_inputs_for_generation(self, inputs, past, use_mems=None, **kwargs):
         # Add dummy token at the end (no attention on this one)
