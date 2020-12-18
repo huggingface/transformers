@@ -372,9 +372,7 @@ def main():
     train_tensor_dataset = (torch.from_numpy(numpy_data),)
     train_data = TensorDataset(*train_tensor_dataset)
     train_sampler = RandomSampler(train_data)
-    eval_dataloader = DataLoader(
-        train_data, sampler=train_sampler, batch_size=args.batch_size
-    )
+    eval_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.batch_size)
 
     # Compute head entropy and importance score
     compute_heads_importance(args, model, eval_dataloader)
