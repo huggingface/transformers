@@ -20,7 +20,7 @@ import inspect
 import os
 import re
 import warnings
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import h5py
 import numpy as np
@@ -652,24 +652,75 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             else:
                 raise NotImplementedError
 
-    def get_output_embeddings(self) -> tf.Variable:
+    def get_output_embeddings(self) -> Union[None, tf.Variable]:
         """
         Returns the model's output embeddings
 
         Returns:
-            :obj:`tf.keras.layers.Layer`: The LM layer mapping hidden states to vocabulary.
+            :obj:`tf.Variable`: The new weights mapping vocabulary to hidden states.
         """
+
+        if hasattr(self, "get_lm_head"):
+            lm_head = self.get_lm_head()
+            try:
+                return lm_head.get_output_embeddings()
+            except AttributeError:
+                self(self.dummy_inputs)
+
+                return lm_head.get_output_embeddings()
+
         return None  # Overwrite for models with output embeddings
 
-    def get_bias(self) -> Union[None, tf.keras.layers.Layer]:
+    def set_output_embeddings(self, value):
         """
-        Get the layer that handles a bias attribute in case the model has an LM head with weights tied to the
-        embeddings.
+        Set model's output embeddings
+
+        Args:
+            value (:obj:`tf.Variable`):
+                The new weights mapping hidden states to vocabulary.
+        """
+        if value is not None:
+            if hasattr(self, "get_lm_head"):
+                lm_head = self.get_lm_head()
+                try:
+                    lm_head.set_output_embeddings(value)
+                except AttributeError:
+                    self(self.dummy_inputs)
+                    lm_head.set_output_embeddings(value)
+
+    def get_bias(self) -> Union[None, Dict[str, tf.Variable]]:
+        """
+        Dict of bias attached to an LM head. The key represents the name of the bias attribute.
 
         Return:
-            :obj:`tf.keras.layers.Layer`: The layer that handles the bias, None if not an LM model.
+            :obj:`tf.Variable`: The weights representing the bias, None if not an LM model.
         """
+        if hasattr(self, "get_lm_head"):
+            lm_head = self.get_lm_head()
+            try:
+                return lm_head.get_bias()
+            except AttributeError:
+                self(self.dummy_inputs)
+
+                return lm_head.get_bias()
         return None
+
+    def set_bias(self, value):
+        """
+        Set all the bias in the LM head.
+
+        Args:
+            value (:obj:`Dict[tf.Variable]`):
+                All the new bias attached to an LM head.
+        """
+        if value is not None:
+            if hasattr(self, "get_lm_head"):
+                lm_head = self.get_lm_head()
+                try:
+                    lm_head.set_bias(value)
+                except AttributeError:
+                    self(self.dummy_inputs)
+                    lm_head.set_bias(value)
 
     def resize_token_embeddings(self, new_num_tokens=None) -> tf.Variable:
         """
@@ -726,7 +777,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         Reducing the size will remove vectors from the end
 
         Args:
-            old_lm_head_bias (:obj:`tf.keras.layers.Layer`):
+            old_lm_head_bias (:obj:`tf.Variable`):
                 Old lm head bias to be resized.
             new_num_tokens (:obj:`int`, `optional`):
                 New number of tokens in the linear matrix.
@@ -737,30 +788,38 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         Return:
             :obj:`tf.Variable`: Pointer to the resized bias.
         """
-        old_num_tokens = shape_list(old_lm_head_bias)[0]
-        size_diff = new_num_tokens - old_num_tokens
+        new_lm_head_bias = {}
 
-        # initialize new bias
-        if tf.math.greater(size_diff, 0):
-            current_bias = tf.pad(old_lm_head_bias.value(), tf.convert_to_tensor([[0, size_diff]]), constant_values=-1)
-            num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-            bias_mask = tf.fill(tf.convert_to_tensor([num_tokens_to_copy]), True)
-            bias_mask = tf.pad(bias_mask, tf.convert_to_tensor([[0, size_diff]]), constant_values=False)
-        else:
-            current_bias = tf.slice(
-                old_lm_head_bias.value(), tf.convert_to_tensor([0]), tf.convert_to_tensor([new_num_tokens])
+        for attr, weight in old_lm_head_bias.items():
+            first_dim, old_num_tokens = (None, shape_list(weight)[0]) if tf.rank(weight) == 1 else shape_list(weight)
+            size_diff = new_num_tokens - old_num_tokens
+            final_shape = [new_num_tokens] if first_dim is None else [first_dim, new_num_tokens]
+
+            # initialize new bias
+            if tf.math.greater(size_diff, 0):
+                padding_shape = [[0, size_diff]] if first_dim is None else [[0, 0], [0, size_diff]]
+                current_bias = tf.pad(weight.value(), tf.convert_to_tensor(padding_shape), constant_values=-1)
+                num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+                mask_shape = [num_tokens_to_copy] if first_dim is None else [1, num_tokens_to_copy]
+                bias_mask = tf.fill(tf.convert_to_tensor(mask_shape), True)
+                bias_mask = tf.pad(bias_mask, tf.convert_to_tensor(padding_shape), constant_values=False)
+            else:
+                slice_from = [0] if first_dim is None else [0, 0]
+                current_bias = tf.slice(
+                    weight.value(), tf.convert_to_tensor(slice_from), tf.convert_to_tensor(final_shape)
+                )
+                bias_mask = tf.fill(tf.convert_to_tensor(final_shape), True)
+
+            new_bias = self.add_weight(
+                shape=final_shape,
+                initializer="zeros",
+                trainable=True,
+                name=weight.name.split(":")[0],
             )
-            bias_mask = tf.fill(tf.convert_to_tensor([new_num_tokens]), True)
+            init_bias = tf.where(bias_mask, current_bias, new_bias.value())
 
-        new_lm_head_bias = self.add_weight(
-            shape=(new_num_tokens,),
-            initializer="zeros",
-            trainable=True,
-            name=old_lm_head_bias.name.split(":")[0],
-        )
-        init_bias = tf.where(bias_mask, current_bias, new_lm_head_bias.value())
-
-        new_lm_head_bias.assign(init_bias)
+            new_bias.assign(init_bias)
+            new_lm_head_bias[attr] = new_bias
 
         return new_lm_head_bias
 
@@ -770,7 +829,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         Reducing the size will remove vectors from the end
 
         Args:
-            old_lm_head_decoder (:obj:`tf.keras.layers.Layer`):
+            old_lm_head_decoder (:obj:`tf.Variable`):
                 Old lm head decoder to be resized.
             new_num_tokens (:obj:`int`, `optional`):
                 New number of tokens in the linear matrix.

@@ -834,13 +834,14 @@ class TFModelTesterMixin:
                 self.assertTrue(models_equal)
 
                 if old_bias is not None and new_bias is not None:
-                    self.assertEqual(new_bias.shape[0], assert_size)
+                    for old_weight, new_weight in zip(old_bias.values(), new_bias.values()):
+                        self.assertEqual(new_weight.shape[0], assert_size)
 
-                    models_equal = True
-                    for p1, p2 in zip(old_bias.value(), new_bias.value()):
-                        if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                            models_equal = False
-                    self.assertTrue(models_equal)
+                        models_equal = True
+                        for p1, p2 in zip(old_weight.value(), new_weight.value()):
+                            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                                models_equal = False
+                        self.assertTrue(models_equal)
 
                 if old_output_embeddings is not None and new_output_embeddings is not None:
                     self.assertEqual(new_output_embeddings.shape[0], assert_size)
