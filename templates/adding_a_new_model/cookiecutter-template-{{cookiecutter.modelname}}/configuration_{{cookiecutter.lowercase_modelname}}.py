@@ -137,6 +137,7 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         attention_dropout=0.0,
         activation_dropout=0.0
         init_std=0.02,
+        decoder_start_token_id=2,
         {% endif -%}
         pad_token_id=1,
         bos_token_id=0,
@@ -145,10 +146,14 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
     ):
         super().__init__(
             pad_token_id=pad_token_id,
-            is_encoder_decoder=is_encoder_decoder,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
+            {% if cookiecutter.is_encoder_decoder_model == "False" -%}
+            {% else -%}
             use_cache=use_cache,
+            is_encoder_decoder=is_encoder_decoder,
+            decoder_start_token_id=decoder_start_token_id,
+            {% endif -%}
             **kwargs
         )
 

@@ -1392,7 +1392,6 @@ class {{cookiecutter.camelcase_modelname}}ForQuestionAnswering({{cookiecutter.ca
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
 {% else %}
 
 
@@ -1440,20 +1439,16 @@ _TOKENIZER_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Tokenizer"
 ]
 
 
-def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
     Shift input ids one token to the right, and wrap the last non pad token (usually <eos>).
     """
-    prev_output_tokens = input_ids.clone()
+    prev_output_tokens[:, 1:] = input_ids[:, :-1].clone()
+    prev_output_tokens[:, 0] = decoder_start_token_id
 
     assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
     # replace possible -100 values in labels by `pad_token_id`
     prev_output_tokens.masked_fill_(prev_output_tokens == -100, pad_token_id)
-
-    index_of_eos = (prev_output_tokens.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
-    decoder_start_tokens = prev_output_tokens.gather(1, index_of_eos).squeeze()
-    prev_output_tokens[:, 1:] = prev_output_tokens[:, :-1].clone()
-    prev_output_tokens[:, 0] = decoder_start_tokens
 
     return prev_output_tokens
 
@@ -1909,14 +1904,6 @@ class {{cookiecutter.camelcase_modelname}}PretrainedModel(PreTrainedModel):
         return dummy_inputs
 
 
-class Pretrained{{cookiecutter.camelcase_modelname}}Model({{cookiecutter.camelcase_modelname}}PretrainedModel):
-    def __init_subclass__(self):
-        warnings.warn(
-            "The class `Pretrained{{cookiecutter.camelcase_modelname}}Model` has been depreciated, please use `{{cookiecutter.camelcase_modelname}}PretrainedModel` instead.",
-            FutureWarning,
-        )
-
-
 {{cookiecutter.uppercase_modelname}}_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
@@ -2285,23 +2272,6 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
                 input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
             ).to(self.device)
 
-        # create decoder_padding_mask if not provided and needed
-        # 4.12.20 (PVP): Not a fan of this "magical" function that
-        # automatically creates attention_mask for padded tokens
-        # => this is inconsistent with other models
-        # => Pegasus uses the pad_token as decoder_start_token_id, so that this could
-        # pose some problems.
-        if (
-            attention_mask is None
-            and input_ids is not None
-            and input_shape[-1] > 1
-            and self.config.pad_token_id in input_ids
-        ):
-            # should be kept for backwards compatibility
-            attention_mask = input_ids.ne(self.config.pad_token_id).to(torch.long)
-            # never mask leading token, even if it is pad
-            attention_mask[:, 0] = attention_mask[:, 1]
-
         if attention_mask is not None and combined_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             combined_attention_mask = combined_attention_mask + _expand_mask(
@@ -2424,14 +2394,6 @@ class {{cookiecutter.camelcase_modelname}}Model({{cookiecutter.camelcase_modelna
         output_hidden_states=None,
         return_dict=None,
     ):
-
-        # 4.12.20 (PVP): Not a fan of this "magical" function and
-        # also wonder how often it's actually used ... keep now
-        # for backward compatibility
-        # -> is this used for backward compatibility
-        if decoder_input_ids is None and decoder_inputs_embeds is None:
-            decoder_input_ids = shift_tokens_right(input_ids, self.config.pad_token_id)
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -2579,9 +2541,8 @@ class {{cookiecutter.camelcase_modelname}}ForConditionalGeneration({{cookiecutte
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
-            use_cache = False
             if decoder_input_ids is None:
-                decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id)
+                decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
         outputs = self.model(
             input_ids,
@@ -2872,7 +2833,4 @@ class {{cookiecutter.camelcase_modelname}}ForQuestionAnswering({{cookiecutter.ca
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
         )
-
-
-
 {% endif %}
