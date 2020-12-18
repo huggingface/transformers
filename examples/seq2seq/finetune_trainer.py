@@ -130,8 +130,8 @@ def handle_metrics(split, metrics, output_dir):
     """
 
     logger.info(f"***** {split} metrics *****")
-    for key, value in metrics.items():
-        logger.info(f"  {key} = {value}")
+    for key in sorted(metrics.keys()):
+        logger.info(f"  {key} = {metrics[key]}")
     save_json(metrics, os.path.join(output_dir, f"{split}_results.json"))
 
 
