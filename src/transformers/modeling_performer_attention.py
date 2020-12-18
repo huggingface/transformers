@@ -27,23 +27,19 @@ SHORT_SEQUENCE_BEHAVIOR_CALLABLES = {
 
 
 class PerformerAttention(nn.Module):
-    def __init__(self, config: Optional[Union[dict, PerformerAttentionConfig]] = None, **kwargs):
+    def __init__(self, config: Optional[PerformerAttentionConfig] = None, **kwargs):
         super().__init__()
 
-        if config is not None:
-            # config can either be a dictionary or a PerformerAttentionConfig object
-            if not isinstance(config, dict):
-                config = config.__dict__
-
-            # Just copy over all the parameters
-            self.__dict__.update(config)
-        else:
-            # Make sure we have all the default values filled in
-            config = PerformerAttentionConfig(**kwargs)
-            kwargs = config.__dict__
+        config = config or PerformerAttentionConfig()
 
         # kwargs take precedence over the default values that might be stored in the config object
-        self.__dict__.update(kwargs)
+        for k, v in kwargs.items():
+            if not hasattr(config, k):
+                raise AttributeError(f"PerformerAttention: '{k}' is an invalid config parameter")
+
+            setattr(config, k, v)
+
+        self.__dict__.update(config.__dict__)
 
         if self.num_heads is None or self.d_model is None:
             raise ValueError("PerformerAttention: num_heads and d_model must be non-None")
@@ -68,17 +64,6 @@ class PerformerAttention(nn.Module):
             self.should_fallback_to_softmax = behavior
         else:
             raise ValueError("PerformerAttention: short_sequence_behavior must be either str or Callable")
-
-        if self.causal:
-            try:
-                from fast_transformers.causal_product import CausalDotProduct
-                self._cuda_kernel_available = True
-            except ImportError:
-                self._cuda_kernel_available = False
-
-                logger = logging.getLogger()
-                logger.warning("Causal attention will perform inefficiently without the custom CUDA kernel in the "
-                               "fast_transformers package. Use `pip install pytorch-fast-transformers` to download.")
 
         self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
