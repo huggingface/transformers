@@ -4,20 +4,17 @@ to prune GPT-like models. The author is @altsoph.
 """
 
 from __future__ import absolute_import, division, print_function
-import warnings
-warnings.filterwarnings('ignore',category=FutureWarning)
 
 import argparse
 import logging
 import os
 from datetime import datetime
-import shutil
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader, SequentialSampler, Subset, RandomSampler, TensorDataset
-from torch.utils.data.distributed import DistributedSampler
+from torch.utils.data import DataLoader, RandomSampler, TensorDataset
 from tqdm import tqdm
+
 from transformers import GPT2LMHeadModel
 
 
@@ -27,15 +24,20 @@ logger = logging.getLogger(__name__)
 def save_model(model, dirpath):
     # save results
     if os.path.exists(dirpath):
-        if os.path.exists(os.path.join(dirpath, "config.json")) and os.path.isfile(os.path.join(dirpath, "config.json")):
+        if os.path.exists(os.path.join(dirpath, "config.json")) and os.path.isfile(
+            os.path.join(dirpath, "config.json")
+        ):
             os.remove(os.path.join(dirpath, "config.json"))
-        if os.path.exists(os.path.join(dirpath, "pytorch_model.bin")) and os.path.isfile(os.path.join(dirpath, "pytorch_model.bin")):
+        if os.path.exists(os.path.join(dirpath, "pytorch_model.bin")) and os.path.isfile(
+            os.path.join(dirpath, "pytorch_model.bin")
+        ):
             os.remove(os.path.join(dirpath, "pytorch_model.bin"))
     else:
         os.makedirs(dirpath)
     model.save_pretrained(dirpath)
 
-def entropy(p, unlogit = False):
+
+def entropy(p, unlogit=False):
     """ Compute the entropy of a probability distribution """
     exponent = 2
     if unlogit:
@@ -43,6 +45,7 @@ def entropy(p, unlogit = False):
     plogp = p * torch.log(p)
     plogp[p == 0] = 0
     return -plogp.sum(dim=-1)
+
 
 def print_2d_tensor(tensor):
     """ Print a 2D tensor """
@@ -57,9 +60,9 @@ def print_2d_tensor(tensor):
 def compute_heads_importance(
     args, model, eval_dataloader, compute_entropy=True, compute_importance=True, head_mask=None, actually_pruned=False
 ):
-    """ This method shows how to compute:
-        - head attention entropy
-        - head importance scores according to http://arxiv.org/abs/1905.10650
+    """This method shows how to compute:
+    - head attention entropy
+    - head importance scores according to http://arxiv.org/abs/1905.10650
     """
     # Prepare our tensors
     n_layers, n_heads = model.config.num_hidden_layers, model.config.num_attention_heads
@@ -78,12 +81,12 @@ def compute_heads_importance(
     total_loss = 0.0
     for step, inputs in enumerate(tqdm(eval_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0])):
         inputs = tuple(t.to(args.device) for t in inputs)
-        input_ids, = inputs
+        (input_ids,) = inputs
 
         # Do a forward pass (not with torch.no_grad() since we need gradients for importance score - see below)
         outputs = model(input_ids, labels=input_ids, head_mask=head_mask)
         #  (loss), lm_logits, presents, (all hidden_states), (attentions)
-        loss, logits, all_attentions = (
+        loss, _, all_attentions = (
             outputs[0],
             outputs[1],
             outputs[-1],
@@ -129,12 +132,13 @@ def compute_heads_importance(
     print_2d_tensor(head_ranks)
     return attn_entropy, head_importance, total_loss
 
+
 def mask_heads(args, model, eval_dataloader):
-    """ This method shows how to mask head (set some heads to zero), to test the effect on the network,
-        based on the head importance scores, as described in Michel et al. (http://arxiv.org/abs/1905.10650)
+    """This method shows how to mask head (set some heads to zero), to test the effect on the network,
+    based on the head importance scores, as described in Michel et al. (http://arxiv.org/abs/1905.10650)
     """
     _, head_importance, loss = compute_heads_importance(args, model, eval_dataloader, compute_entropy=False)
-    original_score = 1/loss # instead of downsteam score use the LM loss
+    original_score = 1 / loss  # instead of downsteam score use the LM loss
     logger.info("Pruning: original score: %f, threshold: %f", original_score, original_score * args.masking_threshold)
 
     new_head_mask = torch.ones_like(head_importance)
@@ -148,7 +152,7 @@ def mask_heads(args, model, eval_dataloader):
         current_heads_to_mask = head_importance.view(-1).sort()[1]
 
         if len(current_heads_to_mask) <= num_to_mask:
-            print('BREAK BY num_to_mask')
+            print("BREAK BY num_to_mask")
             break
 
         # mask heads
@@ -164,7 +168,7 @@ def mask_heads(args, model, eval_dataloader):
         _, head_importance, loss = compute_heads_importance(
             args, model, eval_dataloader, compute_entropy=False, head_mask=new_head_mask
         )
-        current_score = 1/loss
+        current_score = 1 / loss
         logger.info(
             "Masking: current score: %f, remaining heads %d (%.1f percents)",
             current_score,
@@ -180,8 +184,8 @@ def mask_heads(args, model, eval_dataloader):
 
 
 def prune_heads(args, model, eval_dataloader, head_mask):
-    """ This method shows how to prune head (remove heads weights) based on
-        the head importance scores as described in Michel et al. (http://arxiv.org/abs/1905.10650)
+    """This method shows how to prune head (remove heads weights) based on
+    the head importance scores as described in Michel et al. (http://arxiv.org/abs/1905.10650)
     """
     # Try pruning and test time speedup
     # Pruning is like masking but we actually remove the masked weights
@@ -189,7 +193,7 @@ def prune_heads(args, model, eval_dataloader, head_mask):
     _, _, loss = compute_heads_importance(
         args, model, eval_dataloader, compute_entropy=False, compute_importance=False, head_mask=head_mask
     )
-    score_masking = 1/loss
+    score_masking = 1 / loss
     original_time = datetime.now() - before_time
 
     original_num_params = sum(p.numel() for p in model.parameters())
@@ -197,9 +201,11 @@ def prune_heads(args, model, eval_dataloader, head_mask):
         (layer, (1 - head_mask[layer].long()).nonzero().squeeze().tolist()) for layer in range(len(head_mask))
     )
 
-    for k,v in heads_to_prune.items():
+    for k, v in heads_to_prune.items():
         if isinstance(v, int):
-            heads_to_prune[k] = [v,]
+            heads_to_prune[k] = [
+                v,
+            ]
 
     assert sum(len(h) for h in heads_to_prune.values()) == (1 - head_mask.long()).sum().item()
     model.prune_heads(heads_to_prune)
@@ -216,7 +222,7 @@ def prune_heads(args, model, eval_dataloader, head_mask):
         actually_pruned=True,
     )
 
-    score_pruning = 1/loss
+    score_pruning = 1 / loss
     new_time = datetime.now() - before_time
 
     logger.info(
@@ -227,7 +233,8 @@ def prune_heads(args, model, eval_dataloader, head_mask):
     )
     logger.info("Pruning: score with masking: %f score with pruning: %f", score_masking, score_pruning)
     logger.info("Pruning: speed ratio (original timing / new timing): %f percents", original_time / new_time * 100)
-    save_model(model,args.output_dir)
+    save_model(model, args.output_dir)
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -361,12 +368,17 @@ def main():
     logger.info("Training/evaluation parameters %s", args)
 
     # Prepare dataset
-    numpy_data = np.concatenate( [np.loadtxt(args.data_dir, dtype=np.int64),] )
+    numpy_data = np.concatenate(
+        [
+            np.loadtxt(args.data_dir, dtype=np.int64),
+        ]
+    )
     train_tensor_dataset = (torch.from_numpy(numpy_data),)
     train_data = TensorDataset(*train_tensor_dataset)
     train_sampler = RandomSampler(train_data)
-    eval_dataloader = DataLoader(train_data, sampler=train_sampler, batch_size=args.batch_size) #, collate_fn=DefaultDataCollator().collate_batch)
-
+    eval_dataloader = DataLoader(
+        train_data, sampler=train_sampler, batch_size=args.batch_size
+    )  # , collate_fn=DefaultDataCollator().collate_batch)
 
     # Compute head entropy and importance score
     compute_heads_importance(args, model, eval_dataloader)
