@@ -532,7 +532,32 @@ class TFRagModel(TFRagPreTrainedModel):
 
         self.question_encoder = question_encoder
         self.generator = generator
+    
+    # UGLY HACK: (TEMPorarily put the hack back again to show case of the new nq_checkpoint test) 
+    # really ugly fixed and require torch model: manually and ineffcient fixed of two weights name mismatched
+    @classmethod
+    def from_pretrained(cls, path_or_weight_name, model_pt=None, **kwargs):
+       
+        print(path_or_weight_name, kwargs)
+        model = super(TFRagTokenForGeneration, cls).from_pretrained(path_or_weight_name, **kwargs)
 
+        if path_or_weight_name == "facebook/rag-token-nq":
+            import gc
+            import tensorflow.keras.backend as K
+            from transformers import RagTokenForGeneration
+
+            gc.collect()
+            if model_pt is None:
+                model_pt = RagTokenForGeneration.from_pretrained(path_or_weight_name, **kwargs)
+          
+            K.set_value(model.rag.generator.model.shared.weight, model_pt.rag.generator.model.shared.weight.detach().numpy())
+            K.set_value(model.rag.generator.final_logits_bias, model_pt.rag.generator.final_logits_bias.detach().numpy())
+            del model_pt
+            gc.collect()
+            print('*** Ugly fix of weights loading -- not a generalizable solution ***')
+
+        return model
+    
     def set_retriever(self, retriever: RagRetriever):
         self.retriever = retriever
 
