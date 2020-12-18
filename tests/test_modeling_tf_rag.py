@@ -46,6 +46,11 @@ class TFRagModelIntegrationTests(unittest.TestCase):
             "facebook/dpr-question_encoder-single-nq-base", "facebook/bart-large-cnn"
         )
 
+    def token_model_nq_checkpoint(self, retriever):
+        return TFRagTokenForGeneration.from_pretrained(
+            "facebook/rag-token-nq", from_pt=True, retriever=retriever
+        )
+    
     def get_rag_config(self):
         question_encoder_config = AutoConfig.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
         generator_config = AutoConfig.from_pretrained("facebook/bart-large-cnn")
@@ -105,7 +110,42 @@ class TFRagModelIntegrationTests(unittest.TestCase):
 
         tf.debugging.assert_near(output.loss, expected_loss, atol=1e-3)
         tf.debugging.assert_near(output.doc_scores, expected_doc_scores, atol=1e-3)
+    
+    @slow
+    def test_rag_token_inference_nq_checkpoint(self):
+        print('\n\n Special check on facebook/rag-token-nq weight!\n\n')
 
+        rag_config = self.get_rag_config()
+        rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
+            "facebook/dpr-question_encoder-single-nq-base"
+        )
+        rag_retriever = RagRetriever(
+            rag_config,
+            question_encoder_tokenizer=rag_question_encoder_tokenizer,
+            generator_tokenizer=rag_decoder_tokenizer,
+        )
+
+        rag_token = self.token_model_nq_checkpoint(retriever=rag_retriever)
+        input_ids = rag_question_encoder_tokenizer(
+            "who sings does he love me with reba", return_tensors="tf"
+        ).input_ids
+        decoder_input_ids = rag_decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
+
+        output = rag_token(
+            input_ids,
+            labels=decoder_input_ids,
+        )
+
+        expected_shape = tf.TensorShape([5, 5, 50265])
+        self.assertEqual(output.logits.shape, expected_shape)
+
+        expected_doc_scores = tf.convert_to_tensor([[62.9402, 62.7107, 62.2382, 62.1194, 61.8578]])
+        expected_loss = tf.convert_to_tensor([32.521812])
+
+        tf.debugging.assert_near(output.loss, expected_loss, atol=1e-3)
+        tf.debugging.assert_near(output.doc_scores, expected_doc_scores, atol=1e-3)
+    
     @slow
     def test_rag_token_inference_save_pretrained(self):
         rag_config = self.get_rag_config()
