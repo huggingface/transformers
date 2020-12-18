@@ -55,7 +55,7 @@ of the script.
 
 ## Old version of the script
 
-You can find the old version of the PyTorch script [here](https://github.com/huggingface/transformers/blob/master/examples/contrib/legacy/token-classification/run_ner_old.py).
+You can find the old version of the PyTorch script [here](https://github.com/huggingface/transformers/blob/master/examples/legacy/token-classification/run_ner.py).
 
 ### TensorFlow version
 
