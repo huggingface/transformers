@@ -68,13 +68,13 @@ logger = logging.get_logger(__name__)
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "{{cookiecutter.checkpoint_identifier}}": "https://huggingface.co/{{cookiecutter.checkpoint_identifier}}/resolve/main/vocab.json",
-    }
+    },
     "merges_file": {
         "{{cookiecutter.checkpoint_identifier}}": "https://huggingface.co/{{cookiecutter.checkpoint_identifier}}/resolve/main/merges.txt",
-    }
+    },
     "tokenizer_file": {
         "{{cookiecutter.checkpoint_identifier}}": "https://huggingface.co/{{cookiecutter.checkpoint_identifier}}/resolve/main/tokenizer.json",
-    }
+    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
