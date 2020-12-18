@@ -45,7 +45,7 @@ def require_distributed_retrieval(test_case):
 
     """
     if not (is_datasets_available() and is_faiss_available() and is_psutil_available()):
-        test_case = unittest.skip("test requires Datasets, Faiss, " "psutil")(test_case)
+        test_case = unittest.skip("test requires Datasets, Faiss, psutil")(test_case)
     return test_case
 
 
