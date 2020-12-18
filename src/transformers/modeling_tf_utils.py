@@ -752,7 +752,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                     self(self.dummy_inputs)
                     lm_head.set_bias(value)
     
-    def get_lm_head(self):
+    def get_lm_head(self) -> tf.keras.layers.Layer:
+        """
+        The LM Head layer.
+
+        Return:
+            :obj:`tf.keras.layers.Layer`: The LM head layer if the model has one, None if not.
+        """
         return None
 
     def resize_token_embeddings(self, new_num_tokens=None) -> tf.Variable:
