@@ -1715,7 +1715,6 @@ class {{cookiecutter.camelcase_modelname}}EncoderLayer(nn.Module):
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
         )
-        self.normalize_before = config.normalize_before
         self.self_attn_layer_norm = {{cookiecutter.camelcase_modelname}}LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -1733,26 +1732,21 @@ class {{cookiecutter.camelcase_modelname}}EncoderLayer(nn.Module):
             output_attentions (:obj:`bool`): Whether the base model outputs attentions. This requires the attentions tensor to be reshaped in this function.
         """
         residual = hidden_states
-        if self.normalize_before:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, attn_weights, _ = self.self_attn(
             hidden_states=hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
         )
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        if not self.normalize_before:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
-        if self.normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        if not self.normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.final_layer_norm(hidden_states)
+
         if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
@@ -1774,7 +1768,6 @@ class {{cookiecutter.camelcase_modelname}}DecoderLayer(nn.Module):
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
-        self.normalize_before = config.normalize_before
 
         self.self_attn_layer_norm = {{cookiecutter.camelcase_modelname}}LayerNorm(self.embed_dim)
         self.encoder_attn = {{cookiecutter.camelcase_modelname}}Attention(
@@ -1809,8 +1802,6 @@ class {{cookiecutter.camelcase_modelname}}DecoderLayer(nn.Module):
             output_attentions (:obj:`bool`): Whether the base model outputs attentions. This requires the attentions tensor to be reshaped in this function.
         """
         residual = hidden_states
-        if self.normalize_before:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
@@ -1824,16 +1815,13 @@ class {{cookiecutter.camelcase_modelname}}DecoderLayer(nn.Module):
         )
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        if not self.normalize_before:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
         cross_attn_present_key_value = None
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
-            if self.normalize_before:
-                hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -1846,23 +1834,19 @@ class {{cookiecutter.camelcase_modelname}}DecoderLayer(nn.Module):
             )
             hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
-            if not self.normalize_before:
-                hidden_states = self.encoder_attn_layer_norm(hidden_states)
+            hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # add cross-attn to positions 3,4 of present_key_value tuple
             present_key_value = present_key_value + cross_attn_present_key_value
 
         # Fully Connected
         residual = hidden_states
-        if self.normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        if not self.normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.final_layer_norm(hidden_states)
 
         return (
             hidden_states,
@@ -2068,8 +2052,7 @@ class {{cookiecutter.camelcase_modelname}}Encoder({{cookiecutter.camelcase_model
                 config.extra_pos_embeddings,
             )
         self.layers = nn.ModuleList([{{cookiecutter.camelcase_modelname}}EncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.layernorm_embedding = {{cookiecutter.camelcase_modelname}}LayerNorm(embed_dim) if config.normalize_embedding else nn.Identity()
-        self.layer_norm = {{cookiecutter.camelcase_modelname}}LayerNorm(config.d_model) if config.add_final_layer_norm else None
+        self.layernorm_embedding = {{cookiecutter.camelcase_modelname}}LayerNorm(embed_dim)
 
         self.init_weights()
 
@@ -2159,9 +2142,6 @@ class {{cookiecutter.camelcase_modelname}}Encoder({{cookiecutter.camelcase_model
             if output_attentions:
                 all_attentions = all_attentions + (attn,)
 
-        if self.layer_norm:
-            hidden_states = self.layer_norm(hidden_states)
-
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
@@ -2185,7 +2165,6 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
-        self.do_blenderbot_90_layernorm = config.do_blenderbot_90_layernorm  # layernorm variant
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
@@ -2207,8 +2186,7 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
                 config.extra_pos_embeddings,
             )
         self.layers = nn.ModuleList([{{cookiecutter.camelcase_modelname}}DecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.layernorm_embedding = {{cookiecutter.camelcase_modelname}}LayerNorm(config.d_model) if config.normalize_embedding else nn.Identity()
-        self.layer_norm = {{cookiecutter.camelcase_modelname}}LayerNorm(config.d_model) if config.add_final_layer_norm else None
+        self.layernorm_embedding = {{cookiecutter.camelcase_modelname}}LayerNorm(config.d_model)
 
         self.init_weights()
 
@@ -2338,12 +2316,8 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
         # embed positions
         positions = self.embed_positions(input_shape, past_key_values_length)
 
-        if self.do_blenderbot_90_layernorm:
-            hidden_states = self.layernorm_embedding(inputs_embeds)
-            hidden_states += positions
-        else:
-            hidden_states = inputs_embeds + positions
-            hidden_states = self.layernorm_embedding(hidden_states)
+        hidden_states = inputs_embeds + positions
+        hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -2381,10 +2355,6 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
-
-        # if config.add_final_layer_norm (m{{cookiecutter.modelname}})
-        if self.layer_norm:
-            hidden_states = self.layer_norm(hidden_states)
 
         next_cache = next_decoder_cache if use_cache else None
         if not return_dict:

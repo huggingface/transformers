@@ -439,12 +439,6 @@ if is_torch_available():
         {{cookiecutter.camelcase_modelname}}Model,
         {{cookiecutter.camelcase_modelname}}Tokenizer,
         {{cookiecutter.camelcase_modelname}}TokenizerFast,
-        BertConfig,
-        BlenderbotConfig,
-        MarianConfig,
-        M{{cookiecutter.camelcase_modelname}}Config,
-        PegasusConfig,
-        pipeline,
     )
     from transformers.models.{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_modelname}} import (
         {{cookiecutter.camelcase_modelname}}Decoder,
@@ -457,13 +451,19 @@ if is_torch_available():
 def prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(
     config,
     input_ids,
+    decoder_input_ids,
     attention_mask=None,
+    decoder_attention_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.ne(config.pad_token_id)
+    if decoder_attention_mask is None:
+        decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
     return {
         "input_ids": input_ids,
+        "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
+        "decoder_attention_mask": attention_mask,
     }
 
 
@@ -506,13 +506,10 @@ class {{cookiecutter.camelcase_modelname}}ModelTester:
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
-        torch.manual_seed(0)
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
-            3,
-        )
-        input_ids[:, -1] = 2  # Eos Token
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         config = {{cookiecutter.camelcase_modelname}}Config(
             vocab_size=self.vocab_size,
@@ -530,13 +527,11 @@ class {{cookiecutter.camelcase_modelname}}ModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
         )
-        inputs_dict = prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(config, input_ids)
+        inputs_dict = prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(config, input_ids, decoder_input_ids)
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()
-        inputs_dict["decoder_input_ids"] = inputs_dict["input_ids"]
-        inputs_dict["decoder_attention_mask"] = inputs_dict["attention_mask"]
         return config, inputs_dict
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
@@ -637,37 +632,6 @@ class {{cookiecutter.camelcase_modelname}}ModelTest(ModelTesterMixin, Generation
         _check_var(model.encoder.layers[0].fc1)
         _check_var(model.encoder.embed_positions)
 
-    def test_advanced_inputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        config.use_cache = False
-        inputs_dict["input_ids"][:, -2:] = config.pad_token_id
-
-        model = {{cookiecutter.camelcase_modelname}}Model(config).to(torch_device).eval()
-        decoder_features_with_created_mask = model(**inputs_dict)[0]
-
-        decoder_input_ids = shift_tokens_right(inputs_dict["input_ids"], config.pad_token_id)
-        decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
-        decoder_attention_mask[:, 0] = decoder_attention_mask[:, 1]
-
-        decoder_features_with_passed_mask = model(
-            decoder_attention_mask=decoder_attention_mask, decoder_input_ids=decoder_input_ids, **inputs_dict
-        )[0]
-        assert_tensors_close(decoder_features_with_passed_mask, decoder_features_with_created_mask)
-        useless_mask = torch.zeros_like(decoder_attention_mask)
-        decoder_features = model(decoder_attention_mask=useless_mask, **inputs_dict)[0]
-        self.assertTrue(isinstance(decoder_features, torch.Tensor))  # no hidden states or attentions
-        self.assertEqual(
-            decoder_features.size(), (self.model_tester.batch_size, self.model_tester.seq_length, config.d_model)
-        )
-        if decoder_attention_mask.min().item() == 0:  # some tokens were masked
-            self.assertFalse((decoder_features_with_created_mask == decoder_features).all().item())
-
-        # Test different encoder attention masks
-        decoder_features_with_long_encoder_mask = model(
-            inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"].long()
-        )[0]
-        assert_tensors_close(decoder_features_with_long_encoder_mask, decoder_features_with_created_mask)
-
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
@@ -716,143 +680,6 @@ class {{cookiecutter.camelcase_modelname}}ModelTest(ModelTesterMixin, Generation
             with torch.no_grad():
                 model(**inputs)[0]
 
-
-@require_torch
-class {{cookiecutter.camelcase_modelname}}HeadTests(unittest.TestCase):
-    vocab_size = 99
-
-    def _get_config_and_data(self):
-        input_ids = torch.tensor(
-            [
-                [71, 82, 18, 33, 46, 91, 2],
-                [68, 34, 26, 58, 30, 82, 2],
-                [5, 97, 17, 39, 94, 40, 2],
-                [76, 83, 94, 25, 70, 78, 2],
-                [87, 59, 41, 35, 48, 66, 2],
-                [55, 13, 16, 58, 5, 2, 1],  # note padding
-                [64, 27, 31, 51, 12, 75, 2],
-                [52, 64, 86, 17, 83, 39, 2],
-                [48, 61, 9, 24, 71, 82, 2],
-                [26, 1, 60, 48, 22, 13, 2],
-                [21, 5, 62, 28, 14, 76, 2],
-                [45, 98, 37, 86, 59, 48, 2],
-                [70, 70, 50, 9, 28, 0, 2],
-            ],
-            dtype=torch.long,
-            device=torch_device,
-        )
-
-        batch_size = input_ids.shape[0]
-        config = {{cookiecutter.camelcase_modelname}}Config(
-            vocab_size=self.vocab_size,
-            d_model=24,
-            encoder_layers=2,
-            decoder_layers=2,
-            encoder_attention_heads=2,
-            decoder_attention_heads=2,
-            encoder_ffn_dim=32,
-            decoder_ffn_dim=32,
-            max_position_embeddings=48,
-            eos_token_id=2,
-            pad_token_id=1,
-            bos_token_id=0,
-        )
-        return config, input_ids, batch_size
-
-    def test_sequence_classification_forward(self):
-        config, input_ids, batch_size = self._get_config_and_data()
-        labels = _long_tensor([2] * batch_size).to(torch_device)
-        model = {{cookiecutter.camelcase_modelname}}ForSequenceClassification(config)
-        model.to(torch_device)
-        outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=labels)
-        expected_shape = torch.Size((batch_size, config.num_labels))
-        self.assertEqual(outputs["logits"].shape, expected_shape)
-        self.assertIsInstance(outputs["loss"].item(), float)
-
-    def test_question_answering_forward(self):
-        config, input_ids, batch_size = self._get_config_and_data()
-        sequence_labels = ids_tensor([batch_size], 2).to(torch_device)
-        model = {{cookiecutter.camelcase_modelname}}ForQuestionAnswering(config)
-        model.to(torch_device)
-        outputs = model(
-            input_ids=input_ids,
-            start_positions=sequence_labels,
-            end_positions=sequence_labels,
-        )
-
-        self.assertEqual(outputs["start_logits"].shape, input_ids.shape)
-        self.assertEqual(outputs["end_logits"].shape, input_ids.shape)
-        self.assertIsInstance(outputs["loss"].item(), float)
-
-    @timeout_decorator.timeout(1)
-    def test_lm_forward(self):
-        config, input_ids, batch_size = self._get_config_and_data()
-        lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size).to(torch_device)
-        lm_model = {{cookiecutter.camelcase_modelname}}ForConditionalGeneration(config)
-        lm_model.to(torch_device)
-        outputs = lm_model(input_ids=input_ids, labels=lm_labels)
-        expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
-        self.assertEqual(outputs["logits"].shape, expected_shape)
-        self.assertIsInstance(outputs["loss"].item(), float)
-
-    def test_lm_uneven_forward(self):
-        config = {{cookiecutter.camelcase_modelname}}Config(
-            vocab_size=self.vocab_size,
-            d_model=14,
-            encoder_layers=2,
-            decoder_layers=2,
-            encoder_attention_heads=2,
-            decoder_attention_heads=2,
-            encoder_ffn_dim=8,
-            decoder_ffn_dim=8,
-            max_position_embeddings=48,
-        )
-        lm_model = {{cookiecutter.camelcase_modelname}}ForConditionalGeneration(config).to(torch_device)
-        context = torch.Tensor([[71, 82, 18, 33, 46, 91, 2], [68, 34, 26, 58, 30, 2, 1]]).long().to(torch_device)
-        summary = torch.Tensor([[82, 71, 82, 18, 2], [58, 68, 2, 1, 1]]).long().to(torch_device)
-        outputs = lm_model(input_ids=context, decoder_input_ids=summary, labels=summary)
-        expected_shape = (*summary.shape, config.vocab_size)
-        self.assertEqual(outputs["logits"].shape, expected_shape)
-
-    def test_generate_beam_search(self):
-        input_ids = torch.Tensor([[71, 82, 2], [68, 34, 2]]).long().to(torch_device)
-        config = {{cookiecutter.camelcase_modelname}}Config(
-            vocab_size=self.vocab_size,
-            d_model=24,
-            encoder_layers=2,
-            decoder_layers=2,
-            encoder_attention_heads=2,
-            decoder_attention_heads=2,
-            encoder_ffn_dim=32,
-            decoder_ffn_dim=32,
-            max_position_embeddings=48,
-            eos_token_id=2,
-            pad_token_id=1,
-            bos_token_id=0,
-        )
-        lm_model = {{cookiecutter.camelcase_modelname}}ForConditionalGeneration(config).to(torch_device)
-        lm_model.eval()
-
-        max_length = 5
-        generated_ids = lm_model.generate(
-            input_ids.clone(),
-            do_sample=True,
-            num_return_sequences=1,
-            num_beams=2,
-            no_repeat_ngram_size=3,
-            max_length=max_length,
-        )
-        self.assertEqual(generated_ids.shape, (input_ids.shape[0], max_length))
-
-    def test_shift_tokens_right(self):
-        input_ids = torch.Tensor([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]]).long()
-        shifted = shift_tokens_right(input_ids, 1)
-        n_pad_before = input_ids.eq(1).float().sum()
-        n_pad_after = shifted.eq(1).float().sum()
-        self.assertEqual(shifted.shape, input_ids.shape)
-        self.assertEqual(n_pad_after, n_pad_before - 1)
-        self.assertTrue(torch.eq(shifted[:, 0], 2).all())
-
     def test_generate_fp16(self):
         config, input_ids, batch_size = self._get_config_and_data()
         attention_mask = input_ids.ne(1).to(torch_device)
@@ -861,27 +688,6 @@ class {{cookiecutter.camelcase_modelname}}HeadTests(unittest.TestCase):
             model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
-
-    def test_dummy_inputs(self):
-        config, *_ = self._get_config_and_data()
-        model = {{cookiecutter.camelcase_modelname}}ForConditionalGeneration(config).eval().to(torch_device)
-        model(**model.dummy_inputs)
-
-    def test_resize_tokens_embeddings_more(self):
-        config, input_ids, _ = self._get_config_and_data()
-
-        def _get_embs(m):
-            return (m.get_input_embeddings().weight.data.clone(), m.get_output_embeddings().weight.data.clone())
-
-        model = {{cookiecutter.camelcase_modelname}}ForConditionalGeneration(config).eval().to(torch_device)
-        input, output = _get_embs(model)
-        self.assertTrue(torch.eq(input, output).all())
-        new_vocab_size = 45
-        model.resize_token_embeddings(new_vocab_size)
-        input_new, output_new = _get_embs(model)
-        self.assertEqual(input_new.shape, (new_vocab_size, config.d_model))
-        self.assertEqual(output_new.shape, (new_vocab_size, config.d_model))
-        self.assertTrue(torch.eq(input_new, output_new).all())
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
@@ -913,33 +719,44 @@ TOLERANCE = 1e-4
 @require_torch
 @require_sentencepiece
 @require_tokenizers
+@slow
 class {{cookiecutter.camelcase_modelname}}ModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_tokenizer(self):
         return {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
 
-    @slow
     def test_inference_no_head(self):
         model = {{cookiecutter.camelcase_modelname}}Model.from_pretrained('{{cookiecutter.checkpoint_identifier}}').to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        inputs_dict = prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(model.config, input_ids)
+        decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        inputs_dict = prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(model.config, input_ids, decoder_input_ids)
         with torch.no_grad():
             output = model(**inputs_dict)[0]
         expected_shape = torch.Size((1, 11, 1024))
         self.assertEqual(output.shape, expected_shape)
+        # change to expected output here
         expected_slice = torch.tensor(
             [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
-    @slow
-    def test_inference_with_head(self):
-        pbase = pipeline(task="fill-mask", model='{{cookiecutter.checkpoint_identifier}}')
-        src_text = [" I went to the <mask>."]
-        results = [x["token_str"] for x in pbase(src_text)]
-        assert "Ġbathroom" in results
+    def test_inference_head(self):
+        model = {{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}').to(torch_device)
 
-    @slow
+        # change to intended input
+        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        inputs_dict = prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(model.config, input_ids. decoder_input_ids)
+        with torch.no_grad():
+            output = model(**inputs_dict)[0]
+        expected_shape = torch.Size((1, 11, model.config.vocab_size))
+        self.assertEqual(output.shape, expected_shape)
+        # change to expected output here
+        expected_slice = torch.tensor(
+            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device=torch_device
+        )
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+
     def test_seq_to_seq_generation(self):
         hf = {{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}').to(torch_device)
         tok = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
