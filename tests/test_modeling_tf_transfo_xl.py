@@ -87,7 +87,7 @@ class TFTransfoXLModelTester:
             eos_token_id=self.eos_token_id,
             pad_token_id=self.vocab_size - 1,
             init_range=self.init_range,
-            num_labels = self.num_labels,
+            num_labels=self.num_labels,
         )
 
         return (config, input_ids_1, input_ids_2, lm_labels)
