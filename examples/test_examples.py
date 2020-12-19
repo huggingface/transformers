@@ -33,6 +33,7 @@ SRC_DIRS = [
         "text-classification",
         "token-classification",
         "language-modeling",
+        "multiple-choice",
         "question-answering",
     ]
 ]
@@ -46,6 +47,7 @@ if SRC_DIRS is not None:
     import run_mlm
     import run_ner
     import run_qa as run_squad
+    import run_swag
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -95,9 +97,7 @@ class ExamplesTests(TestCasePlus):
 
         with patch.object(sys, "argv", testargs):
             result = run_glue.main()
-            del result["eval_loss"]
-            for value in result.values():
-                self.assertGreaterEqual(value, 0.75)
+            self.assertGreaterEqual(result["eval_accuracy"], 0.75)
 
     @require_torch_non_multi_gpu_but_fix_me
     def test_run_clm(self):
@@ -215,6 +215,32 @@ class ExamplesTests(TestCasePlus):
             result = run_squad.main()
             self.assertGreaterEqual(result["f1"], 30)
             self.assertGreaterEqual(result["exact"], 30)
+
+    @require_torch_non_multi_gpu_but_fix_me
+    def test_run_swag(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_swag.py
+            --model_name_or_path bert-base-uncased
+            --train_file tests/fixtures/tests_samples/swag/sample.json
+            --validation_file tests/fixtures/tests_samples/swag/sample.json
+            --output_dir {tmp_dir}
+            --overwrite_output_dir
+            --max_steps=20
+            --warmup_steps=2
+            --do_train
+            --do_eval
+            --learning_rate=2e-4
+            --per_device_train_batch_size=2
+            --per_device_eval_batch_size=1
+        """.split()
+
+        with patch.object(sys, "argv", testargs):
+            result = run_swag.main()
+            self.assertGreaterEqual(result["eval_accuracy"], 0.8)
 
     @require_torch_non_multi_gpu_but_fix_me
     def test_generation(self):
