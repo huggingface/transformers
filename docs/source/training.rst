@@ -278,6 +278,31 @@ pass it to the trainer.
 Finally, you can view the results, including any calculated metrics, by launching tensorboard in your specified
 ``logging_dir`` directory.
 
+Trainer Integrations
+-----------------------------------------------------------------------------------------------------------------------
+
+The trainer is being extended to support experimental libraries that may dramatically improve your training time and
+fit bigger models.
+
+The main part that is being integrated at the moment is based on the paper `ZeRO: Memory Optimizations Toward Training
+Trillion Parameter Models, by Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, Yuxiong He
+<https://arxiv.org/abs/1910.02054>`_.
+
+You can already deploy the following features from this paper:
+
+* Optimizer State Sharding
+* Gradient Sharding
+
+using the `--sharded_ddp` trainer argument. This is implemented via `fairscale
+<https://github.com/facebookresearch/fairscale/>`_. You will have to install `fairscale`.
+
+Note that it works with `--fp16` too, to make things even faster.
+
+One of the main benefits of enabling `--sharded_ddp` is that you should be able to use significantly larger batch sizes
+using the same hardware (e.g. 3x or bigger).
+
+Eventually more parts will be supported via integrating `DeepSpeed <https://github.com/microsoft/DeepSpeed>`.
+
 
 .. _additional-resources:
 
