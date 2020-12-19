@@ -346,6 +346,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (GPT2Config, TFGPT2ForSequenceClassification),
         (MPNetConfig, TFMPNetForSequenceClassification),
         (OpenAIGPTConfig, TFOpenAIGPTForSequenceClassification),
+        (TransfoXLConfig, TFTransfoXLForSequenceClassification),
         (CTRLConfig, TFCTRLForSequenceClassification),
         (TransfoXLConfig, TFTransfoXLForSequenceClassification),
     ]
