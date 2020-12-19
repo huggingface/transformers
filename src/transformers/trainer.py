@@ -35,6 +35,7 @@ from .integrations import (  # isort: split
     is_azureml_available,
     is_comet_available,
     is_fairscale_available,
+    is_deepspeed_available,
     is_mlflow_available,
     is_optuna_available,
     is_ray_available,
@@ -158,6 +159,9 @@ if is_fairscale_available():
     from fairscale.optim import OSS
     from fairscale.optim.grad_scaler import ShardedGradScaler
 
+if is_deepspeed_available():
+    import deepspeed
+
 logger = logging.get_logger(__name__)
 
 
@@ -240,6 +244,22 @@ class Trainer:
         if model is None and model_init is not None:
             model = self.call_model_init()
 
+        if args.deepspeed:
+            model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+            model, optimizer, training_dataloader, lr_scheduler = deepspeed.initialize(
+                args=args,
+                model=model,
+                model_parameters=model_parameters,
+                #optimizer=optimizer,
+                #lr_scheduler=lr_scheduler,
+                #training_data=trainset,
+            )
+
+            self.optimizer = optimizer
+            self.lr_scheduler = lr_scheduler
+        else:
+            self.optimizer, self.lr_scheduler = optimizers
+
         # Model parallel
         if model is not None and not self.args.model_parallel:
             model = model.to(args.device)
@@ -252,7 +272,6 @@ class Trainer:
         self.tokenizer = tokenizer
 
         self.compute_metrics = compute_metrics
-        self.optimizer, self.lr_scheduler = optimizers
         if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
             raise RuntimeError(
                 "Passing a `model_init` is incompatible with providing the `optimizers` argument."
@@ -303,6 +322,12 @@ class Trainer:
         # Mixed precision setup
         self.use_apex = False
         self.use_amp = False
+
+        # deepspeed manages its own fp16, so don't interfere
+        # XXX: perhaps assert if --fp16 is passed with --deepspeed?
+        if args.deepspeed:
+            args.fp16 = False
+
         if args.fp16:
             if args.fp16_backend == "auto":
                 backend = "amp" if _is_native_amp_available else "apex"
@@ -811,8 +836,9 @@ class Trainer:
                             # AMP: gradients need unscaling
                             self.scaler.unscale_(self.optimizer)
 
-                        if hasattr(self.optimizer, "clip_grad_norm"):
+                        if hasattr(self.optimizer, "clip_grad_norm") and not self.args.deepspeed:
                             # Some optimizers (like the sharded optimizer) have a specific way to do gradient clipping
+                            # deepspeed has clip_grad_norm aliased to torch.nn.utils.clip_grad_norm_
                             self.optimizer.clip_grad_norm(self.args.max_grad_norm)
                         else:
                             # Revert to normal clipping otherwise, handling Apex or full precision

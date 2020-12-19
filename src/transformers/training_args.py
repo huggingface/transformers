@@ -217,6 +217,10 @@ class TrainingArguments:
         sharded_ddp (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Use Sharded DDP training from `FairScale <https://github.com/facebookresearch/fairscale>`__ (in distributed
             training only). This is an experimental feature.
+        deepspeed (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Use `Deepspeed <https://github.com/microsoft/deepspeed>`__. This is an experimental feature.
+        deepspeed_config (:obj:`str`, `optional`):
+            If ``deepspeed`` is used this is the location of its json config file.
     """
 
     output_dir: str = field(
@@ -392,6 +396,14 @@ class TrainingArguments:
         default=False,
         metadata={"help": "Whether or not to use sharded DDP training (in distributed training only)."},
     )
+    deepspeed: bool = field(
+        default=False,
+        metadata={"help": "Whether or not to enable deepspeed training."},
+    )
+    deepspeed_config: Optional[str] = field(
+        default=None,
+        metadata={"help": "path to deepspeed json config file (e.g. ds_config.json)"},
+    )
 
     def __post_init__(self):
         if self.disable_tqdm is None:
@@ -459,6 +471,7 @@ class TrainingArguments:
     @torch_required
     def _setup_devices(self) -> Tuple["torch.device", int]:
         logger.info("PyTorch: setting up devices")
+
         if self.no_cuda:
             device = torch.device("cpu")
             n_gpu = 0
@@ -477,7 +490,13 @@ class TrainingArguments:
         else:
             # Here, we'll use torch.distributed.
             # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
-            torch.distributed.init_process_group(backend="nccl")
+            #
+            # deepspeed performs its own DDP internally, and requires the program to be started with:
+            # deepspeed  ./program.py
+            # rather than:
+            # python -m torch.distributed.launch --nproc_per_node=2 ./program.py
+            if not self.deepspeed:
+                torch.distributed.init_process_group(backend="nccl")
             device = torch.device("cuda", self.local_rank)
             n_gpu = 1
 

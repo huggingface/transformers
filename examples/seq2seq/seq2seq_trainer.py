@@ -217,7 +217,12 @@ class Seq2SeqTrainer(Trainer):
         }
 
         if self.args.predict_with_generate and not self.args.prediction_loss_only:
-            generated_tokens = self.model.generate(
+            if self.args.deepspeed:
+                model = self.model.module
+            else:
+                model = self.model
+
+            generated_tokens = model.generate(
                 inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
                 **gen_kwargs,

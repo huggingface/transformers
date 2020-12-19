@@ -99,6 +99,13 @@ try:
 except ImportError:
     _has_fairscale = False
 
+try:
+    import deepspeed  # noqa: F401
+
+    _has_deepspeed = True
+except ImportError:
+    _has_deepspeed = False
+
 # No transformer imports above this point
 
 from .file_utils import is_torch_tpu_available  # noqa: E402
@@ -138,6 +145,8 @@ def is_mlflow_available():
 def is_fairscale_available():
     return _has_fairscale
 
+def is_deepspeed_available():
+    return _has_deepspeed
 
 def hp_params(trial):
     if is_optuna_available():
