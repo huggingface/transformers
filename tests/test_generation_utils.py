@@ -261,8 +261,15 @@ class GenerationTesterMixin:
             for output in (output_greedy, output_generate):
                 self._check_outptus(output, input_ids, model.config)
 
+    def test_greedy_generate_dict_outputs_use_cache(self):
+        for model_class in self.all_generative_model_classes:
             # enable cache
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+
+            if not hasattr(config, "use_cache"):
+                # only relevant if model has "use_cache"
+                return
+
             config.use_cache = True
             model = model_class(config).to(torch_device).eval()
             output_greedy, output_generate = self._greedy_generate(
