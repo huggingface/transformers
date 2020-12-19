@@ -958,7 +958,7 @@ def filename_to_url(filename, cache_dir=None):
 
 def get_cached_models(cache_dir: Union[str, Path] = None) -> List[Tuple]:
     """
-    Returns a list of tuples representing model binaries that are cached locally. Each tuple has shape `(model_url,
+    Returns a list of tuples representing model binaries that are cached locally. Each tuple has shape :obj:`(model_url,
     etag, size_MB)`. Filenames in `cache_dir` are use to get the metadata for each model, only urls ending with `.bin`
     are added.
 
