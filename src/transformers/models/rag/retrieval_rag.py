@@ -410,10 +410,12 @@ class RagRetriever:
             )
 
     @classmethod
-    def get_tokenizers(cls, retriever_name_or_path, indexed_dataset=None, **kwargs):
+    def from_pretrained(cls, retriever_name_or_path, indexed_dataset=None, **kwargs):
         requires_datasets(cls)
         requires_faiss(cls)
-        config = RagConfig.from_pretrained(retriever_name_or_path, **kwargs)
+        config = kwargs.pop("config", None) or RagConfig.from_pretrained(
+                            retriever_name_or_path,
+                                               **kwargs)
         rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path, config=config)
         question_encoder_tokenizer = rag_tokenizer.question_encoder
         generator_tokenizer = rag_tokenizer.generator
@@ -422,13 +424,6 @@ class RagRetriever:
             index = CustomHFIndex(config.retrieval_vector_size, indexed_dataset)
         else:
             index = cls._build_index(config)
-        return config, question_encoder_tokenizer, generator_tokenizer, index
-
-    @classmethod
-    def from_pretrained(cls, retriever_name_or_path, indexed_dataset=None, **kwargs):
-        config, question_encoder_tokenizer, generator_tokenizer, index = cls.get_tokenizers(
-            retriever_name_or_path, indexed_dataset, **kwargs
-        )
         return cls(
             config,
             question_encoder_tokenizer=question_encoder_tokenizer,
