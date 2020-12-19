@@ -971,8 +971,7 @@ def get_cached_models(cache_dir: Union[str, Path] = None) -> List[Tuple]:
     """
     if cache_dir is None:
         cache_dir = TRANSFORMERS_CACHE
-
-    if isinstance(cache_dir, Path):
+    elif isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
 
     cached_models = []
