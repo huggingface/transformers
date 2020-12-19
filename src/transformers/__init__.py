@@ -16,7 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__version__ = "4.1.0.dev0"
+__version__ = "4.2.0dev0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -164,6 +164,7 @@ from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBert
 from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
 from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
 from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
+from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
 from .models.transfo_xl import (
     TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     TransfoXLConfig,
@@ -189,6 +190,7 @@ from .pipelines import (
     PipelineDataFormat,
     QuestionAnsweringPipeline,
     SummarizationPipeline,
+    TableQuestionAnsweringPipeline,
     Text2TextGenerationPipeline,
     TextClassificationPipeline,
     TextGenerationPipeline,
@@ -357,6 +359,7 @@ if is_torch_available():
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         MODEL_MAPPING,
         MODEL_WITH_LM_HEAD_MAPPING,
@@ -369,6 +372,7 @@ if is_torch_available():
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
+        AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
         AutoModelWithLMHead,
     )
@@ -605,6 +609,13 @@ if is_torch_available():
         T5PreTrainedModel,
         load_tf_weights_in_t5,
     )
+    from .models.tapas import (
+        TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TapasForMaskedLM,
+        TapasForQuestionAnswering,
+        TapasForSequenceClassification,
+        TapasModel,
+    )
     from .models.transfo_xl import (
         TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
         AdaptiveEmbedding,
@@ -717,7 +728,7 @@ if is_tf_available():
         TFAutoModelForTokenClassification,
         TFAutoModelWithLMHead,
     )
-    from .models.bart import TFBartForConditionalGeneration, TFBartModel
+    from .models.bart import TFBartForConditionalGeneration, TFBartModel, TFBartPretrainedModel
     from .models.bert import (
         TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFBertEmbeddings,
@@ -745,6 +756,7 @@ if is_tf_available():
     )
     from .models.ctrl import (
         TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFCTRLForSequenceClassification,
         TFCTRLLMHeadModel,
         TFCTRLModel,
         TFCTRLPreTrainedModel,
@@ -859,6 +871,7 @@ if is_tf_available():
     from .models.openai import (
         TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFOpenAIGPTDoubleHeadsModel,
+        TFOpenAIGPTForSequenceClassification,
         TFOpenAIGPTLMHeadModel,
         TFOpenAIGPTMainLayer,
         TFOpenAIGPTModel,
@@ -886,6 +899,7 @@ if is_tf_available():
     from .models.transfo_xl import (
         TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFAdaptiveEmbedding,
+        TFTransfoXLForSequenceClassification,
         TFTransfoXLLMHeadModel,
         TFTransfoXLMainLayer,
         TFTransfoXLModel,
@@ -936,6 +950,7 @@ else:
 
 
 if is_flax_available():
+    from .modeling_flax_utils import FlaxPreTrainedModel
     from .models.auto import FLAX_MODEL_MAPPING, FlaxAutoModel
     from .models.bert import FlaxBertForMaskedLM, FlaxBertModel
     from .models.roberta import FlaxRobertaModel

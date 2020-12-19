@@ -28,6 +28,8 @@ from .file_utils import (
     _datasets_available,
     _faiss_available,
     _flax_available,
+    _pandas_available,
+    _scatter_available,
     _sentencepiece_available,
     _tf_available,
     _tokenizers_available,
@@ -170,6 +172,19 @@ def require_torch(test_case):
         return test_case
 
 
+def require_torch_scatter(test_case):
+    """
+    Decorator marking a test that requires PyTorch scatter.
+
+    These tests are skipped when PyTorch scatter isn't installed.
+
+    """
+    if not _scatter_available:
+        return unittest.skip("test requires PyTorch scatter")(test_case)
+    else:
+        return test_case
+
+
 def require_tf(test_case):
     """
     Decorator marking a test that requires TensorFlow.
@@ -217,6 +232,27 @@ def require_tokenizers(test_case):
     """
     if not _tokenizers_available:
         return unittest.skip("test requires tokenizers")(test_case)
+    else:
+        return test_case
+
+
+def require_pandas(test_case):
+    """
+    Decorator marking a test that requires pandas. These tests are skipped when pandas isn't installed.
+    """
+    if not _pandas_available:
+        return unittest.skip("test requires pandas")(test_case)
+    else:
+        return test_case
+
+
+def require_scatter(test_case):
+    """
+    Decorator marking a test that requires PyTorch Scatter. These tests are skipped when PyTorch Scatter isn't
+    installed.
+    """
+    if not _scatter_available:
+        return unittest.skip("test requires PyTorch Scatter")(test_case)
     else:
         return test_case
 

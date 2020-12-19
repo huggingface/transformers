@@ -13,9 +13,10 @@
 Models
 -----------------------------------------------------------------------------------------------------------------------
 
-The base classes :class:`~transformers.PreTrainedModel` and :class:`~transformers.TFPreTrainedModel` implement the
-common methods for loading/saving a model either from a local file or directory, or from a pretrained model
-configuration provided by the library (downloaded from HuggingFace's AWS S3 repository).
+The base classes :class:`~transformers.PreTrainedModel`, :class:`~transformers.TFPreTrainedModel`, and
+:class:`~transformers.FlaxPreTrainedModel` implement the common methods for loading/saving a model either from a local
+file or directory, or from a pretrained model configuration provided by the library (downloaded from HuggingFace's AWS
+S3 repository).
 
 :class:`~transformers.PreTrainedModel` and :class:`~transformers.TFPreTrainedModel` also implement a few methods which
 are common among all the models to:
@@ -54,6 +55,13 @@ TFModelUtilsMixin
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_tf_utils.TFModelUtilsMixin
+    :members:
+
+
+FlaxPreTrainedModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxPreTrainedModel
     :members:
 
 

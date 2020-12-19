@@ -165,6 +165,12 @@ from ..squeezebert.modeling_squeezebert import (
     SqueezeBertModel,
 )
 from ..t5.modeling_t5 import T5ForConditionalGeneration, T5Model
+from ..tapas.modeling_tapas import (
+    TapasForMaskedLM,
+    TapasForQuestionAnswering,
+    TapasForSequenceClassification,
+    TapasModel,
+)
 from ..transfo_xl.modeling_transfo_xl import TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
 from ..xlm.modeling_xlm import (
     XLMForMultipleChoice,
@@ -230,6 +236,7 @@ from .configuration_auto import (
     RobertaConfig,
     SqueezeBertConfig,
     T5Config,
+    TapasConfig,
     TransfoXLConfig,
     XLMConfig,
     XLMProphetNetConfig,
@@ -277,6 +284,7 @@ MODEL_MAPPING = OrderedDict(
         (XLMProphetNetConfig, XLMProphetNetModel),
         (ProphetNetConfig, ProphetNetModel),
         (MPNetConfig, MPNetModel),
+        (TapasConfig, TapasModel),
     ]
 )
 
@@ -308,6 +316,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (LxmertConfig, LxmertForPreTraining),
         (FunnelConfig, FunnelForPreTraining),
         (MPNetConfig, MPNetForMaskedLM),
+        (TapasConfig, TapasForMaskedLM),
     ]
 )
 
@@ -340,6 +349,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (ReformerConfig, ReformerModelWithLMHead),
         (FunnelConfig, FunnelForMaskedLM),
         (MPNetConfig, MPNetForMaskedLM),
+        (TapasConfig, TapasForMaskedLM),
     ]
 )
 
@@ -386,6 +396,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (ReformerConfig, ReformerForMaskedLM),
         (FunnelConfig, FunnelForMaskedLM),
         (MPNetConfig, MPNetForMaskedLM),
+        (TapasConfig, TapasForMaskedLM),
     ]
 )
 
@@ -431,6 +442,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (CTRLConfig, CTRLForSequenceClassification),
         (TransfoXLConfig, TransfoXLForSequenceClassification),
         (MPNetConfig, MPNetForSequenceClassification),
+        (TapasConfig, TapasForSequenceClassification),
     ]
 )
 
@@ -455,6 +467,13 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForQuestionAnswering),
         (LxmertConfig, LxmertForQuestionAnswering),
         (MPNetConfig, MPNetForQuestionAnswering),
+    ]
+)
+
+MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
+    [
+        # Model for Table Question Answering mapping
+        (TapasConfig, TapasForQuestionAnswering),
     ]
 )
 
@@ -1367,6 +1386,106 @@ class AutoModelForQuestionAnswering:
                 config.__class__,
                 cls.__name__,
                 ", ".join(c.__name__ for c in MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys()),
+            )
+        )
+
+
+class AutoModelForTableQuestionAnswering:
+    r"""
+    This is a generic model class that will be instantiated as one of the model classes of the library---with a table
+    question answering head---when created with the when created with the
+    :meth:`~transformers.AutoModeForTableQuestionAnswering.from_pretrained` class method or the
+    :meth:`~transformers.AutoModelForTableQuestionAnswering.from_config` class method.
+
+    This class cannot be instantiated directly using ``__init__()`` (throws an error).
+    """
+
+    def __init__(self):
+        raise EnvironmentError(
+            "AutoModelForQuestionAnswering is designed to be instantiated "
+            "using the `AutoModelForTableQuestionAnswering.from_pretrained(pretrained_model_name_or_path)` or "
+            "`AutoModelForTableQuestionAnswering.from_config(config)` methods."
+        )
+
+    @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING, use_model_types=False)
+    def from_config(cls, config):
+        r"""
+        Instantiates one of the model classes of the library---with a table question answering head---from a
+        configuration.
+
+        Note:
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForTableQuestionAnswering.from_pretrained` to load
+            the model weights.
+
+        Args:
+            config (:class:`~transformers.PretrainedConfig`):
+                The model class to instantiate is selected based on the configuration class:
+
+                List options
+
+        Examples::
+
+            >>> from transformers import AutoConfig, AutoModelForTableQuestionAnswering
+            >>> # Download configuration from huggingface.co and cache.
+            >>> config = AutoConfig.from_pretrained('google/tapas-base-finetuned-wtq')
+            >>> model = AutoModelForTableQuestionAnswering.from_config(config)
+        """
+        if type(config) in MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING.keys():
+            return MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING[type(config)](config)
+
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__,
+                cls.__name__,
+                ", ".join(c.__name__ for c in MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING.keys()),
+            )
+        )
+
+    @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING)
+    @add_start_docstrings(
+        "Instantiate one of the model classes of the library---with a table question answering head---from a "
+        "pretrained model.",
+        AUTO_MODEL_PRETRAINED_DOCSTRING,
+    )
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        r"""
+        Examples::
+
+            >>> from transformers import AutoConfig, AutoModelForTableQuestionAnswering
+
+            >>> # Download model and configuration from huggingface.co and cache.
+            >>> model = AutoModelForTableQuestionAnswering.from_pretrained('google/tapas-base-finetuned-wtq')
+
+            >>> # Update configuration during loading
+            >>> model = AutoModelForTableQuestionAnswering.from_pretrained('google/tapas-base-finetuned-wtq', output_attentions=True)
+            >>> model.config.output_attentions
+            True
+
+            >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
+            >>> config = AutoConfig.from_json_file('./tf_model/tapas_tf_checkpoint.json')
+            >>> model = AutoModelForQuestionAnswering.from_pretrained('./tf_model/tapas_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+        """
+        config = kwargs.pop("config", None)
+        if not isinstance(config, PretrainedConfig):
+            config, kwargs = AutoConfig.from_pretrained(
+                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+            )
+
+        if type(config) in MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING.keys():
+            return MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__,
+                cls.__name__,
+                ", ".join(c.__name__ for c in MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING.keys()),
             )
         )
 
