@@ -967,7 +967,7 @@ def get_cached_models(cache_dir: Union[str, Path] = None) -> List[Tuple]:
             The cache directory to search for models within. Will default to the transformers cache if unset.
 
     Returns:
-        List[Tuple]: List of tuples each with shape `(model_url, etag, size_MB)`
+        List[Tuple]: List of tuples each with shape :obj:`(model_url, etag, size_MB)`
     """
     if cache_dir is None:
         cache_dir = TRANSFORMERS_CACHE
