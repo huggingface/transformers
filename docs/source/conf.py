@@ -26,10 +26,9 @@ author = u'huggingface'
 # The short X.Y version
 version = u''
 # The full version, including alpha/beta/rc tags
-release = u'4.0.0'
+release = u'4.1.1'
 # Prefix link to always point to
-extlinks = {'prefix_link': ('https://github.com/huggingface/transformers/blob/v4.0.0/%s', '')}
-
+extlinks = {'prefix_link': ('https://github.com/huggingface/transformers/blob/v4.1.1/%s', '')}
 
 # -- General configuration ---------------------------------------------------
 
