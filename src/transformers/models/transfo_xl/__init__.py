@@ -36,6 +36,7 @@ if is_tf_available():
     from .modeling_tf_transfo_xl import (
         TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFAdaptiveEmbedding,
+        TFTransfoXLForSequenceClassification,
         TFTransfoXLLMHeadModel,
         TFTransfoXLMainLayer,
         TFTransfoXLModel,
