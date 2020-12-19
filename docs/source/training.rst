@@ -301,7 +301,7 @@ Note that it works with `--fp16` too, to make things even faster.
 One of the main benefits of enabling `--sharded_ddp` is that you should be able to use significantly larger batch sizes
 using the same hardware (e.g. 3x or bigger).
 
-Eventually more parts will be supported via integrating `DeepSpeed <https://github.com/microsoft/DeepSpeed>`.
+Eventually more parts will be supported via integrating `DeepSpeed <https://github.com/microsoft/DeepSpeed>`_.
 
 
 .. _additional-resources:
