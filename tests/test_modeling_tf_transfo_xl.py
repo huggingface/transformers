@@ -87,6 +87,7 @@ class TFTransfoXLModelTester:
             eos_token_id=self.eos_token_id,
             pad_token_id=self.vocab_size - 1,
             init_range=self.init_range,
+            num_labels = self.num_labels,
         )
 
         return (config, input_ids_1, input_ids_2, lm_labels)
@@ -142,7 +143,6 @@ class TFTransfoXLModelTester:
         )
 
     def create_and_check_transfo_xl_for_sequence_classification(self, config, input_ids_1, input_ids_2, lm_labels):
-        config.num_labels = self.num_labels
         model = TFTransfoXLForSequenceClassification(config)
         result = model(input_ids_1)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
