@@ -304,6 +304,14 @@ class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         # transfo-xl requires special resize for lm-head
         return
 
+    def _check_attentions_for_generate(self, *args, **kwargs):
+        # TODO(PVP)
+        pass
+
+    def _check_hidden_states_for_generate(self, *args, **kwargs):
+        # TODO(PVP)
+        pass
+
 
 @require_torch
 class TransfoXLModelLanguageGenerationTest(unittest.TestCase):

@@ -593,6 +593,14 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         # xlnet cannot keep gradients in attentions or hidden states
         return
 
+    def _check_attentions_for_generate(self, *args, **kwargs):
+        # TODO(PVP)
+        pass
+
+    def _check_hidden_states_for_generate(self, *args, **kwargs):
+        # TODO(PVP)
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in XLNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
