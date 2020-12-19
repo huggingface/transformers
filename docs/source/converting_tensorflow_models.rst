@@ -27,8 +27,7 @@ BERT
 
 You can convert any TensorFlow checkpoint for BERT (in particular `the pre-trained models released by Google
 <https://github.com/google-research/bert#pre-trained-models>`_\ ) in a PyTorch save file by using the
-`convert_bert_original_tf_checkpoint_to_pytorch.py
-<https://github.com/huggingface/transformers/blob/master/src/transformers/convert_bert_original_tf_checkpoint_to_pytorch.py>`_
+:prefix_link:`convert_bert_original_tf_checkpoint_to_pytorch.py <src/transformers/convert_bert_original_tf_checkpoint_to_pytorch.py>`
 script.
 
 This CLI takes as input a TensorFlow checkpoint (three files starting with ``bert_model.ckpt``\ ) and the associated
@@ -66,8 +65,8 @@ ALBERT
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Convert TensorFlow model checkpoints of ALBERT to PyTorch using the
-`convert_albert_original_tf_checkpoint_to_pytorch.py
-<https://github.com/huggingface/transformers/blob/master/src/transformers/convert_bert_original_tf_checkpoint_to_pytorch.py>`_
+:prefix_link:`convert_albert_original_tf_checkpoint_to_pytorch.py
+<src/transformers/convert_bert_original_tf_checkpoint_to_pytorch.py>`
 script.
 
 The CLI takes as input a TensorFlow checkpoint (three files starting with ``model.ckpt-best``\ ) and the accompanying

@@ -27,6 +27,8 @@ author = u'huggingface'
 version = u''
 # The full version, including alpha/beta/rc tags
 release = u'4.0.0'
+# Prefix link to always point to
+extlinks = {'prefix_link': ('https://github.com/huggingface/transformers/blob/v4.0.0/%s', '')}
 
 
 # -- General configuration ---------------------------------------------------
@@ -40,6 +42,7 @@ release = u'4.0.0'
 # ones.
 extensions = [
     'sphinx.ext.autodoc',
+    'sphinx.ext.extlinks',
     'sphinx.ext.coverage',
     'sphinx.ext.napoleon',
     'recommonmark',
