@@ -53,7 +53,7 @@ from ..camembert.modeling_tf_camembert import (
     TFCamembertForTokenClassification,
     TFCamembertModel,
 )
-from ..ctrl.modeling_tf_ctrl import TFCTRLLMHeadModel, TFCTRLModel
+from ..ctrl.modeling_tf_ctrl import TFCTRLForSequenceClassification, TFCTRLLMHeadModel, TFCTRLModel
 from ..distilbert.modeling_tf_distilbert import (
     TFDistilBertForMaskedLM,
     TFDistilBertForMultipleChoice,
@@ -120,7 +120,7 @@ from ..mpnet.modeling_tf_mpnet import (
     TFMPNetModel,
 )
 from ..mt5.modeling_tf_mt5 import TFMT5ForConditionalGeneration, TFMT5Model
-from ..openai.modeling_tf_openai import TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
+from ..openai.modeling_tf_openai import TFOpenAIGPTForSequenceClassification, TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
 from ..pegasus.modeling_tf_pegasus import TFPegasusForConditionalGeneration
 from ..roberta.modeling_tf_roberta import (
     TFRobertaForMaskedLM,
@@ -131,7 +131,11 @@ from ..roberta.modeling_tf_roberta import (
     TFRobertaModel,
 )
 from ..t5.modeling_tf_t5 import TFT5ForConditionalGeneration, TFT5Model
-from ..transfo_xl.modeling_tf_transfo_xl import TFTransfoXLLMHeadModel, TFTransfoXLModel
+from ..transfo_xl.modeling_tf_transfo_xl import (
+    TFTransfoXLForSequenceClassification,
+    TFTransfoXLLMHeadModel,
+    TFTransfoXLModel,
+)
 from ..xlm.modeling_tf_xlm import (
     TFXLMForMultipleChoice,
     TFXLMForQuestionAnsweringSimple,
@@ -341,6 +345,9 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (FunnelConfig, TFFunnelForSequenceClassification),
         (GPT2Config, TFGPT2ForSequenceClassification),
         (MPNetConfig, TFMPNetForSequenceClassification),
+        (OpenAIGPTConfig, TFOpenAIGPTForSequenceClassification),
+        (TransfoXLConfig, TFTransfoXLForSequenceClassification),
+        (CTRLConfig, TFCTRLForSequenceClassification),
     ]
 )
 

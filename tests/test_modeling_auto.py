@@ -17,7 +17,13 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, require_torch, slow
+from transformers.testing_utils import (
+    DUMMY_UNKWOWN_IDENTIFIER,
+    SMALL_MODEL_IDENTIFIER,
+    require_scatter,
+    require_torch,
+    slow,
+)
 
 
 if is_torch_available():
@@ -30,6 +36,7 @@ if is_torch_available():
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
+        AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
         AutoModelWithLMHead,
         BertConfig,
@@ -44,6 +51,8 @@ if is_torch_available():
         RobertaForMaskedLM,
         T5Config,
         T5ForConditionalGeneration,
+        TapasConfig,
+        TapasForQuestionAnswering,
     )
     from transformers.models.auto.modeling_auto import (
         MODEL_FOR_CAUSAL_LM_MAPPING,
@@ -52,6 +61,7 @@ if is_torch_available():
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         MODEL_MAPPING,
         MODEL_WITH_LM_HEAD_MAPPING,
@@ -59,6 +69,7 @@ if is_torch_available():
     from transformers.models.bert.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.models.gpt2.modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.models.t5.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.tapas.modeling_tapas import TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
@@ -169,6 +180,21 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsInstance(model, BertForQuestionAnswering)
 
     @slow
+    @require_scatter
+    def test_table_question_answering_model_from_pretrained(self):
+        for model_name in TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST[5:6]:
+            config = AutoConfig.from_pretrained(model_name)
+            self.assertIsNotNone(config)
+            self.assertIsInstance(config, TapasConfig)
+
+            model = AutoModelForTableQuestionAnswering.from_pretrained(model_name)
+            model, loading_info = AutoModelForTableQuestionAnswering.from_pretrained(
+                model_name, output_loading_info=True
+            )
+            self.assertIsNotNone(model)
+            self.assertIsInstance(model, TapasForQuestionAnswering)
+
+    @slow
     def test_token_classification_model_from_pretrained(self):
         for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = AutoConfig.from_pretrained(model_name)
@@ -200,6 +226,7 @@ class AutoModelTest(unittest.TestCase):
             MODEL_MAPPING,
             MODEL_FOR_PRETRAINING_MAPPING,
             MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+            MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
