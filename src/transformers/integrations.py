@@ -145,8 +145,10 @@ def is_mlflow_available():
 def is_fairscale_available():
     return _has_fairscale
 
+
 def is_deepspeed_available():
     return _has_deepspeed
+
 
 def hp_params(trial):
     if is_optuna_available():

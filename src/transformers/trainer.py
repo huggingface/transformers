@@ -250,9 +250,9 @@ class Trainer:
                 args=args,
                 model=model,
                 model_parameters=model_parameters,
-                #optimizer=optimizer,
-                #lr_scheduler=lr_scheduler,
-                #training_data=trainset,
+                # optimizer=optimizer,
+                # lr_scheduler=lr_scheduler,
+                # training_data=trainset,
             )
 
             self.optimizer = optimizer
