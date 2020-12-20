@@ -286,7 +286,7 @@ fit bigger models.
 
 The main part that is being integrated at the moment is based on the paper `ZeRO: Memory Optimizations Toward Training
 Trillion Parameter Models, by Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, Yuxiong He
-<https://arxiv.org/abs/1910.02054>`_.
+<https://arxiv.org/abs/1910.02054>`__.
 
 You can already deploy the following features from this paper:
 
@@ -294,9 +294,9 @@ You can already deploy the following features from this paper:
 * Gradient Sharding
 
 using the `--sharded_ddp` trainer argument. This is implemented via `fairscale
-<https://github.com/facebookresearch/fairscale/>`_. You will have to install `fairscale`.
+<https://github.com/facebookresearch/fairscale/>`__, so you will have to install this library.
 
-This feature requires distributed training.
+This feature requires distributed training (so multiple GPUs) and is not implemented for TPUs.
 
 For example here is how you could use it for `finetune_trainer.py`:
 
@@ -307,10 +307,10 @@ For example here is how you could use it for `finetune_trainer.py`:
 
 Note that it works with `--fp16` too, to make things even faster.
 
-One of the main benefits of enabling `--sharded_ddp` is that you should be able to use significantly larger batch sizes
-using the same hardware (e.g. 3x or bigger).
+One of the main benefits of enabling `--sharded_ddp` is that it uses a lot less GPU memory, so you should be able to
+use significantly larger batch sizes using the same hardware (e.g. 3x or bigger).
 
-Eventually more parts will be supported via integrating `DeepSpeed <https://github.com/microsoft/DeepSpeed>`_.
+Eventually more parts will be supported via integrating `DeepSpeed <https://github.com/microsoft/DeepSpeed>`__.
 
 
 .. _additional-resources:
