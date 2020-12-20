@@ -942,26 +942,15 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                     doc_scores is not None
                 ), "Make sure that `doc_scores` are passed, if no `input_ids` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
 
-                # def extend_beam_dim(tensor, num_beams=None):
-                #     # split dimension into `num_beams`, `num_docs`
-                #     tensor = tensor[None, :].reshape((1, n_docs) + tensor.shape[1:])
-                #     # repeat same last hidden states over `num_beams` dimension
-                #     tensor = tensor.expand((num_beams, n_docs) + tensor.shape[2:])
-                #     # merge `batch_size`, `num_beams`, `num_docs` dims again
-                #     return tensor.reshape((num_beams * n_docs,) + tensor.shape[2:])
-
                 num_candidates = len(output_sequences)
-                # individual_input_ids = extend_beam_dim(generator_input_ids, num_candidates)
                 individual_input_ids = generator_input_ids.repeat(
                     num_candidates, 1
                 )  # (num_candidates*n_docs, max_len)
 
                 individual_attention_mask = context_attention_mask[index * n_docs : (index + 1) * n_docs]
-                # individual_attention_mask = extend_beam_dim(individual_attention_mask, num_candidates)
                 individual_attention_mask = individual_attention_mask.repeat(num_candidates, 1)
 
                 individual_doc_scores = doc_scores[index : (index + 1), :]  # doc_scores.shape = [batch, n_docs]
-                # individual_doc_scores = individual_doc_scores.repeat_interleave(num_candidates,dim=0) # [num_candidates, n_docs]
                 individual_doc_scores = individual_doc_scores.repeat(num_candidates, 1)  # [num_candidates, n_docs]
 
                 outputs = self(
