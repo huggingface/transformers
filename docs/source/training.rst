@@ -303,7 +303,13 @@ For example here is how you could use it for `finetune_trainer.py`:
 .. code-block:: bash
 
     cd examples/seq2seq
-    python -m torch.distributed.launch --nproc_per_node=2 ./finetune_trainer.py --model_name_or_path sshleifer/distill-mbart-en-ro-12-4 --output_dir output_dir --adam_eps 1e-06 --data_dir wmt_en_ro --do_train --freeze_embeds --label_smoothing 0.1 --learning_rate 3e-5 --logging_first_step --logging_steps 1000 --max_source_length 128 --max_target_length 128 --num_train_epochs 1 --overwrite_output_dir --per_device_train_batch_size 4 --sortish_sampler --src_lang en_XX --task translation --tgt_lang ro_RO  --warmup_steps 500 --n_train 500 --fp16 --sharded_ddp
+    python -m torch.distributed.launch --nproc_per_node=2 ./finetune_trainer.py \
+    --model_name_or_path sshleifer/distill-mbart-en-ro-12-4 --data_dir wmt_en_ro \
+    --output_dir output_dir --overwrite_output_dir \
+    --do_train --n_train 500 --num_train_epochs 1 \
+    --per_device_train_batch_size 1  --freeze_embeds \
+    --src_lang en_XX --tgt_lang ro_RO --task translation \
+    --fp16 --sharded_ddp
 
 Note that it works with `--fp16` too, to make things even faster.
 
