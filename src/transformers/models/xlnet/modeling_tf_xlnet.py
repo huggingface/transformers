@@ -407,6 +407,20 @@ class TFXLNetLMHead(tf.keras.layers.Layer):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
         super().build(input_shape)
 
+    def get_output_embeddings(self):
+        return self.input_embeddings.weight
+
+    def set_output_embeddings(self, value):
+        self.input_embeddings.weight = value
+        self.input_embeddings.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
+
     def call(self, hidden_states):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
         hidden_states = hidden_states + self.bias
@@ -1227,37 +1241,8 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         self.transformer = TFXLNetMainLayer(config, name="transformer")
         self.lm_loss = TFXLNetLMHead(config, self.transformer.word_embedding, name="lm_loss")
 
-    def get_output_embeddings(self):
-        try:
-            return self.lm_loss.input_embeddings.weight
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.lm_loss.input_embeddings.weight
-
-    def set_output_embeddings(self, value):
-        if value is not None:
-            try:
-                self.lm_loss.input_embeddings.weight = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.lm_loss.input_embeddings.weight = value
-            self.lm_loss.input_embeddings.vocab_size = shape_list(value)[0]
-
-    def get_bias(self):
-        try:
-            return self.lm_loss.bias
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.lm_loss.bias
-
-    def set_bias(self, value):
-        if value is not None:
-            try:
-                self.lm_loss.bias = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.lm_loss.bias = value
-            self.lm_loss.vocab_size = shape_list(value)[0]
+    def get_lm_head(self):
+        return self.lm_loss
 
     def prepare_inputs_for_generation(self, inputs, past, use_mems=None, **kwargs):
         # Add dummy token at the end (no attention on this one)

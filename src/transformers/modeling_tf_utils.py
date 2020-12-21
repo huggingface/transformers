@@ -20,7 +20,7 @@ import inspect
 import os
 import re
 import warnings
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Union
 
 import h5py
 import numpy as np
