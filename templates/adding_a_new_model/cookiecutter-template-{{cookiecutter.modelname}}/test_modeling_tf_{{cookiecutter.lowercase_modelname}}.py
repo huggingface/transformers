@@ -339,8 +339,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration, TF{{cookiecutter.camelcase_modelname}}Model
-    from transformers.models.{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase_modelname}} import TF{{cookiecutter.camelcase_modelname}}SinusoidalPositionalEmbedding
-
 
 @require_tf
 class TF{{cookiecutter.camelcase_modelname}}ModelTester:
