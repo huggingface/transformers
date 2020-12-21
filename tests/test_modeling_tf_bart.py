@@ -173,6 +173,7 @@ class TFBartModelTest(TFModelTesterMixin, unittest.TestCase):
                 name = model.get_bias()
                 assert name is None
 
+    """
     def test_resize_token_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -226,6 +227,7 @@ class TFBartModelTest(TFModelTesterMixin, unittest.TestCase):
                             if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
                                 models_equal = False
                     self.assertTrue(models_equal)
+    """
 
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI

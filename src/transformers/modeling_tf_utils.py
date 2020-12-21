@@ -689,8 +689,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         Returns:
             :obj:`tf.Variable`: The new weights mapping vocabulary to hidden states.
         """
-
-        if hasattr(self, "get_lm_head"):
+        if self.get_lm_head() is not None:
             lm_head = self.get_lm_head()
             try:
                 return lm_head.get_output_embeddings()
@@ -709,14 +708,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             value (:obj:`tf.Variable`):
                 The new weights mapping hidden states to vocabulary.
         """
-        if value is not None:
-            if hasattr(self, "get_lm_head"):
-                lm_head = self.get_lm_head()
-                try:
-                    lm_head.set_output_embeddings(value)
-                except AttributeError:
-                    self(self.dummy_inputs)
-                    lm_head.set_output_embeddings(value)
+        if value is not None and self.get_lm_head() is not None:
+            lm_head = self.get_lm_head()
+            try:
+                lm_head.set_output_embeddings(value)
+            except AttributeError:
+                self(self.dummy_inputs)
+                lm_head.set_output_embeddings(value)
 
     def get_bias(self) -> Union[None, Dict[str, tf.Variable]]:
         """
@@ -725,7 +723,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         Return:
             :obj:`tf.Variable`: The weights representing the bias, None if not an LM model.
         """
-        if hasattr(self, "get_lm_head"):
+        if self.get_lm_head() is not None:
             lm_head = self.get_lm_head()
             try:
                 return lm_head.get_bias()
@@ -743,14 +741,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             value (:obj:`Dict[tf.Variable]`):
                 All the new bias attached to an LM head.
         """
-        if value is not None:
-            if hasattr(self, "get_lm_head"):
-                lm_head = self.get_lm_head()
-                try:
-                    lm_head.set_bias(value)
-                except AttributeError:
-                    self(self.dummy_inputs)
-                    lm_head.set_bias(value)
+        if value is not None and self.get_lm_head() is not None:
+            lm_head = self.get_lm_head()
+            try:
+                lm_head.set_bias(value)
+            except AttributeError:
+                self(self.dummy_inputs)
+                lm_head.set_bias(value)
     
     def get_lm_head(self) -> tf.keras.layers.Layer:
         """

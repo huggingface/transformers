@@ -480,6 +480,30 @@ class TFBartPretrainedModel(TFPreTrainedModel):
             "input_ids": input_ids,
         }
         return dummy_inputs
+    
+    def get_output_embeddings(self):
+        main_layer = getattr(self, self.base_model_prefix, self)
+
+        if main_layer is not self:
+            try:
+                return main_layer.get_output_embeddings()
+            except AttributeError:
+                self(self.dummy_inputs)
+
+                return main_layer.get_output_embeddings()
+        
+        return None
+    
+    def set_output_embeddings(self, value):
+        if value is not None:
+            main_layer = getattr(self, self.base_model_prefix, self)
+
+            if main_layer is not self:
+                try:
+                    main_layer.set_output_embeddings(value)
+                except AttributeError:
+                    self(self.dummy_inputs)
+                    main_layer.set_output_embeddings(value)
 
     @tf.function(
         input_signature=[
@@ -1015,32 +1039,25 @@ class TFBartModel(TFBartPretrainedModel):
         self.encoder = TFBartEncoder(config, embed_tokens, name="encoder")
         self.decoder = TFBartDecoder(config, embed_tokens, name="decoder")
 
-    def get_decoder(self):
-        return self.decoder
+    def get_input_embeddings(self):
+        return self.shared.weight
+
+    def set_input_embeddings(self, value):
+        self.shared.weight = value
+        self.shared.vocab_size = shape_list(self.shared.weight)[0]
+
+        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
+            pass
+        
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
+        self.encoder.set_embed_tokens(embed_tokens)
+        self.decoder.set_embed_tokens(embed_tokens)
 
     def get_encoder(self):
         return self.encoder
 
-    def get_input_embeddings(self):
-        try:
-            return self.shared.weight
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.shared.weight
-
-    def set_input_embeddings(self, value):
-        try:
-            self.shared.weight = value
-        except AttributeError:
-            self(self.dummy_inputs)
-            self.shared.weight = value
-
-        self.shared.vocab_size = shape_list(self.shared.weight)[0]
-        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
-            pass
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-        self.encoder.set_embed_tokens(embed_tokens)
-        self.decoder.set_embed_tokens(embed_tokens)
+    def get_decoder(self):
+        return self.decoder
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1189,29 +1206,11 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel):
 
     def get_encoder(self):
         return self.model.encoder
+    
+    def get_output_embeddings(self):
+        return self.model.shared.weight
 
-    def get_input_embeddings(self):
-        try:
-            return self.model.shared.weight
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.model.shared.weight
-
-    def set_input_embeddings(self, value):
-        if value is not None:
-            try:
-                self.model.shared.weight = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.model.shared.weight = value
-
-            self.model.shared.vocab_size = shape_list(self.model.shared.weight)[0]
-            with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
-                pass
-            embed_tokens = TFWrappedEmbeddings(self.model.shared, abs_scope_name=shared_abs_scope_name)
-            self.model.encoder.set_embed_tokens(embed_tokens)
-            self.model.decoder.set_embed_tokens(embed_tokens)
-
+    """
     def get_output_embeddings(self):
         try:
             return self.model.shared.weight
@@ -1279,6 +1278,7 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel):
         init_bias = tf.where(bias_mask, current_bias, self.final_logits_bias.value())
 
         self.final_logits_bias.assign(init_bias)
+    """
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
