@@ -321,6 +321,12 @@ class Trainer:
                     )
                 self.use_apex = True
 
+        # Label smoothing
+        if self.args.label_smoothing_factor != 0:
+            self.label_smoother = LabelSmoother(epsilon=self.args.label_smoothing_factor)
+        else:
+            self.label_smoother = None
+
         self.state = TrainerState()
         self.control = TrainerControl()
         # Internal variable for total_flos used to count as tensors (for distributed + TPU), will be sent in the
@@ -692,12 +698,6 @@ class Trainer:
             )
             # find_unused_parameters breaks checkpointing as per
             # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
-
-        # Label smoothing
-        if self.args.label_smoothing_factor != 0:
-            self.label_smoother = LabelSmoother(epsilon=self.args.label_smoothing_factor)
-        else:
-            self.label_smoother = None
 
         # Train!
         if is_torch_tpu_available():
@@ -1575,11 +1575,13 @@ class Trainer:
             else:
                 outputs = model(**inputs)
             if has_labels:
+                if self.label_smoother is not None and "labels" in inputs:
+                    loss = self.label_smoother(outputs, inputs["labels"]).mean().detach()
+                else:
+                    loss = (outputs["loss"] if isinstance(outputs, dict) else outputs[0]).mean().detach()
                 if isinstance(outputs, dict):
-                    loss = outputs["loss"].mean().detach()
                     logits = tuple(v for k, v in outputs.items() if k not in ignore_keys + ["loss"])
                 else:
-                    loss = outputs[0].mean().detach()
                     logits = outputs[1:]
             else:
                 loss = None

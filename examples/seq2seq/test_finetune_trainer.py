@@ -17,7 +17,7 @@ import sys
 import unittest
 from unittest.mock import patch
 
-from transformers import BertTokenizer, EncoderDecoderModel
+from transformers import BertTokenizer, EncoderDecoderModel, Seq2SeqTrainer, Seq2SeqTrainingArguments
 from transformers.file_utils import is_apex_available, is_datasets_available
 from transformers.integrations import is_fairscale_available
 from transformers.testing_utils import (
@@ -31,8 +31,7 @@ from transformers.testing_utils import (
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import set_seed
 
-from .finetune_trainer import Seq2SeqTrainingArguments, main
-from .seq2seq_trainer import Seq2SeqTrainer
+from .finetune_trainer import main
 
 
 set_seed(42)
@@ -228,6 +227,7 @@ class TestFinetuneTrainer(TestCasePlus):
             compute_metrics=_compute_metrics,
             train_dataset=train_dataset,
             eval_dataset=val_dataset,
+            tokenizer=tokenizer,
         )
 
         # start training

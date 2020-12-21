@@ -289,6 +289,7 @@ from .trainer_callback import (
 )
 from .trainer_utils import EvalPrediction, EvaluationStrategy, SchedulerType, set_seed
 from .training_args import TrainingArguments
+from .training_args_seq2seq import Seq2SeqTrainingArguments
 from .training_args_tf import TFTrainingArguments
 from .utils import logging
 
@@ -688,6 +689,7 @@ if is_torch_available():
     # Trainer
     from .trainer import Trainer
     from .trainer_pt_utils import torch_distributed_zero_first
+    from .trainer_seq2seq import Seq2SeqTrainer
 else:
     from .utils.dummy_pt_objects import *
 

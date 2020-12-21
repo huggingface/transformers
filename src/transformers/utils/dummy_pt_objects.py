@@ -2290,3 +2290,8 @@ class Trainer:
 
 def torch_distributed_zero_first(*args, **kwargs):
     requires_pytorch(torch_distributed_zero_first)
+
+
+class Seq2SeqTrainer:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
