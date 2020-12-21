@@ -72,7 +72,7 @@ Coming soon!
 ## Distributed training and mixed precision
 
 All the PyTorch scripts mentioned above work out of the box with distributed training and mixed precision, thanks to
-the [Trainer API](https://huggingface.co/transformers/main_classes/trainer.html). To launch one of them on 8 GPUS, use
+the [Trainer API](https://huggingface.co/transformers/main_classes/trainer.html). To launch one of them on the number of GPUS you have, use
 the following command:
 
 ```bash
