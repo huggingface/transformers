@@ -219,6 +219,7 @@ from .integrations import (  # isort:skip
     is_comet_available,
     is_optuna_available,
     is_ray_available,
+    is_ray_tune_available,
     is_tensorboard_available,
     is_wandb_available,
 )
@@ -405,7 +406,11 @@ if is_torch_available():
         BertGenerationEncoder,
         load_tf_weights_in_bert_generation,
     )
-    from .models.blenderbot import BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST, BlenderbotForConditionalGeneration
+    from .models.blenderbot import (
+        BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        BlenderbotForConditionalGeneration,
+        BlenderbotModel,
+    )
     from .models.camembert import (
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         CamembertForCausalLM,
@@ -521,7 +526,7 @@ if is_torch_available():
         LxmertXLayer,
     )
     from .models.marian import MarianMTModel
-    from .models.mbart import MBartForConditionalGeneration
+    from .models.mbart import MBartForConditionalGeneration, MBartModel
     from .models.mmbt import MMBTForClassification, MMBTModel, ModalEmbeddings
     from .models.mobilebert import (
         MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -558,7 +563,7 @@ if is_torch_available():
         OpenAIGPTPreTrainedModel,
         load_tf_weights_in_openai_gpt,
     )
-    from .models.pegasus import PegasusForConditionalGeneration
+    from .models.pegasus import PegasusForConditionalGeneration, PegasusModel
     from .models.prophetnet import (
         PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
         ProphetNetDecoder,
@@ -899,6 +904,7 @@ if is_tf_available():
     from .models.transfo_xl import (
         TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFAdaptiveEmbedding,
+        TFTransfoXLForSequenceClassification,
         TFTransfoXLLMHeadModel,
         TFTransfoXLMainLayer,
         TFTransfoXLModel,

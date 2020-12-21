@@ -127,8 +127,8 @@ _deps = [
     "sphinx-rtd-theme==0.4.3",  # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
     "sphinx==3.2.1",
     "starlette",
-    "tensorflow-cpu>=2.0",
-    "tensorflow>=2.0",
+    "tensorflow-cpu>=2.3",
+    "tensorflow>=2.3",
     "timeout-decorator",
     "tokenizers==0.9.4",
     "torch>=1.0",
@@ -244,7 +244,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.2.0dev0",
+    version="4.2.0.dev0", # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
