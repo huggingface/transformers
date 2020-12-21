@@ -138,6 +138,7 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         activation_dropout=0.0,
         init_std=0.02,
         decoder_start_token_id=2,
+        classifier_dropout=0.0,
         {% endif -%}
         pad_token_id=1,
         bos_token_id=0,
@@ -172,12 +173,12 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         {% else -%}
         self.d_model = d_model
-        self.encoder_ffn_dim = encoder_ffn_dim,
-        self.encoder_layers = encoder_layers,
-        self.encoder_attention_heads = encoder_attention_heads,
-        self.decoder_ffn_dim = decoder_ffn_dim,
-        self.decoder_layers = decoder_layers,
-        self.decoder_attention_heads = decoder_attention_heads,
+        self.encoder_ffn_dim = encoder_ffn_dim
+        self.encoder_layers = encoder_layers
+        self.encoder_attention_heads = encoder_attention_heads
+        self.decoder_ffn_dim = decoder_ffn_dim
+        self.decoder_layers = decoder_layers
+        self.decoder_attention_heads = decoder_attention_heads
         self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
@@ -185,6 +186,7 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         self.init_std = init_std
         self.encoder_layerdrop = encoder_layerdrop
         self.decoder_layerdrop = decoder_layerdrop
+        self.classifier_dropout = classifier_dropout
         {% endif -%}
     {% if cookiecutter.is_encoder_decoder_model == "False" %}
     {% else %}
