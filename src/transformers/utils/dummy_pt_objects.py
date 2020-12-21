@@ -2279,6 +2279,10 @@ def get_polynomial_decay_schedule_with_warmup(*args, **kwargs):
     requires_pytorch(get_polynomial_decay_schedule_with_warmup)
 
 
+def get_scheduler(*args, **kwargs):
+    requires_pytorch(get_scheduler)
+
+
 class Trainer:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)

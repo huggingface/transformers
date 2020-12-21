@@ -57,7 +57,7 @@ from .data.data_collator import DataCollator, DataCollatorWithPadding, default_d
 from .file_utils import WEIGHTS_NAME, is_apex_available, is_datasets_available, is_in_notebook, is_torch_tpu_available
 from .modeling_utils import PreTrainedModel
 from .models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
-from .optimization import AdamW, get_linear_schedule_with_warmup
+from .optimization import Adafactor, AdamW, get_scheduler
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -508,24 +508,32 @@ class Trainer:
                     "weight_decay": 0.0,
                 },
             ]
+            optimizer_cls = Adafactor if self.args.adafactor else AdamW
+            if self.args.adafactor:
+                optimizer_cls = Adafactor
+                optimizer_kwargs = {"scale_parameter": False, "relative_step": False}
+            else:
+                optimizer_cls = AdamW
+                optimizer_kwargs = {
+                    "betas": (self.args.adam_beta1, self.args.adam_beta2),
+                    "eps": self.args.adam_epsilon,
+                }
+            optimizer_kwargs["lr"] = self.args.learning_rate
             if self.sharded_dpp:
                 self.optimizer = OSS(
                     params=optimizer_grouped_parameters,
-                    optim=AdamW,
-                    lr=self.args.learning_rate,
-                    betas=(self.args.adam_beta1, self.args.adam_beta2),
-                    eps=self.args.adam_epsilon,
+                    optim=optimizer_cls,
+                    **optimizer_kwargs,
                 )
             else:
-                self.optimizer = AdamW(
-                    optimizer_grouped_parameters,
-                    lr=self.args.learning_rate,
-                    betas=(self.args.adam_beta1, self.args.adam_beta2),
-                    eps=self.args.adam_epsilon,
-                )
+                self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
+
         if self.lr_scheduler is None:
-            self.lr_scheduler = get_linear_schedule_with_warmup(
-                self.optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps
+            self.lr_scheduler = get_scheduler(
+                self.args.lr_scheduler_type,
+                self.optimizer,
+                num_warmup_steps=self.args.warmup_steps,
+                num_training_steps=num_training_steps,
             )
 
     def num_examples(self, dataloader: DataLoader) -> int:
