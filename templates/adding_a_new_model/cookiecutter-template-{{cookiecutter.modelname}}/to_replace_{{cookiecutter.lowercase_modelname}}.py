@@ -199,7 +199,7 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_mo
 # Below: "# Model for Seq2Seq Causal LM mapping"
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
-{% else -%}
+{% else %}
         ({{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}ForConditionalGeneration),
 {% endif -%}
 # End.
