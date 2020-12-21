@@ -892,7 +892,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
 
         assert (
             input_ids is not None or context_input_ids is not None
-        ), f" At least one of input_ids or context_input_ids must be given"
+        ), " At least one of input_ids or context_input_ids must be given"
 
         if self.retriever is not None and context_input_ids is None:
             question_hidden_states = self.question_encoder(input_ids, attention_mask=attention_mask)[0]
@@ -912,12 +912,9 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         model_kwargs["num_return_sequences"] = num_beams
         model_kwargs["attention_mask"] = None
 
-        if input_ids is not None:
-            len_input_ids = len(input_ids)
-        else:
-            len_input_ids = len(context_input_ids) // n_docs
+        batch_size = input_ids.shape[0] if input_ids is not None else context_input_ids.shape[0] // n_docs
 
-        for index in range(len_input_ids):
+        for index in range(batch_size):
             # first, generate beams from documents:
             generator_input_ids = context_input_ids[index * n_docs : (index + 1) * n_docs]  # (n_docs, max_len)
 
@@ -929,11 +926,12 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 # do_deduplication, max_output_len
                 output_sequences = torch.stack(list({str(k.tolist()): k for k in output_sequences}.values()))
 
+            num_candidates = output_sequences.shape[0] # after deduplication, this number can be less than n_docs*n_beam
+
             # then, run model forwards to get nll scores:
             if input_ids is not None:
-                new_input_ids = input_ids[index : index + 1].repeat(len(output_sequences), 1)
+                new_input_ids = input_ids[index : index + 1].repeat(num_candidates, 1)
                 outputs = self(new_input_ids, labels=output_sequences, exclude_bos_score=True)
-                top_cand_inds = (-outputs["loss"]).topk(num_doc_return_sequences)[1]
             else:  # input_ids is None, need context_input_ids/mask and doc_scores
                 assert (
                     context_attention_mask is not None
@@ -942,7 +940,6 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                     doc_scores is not None
                 ), "Make sure that `doc_scores` are passed, if no `input_ids` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
 
-                num_candidates = len(output_sequences)
                 individual_input_ids = generator_input_ids.repeat(
                     num_candidates, 1
                 )  # (num_candidates*n_docs, max_len)
@@ -960,7 +957,8 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                     labels=output_sequences,
                     exclude_bos_score=True,
                 )
-                top_cand_inds = (-outputs["loss"]).topk(num_doc_return_sequences)[1]
+            
+            top_cand_inds = (-outputs["loss"]).topk(num_doc_return_sequences)[1]
 
             # add hypothesis
             hypos.append(output_sequences[top_cand_inds])
