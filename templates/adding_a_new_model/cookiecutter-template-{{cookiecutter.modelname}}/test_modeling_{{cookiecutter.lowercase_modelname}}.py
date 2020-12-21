@@ -92,6 +92,8 @@ class {{cookiecutter.camelcase_modelname}}ModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
         input_mask = None
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
@@ -121,7 +123,6 @@ class {{cookiecutter.camelcase_modelname}}ModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
-            eos_token_id=self.eos_token_id
         )
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
