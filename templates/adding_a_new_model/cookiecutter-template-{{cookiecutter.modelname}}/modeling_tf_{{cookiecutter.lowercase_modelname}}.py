@@ -460,6 +460,20 @@ class TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(tf.keras.layers.Lay
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
 
         super().build(input_shape)
+    
+    def get_output_embeddings(self):
+        return self.input_embeddings.word_embeddings
+
+    def set_output_embeddings(self, value):
+        self.input_embeddings.word_embeddings = value
+        self.input_embeddings.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -803,37 +817,8 @@ class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelca
         self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
         self.mlm = TF{{cookiecutter.camelcase_modelname}}MLMHead(config, self.{{cookiecutter.lowercase_modelname}}.embeddings, name="mlm___cls")
     
-    def get_output_embeddings(self):
-        try:
-            return self.mlm.predictions.input_embeddings.word_embeddings
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.mlm.predictions.input_embeddings.word_embeddings
-
-    def set_output_embeddings(self, value):
-        if value is not None:
-            try:
-                self.mlm.predictions.input_embeddings.word_embeddings = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.mlm.predictions.input_embeddings.word_embeddings = value
-            self.mlm.predictions.input_embeddings.vocab_size = shape_list(value)[0]
-
-    def get_bias(self):
-        try:
-            return self.mlm.predictions.bias
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.mlm.predictions.bias
-
-    def set_bias(self, value):
-        if value is not None:
-            try:
-                self.mlm.predictions.bias = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.mlm.predictions.bias = value
-            self.mlm.predictions.vocab_size = shape_list(value)[0]
+    def get_lm_head(self):
+        return self.mlm.predictions
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -932,37 +917,8 @@ class TF{{cookiecutter.camelcase_modelname}}ForCausalLM(TF{{cookiecutter.camelca
         self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
         self.mlm = TF{{cookiecutter.camelcase_modelname}}MLMHead(config, self.{{cookiecutter.lowercase_modelname}}.embeddings, name="mlm___cls")
 
-    def get_output_embeddings(self):
-        try:
-            return self.mlm.predictions.input_embeddings.word_embeddings
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.mlm.predictions.input_embeddings.word_embeddings
-
-    def set_output_embeddings(self, value):
-        if value is not None:
-            try:
-                self.mlm.predictions.input_embeddings.word_embeddings = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.mlm.predictions.input_embeddings.word_embeddings = value
-            self.mlm.predictions.input_embeddings.vocab_size = shape_list(value)[0]
-
-    def get_bias(self):
-        try:
-            return self.mlm.predictions.bias
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.mlm.predictions.bias
-
-    def set_bias(self, value):
-        if value is not None:
-            try:
-                self.mlm.predictions.bias = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.mlm.predictions.bias = value
-            self.mlm.predictions.vocab_size = shape_list(value)[0]
+    def get_lm_head(self):
+        return self.mlm.predictions
 
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
