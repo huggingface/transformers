@@ -198,4 +198,8 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
+
+    @property
+    def num_hidden_layers(self) -> int:
+        return self.encoder_layers
     {% endif %}
