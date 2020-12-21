@@ -847,7 +847,7 @@ class RagModelIntegrationTests(unittest.TestCase):
             " old trafford",
         ]
         self.assertListEqual(outputs, EXPECTED_OUTPUTS)
-    
+
     @slow
     def test_rag_sequence_generate_batch_from_context_input_ids(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
@@ -869,14 +869,20 @@ class RagModelIntegrationTests(unittest.TestCase):
         attention_mask = input_dict.attention_mask.to(torch_device)
 
         question_hidden_states = rag_sequence.question_encoder(input_ids)[0]
-        docs_dict = retriever(input_ids.cpu().detach().numpy(), question_hidden_states.cpu().detach().numpy(), return_tensors="pt")
-        doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].to(torch_device).float().transpose(1, 2)).squeeze(1)
-        
-        output_ids = rag_sequence.generate(context_input_ids=docs_dict["context_input_ids"].to(torch_device), 
-                                           context_attention_mask=docs_dict["context_attention_mask"].to(torch_device), 
-                                           doc_scores=doc_scores.to(torch_device), 
-                                           do_deduplication=True,
-                                           )
+        docs_dict = retriever(
+            input_ids.cpu().detach().numpy(), question_hidden_states.cpu().detach().numpy(), return_tensors="pt"
+        )
+        doc_scores = torch.bmm(
+            question_hidden_states.unsqueeze(1),
+            docs_dict["retrieved_doc_embeds"].to(torch_device).float().transpose(1, 2),
+        ).squeeze(1)
+
+        output_ids = rag_sequence.generate(
+            context_input_ids=docs_dict["context_input_ids"].to(torch_device),
+            context_attention_mask=docs_dict["context_attention_mask"].to(torch_device),
+            doc_scores=doc_scores.to(torch_device),
+            do_deduplication=True,
+        )
 
         outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
@@ -898,7 +904,7 @@ class RagModelIntegrationTests(unittest.TestCase):
             " old trafford",
         ]
         self.assertListEqual(outputs, EXPECTED_OUTPUTS)
-    
+
     @slow
     def test_rag_token_generate_batch(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
