@@ -685,7 +685,7 @@ class {{cookiecutter.camelcase_modelname}}ModelTest(ModelTesterMixin, Generation
                 model(**inputs)[0]
 
     def test_generate_fp16(self):
-        config, input_dict = self.prepare_config_and_inputs()
+        config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
         model = {{cookiecutter.camelcase_modelname}}ForConditionalGeneration(config).eval().to(torch_device)
