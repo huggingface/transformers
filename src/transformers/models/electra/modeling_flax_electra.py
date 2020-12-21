@@ -93,31 +93,31 @@ class FlaxElectraLayerNorm(nn.Module):
     bias_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
 
     @nn.compact
-    def __call__(self, x):
+    def __call__(self, hidden_states):
         """
         Applies layer normalization on the input. It normalizes the activations of the layer for each given example in
         a batch independently, rather than across a batch like Batch Normalization. i.e. applies a transformation that
         maintains the mean activation within each example close to 0 and the activation standard deviation close to 1
 
         Args:
-          x: the inputs
+            x: the inputs
 
         Returns:
-          Normalized inputs (the same shape as inputs).
+            Normalized inputs (the same shape as inputs).
         """
-        features = x.shape[-1]
-        mean = jnp.mean(x, axis=-1, keepdims=True)
-        mean2 = jnp.mean(jax.lax.square(x), axis=-1, keepdims=True)
+        features = hidden_states.shape[-1]
+        mean = jnp.mean(hidden_states, axis=-1, keepdims=True)
+        mean2 = jnp.mean(jax.lax.square(hidden_states), axis=-1, keepdims=True)
         var = mean2 - jax.lax.square(mean)
         mul = jax.lax.rsqrt(var + self.epsilon)
 
         if self.scale:
             mul = mul * jnp.asarray(self.param("gamma", self.scale_init, (features,)))
-        y = (x - mean) * mul
+        hidden_states = (hidden_states - mean) * mul
 
         if self.bias:
-            y = y + jnp.asarray(self.param("beta", self.bias_init, (features,)))
-        return y
+            hidden_states = hidden_states + jnp.asarray(self.param("beta", self.bias_init, (features,)))
+        return hidden_states
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertEmbedding with Bert->Electra
@@ -348,23 +348,6 @@ class FlaxElectraEncoder(nn.Module):
             dtype=self.dtype,
         )(hidden_states, attention_mask, deterministic=deterministic)
         return layer
-
-
-# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPooler with Bert->Electra
-class FlaxElectraPooler(nn.Module):
-    kernel_init_scale: float = 0.2
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-
-    @nn.compact
-    def __call__(self, hidden_states):
-        cls_token = hidden_states[:, 0]
-        out = nn.Dense(
-            hidden_states.shape[-1],
-            kernel_init=jax.nn.initializers.normal(self.kernel_init_scale, self.dtype),
-            name="dense",
-            dtype=self.dtype,
-        )(cls_token)
-        return nn.tanh(out)
 
 
 class FlaxElectraPredictionHeadTransform(nn.Module):
