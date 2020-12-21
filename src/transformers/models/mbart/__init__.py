@@ -27,7 +27,7 @@ if is_tokenizers_available():
     from .tokenization_mbart_fast import MBartTokenizerFast
 
 if is_torch_available():
-    from .modeling_mbart import MBartForConditionalGeneration
+    from .modeling_mbart import MBartForConditionalGeneration, MBartModel
 
 if is_tf_available():
     from .modeling_tf_mbart import TFMBartForConditionalGeneration

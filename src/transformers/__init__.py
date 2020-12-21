@@ -405,7 +405,11 @@ if is_torch_available():
         BertGenerationEncoder,
         load_tf_weights_in_bert_generation,
     )
-    from .models.blenderbot import BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST, BlenderbotForConditionalGeneration
+    from .models.blenderbot import (
+        BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        BlenderbotForConditionalGeneration,
+        BlenderbotModel,
+    )
     from .models.camembert import (
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         CamembertForCausalLM,
@@ -521,7 +525,7 @@ if is_torch_available():
         LxmertXLayer,
     )
     from .models.marian import MarianMTModel
-    from .models.mbart import MBartForConditionalGeneration
+    from .models.mbart import MBartForConditionalGeneration, MBartModel
     from .models.mmbt import MMBTForClassification, MMBTModel, ModalEmbeddings
     from .models.mobilebert import (
         MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -558,7 +562,7 @@ if is_torch_available():
         OpenAIGPTPreTrainedModel,
         load_tf_weights_in_openai_gpt,
     )
-    from .models.pegasus import PegasusForConditionalGeneration
+    from .models.pegasus import PegasusForConditionalGeneration, PegasusModel
     from .models.prophetnet import (
         PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
         ProphetNetDecoder,
