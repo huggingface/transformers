@@ -350,7 +350,7 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
                 x = model.get_output_embeddings()
                 assert x is None
                 name = model.get_bias()
-                assert x is None
+                assert name is None
 
     def test_custom_load_tf_weights(self):
         model, output_loading_info = TFBertForTokenClassification.from_pretrained(

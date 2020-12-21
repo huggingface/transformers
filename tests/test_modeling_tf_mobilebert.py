@@ -302,7 +302,7 @@ class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
                 x = model.get_output_embeddings()
                 assert x is None
                 name = model.get_bias()
-                assert x is None
+                assert name is None
 
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI

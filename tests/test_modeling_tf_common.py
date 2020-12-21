@@ -683,7 +683,7 @@ class TFModelTesterMixin:
                 x = model.get_output_embeddings()
                 assert x is None
                 name = model.get_bias()
-                assert x is None
+                assert name is None
 
     def test_determinism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
