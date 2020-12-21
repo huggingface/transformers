@@ -208,6 +208,9 @@ class TFDPRModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_dpr_reader(*config_and_inputs)
 
+    def test_model_common_attributes(self):
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
