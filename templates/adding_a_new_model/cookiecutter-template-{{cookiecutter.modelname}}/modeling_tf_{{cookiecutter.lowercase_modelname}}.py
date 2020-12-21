@@ -2312,11 +2312,6 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
             else self.config.output_hidden_states
         )
 
-        if inputs["decoder_input_ids"] is None and inputs["input_ids"] is not None:
-            inputs["decoder_input_ids"] = shift_tokens_right(
-                inputs["input_ids"], self.config.pad_token_id, self.config.eos_token_id
-            )
-
         if inputs["encoder_outputs"] is None:
             inputs["encoder_outputs"] = self.encoder(
                 input_ids=inputs["input_ids"],
