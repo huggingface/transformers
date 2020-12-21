@@ -18,7 +18,7 @@
 import unittest
 
 from transformers import {{cookiecutter.camelcase_modelname}}Config, is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import require_sentencepiece, require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
