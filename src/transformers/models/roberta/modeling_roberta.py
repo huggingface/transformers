@@ -112,7 +112,7 @@ class RobertaEmbeddings(nn.Module):
         seq_length = input_shape[1]
 
         if position_ids is None:
-            position_ids = self.position_ids[:, :seq_length]
+            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
@@ -170,6 +170,7 @@ class RobertaSelfAttention(nn.Module):
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+
         self.is_decoder = config.is_decoder
 
     def transpose_for_scores(self, x):
@@ -259,6 +260,7 @@ class RobertaSelfAttention(nn.Module):
         context_layer = context_layer.view(*new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+
         if self.is_decoder:
             outputs = outputs + (past_key_value,)
         return outputs
@@ -390,10 +392,11 @@ class RobertaLayer(nn.Module):
             hidden_states,
             attention_mask,
             head_mask,
-            past_key_value=self_attn_past_key_value,
             output_attentions=output_attentions,
+            past_key_value=self_attn_past_key_value,
         )
         attention_output = self_attention_outputs[0]
+
         if self.is_decoder:
             outputs = self_attention_outputs[1:-1]
             present_key_value = self_attention_outputs[-1]
@@ -426,6 +429,7 @@ class RobertaLayer(nn.Module):
         outputs = (layer_output,) + outputs
         if self.is_decoder:
             outputs = outputs + (present_key_value,)
+
         return outputs
 
     def feed_forward_chunk(self, attention_output):
@@ -491,6 +495,7 @@ class RobertaEncoder(nn.Module):
                     past_key_value,
                     output_attentions,
                 )
+
             hidden_states = layer_outputs[0]
             if use_cache:
                 next_decoder_cache += (layer_outputs[-1],)
