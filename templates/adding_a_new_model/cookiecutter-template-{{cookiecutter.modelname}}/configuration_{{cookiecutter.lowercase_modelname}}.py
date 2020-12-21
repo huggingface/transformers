@@ -151,7 +151,6 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
             eos_token_id=eos_token_id,
             {% if cookiecutter.is_encoder_decoder_model == "False" -%}
             {% else -%}
-            use_cache=use_cache,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
             {% endif -%}
@@ -187,6 +186,8 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         self.encoder_layerdrop = encoder_layerdrop
         self.decoder_layerdrop = decoder_layerdrop
         self.classifier_dropout = classifier_dropout
+        self.use_cache = use_cache
+        self.num_hidden_layers = encoder_layers
         {% endif -%}
     {% if cookiecutter.is_encoder_decoder_model == "False" %}
     {% else %}
@@ -198,8 +199,4 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
-
-    @property
-    def num_hidden_layers(self) -> int:
-        return self.encoder_layers
     {% endif %}
