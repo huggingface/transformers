@@ -1382,12 +1382,9 @@ class TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering(TF{{cookiecutte
         )
 
 {% else %}
-import math
 import random
-import warnings
 from typing import Dict, Optional, Tuple, Union
 
-import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import ACT2FN
@@ -1794,14 +1791,6 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
             "input_ids": input_ids,
         }
         return dummy_inputs
-
-
-class TFPretrained{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel):
-    def __init_subclass__(self):
-        warnings.warn(
-            "The class `TFPretrained{{cookiecutter.camelcase_modelname}}Model` has been deprecated, please use `TF{{cookiecutter.camelcase_modelname}}PreTrainedModel` instead.",
-            FutureWarning,
-        )
 
 
 {{cookiecutter.uppercase_modelname}}_START_DOCSTRING = r"""
