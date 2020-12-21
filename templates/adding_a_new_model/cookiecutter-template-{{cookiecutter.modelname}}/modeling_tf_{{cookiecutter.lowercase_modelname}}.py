@@ -1779,7 +1779,7 @@ class TF{{cookiecutter.camelcase_modelname}}DecoderLayer(tf.keras.layers.Layer):
         )
 
 
-class TF{{cookiecutter.camelcase_modelname}}PretrainedModel(TFPreTrainedModel):
+class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
     config_class = {{cookiecutter.camelcase_modelname}}Config
     base_model_prefix = "model"
 
@@ -1796,10 +1796,10 @@ class TF{{cookiecutter.camelcase_modelname}}PretrainedModel(TFPreTrainedModel):
         return dummy_inputs
 
 
-class TFPretrained{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_modelname}}PretrainedModel):
+class TFPretrained{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel):
     def __init_subclass__(self):
         warnings.warn(
-            "The class `TFPretrained{{cookiecutter.camelcase_modelname}}Model` has been deprecated, please use `TF{{cookiecutter.camelcase_modelname}}PretrainedModel` instead.",
+            "The class `TFPretrained{{cookiecutter.camelcase_modelname}}Model` has been deprecated, please use `TF{{cookiecutter.camelcase_modelname}}PreTrainedModel` instead.",
             FutureWarning,
         )
 
@@ -2243,7 +2243,7 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
     {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
 @keras_serializable
-class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_modelname}}PretrainedModel):
+class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel):
     base_model_prefix = "model"
 
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, *inputs, **kwargs):
@@ -2383,7 +2383,7 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
     "The {{cookiecutter.uppercase_modelname}} Model with a language modeling head. Can be used for summarization.",
     {{cookiecutter.uppercase_modelname}}_START_DOCSTRING,
 )
-class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiecutter.camelcase_modelname}}PretrainedModel):
+class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [
         r"model.encoder.embed_tokens.weight",
         r"model.decoder.embed_tokens.weight",
