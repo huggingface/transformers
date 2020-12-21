@@ -14,7 +14,76 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-## GLUE Benchmark
+# Text classification examples
+
+## PyTorch version
+
+Based on the script [`run_glue.py`](https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_glue.py).
+
+Fine-tuning the library models for sequence classification on the GLUE benchmark: [General Language Understanding
+Evaluation](https://gluebenchmark.com/). This script can fine-tune any of the models on the [hub](https://huggingface.co/models)
+and can also be used for your own data in a csv or a JSON file (the script might need some tweaks in that case, refer
+to the comments inside for help).
+
+GLUE is made up of a total of 9 different tasks. Here is how to run the script on one of them:
+
+```bash
+export TASK_NAME=mrpc
+
+python run_glue.py \
+  --model_name_or_path bert-base-cased \
+  --task_name $TASK_NAME \
+  --do_train \
+  --do_eval \
+  --max_seq_length 128 \
+  --per_device_train_batch_size 32 \
+  --learning_rate 2e-5 \
+  --num_train_epochs 3 \
+  --output_dir /tmp/$TASK_NAME/
+```
+
+where task name can be one of cola, sst2, mrpc, stsb, qqp, mnli, qnli, rte, wnli.
+
+We get the following results on the dev set of the benchmark with the previous commands (with an exception for MRPC and
+WNLI which are tiny and where we used 5 epochs isntead of 3). Trainings are seeded so you should obtain the same
+results with PyTorch 1.6.0 (and close results with different versions), training times are given for information (a
+single Titan RTX was used):
+
+| Task  | Metric                       | Result      | Training time |
+|-------|------------------------------|-------------|---------------|
+| CoLA  | Matthew's corr               | 56.53       | 3:17          |
+| SST-2 | Accuracy                     | 92.32       | 26:06         |
+| MRPC  | F1/Accuracy                  | 88.85/84.07 | 2:21          |
+| STS-B | Person/Spearman corr.        | 88.64/88.48 | 2:13          |
+| QQP   | Accuracy/F1                  | 90.71/87.49 | 2:22:26       |
+| MNLI  | Matched acc./Mismatched acc. | 83.91/84.10 | 2:35:23       |
+| QNLI  | Accuracy                     | 90.66       | 40:57         |
+| RTE   | Accuracy                     | 65.70       | 57            |
+| WNLI  | Accuracy                     | 56.34       | 24            |
+
+Some of these results are significantly different from the ones reported on the test set of GLUE benchmark on the
+website. For QQP and WNLI, please refer to [FAQ #12](https://gluebenchmark.com/faq) on the website.
+
+### Mixed precision training
+
+If you have a GPU with mixed precision capabilities (architecture Pascal or more recent), you can use mixed precision
+training with PyTorch 1.6.0 or latest, or by installing the [Apex](https://github.com/NVIDIA/apex) library for previous
+versions. Just add the flag `--fp16` to your command launching one of the scripts mentioned above!
+
+Using mixed precision training usually results in 2x-speedup for training with the same final results:
+
+| Task  | Metric                       | Result      | Training time | Result (FP16) | Training time (FP16) |
+|-------|------------------------------|-------------|---------------|---------------|----------------------|
+| CoLA  | Matthew's corr               | 56.53       | 3:17          | 56.78         | 1:41                 |
+| SST-2 | Accuracy                     | 92.32       | 26:06         | 91.74         | 13:11                |
+| MRPC  | F1/Accuracy                  | 88.85/84.07 | 2:21          | 88.12/83.58   | 1:10                 |
+| STS-B | Person/Spearman corr.        | 88.64/88.48 | 2:13          | 88.71/88.55   | 1:08                 |
+| QQP   | Accuracy/F1                  | 90.71/87.49 | 2:22:26       | 90.67/87.43   | 1:11:54              |
+| MNLI  | Matched acc./Mismatched acc. | 83.91/84.10 | 2:35:23       | 84.04/84.06   | 1:17:06              |
+| QNLI  | Accuracy                     | 90.66       | 40:57         | 90.96         | 20:16                |
+| RTE   | Accuracy                     | 65.70       | 57            | 65.34         | 29                   |
+| WNLI  | Accuracy                     | 56.34       | 24            | 56.34         | 12                   |
+
 
 # Run TensorFlow 2.0 version
 
@@ -65,191 +134,8 @@ python run_tf_text_classification.py \
   --max_seq_length 128
 ```
 
-# Run PyTorch version
 
-Based on the script [`run_glue.py`](https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_glue.py).
-
-Fine-tuning the library models for sequence classification on the GLUE benchmark: [General Language Understanding
-Evaluation](https://gluebenchmark.com/). This script can fine-tune the following models: BERT, XLM, XLNet and RoBERTa.
-
-GLUE is made up of a total of 9 different tasks. We get the following results on the dev set of the benchmark with an
-uncased  BERT base model (the checkpoint `bert-base-uncased`). All experiments ran single V100 GPUs with a total train
-batch sizes between 16 and 64. Some of these tasks have a small dataset and training can lead to high variance in the results
-between different runs. We report the median on 5 runs (with different seeds) for each of the metrics.
-
-| Task  | Metric                       | Result      |
-|-------|------------------------------|-------------|
-| CoLA  | Matthew's corr               | 49.23       |
-| SST-2 | Accuracy                     | 91.97       |
-| MRPC  | F1/Accuracy                  | 89.47/85.29 |
-| STS-B | Person/Spearman corr.        | 83.95/83.70 |
-| QQP   | Accuracy/F1                  | 88.40/84.31 |
-| MNLI  | Matched acc./Mismatched acc. | 80.61/81.08 |
-| QNLI  | Accuracy                     | 87.46       |
-| RTE   | Accuracy                     | 61.73       |
-| WNLI  | Accuracy                     | 45.07       |
-
-Some of these results are significantly different from the ones reported on the test set
-of GLUE benchmark on the website. For QQP and WNLI, please refer to [FAQ #12](https://gluebenchmark.com/faq) on the
-website.
-
-```bash
-export TASK_NAME=MRPC
-
-python run_glue.py \
-  --model_name_or_path bert-base-cased \
-  --task_name $TASK_NAME \
-  --do_train \
-  --do_eval \
-  --max_seq_length 128 \
-  --per_device_train_batch_size 32 \
-  --learning_rate 2e-5 \
-  --num_train_epochs 3.0 \
-  --output_dir /tmp/$TASK_NAME/
-```
-
-where task name can be one of CoLA, SST-2, MRPC, STS-B, QQP, MNLI, QNLI, RTE, WNLI.
-
-The dev set results will be present within the text file `eval_results.txt` in the specified output_dir.
-In case of MNLI, since there are two separate dev sets (matched and mismatched), there will be a separate
-output folder called `/tmp/MNLI-MM/` in addition to `/tmp/MNLI/`.
-
-The code has not been tested with half-precision training with apex on any GLUE task apart from MRPC, MNLI,
-CoLA, SST-2. The following section provides details on how to run half-precision training with MRPC. With that being
-said, there shouldn’t be any issues in running half-precision training with the remaining GLUE tasks as well,
-since the data processor for each task inherits from the base class DataProcessor.
-
-## Running on TPUs in PyTorch
-
-Even when running PyTorch, you can accelerate your workloads on Google's TPUs, using `pytorch/xla`. For information on
-how to setup your TPU environment refer to the
-[pytorch/xla README](https://github.com/pytorch/xla/blob/master/README.md).
-
-For running your GLUE task on MNLI dataset you can run something like the following form the root of the transformers
-repo:
-
-```
-python examples/xla_spawn.py \
-  --num_cores=8 \
-  transformers/examples/text-classification/run_glue.py \
-  --do_train \
-  --do_eval \
-  --task_name=mrpc \
-  --num_train_epochs=3 \
-  --max_seq_length=128 \
-  --learning_rate=5e-5 \
-  --output_dir=/tmp/mrpc \
-  --overwrite_output_dir \
-  --logging_steps=5 \
-  --save_steps=5 \
-  --tpu_metrics_debug \
-  --model_name_or_path=bert-base-cased \
-  --per_device_train_batch_size=64 \
-  --per_device_eval_batch_size=64
-```
-
-
-#### Using Apex and mixed-precision
-
-Using Apex and 16 bit precision, the fine-tuning on MRPC only takes 27 seconds. First install
-[apex](https://github.com/NVIDIA/apex), then run the following example:
-
-```bash
-
-python run_glue.py \
-  --model_name_or_path bert-base-cased \
-  --task_name MRPC \
-  --do_train \
-  --do_eval \
-  --max_seq_length 128 \
-  --per_device_train_batch_size 32 \
-  --learning_rate 2e-5 \
-  --num_train_epochs 3.0 \
-  --output_dir /tmp/mrpc_output/ \
-  --fp16
-```
-
-#### Distributed training
-
-Here is an example using distributed training on 8 V100 GPUs. The model used is the BERT whole-word-masking and it
-reaches F1 > 92 on MRPC.
-
-```bash
-
-python -m torch.distributed.launch \
-    --nproc_per_node 8 run_glue.py \
-    --model_name_or_path bert-base-cased \
-    --task_name mrpc \
-    --do_train \
-    --do_eval \
-    --max_seq_length 128 \
-    --per_device_train_batch_size 8 \
-    --learning_rate 2e-5 \
-    --num_train_epochs 3.0 \
-    --output_dir /tmp/mrpc_output/
-```
-
-Training with these hyper-parameters gave us the following results:
-
-```bash
-acc = 0.8823529411764706
-acc_and_f1 = 0.901702786377709
-eval_loss = 0.3418912578906332
-f1 = 0.9210526315789473
-global_step = 174
-loss = 0.07231863956341798
-```
-
-### MNLI
-
-The following example uses the BERT-large, uncased, whole-word-masking model and fine-tunes it on the MNLI task.
-
-```bash
-export GLUE_DIR=/path/to/glue
-
-python -m torch.distributed.launch \
-    --nproc_per_node 8 run_glue.py \
-    --model_name_or_path bert-base-cased \
-    --task_name mnli \
-    --do_train \
-    --do_eval \
-    --max_seq_length 128 \
-    --per_device_train_batch_size 8 \
-    --learning_rate 2e-5 \
-    --num_train_epochs 3.0 \
-    --output_dir output_dir \
-```
-
-The results  are the following:
-
-```bash
-***** Eval results *****
-  acc = 0.8679706601466992
-  eval_loss = 0.4911287787382479
-  global_step = 18408
-  loss = 0.04755385363816904
-
-***** Eval results *****
-  acc = 0.8747965825874695
-  eval_loss = 0.45516540421714036
-  global_step = 18408
-  loss = 0.04755385363816904
-```
-
-# Run PyTorch version using PyTorch-Lightning
-
-Run `bash run_pl.sh` from the `glue` directory. This will also install `pytorch-lightning` and the requirements in
-`examples/requirements.txt`. It is a shell pipeline that will automatically download, preprocess the data and run the
-specified models. Logs are saved in `lightning_logs` directory.
-
-Pass `--gpus` flag to change the number of GPUs. Default uses 1. At the end, the expected results are:
-
-```
-TEST RESULTS {'val_loss': tensor(0.0707), 'precision': 0.852427800698191, 'recall': 0.869537067011978, 'f1': 0.8608974358974358}
-```
-
-
-# XNLI
+## XNLI
 
 Based on the script [`run_xnli.py`](https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_xnli.py).
 
