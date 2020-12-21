@@ -418,8 +418,7 @@ class FlaxPerformerModel(FlaxBertPreTrainedModel):
         return jax_state
 
     def __init__(
-            self, config: BertConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32,
-            **kwargs
+        self, config: BertConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
     ):
         module = FlaxPerformerModule(
             vocab_size=config.vocab_size,
@@ -440,8 +439,9 @@ class FlaxPerformerModel(FlaxBertPreTrainedModel):
     def module(self) -> nn.Module:
         return self._module
 
-    def __call__(self, input_ids, token_type_ids=None, position_ids=None,
-                 dropout_rng: PRNGKey = None, attention_mask=None):
+    def __call__(
+        self, input_ids, token_type_ids=None, position_ids=None, dropout_rng: PRNGKey = None, attention_mask=None
+    ):
 
         input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
             input_ids, attention_mask, token_type_ids, position_ids
@@ -458,14 +458,13 @@ class FlaxPerformerModel(FlaxBertPreTrainedModel):
             jnp.array(token_type_ids, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
-            rng=rngs
+            rng=rngs,
         )
 
 
 class FlaxPerformerForMaskedLM(FlaxBertPreTrainedModel):
     def __init__(
-            self, config: BertConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32,
-            **kwargs
+        self, config: BertConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
     ):
         module = FlaxPerformerForMaskedLMModule(
             vocab_size=config.vocab_size,
@@ -483,14 +482,14 @@ class FlaxPerformerForMaskedLM(FlaxBertPreTrainedModel):
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
     def __call__(
-            self,
-            input_ids,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            params: dict = None,
-            train: bool = False,
-            dropout_rng: PRNGKey = None,
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        params: dict = None,
+        train: bool = False,
+        dropout_rng: PRNGKey = None,
     ):
         input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
             input_ids, attention_mask, token_type_ids, position_ids
@@ -527,7 +526,7 @@ class FlaxPerformerForMaskedLMModule(nn.Module):
 
     @nn.compact
     def __call__(
-            self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
+        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
     ):
         # Model
         encoder = FlaxPerformerModule(
