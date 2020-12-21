@@ -224,13 +224,12 @@ class TFOpenAIGPTModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        list_lm_models = [TFOpenAIGPTLMHeadModel, TFOpenAIGPTDoubleHeadsModel]
 
         for model_class in self.all_model_classes:
             model = model_class(config)
             assert isinstance(model.get_input_embeddings(), tf.Variable)
 
-            if model_class in list_lm_models:
+            if model_class in self.all_generative_model_classes:
                 x = model.get_output_embeddings()
                 assert isinstance(x, tf.Variable)
                 name = model.get_bias()

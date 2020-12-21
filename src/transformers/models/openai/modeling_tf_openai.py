@@ -580,20 +580,10 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
         self.transformer = TFOpenAIGPTMainLayer(config, name="transformer")
 
     def get_output_embeddings(self):
-        try:
-            return self.transformer.tokens_embed.weight
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.transformer.tokens_embed.weight
+        return self.get_input_embeddings()
 
     def set_output_embeddings(self, value):
-        if value is not None:
-            try:
-                self.transformer.tokens_embed.weight = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.transformer.tokens_embed.weight = value
-            self.transformer.tokens_embed.vocab_size = shape_list(value)[0]
+        self.set_input_embeddings(value)
 
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -700,22 +690,6 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         self.multiple_choice_head = TFSequenceSummary(
             config, initializer_range=config.initializer_range, name="multiple_choice_head"
         )
-
-    def get_output_embeddings(self):
-        try:
-            return self.transformer.tokens_embed.weight
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.transformer.tokens_embed.weight
-
-    def set_output_embeddings(self, value):
-        if value is not None:
-            try:
-                self.transformer.tokens_embed.weight = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.transformer.tokens_embed.weight = value
-            self.transformer.tokens_embed.vocab_size = shape_list(value)[0]
 
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFOpenAIGPTDoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
