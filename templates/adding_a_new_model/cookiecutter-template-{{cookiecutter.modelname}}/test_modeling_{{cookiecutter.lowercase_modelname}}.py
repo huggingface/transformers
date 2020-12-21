@@ -66,7 +66,6 @@ class {{cookiecutter.camelcase_modelname}}ModelTester:
             initializer_range=0.02,
             num_labels=3,
             num_choices=4,
-            eos_token_id=2,
             scope=None,
     ):
         self.parent = parent
@@ -90,15 +89,9 @@ class {{cookiecutter.camelcase_modelname}}ModelTester:
         self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.num_choices = num_choices
-        self.eos_token_id = eos_token_id
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
-            3,
-        )
-        input_ids[:, -1] = self.eos_token_id  # Eos Token
-
         input_mask = None
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
@@ -515,6 +508,11 @@ class {{cookiecutter.camelcase_modelname}}ModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
+            3,
+        )
+        input_ids[:, -1] = self.eos_token_id  # Eos Token
+
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         config = {{cookiecutter.camelcase_modelname}}Config(
