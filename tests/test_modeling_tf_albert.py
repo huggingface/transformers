@@ -284,77 +284,14 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
                 x = model.get_output_embeddings()
                 assert isinstance(x, tf.Variable)
                 name = model.get_bias()
-                assert isinstance(name, tf.Variable)
+                assert isinstance(name, dict)
+                for k, v in name.items():
+                    assert isinstance(v, tf.Variable)
             else:
                 x = model.get_output_embeddings()
                 assert x is None
                 name = model.get_bias()
                 assert name is None
-
-    """
-    def test_resize_token_embeddings(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            for size in [config.vocab_size - 10, config.vocab_size + 10, None]:
-                # build the embeddings
-                model = model_class(config=config)
-                old_input_embeddings = model.get_input_embeddings()
-                old_bias = model.get_bias()
-                old_decoder_bias = None
-
-                if old_bias is not None:
-                    old_decoder_bias = model.get_decoder_bias()
-
-                old_output_embeddings = model.get_output_embeddings()
-                # reshape the embeddings
-                model.resize_token_embeddings(size)
-                new_input_embeddings = model.get_input_embeddings()
-                new_bias = model.get_bias()
-                new_decoder_bias = None
-
-                if new_bias is not None:
-                    new_decoder_bias = model.get_decoder_bias()
-
-                new_output_embeddings = model.get_output_embeddings()
-
-                # check that the resized embeddings size matches the desired size.
-                assert_size = size if size is not None else config.vocab_size
-                self.assertEqual(new_input_embeddings.shape[0], assert_size)
-
-                # check that weights remain the same after resizing
-                models_equal = True
-                for p1, p2 in zip(old_input_embeddings.value(), new_input_embeddings.value()):
-                    if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                        models_equal = False
-                self.assertTrue(models_equal)
-
-                if old_bias is not None and new_bias is not None:
-                    self.assertEqual(new_bias.shape[0], assert_size)
-                    self.assertEqual(new_decoder_bias.shape[0], assert_size)
-
-                    models_equal = True
-                    for p1, p2 in zip(old_bias.value(), new_bias.value()):
-                        if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                            models_equal = False
-                    self.assertTrue(models_equal)
-
-                    models_equal = True
-                    for p1, p2 in zip(old_decoder_bias.value(), new_decoder_bias.value()):
-                        if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                            models_equal = False
-                    self.assertTrue(models_equal)
-
-                if old_output_embeddings is not None and new_output_embeddings is not None:
-                    self.assertEqual(new_output_embeddings.shape[0], assert_size)
-                    self.assertEqual(new_output_embeddings.shape[1], old_output_embeddings.shape[1])
-
-                    models_equal = True
-                    for p1, p2 in zip(old_output_embeddings.value(), new_output_embeddings.value()):
-                        if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
-                            models_equal = False
-                    self.assertTrue(models_equal)
-    """
 
     @slow
     def test_model_from_pretrained(self):

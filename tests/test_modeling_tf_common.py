@@ -676,7 +676,9 @@ class TFModelTesterMixin:
                 x = model.get_output_embeddings()
                 assert isinstance(x, tf.Variable)
                 name = model.get_bias()
-                assert isinstance(name, tf.Variable)
+                assert isinstance(name, dict)
+                for k, v in name.items():
+                    assert isinstance(v, tf.Variable)
             else:
                 x = model.get_output_embeddings()
                 assert x is None

@@ -481,9 +481,9 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
         return {"bias": self.bias, "decoder_bias": self.decoder_bias}
 
     def set_bias(self, value):
-        for attr, weight in value.items():
-            setattr(self, attr, weight)
-            self.vocab_size = shape_list(weight)[0]
+        self.bias = value["bias"]
+        self.decoder_bias = value["decoder_bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
