@@ -370,9 +370,8 @@ class RagRetriever:
 
     """
 
-    _init_retrieval = True
-
-    def __init__(self, config, question_encoder_tokenizer, generator_tokenizer, index=None):
+    def __init__(self, config, question_encoder_tokenizer, generator_tokenizer, index=None, init_retrieval=True):
+        self._init_retrieval = init_retrieval
         requires_datasets(self)
         requires_faiss(self)
         super().__init__()
