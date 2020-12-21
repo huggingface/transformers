@@ -480,30 +480,41 @@ class TFBartPretrainedModel(TFPreTrainedModel):
             "input_ids": input_ids,
         }
         return dummy_inputs
-    
-    def get_output_embeddings(self):
-        main_layer = getattr(self, self.base_model_prefix, self)
 
-        if main_layer is not self:
+    def get_input_embeddings(self):
+        base_model = getattr(self, self.base_model_prefix, self)
+
+        try:
+            return base_model.shared.weight
+        except AttributeError:
+            self(self.dummy_inputs)
+
+        return base_model.shared.weight
+
+    def set_input_embeddings(self, value):
+        if value is not None:
+            base_model = getattr(self, self.base_model_prefix, self)
+
             try:
-                return main_layer.get_output_embeddings()
+                base_model.shared.weight = value
             except AttributeError:
                 self(self.dummy_inputs)
+                base_model.shared.weight = value
 
-                return main_layer.get_output_embeddings()
-        
-        return None
-    
+            base_model.shared.vocab_size = shape_list(base_model.shared.weight)[0]
+
+            with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
+                pass
+
+            embed_tokens = TFWrappedEmbeddings(base_model.shared, abs_scope_name=shared_abs_scope_name)
+            base_model.encoder.set_embed_tokens(embed_tokens)
+            base_model.decoder.set_embed_tokens(embed_tokens)
+
+    def get_output_embeddings(self):
+        return self.get_input_embeddings()
+
     def set_output_embeddings(self, value):
-        if value is not None:
-            main_layer = getattr(self, self.base_model_prefix, self)
-
-            if main_layer is not self:
-                try:
-                    main_layer.set_output_embeddings(value)
-                except AttributeError:
-                    self(self.dummy_inputs)
-                    main_layer.set_output_embeddings(value)
+        self.set_input_embeddings(value)
 
     @tf.function(
         input_signature=[
@@ -1039,20 +1050,6 @@ class TFBartModel(TFBartPretrainedModel):
         self.encoder = TFBartEncoder(config, embed_tokens, name="encoder")
         self.decoder = TFBartDecoder(config, embed_tokens, name="decoder")
 
-    def get_input_embeddings(self):
-        return self.shared.weight
-
-    def set_input_embeddings(self, value):
-        self.shared.weight = value
-        self.shared.vocab_size = shape_list(self.shared.weight)[0]
-
-        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
-            pass
-        
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-        self.encoder.set_embed_tokens(embed_tokens)
-        self.decoder.set_embed_tokens(embed_tokens)
-
     def get_encoder(self):
         return self.encoder
 
@@ -1206,79 +1203,12 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel):
 
     def get_encoder(self):
         return self.model.encoder
-    
-    def get_output_embeddings(self):
-        return self.model.shared.weight
 
-    """
-    def get_output_embeddings(self):
-        try:
-            return self.model.shared.weight
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.model.shared.weight
+    def get_bias(self):
+        return {"final_logits_bias": self.final_logits_bias}
 
-    def set_output_embeddings(self, value):
-        if value is not None:
-            try:
-                self.model.shared.weight = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.model.shared.weight = value
-
-            self.model.shared.vocab_size = shape_list(self.model.shared.weight)[0]
-            with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
-                pass
-            embed_tokens = TFWrappedEmbeddings(self.model.shared, abs_scope_name=shared_abs_scope_name)
-            self.model.encoder.set_embed_tokens(embed_tokens)
-            self.model.decoder.set_embed_tokens(embed_tokens)
-
-    def get_final_logits_bias(self):
-        return self.final_logits_bias
-
-    def set_final_logits_bias(self, value):
-        if value is not None:
-            self.final_logits_bias = value
-
-    def resize_token_embeddings(self, new_num_tokens):
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
-
-        if new_num_tokens is not None:
-            self._resize_final_logits_bias(new_num_tokens)
-
-        return new_embeddings
-
-    def _resize_final_logits_bias(self, new_num_tokens):
-        old_num_tokens = shape_list(self.final_logits_bias)[1]
-        size_diff = new_num_tokens - old_num_tokens
-
-        # initialize new bias
-        if tf.math.greater(size_diff, 0):
-            current_bias = tf.pad(
-                self.final_logits_bias.value(), tf.convert_to_tensor([[0, 0], [0, size_diff]]), constant_values=-1
-            )
-            num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-            bias_mask = tf.fill(tf.convert_to_tensor([1, num_tokens_to_copy]), True)
-            bias_mask = tf.pad(bias_mask, tf.convert_to_tensor([[0, 0], [0, size_diff]]), constant_values=False)
-        else:
-            current_bias = tf.slice(
-                self.final_logits_bias.value(), tf.convert_to_tensor([0, 0]), tf.convert_to_tensor([1, new_num_tokens])
-            )
-            bias_mask = tf.fill(tf.convert_to_tensor([1, new_num_tokens]), True)
-
-        self.final_logits_bias = self.add_weight(
-            shape=(
-                1,
-                new_num_tokens,
-            ),
-            initializer="zeros",
-            trainable=True,
-            name=self.final_logits_bias.name.split(":")[0],
-        )
-        init_bias = tf.where(bias_mask, current_bias, self.final_logits_bias.value())
-
-        self.final_logits_bias.assign(init_bias)
-    """
+    def set_bias(self, value):
+        self.final_logits_bias = value["final_logits_bias"]
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)

@@ -545,9 +545,7 @@ def init_copy_embeddings(old_embeddings, new_num_tokens):
         )
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
         mask = tf.fill(tf.convert_to_tensor([num_tokens_to_copy, 1]), True)
-        mask = tf.pad(
-            mask, tf.convert_to_tensor([[0, size_diff], [0, 0]]), constant_values=False
-        )
+        mask = tf.pad(mask, tf.convert_to_tensor([[0, size_diff], [0, 0]]), constant_values=False)
     else:
         # if the new size if lower than the old one, we take the current embeddings until the new size
         current_weights = tf.slice(
@@ -748,7 +746,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             except AttributeError:
                 self(self.dummy_inputs)
                 lm_head.set_bias(value)
-    
+
     def get_lm_head(self) -> tf.keras.layers.Layer:
         """
         The LM Head layer.
@@ -892,7 +890,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             init_decoder = tf.where(decoder_mask, current_decoder, new_lm_head_decoder.value())
 
             new_lm_head_decoder.assign(init_decoder)
-        
+
         return new_lm_head_decoder
 
     def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None) -> tf.Variable:
