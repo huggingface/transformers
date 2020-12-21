@@ -388,6 +388,8 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         eos_tensor = tf.expand_dims(tf.constant([self.eos_token_id] * self.batch_size), 1)
         input_ids = tf.concat([input_ids, eos_tensor], axis=1)
 
+        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
+
         config = self.config_cls(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
@@ -406,7 +408,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
             decoder_start_token_id=self.pad_token_id,
             **self.config_updates,
         )
-        inputs_dict = prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(config, input_ids)
+        inputs_dict = prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(config, input_ids, decoder_input_ids)
         return config, inputs_dict
 
     def check_decoder_model_past_large_inputs(self, config, inputs_dict):
