@@ -70,6 +70,7 @@ from .trainer_callback import (
 )
 from .trainer_pt_utils import (
     DistributedTensorGatherer,
+    LabelSmoother,
     SequentialDistributedSampler,
     distributed_broadcast_scalars,
     distributed_concat,
@@ -684,6 +685,12 @@ class Trainer:
             # find_unused_parameters breaks checkpointing as per
             # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
 
+        # Label smoothing
+        if self.args.label_smoothing_factor != 0:
+            self.label_smoother = LabelSmoother(epsilon=self.args.label_smoothing_factor)
+        else:
+            self.label_smoother = None
+
         # Train!
         if is_torch_tpu_available():
             total_train_batch_size = self.args.train_batch_size * xm.xrt_world_size()
@@ -1168,8 +1175,12 @@ class Trainer:
         # TODO: this needs to be fixed and made cleaner later.
         if self.args.past_index >= 0:
             self._past = outputs[self.args.past_index]
-        # We don't use .loss here since the model may return tuples instead of ModelOutput.
-        return outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+
+        if self.label_smoother is not None and "labels" in inputs:
+            return self.label_smoother(outputs, inputs["labels"])
+        else:
+            # We don't use .loss here since the model may return tuples instead of ModelOutput.
+            return outputs["loss"] if isinstance(outputs, dict) else outputs[0]
 
     def is_local_process_zero(self) -> bool:
         """
