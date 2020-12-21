@@ -214,6 +214,10 @@ class RobertaModelTester:
         config.add_cross_attention = True
         model = RobertaForCausalLM(config=config).to(torch_device).eval()
 
+        # make sure that ids don't start with pad token
+        mask = input_ids.ne(config.pad_token_id).long()
+        input_ids = input_ids * mask
+
         # first forward pass
         outputs = model(
             input_ids,
@@ -225,6 +229,10 @@ class RobertaModelTester:
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+
+        # make sure that ids don't start with pad token
+        mask = next_tokens.ne(config.pad_token_id).long()
+        next_tokens = next_tokens * mask
 
         # append to next input_ids and
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
