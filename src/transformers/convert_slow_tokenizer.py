@@ -74,18 +74,6 @@ class BertConverter(Converter):
         vocab = self.original_tokenizer.vocab
         tokenizer = Tokenizer(WordPiece(vocab, unk_token=str(self.original_tokenizer.unk_token)))
 
-        # # Let the tokenizer know about special tokens if they are part of the vocab
-        # if tokenizer.token_to_id(str(self.original_tokenizer.unk_token)) is not None:
-        #     tokenizer.add_special_tokens([str(self.original_tokenizer.unk_token)])
-        # if tokenizer.token_to_id(str(self.original_tokenizer.sep_token)) is not None:
-        #     tokenizer.add_special_tokens([str(self.original_tokenizer.sep_token)])
-        # if tokenizer.token_to_id(str(self.original_tokenizer.cls_token)) is not None:
-        #     tokenizer.add_special_tokens([str(self.original_tokenizer.cls_token)])
-        # if tokenizer.token_to_id(str(self.original_tokenizer.pad_token)) is not None:
-        #     tokenizer.add_special_tokens([str(self.original_tokenizer.pad_token)])
-        # if tokenizer.token_to_id(str(self.original_tokenizer.mask_token)) is not None:
-        #     tokenizer.add_special_tokens([str(self.original_tokenizer.mask_token)])
-
         tokenize_chinese_chars = False
         strip_accents = False
         do_lower_case = False
@@ -124,18 +112,6 @@ class FunnelConverter(Converter):
     def converted(self) -> Tokenizer:
         vocab = self.original_tokenizer.vocab
         tokenizer = Tokenizer(WordPiece(vocab, unk_token=str(self.original_tokenizer.unk_token)))
-
-        # # Let the tokenizer know about special tokens if they are part of the vocab
-        # if tokenizer.token_to_id(str(self.original_tokenizer.unk_token)) is not None:
-        #     tokenizer.add_special_tokens([str(self.original_tokenizer.unk_token)])
-        # if tokenizer.token_to_id(str(self.original_tokenizer.sep_token)) is not None:
-        #     tokenizer.add_special_tokens([str(self.original_tokenizer.sep_token)])
-        # if tokenizer.token_to_id(str(self.original_tokenizer.cls_token)) is not None:
-        #     tokenizer.add_special_tokens([str(self.original_tokenizer.cls_token)])
-        # if tokenizer.token_to_id(str(self.original_tokenizer.pad_token)) is not None:
-        #     tokenizer.add_special_tokens([str(self.original_tokenizer.pad_token)])
-        # if tokenizer.token_to_id(str(self.original_tokenizer.mask_token)) is not None:
-        #     tokenizer.add_special_tokens([str(self.original_tokenizer.mask_token)])
 
         tokenize_chinese_chars = False
         strip_accents = False
@@ -176,18 +152,6 @@ class MPNetConverter(Converter):
         vocab = self.original_tokenizer.vocab
         tokenizer = Tokenizer(WordPiece(vocab, unk_token=str(self.original_tokenizer.unk_token)))
 
-        # # Let the tokenizer know about special tokens if they are part of the vocab
-        # if tokenizer.token_to_id(str(self.original_tokenizer.unk_token)) is not None:
-        #     tokenizer.add_special_tokens([str(self.original_tokenizer.unk_token)])
-        # if tokenizer.token_to_id(str(self.original_tokenizer.sep_token)) is not None:
-        #     tokenizer.add_special_tokens([str(self.original_tokenizer.sep_token)])
-        # if tokenizer.token_to_id(str(self.original_tokenizer.cls_token)) is not None:
-        #     tokenizer.add_special_tokens([str(self.original_tokenizer.cls_token)])
-        # if tokenizer.token_to_id(str(self.original_tokenizer.pad_token)) is not None:
-        #     tokenizer.add_special_tokens([str(self.original_tokenizer.pad_token)])
-        # if tokenizer.token_to_id(str(self.original_tokenizer.mask_token)) is not None:
-        #     tokenizer.add_special_tokens([str(self.original_tokenizer.mask_token)])
-
         tokenize_chinese_chars = False
         strip_accents = False
         do_lower_case = False
@@ -211,7 +175,7 @@ class MPNetConverter(Converter):
 
         tokenizer.post_processor = processors.TemplateProcessing(
             single=f"{cls}:0 $A:0 {sep}:0",
-            pair=f"{cls}:0 $A:0 {sep}:0 {sep}:0 $B:1 {sep}:1",
+            pair=f"{cls}:0 $A:0 {sep}:0 {sep}:0 $B:1 {sep}:1",  # MPNet uses two [SEP] tokens
             special_tokens=[
                 (cls, cls_token_id),
                 (sep, sep_token_id),
