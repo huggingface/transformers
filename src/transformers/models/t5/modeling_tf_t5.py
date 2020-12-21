@@ -831,6 +831,30 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
 
         return self.serving_output(output)
 
+    def get_input_embeddings(self):
+        try:
+            return self.shared.weight
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.shared.weight
+
+    def set_input_embeddings(self, value):
+        if value is not None:
+            try:
+                self.shared.weight = value
+            except AttributeError:
+                self(self.dummy_inputs)
+                self.shared.weight = value
+
+            self.shared.vocab_size = shape_list(value)[0]
+            # retrieve correct absolute scope for embed token wrapper
+            with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
+                pass
+            # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
+            embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
+            self.encoder.embed_tokens = embed_tokens
+            self.decoder.embed_tokens = embed_tokens
+
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
         pad_token_id = self.config.pad_token_id
@@ -1042,30 +1066,6 @@ class TFT5Model(TFT5PreTrainedModel):
         decoder_config.is_decoder = True
         self.decoder = TFT5MainLayer(decoder_config, embed_tokens, name="decoder")
 
-    def get_input_embeddings(self):
-        try:
-            return self.shared.weight
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.shared.weight
-
-    def set_input_embeddings(self, value):
-        if value is not None:
-            try:
-                self.shared.weight = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.shared.weight = value
-
-            self.shared.vocab_size = shape_list(value)[0]
-            # retrieve correct absolute scope for embed token wrapper
-            with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
-                pass
-            # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-            embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-            self.encoder.embed_tokens = embed_tokens
-            self.decoder.embed_tokens = embed_tokens
-
     def get_encoder(self):
         return self.encoder
 
@@ -1223,30 +1223,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         if not config.tie_word_embeddings:
             self.lm_head = tf.keras.layers.Dense(config.vocab_size, use_bias=False, name="lm_head")
-
-    def get_input_embeddings(self):
-        try:
-            return self.shared.weight
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.shared.weight
-
-    def set_input_embeddings(self, value):
-        if value is not None:
-            try:
-                self.shared.weight = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.shared.weight = value
-
-            self.shared.vocab_size = shape_list(value)[0]
-            # retrieve correct absolute scope for embed token wrapper
-            with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
-                pass
-            # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-            embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-            self.encoder.embed_tokens = embed_tokens
-            self.decoder.embed_tokens = embed_tokens
 
     def get_output_embeddings(self):
         if self.config.tie_word_embeddings:
@@ -1513,29 +1489,6 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
         self.encoder = TFT5MainLayer(encoder_config, embed_tokens, name="encoder")
-
-    def get_input_embeddings(self):
-        try:
-            return self.shared.weight
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.shared.weight
-
-    def set_input_embeddings(self, value):
-        if value is not None:
-            try:
-                self.shared.weight = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.shared.weight = value
-
-            self.shared.vocab_size = shape_list(value)[0]
-            # retrieve correct absolute scope for embed token wrapper
-            with tf.compat.v1.variable_scope("shared") as shared_abs_scope_name:
-                pass
-            # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-            embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-            self.encoder.embed_tokens = embed_tokens
 
     def get_encoder(self):
         return self.encoder
