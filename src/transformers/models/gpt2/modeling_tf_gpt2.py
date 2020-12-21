@@ -656,20 +656,10 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         self.transformer = TFGPT2MainLayer(config, name="transformer")
 
     def get_output_embeddings(self):
-        try:
-            return self.transformer.wte.weight
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.transformer.wte.weight
+        return self.get_input_embeddings()
 
     def set_output_embeddings(self, value):
-        if value is not None:
-            try:
-                self.transformer.wte.weight = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.transformer.wte.weight = value
-            self.transformer.wte.vocab_size = shape_list(value)[0]
+        self.set_input_embeddings(value)
 
     def prepare_inputs_for_generation(self, inputs, past, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
@@ -791,22 +781,6 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         self.multiple_choice_head = TFSequenceSummary(
             config, initializer_range=config.initializer_range, name="multiple_choice_head"
         )
-
-    def get_output_embeddings(self):
-        try:
-            return self.transformer.wte.weight
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.transformer.wte.weight
-
-    def set_output_embeddings(self, value):
-        if value is not None:
-            try:
-                self.transformer.wte.weight = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.transformer.wte.weight = value
-            self.transformer.wte.vocab_size = shape_list(value)[0]
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFGPT2DoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)

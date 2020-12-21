@@ -818,6 +818,8 @@ class TFModelTesterMixin:
                 old_input_embeddings = model.get_input_embeddings()
                 old_bias = model.get_bias()
                 old_output_embeddings = model.get_output_embeddings()
+                print(model_class)
+                print(old_output_embeddings)
                 # reshape the embeddings
                 model.resize_token_embeddings(size)
                 new_input_embeddings = model.get_input_embeddings()
