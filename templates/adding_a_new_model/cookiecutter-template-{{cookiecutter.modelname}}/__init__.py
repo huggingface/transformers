@@ -75,7 +75,6 @@ if is_tf_available():
 {% else %}
 if is_tf_available():
     from .modeling_tf_{{cookiecutter.lowercase_modelname}} import (
-        TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
         TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
         TF{{cookiecutter.camelcase_modelname}}Model,
         TF{{cookiecutter.camelcase_modelname}}PreTrainedModel,
