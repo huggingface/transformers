@@ -329,7 +329,7 @@ import numpy as np
 
 from transformers import {{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}Tokenizer, is_tf_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import is_pt_tf_cross_test, require_tf, slow
+from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -568,7 +568,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.TestCa
             padding="max_length",
             truncation_strategy="only_first",
             truncation=True,
-            return_tensors="pt",
+            return_tensors="tf",
         )
 
         hypotheses_batch = hf.generate(
