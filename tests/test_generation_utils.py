@@ -360,17 +360,13 @@ class GenerationTesterMixin:
                 use_cache=use_cache,
             )
 
-    def _check_logits(self, batch_size, logits, length, config, num_beams=None):
-        expected_shape = (
-            (batch_size, config.vocab_size) if num_beams is None else (batch_size, num_beams, config.vocab_size)
-        )
+    def _check_logits(self, batch_size, logits, length, config):
+        expected_shape = (batch_size, config.vocab_size)
         self.assertIsInstance(logits, tuple)
         self.assertTrue(len(logits) == length)
         self.assertTrue(all(iter_logits.shape == expected_shape for iter_logits in logits))
 
-    def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beams=None
-    ):
+    def _check_attentions_for_generate(self, batch_size, attentions, min_length, max_length, config, use_cache=False):
         self.assertIsInstance(attentions, tuple)
         self.assertTrue(all(isinstance(iter_attentions, tuple) for iter_attentions in attentions))
         self.assertTrue(len(attentions) == (max_length - min_length))
@@ -379,16 +375,12 @@ class GenerationTesterMixin:
             tgt_len = min_length + idx if not use_cache else 1
             src_len = min_length + idx
 
-            expected_shape = (
-                (batch_size, config.num_attention_heads, tgt_len, src_len)
-                if num_beams is None
-                else (batch_size, num_beams, config.num_attention_heads, tgt_len, src_len)
-            )
+            expected_shape = (batch_size, config.num_attention_heads, tgt_len, src_len)
             # check attn size
             self.assertTrue(all(layer_attention.shape == expected_shape for layer_attention in iter_attentions))
 
     def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beams=None
+        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False
     ):
         self.assertIsInstance(hidden_states, tuple)
         self.assertTrue(all(isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states))
@@ -397,11 +389,6 @@ class GenerationTesterMixin:
         for idx, iter_hidden_states in enumerate(hidden_states):
             seq_len = min_length + idx if not use_cache else 1
             expected_shape = (batch_size, seq_len, config.hidden_size)
-            expected_shape = (
-                (batch_size, seq_len, config.hidden_size)
-                if num_beams is None
-                else (batch_size, num_beams, seq_len, config.hidden_size)
-            )
             # check hidden size
             self.assertTrue(
                 all(layer_hidden_states.shape == expected_shape for layer_hidden_states in iter_hidden_states)
