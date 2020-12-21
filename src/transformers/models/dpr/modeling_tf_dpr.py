@@ -576,6 +576,13 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         super().__init__(config, *args, **kwargs)
         self.ctx_encoder = TFDPREncoderLayer(config, name="ctx_encoder")
 
+    def get_input_embeddings(self):
+        try:
+            return self.ctx_encoder.bert_model.get_input_embeddings()
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.ctx_encoder.bert_model.get_input_embeddings()
+
     @add_start_docstrings_to_model_forward(TF_DPR_ENCODERS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFDPRContextEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -671,6 +678,13 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         super().__init__(config, *args, **kwargs)
         self.question_encoder = TFDPREncoderLayer(config, name="question_encoder")
 
+    def get_input_embeddings(self):
+        try:
+            return self.question_encoder.bert_model.get_input_embeddings()
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.question_encoder.bert_model.get_input_embeddings()
+
     @add_start_docstrings_to_model_forward(TF_DPR_ENCODERS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFDPRQuestionEncoderOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -764,6 +778,13 @@ class TFDPRReader(TFDPRPretrainedReader):
     def __init__(self, config: DPRConfig, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
         self.span_predictor = TFDPRSpanPredictorLayer(config, name="span_predictor")
+
+    def get_input_embeddings(self):
+        try:
+            return self.span_predictor.encoder.bert_model.get_input_embeddings()
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.span_predictor.encoder.bert_model.get_input_embeddings()
 
     @add_start_docstrings_to_model_forward(TF_DPR_READER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFDPRReaderOutput, config_class=_CONFIG_FOR_DOC)

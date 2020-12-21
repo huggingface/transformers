@@ -853,7 +853,8 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
             # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
             embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
             self.encoder.embed_tokens = embed_tokens
-            self.decoder.embed_tokens = embed_tokens
+            if hasattr(self, "decoder"):
+                self.decoder.embed_tokens = embed_tokens
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
