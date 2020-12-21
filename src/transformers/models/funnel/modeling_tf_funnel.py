@@ -784,7 +784,7 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
         self.encoder = TFFunnelEncoder(config, name="encoder")
 
     def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
+        return self.embeddings
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
