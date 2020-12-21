@@ -41,9 +41,7 @@ from flax.training.common_utils import get_metrics
 from jax.nn import log_softmax
 from modeling_flax_performer import FlaxPerformerForMaskedLM
 from transformers import (
-    CONFIG_MAPPING,
     MODEL_FOR_MASKED_LM_MAPPING,
-    AutoConfig,
     AutoTokenizer,
     BertConfig,
     FlaxBertForMaskedLM,
