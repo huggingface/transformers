@@ -31,14 +31,13 @@ class RagPyTorchDistributedRetriever(RagRetriever):
             If specified, use this index instead of the one built using the configuration
     """
 
-    _init_retrieval = False
-
     def __init__(self, config, question_encoder_tokenizer, generator_tokenizer, index=None):
         super().__init__(
             config,
             question_encoder_tokenizer=question_encoder_tokenizer,
             generator_tokenizer=generator_tokenizer,
             index=index,
+            init_retrieval=False,
         )
         self.process_group = None
 
