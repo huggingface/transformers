@@ -428,9 +428,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        AutoModel,
-        AutoModelForSequenceClassification,
-        AutoTokenizer,
         {{cookiecutter.camelcase_modelname}}Config,
         {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
         {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,

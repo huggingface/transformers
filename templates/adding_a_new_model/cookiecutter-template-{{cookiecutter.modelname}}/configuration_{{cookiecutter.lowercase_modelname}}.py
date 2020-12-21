@@ -189,8 +189,9 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         {% endif -%}
+
     {% if cookiecutter.is_encoder_decoder_model == "False" %}
-    {% else %}
+    {%- else %}
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads
@@ -198,4 +199,4 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
-    {% endif -%}
+    {%- endif %}
