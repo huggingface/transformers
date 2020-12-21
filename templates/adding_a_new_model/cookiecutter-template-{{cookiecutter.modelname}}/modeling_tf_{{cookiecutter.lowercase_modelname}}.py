@@ -2053,7 +2053,6 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.do_blenderbot_90_layernorm = config.do_blenderbot_90_layernorm
 
     def call(
         self,
@@ -2183,10 +2182,7 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _expand_mask(inputs["encoder_attention_mask"], tgt_len=input_shape[-1])
 
-        if self.do_blenderbot_90_layernorm:
-            hidden_states = self.layernorm_embedding(hidden_states) + positions
-        else:
-            hidden_states = self.layernorm_embedding(hidden_states + positions)
+        hidden_states = self.layernorm_embedding(hidden_states + positions)
         hidden_states = self.dropout(hidden_states, training=inputs["training"])
 
         # decoder layers
