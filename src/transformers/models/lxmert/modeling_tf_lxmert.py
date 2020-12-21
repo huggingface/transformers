@@ -16,6 +16,7 @@
 # limitations under the License.
 """ TF 2.0 LXMERT model. """
 
+import warnings
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
@@ -702,7 +703,7 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
         self.config = config
 
     def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
+        return self.embeddings
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
@@ -1101,7 +1102,7 @@ class TFLxmertLMPredictionHead(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def get_output_embeddings(self):
-        return self.input_embeddings.word_embeddings
+        return self.input_embeddings
 
     def set_output_embeddings(self, value):
         self.input_embeddings.word_embeddings = value
@@ -1305,6 +1306,16 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
 
     def get_lm_head(self):
         return self.cls.predictions
+
+    def get_output_layer_with_bias(self):
+        warnings.warn(
+            "The method get_output_layer_with_bias is deprecated. Please use `get_lm_head` instead.", FutureWarning
+        )
+        return self.cls.predictions
+
+    def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
+        return self.name + "/" + self.cls.name + "/" + self.cls.predictions.name
 
     @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFLxmertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)

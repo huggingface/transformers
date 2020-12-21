@@ -17,6 +17,7 @@
  TF 2.0 XLNet model.
 """
 
+import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -408,7 +409,7 @@ class TFXLNetLMHead(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def get_output_embeddings(self):
-        return self.input_embeddings.weight
+        return self.input_embeddings
 
     def set_output_embeddings(self, value):
         self.input_embeddings.weight = value
@@ -460,7 +461,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         self.use_mems_train = config.use_mems_train
 
     def get_input_embeddings(self):
-        return self.word_embedding.weight
+        return self.word_embedding
 
     def set_input_embeddings(self, value):
         self.word_embedding.weight = value
@@ -1243,6 +1244,16 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
 
     def get_lm_head(self):
         return self.lm_loss
+
+    def get_output_layer_with_bias(self):
+        warnings.warn(
+            "The method get_output_layer_with_bias is deprecated. Please use `get_lm_head` instead.", FutureWarning
+        )
+        return self.lm_loss
+
+    def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
+        return self.name + "/" + self.lm_loss.name
 
     def prepare_inputs_for_generation(self, inputs, past, use_mems=None, **kwargs):
         # Add dummy token at the end (no attention on this one)

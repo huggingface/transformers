@@ -484,12 +484,7 @@ class TFBartPretrainedModel(TFPreTrainedModel):
     def get_input_embeddings(self):
         base_model = getattr(self, self.base_model_prefix, self)
 
-        try:
-            return base_model.shared.weight
-        except AttributeError:
-            self(self.dummy_inputs)
-
-        return base_model.shared.weight
+        return base_model.shared
 
     def set_input_embeddings(self, value):
         if value is not None:

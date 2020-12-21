@@ -17,6 +17,7 @@
 
 
 import math
+import warnings
 
 import tensorflow as tf
 
@@ -536,7 +537,7 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.get_input_embeddings
     def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
+        return self.embeddings
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.set_input_embeddings
     def set_input_embeddings(self, value):
@@ -840,7 +841,7 @@ class TFMPNetLMHead(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def get_output_embeddings(self):
-        return self.decoder.word_embeddings
+        return self.decoder
 
     def set_output_embeddings(self, value):
         self.decoder.word_embeddings = value
@@ -877,6 +878,16 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
 
     def get_lm_head(self):
         return self.lm_head
+
+    def get_output_layer_with_bias(self):
+        warnings.warn(
+            "The method get_output_layer_with_bias is deprecated. Please use `get_lm_head` instead.", FutureWarning
+        )
+        return self.lm_head
+
+    def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
+        return self.name + "/" + self.lm_head.name
 
     @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

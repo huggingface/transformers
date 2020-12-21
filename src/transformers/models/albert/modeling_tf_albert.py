@@ -471,7 +471,7 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def get_output_embeddings(self):
-        return self.decoder.word_embeddings
+        return self.decoder
 
     def set_output_embeddings(self, value):
         self.decoder.word_embeddings = value
@@ -516,7 +516,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
         )
 
     def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
+        return self.embeddings
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value

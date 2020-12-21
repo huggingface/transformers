@@ -15,6 +15,8 @@
 # limitations under the License.
 """ TF 2.0 CTRL model."""
 
+import warnings
+
 import numpy as np
 import tensorflow as tf
 
@@ -238,11 +240,11 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="layernorm")
 
     def get_input_embeddings(self):
-        return self.w.weight
+        return self.w
 
     def set_input_embeddings(self, value):
         self.w.weight = value
-        self.w.vocab_size = value.shape[0]
+        self.w.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -618,7 +620,7 @@ class TFCTRLLMHead(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def get_output_embeddings(self):
-        return self.input_embeddings.weight
+        return self.input_embeddings
 
     def set_output_embeddings(self, value):
         self.input_embeddings.weight = value
@@ -653,6 +655,16 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
 
     def get_lm_head(self):
         return self.lm_head
+
+    def get_output_layer_with_bias(self):
+        warnings.warn(
+            "The method get_output_layer_with_bias is deprecated. Please use `get_lm_head` instead.", FutureWarning
+        )
+        return self.lm_head
+
+    def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
+        return self.name + "/" + self.lm_head.name
 
     def prepare_inputs_for_generation(self, inputs, past, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs

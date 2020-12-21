@@ -670,11 +670,11 @@ class TFModelTesterMixin:
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.Variable)
+            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
 
             if model_class in list_lm_models:
                 x = model.get_output_embeddings()
-                assert isinstance(x, tf.Variable)
+                assert isinstance(x, tf.keras.layers.Layer)
                 name = model.get_bias()
                 assert isinstance(name, dict)
                 for k, v in name.items():
@@ -811,18 +811,38 @@ class TFModelTesterMixin:
             return
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
+        def _find_weights(model, embedding_layer):
+            if hasattr(embedding_layer, "word_embeddings"):
+                return embedding_layer.word_embeddings
+            elif hasattr(embedding_layer, "weight"):
+                return embedding_layer.weight
+            elif hasattr(embedding_layer, "decoder"):
+                return embedding_layer.decoder
+            else:
+                # Here we build the word embeddings weights if not exists.
+                # And then we retry to get the attribute once built.
+                model(model.dummy_inputs)
+                if hasattr(embedding_layer, "word_embeddings"):
+                    return embedding_layer.word_embeddings
+                elif hasattr(embedding_layer, "weight"):
+                    return embedding_layer.weight
+                elif hasattr(embedding_layer, "decoder"):
+                    return embedding_layer.decoder
+                else:
+                    return None
+
         for model_class in self.all_model_classes:
             for size in [config.vocab_size - 10, config.vocab_size + 10, None]:
                 # build the embeddings
                 model = model_class(config=config)
-                old_input_embeddings = model.get_input_embeddings()
+                old_input_embeddings = _find_weights(model, model.get_input_embeddings())
                 old_bias = model.get_bias()
-                old_output_embeddings = model.get_output_embeddings()
+                old_output_embeddings = _find_weights(model, model.get_output_embeddings())
                 # reshape the embeddings
                 model.resize_token_embeddings(size)
-                new_input_embeddings = model.get_input_embeddings()
+                new_input_embeddings = _find_weights(model, model.get_input_embeddings())
                 new_bias = model.get_bias()
-                new_output_embeddings = model.get_output_embeddings()
+                new_output_embeddings = _find_weights(model, model.get_output_embeddings())
 
                 # check that the resized embeddings size matches the desired size.
                 assert_size = size if size is not None else config.vocab_size

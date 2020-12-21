@@ -651,12 +651,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         main_layer = getattr(self, self.base_model_prefix, self)
 
         if main_layer is not self:
-            try:
-                return main_layer.get_input_embeddings()
-            except AttributeError:
-                self(self.dummy_inputs)
-
-                return main_layer.get_input_embeddings()
+            return main_layer.get_input_embeddings()
         else:
             raise NotImplementedError
 
@@ -680,7 +675,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             else:
                 raise NotImplementedError
 
-    def get_output_embeddings(self) -> Union[None, tf.Variable]:
+    def get_output_embeddings(self) -> Union[None, tf.keras.layers.Layer]:
         """
         Returns the model's output embeddings
 
@@ -689,12 +684,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         """
         if self.get_lm_head() is not None:
             lm_head = self.get_lm_head()
-            try:
-                return lm_head.get_output_embeddings()
-            except AttributeError:
-                self(self.dummy_inputs)
 
-                return lm_head.get_output_embeddings()
+            return lm_head.get_output_embeddings()
 
         return None  # Overwrite for models with output embeddings
 
@@ -713,6 +704,29 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             except AttributeError:
                 self(self.dummy_inputs)
                 lm_head.set_output_embeddings(value)
+
+    def get_output_layer_with_bias(self) -> Union[None, tf.keras.layers.Layer]:
+        """
+        Get the layer that handles a bias attribute in case the model has an LM head with weights tied to the
+        embeddings
+
+        Return:
+            :obj:`tf.keras.layers.Layer`: The layer that handles the bias, None if not an LM model.
+        """
+        warnings.warn(
+            "The method get_output_layer_with_bias is deprecated. Please use `get_lm_head` instead.", FutureWarning
+        )
+        return None
+
+    def get_prefix_bias_name(self) -> Union[None, str]:
+        """
+        Get the concatenated prefix name of the bias from the model name to the parent layer
+
+        Return:
+            :obj:`str`: The prefix name of the bias.
+        """
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
+        return None
 
     def get_bias(self) -> Union[None, Dict[str, tf.Variable]]:
         """
@@ -773,7 +787,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             :obj:`tf.Variable`: Pointer to the input tokens Embeddings Module of the model.
         """
         if new_num_tokens is None or new_num_tokens == self.config.vocab_size:
-            return self.get_input_embeddings()
+            return self._find_weights(self.get_input_embeddings())
 
         model_embeds = self._resize_token_embeddings(new_num_tokens)
 
@@ -782,9 +796,29 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
         return model_embeds
 
+    def _find_weights(self, embedding_layer):
+        if hasattr(embedding_layer, "word_embeddings"):
+            return embedding_layer.word_embeddings
+        elif hasattr(embedding_layer, "weight"):
+            return embedding_layer.weight
+        elif hasattr(embedding_layer, "decoder"):
+            return embedding_layer.decoder
+        else:
+            # Here we build the word embeddings weights if not exists.
+            # And then we retry to get the attribute once built.
+            self(self.dummy_inputs)
+            if hasattr(embedding_layer, "word_embeddings"):
+                return embedding_layer.word_embeddings
+            elif hasattr(embedding_layer, "weight"):
+                return embedding_layer.weight
+            elif hasattr(embedding_layer, "decoder"):
+                return embedding_layer.decoder
+            else:
+                return None
+
     def _resize_token_embeddings(self, new_num_tokens):
         # get_input_embeddings and set_input_embeddings need to be implemented in base layer.
-        old_embeddings = self.get_input_embeddings()
+        old_embeddings = self._find_weights(self.get_input_embeddings())
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
 
         # if word embeddings are not tied, make sure that lm head bias is resized as well
@@ -796,7 +830,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
         # if word embeddings are not tied, make sure that lm head decoder is resized as well
         if self.get_output_embeddings() is not None:
-            old_lm_head_decoder = self.get_output_embeddings()
+            old_lm_head_decoder = self._find_weights(self.get_output_embeddings())
             new_lm_head_decoder = self._get_resized_lm_head_decoder(old_lm_head_decoder, new_num_tokens)
 
             self.set_output_embeddings(new_lm_head_decoder)
@@ -876,7 +910,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             input ones.
         """
         new_lm_head_decoder = None
-        is_input_output_equals = tf.reduce_any(self.get_input_embeddings() == old_lm_head_decoder)
+        is_input_output_equals = tf.reduce_any(self._find_weights(self.get_input_embeddings()) == old_lm_head_decoder)
 
         if old_lm_head_decoder is not None and not is_input_output_equals:
             old_embedding_dim = shape_list(old_lm_head_decoder)[1]

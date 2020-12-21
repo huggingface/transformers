@@ -18,6 +18,7 @@
 
 import itertools
 import random
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -479,7 +480,7 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
             )
 
     def get_input_embeddings(self):
-        return self.embeddings.weight
+        return self.embeddings
 
     def set_input_embeddings(self, value):
         self.embeddings.weight = value
@@ -729,7 +730,7 @@ class TFFlaubertPredLayer(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def get_output_embeddings(self):
-        return self.input_embeddings.weight
+        return self.input_embeddings
 
     def set_output_embeddings(self, value):
         self.input_embeddings.weight = value
@@ -790,6 +791,16 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
 
     def get_lm_head(self):
         return self.pred_layer
+
+    def get_output_layer_with_bias(self):
+        warnings.warn(
+            "The method get_output_layer_with_bias is deprecated. Please use `get_lm_head` instead.", FutureWarning
+        )
+        return self.pred_layer
+
+    def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
+        return self.name + "/" + self.pred_layer.name
 
     def prepare_inputs_for_generation(self, inputs, **kwargs):
         mask_token_id = self.config.mask_token_id

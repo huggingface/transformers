@@ -832,11 +832,7 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
         return self.serving_output(output)
 
     def get_input_embeddings(self):
-        try:
-            return self.shared.weight
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.shared.weight
+        return self.shared
 
     def set_input_embeddings(self, value):
         if value is not None:

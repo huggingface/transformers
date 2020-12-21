@@ -288,11 +288,11 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            assert isinstance(model.get_input_embeddings(), tf.Variable)
+            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
 
             if model_class in self.all_generative_model_classes:
                 x = model.get_output_embeddings()
-                assert isinstance(x, tf.Variable)
+                assert isinstance(x, tf.keras.layers.Layer)
                 name = model.get_bias()
                 assert name is None
             else:
