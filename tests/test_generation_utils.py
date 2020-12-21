@@ -23,7 +23,6 @@ from transformers.testing_utils import require_torch, slow, torch_device
 if is_torch_available():
     import torch
 
-    from transformers.generation_utils import GreedySearchDecoderOnlyOutput, GreedySearchEncoderDecoderOutput
     from transformers import BartForConditionalGeneration, BartTokenizer, top_k_top_p_filtering
     from transformers.generation_beam_search import BeamSearchScorer
     from transformers.generation_logits_process import (
@@ -37,6 +36,7 @@ if is_torch_available():
         TopKLogitsWarper,
         TopPLogitsWarper,
     )
+    from transformers.generation_utils import GreedySearchDecoderOnlyOutput, GreedySearchEncoderDecoderOutput
 
 
 class GenerationTesterMixin:
