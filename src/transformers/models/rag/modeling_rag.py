@@ -926,7 +926,9 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 # do_deduplication, max_output_len
                 output_sequences = torch.stack(list({str(k.tolist()): k for k in output_sequences}.values()))
 
-            num_candidates = output_sequences.shape[0] # after deduplication, this number can be less than n_docs*n_beam
+            num_candidates = output_sequences.shape[
+                0
+            ]  # after deduplication, this number can be less than n_docs*n_beam
 
             # then, run model forwards to get nll scores:
             if input_ids is not None:
@@ -957,7 +959,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                     labels=output_sequences,
                     exclude_bos_score=True,
                 )
-            
+
             top_cand_inds = (-outputs["loss"]).topk(num_doc_return_sequences)[1]
 
             # add hypothesis
