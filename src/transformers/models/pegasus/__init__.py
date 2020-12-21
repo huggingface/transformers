@@ -27,7 +27,7 @@ if is_tokenizers_available():
     from .tokenization_pegasus_fast import PegasusTokenizerFast
 
 if is_torch_available():
-    from .modeling_pegasus import PegasusForConditionalGeneration
+    from .modeling_pegasus import PegasusForConditionalGeneration, PegasusModel
 
 if is_tf_available():
     from .modeling_tf_pegasus import TFPegasusForConditionalGeneration
