@@ -1166,6 +1166,34 @@ class ModelTesterMixin:
                     for value_, parallel_value_ in zip(value, parallel_value):
                         self.assertTrue(torch.allclose(value_, parallel_value_.to("cpu"), atol=1e-7))
 
+    @require_torch_multi_gpu
+    def test_model_parallel_beam_search(self):
+        if not self.test_model_parallel:
+            return
+
+        all_generative_and_parallelizable_model_classes = tuple(
+            set(self.all_generative_model_classes).intersection(self.all_parallelizable_model_classes)
+        )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in all_generative_and_parallelizable_model_classes:
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+
+            def cast_to_device(dictionary, device):
+                output = {}
+                for k, v in dictionary.items():
+                    if isinstance(v, torch.Tensor):
+                        output[k] = v.to(device)
+                    else:
+                        output[k] = v
+
+                return output
+
+            model.parallelize()
+            model.generate(**cast_to_device(inputs_dict, "cuda:0"), num_beams=2)
+
 
 global_rng = random.Random()
 
