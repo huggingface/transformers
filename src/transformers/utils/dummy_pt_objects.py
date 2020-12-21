@@ -600,6 +600,15 @@ class BlenderbotForConditionalGeneration:
         requires_pytorch(self)
 
 
+class BlenderbotModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -1297,6 +1306,15 @@ class MBartForConditionalGeneration:
         requires_pytorch(self)
 
 
+class MBartModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class MMBTForClassification:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -1552,6 +1570,15 @@ def load_tf_weights_in_openai_gpt(*args, **kwargs):
 
 
 class PegasusForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class PegasusModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
