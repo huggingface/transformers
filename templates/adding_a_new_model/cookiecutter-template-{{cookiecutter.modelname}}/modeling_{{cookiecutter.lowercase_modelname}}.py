@@ -1393,11 +1393,7 @@ class {{cookiecutter.camelcase_modelname}}ForQuestionAnswering({{cookiecutter.ca
             attentions=outputs.attentions,
         )
 {% else %}
-
-
-import math
 import random
-import warnings
 from typing import Optional, Tuple
 
 import numpy as np

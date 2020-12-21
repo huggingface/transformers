@@ -55,7 +55,6 @@ class {{cookiecutter.camelcase_modelname}}Tokenizer(BertTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
 
-
 {%- elif cookiecutter.tokenizer_type == "Based on BART" %}
 from ...utils import logging
 from ..bart.tokenization_bart import BartTokenizer
@@ -93,7 +92,6 @@ class {{cookiecutter.camelcase_modelname}}Tokenizer(BartTokenizer):
 
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-
 
 {%- elif cookiecutter.tokenizer_type == "Standalone" %}
 from typing import List, Optional
@@ -329,6 +327,5 @@ class {{cookiecutter.camelcase_modelname}}TokenizerFast(PreTrainedTokenizerFast)
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
-
 
 {% endif %}

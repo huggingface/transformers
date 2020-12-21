@@ -191,7 +191,6 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         {% endif -%}
     {% if cookiecutter.is_encoder_decoder_model == "False" %}
     {% else %}
-
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads
@@ -199,4 +198,4 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
-    {% endif %}
+    {% endif -%}
