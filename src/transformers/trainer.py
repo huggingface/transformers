@@ -37,7 +37,7 @@ from .integrations import (  # isort: split
     is_fairscale_available,
     is_mlflow_available,
     is_optuna_available,
-    is_ray_available,
+    is_ray_tune_available,
     is_tensorboard_available,
     is_wandb_available,
     run_hp_search_optuna,
@@ -145,7 +145,7 @@ if is_mlflow_available():
 if is_optuna_available():
     import optuna
 
-if is_ray_available():
+if is_ray_tune_available():
     from ray import tune
 
 if is_azureml_available():
@@ -1062,7 +1062,7 @@ class Trainer:
         backend = HPSearchBackend(backend)
         if backend == HPSearchBackend.OPTUNA and not is_optuna_available():
             raise RuntimeError("You picked the optuna backend, but it is not installed. Use `pip install optuna`.")
-        if backend == HPSearchBackend.RAY and not is_ray_available():
+        if backend == HPSearchBackend.RAY and not is_ray_tune_available():
             raise RuntimeError(
                 "You picked the Ray Tune backend, but it is not installed. Use `pip install 'ray[tune]'`."
             )
