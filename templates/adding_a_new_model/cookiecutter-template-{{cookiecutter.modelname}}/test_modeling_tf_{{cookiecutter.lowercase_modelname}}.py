@@ -329,7 +329,7 @@ import numpy as np
 
 from transformers import {{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}Tokenizer, is_tf_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_sentencepiece, require_tf, slow
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
