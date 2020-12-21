@@ -594,7 +594,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
     }])
     def serving(self, inputs):
-        return dict(self.call(inputs))
+        output = self.call(inputs)
+        
+        return self.serving_output(output)
+    
+    def serving_output(output):
+        raise NotImplementedError
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         """
@@ -820,7 +825,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         """
         raise NotImplementedError
 
-    def save_pretrained(self, save_directory, saved_model=False):
+    def save_pretrained(self, save_directory, saved_model=True):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
         :func:`~transformers.TFPreTrainedModel.from_pretrained` class method.
@@ -837,7 +842,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         os.makedirs(save_directory, exist_ok=True)
 
         if saved_model:
-            tf.saved_model.save(self, save_directory, signatures=self.serving)
+            self.save(save_directory, include_optimizer=False, signatures=self.serving)
             logger.info(f"Saved model saved in {save_directory}")
 
         # Save configuration file
