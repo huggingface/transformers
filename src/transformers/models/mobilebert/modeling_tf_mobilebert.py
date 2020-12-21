@@ -665,6 +665,20 @@ class TFMobileBertLMPredictionHead(tf.keras.layers.Layer):
         )
         super().build(input_shape)
 
+    def get_output_embeddings(self):
+        return self.decoder
+
+    def set_output_embeddings(self, value):
+        self.decoder = value
+        self.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
+
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = tf.matmul(hidden_states, tf.concat([tf.transpose(self.decoder), self.dense], axis=0))
@@ -1035,37 +1049,8 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
         self.predictions = TFMobileBertMLMHead(config, name="predictions___cls")
         self.seq_relationship = TFMobileBertOnlyNSPHead(2, name="seq_relationship___cls")
 
-    def get_output_embeddings(self):
-        try:
-            return self.predictions.predictions.decoder
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.predictions.predictions.decoder
-
-    def set_output_embeddings(self, value):
-        if value is not None:
-            try:
-                self.predictions.predictions.decoder = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.predictions.predictions.decoder = value
-            self.predictions.predictions.vocab_size = shape_list(value)[0]
-
-    def get_bias(self):
-        try:
-            return self.predictions.predictions.bias
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.predictions.predictions.bias
-
-    def set_bias(self, value):
-        if value is not None:
-            try:
-                self.predictions.predictions.bias = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.predictions.predictions.bias = value
-            self.predictions.predictions.vocab_size = shape_list(value)[0]
+    def get_lm_head(self):
+        return self.predictions.predictions
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFMobileBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -1168,37 +1153,8 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
         self.mobilebert = TFMobileBertMainLayer(config, add_pooling_layer=False, name="mobilebert")
         self.mlm = TFMobileBertMLMHead(config, name="mlm___cls")
 
-    def get_output_embeddings(self):
-        try:
-            return self.mlm.predictions.decoder
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.mlm.predictions.decoder
-
-    def set_output_embeddings(self, value):
-        if value is not None:
-            try:
-                self.mlm.predictions.decoder = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.mlm.predictions.decoder = value
-            self.mlm.predictions.vocab_size = shape_list(value)[0]
-
-    def get_bias(self):
-        try:
-            return self.mlm.predictions.bias
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.mlm.predictions.bias
-
-    def set_bias(self, value):
-        if value is not None:
-            try:
-                self.mlm.predictions.bias = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.mlm.predictions.bias = value
-            self.mlm.predictions.vocab_size = shape_list(value)[0]
+    def get_lm_head(self):
+        return self.mlm.predictions
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
