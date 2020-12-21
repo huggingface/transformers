@@ -617,6 +617,20 @@ class TFCTRLLMHead(tf.keras.layers.Layer):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
         super().build(input_shape)
 
+    def get_output_embeddings(self):
+        return self.input_embeddings.weight
+
+    def set_output_embeddings(self, value):
+        self.input_embeddings.weight = value
+        self.input_embeddings.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
+
     def call(self, hidden_states):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
         hidden_states = hidden_states + self.bias
@@ -637,37 +651,8 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
 
         self.lm_head = TFCTRLLMHead(config, self.transformer.w, name="lm_head")
 
-    def get_output_embeddings(self):
-        try:
-            return self.lm_head.input_embeddings.weight
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.lm_head.input_embeddings.weight
-
-    def set_output_embeddings(self, value):
-        if value is not None:
-            try:
-                self.lm_head.input_embeddings.weight = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.lm_head.input_embeddings.weight = value
-            self.lm_head.input_embeddings.vocab_size = shape_list(value)[0]
-
-    def get_bias(self):
-        try:
-            return self.lm_head.bias
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.lm_head.bias
-
-    def set_bias(self, value):
-        if value is not None:
-            try:
-                self.lm_head.bias = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.lm_head.bias = value
-            self.lm_head.vocab_size = shape_list(value)[0]
+    def get_lm_head(self):
+        return self.lm_head
 
     def prepare_inputs_for_generation(self, inputs, past, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
