@@ -847,7 +847,58 @@ class RagModelIntegrationTests(unittest.TestCase):
             " old trafford",
         ]
         self.assertListEqual(outputs, EXPECTED_OUTPUTS)
+    
+    @slow
+    def test_rag_sequence_generate_batch_from_context_input_ids(self):
+        tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
+        retriever = RagRetriever.from_pretrained(
+            "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True
+        )
+        rag_sequence = RagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever).to(
+            torch_device
+        )
 
+        input_dict = tokenizer(
+            self.test_data_questions,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+        )
+
+        input_ids = input_dict.input_ids.to(torch_device)
+        attention_mask = input_dict.attention_mask.to(torch_device)
+
+        question_hidden_states = rag_sequence.question_encoder(input_ids)[0]
+        docs_dict = retriever(input_ids.cpu().detach().numpy(), question_hidden_states.cpu().detach().numpy(), return_tensors="pt")
+        doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), docs_dict["retrieved_doc_embeds"].to(torch_device).float().transpose(1, 2)).squeeze(1)
+        
+        output_ids = rag_sequence.generate(context_input_ids=docs_dict["context_input_ids"].to(torch_device), 
+                                           context_attention_mask=docs_dict["context_attention_mask"].to(torch_device), 
+                                           doc_scores=doc_scores.to(torch_device), 
+                                           do_deduplication=True,
+                                           )
+
+        outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+
+        EXPECTED_OUTPUTS = [
+            " albert einstein",
+            " june 22, 2018",
+            " amplitude modulation",
+            " tim besley ( chairman )",
+            " june 20, 2018",
+            " 1980",
+            " 7.0",
+            " 8",
+            " reticular formation",
+            " walls of the abdomen",
+            " spodumene",
+            " obama",
+            " new orleans",
+            " japan",
+            " old trafford",
+        ]
+        self.assertListEqual(outputs, EXPECTED_OUTPUTS)
+    
     @slow
     def test_rag_token_generate_batch(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
