@@ -1493,12 +1493,10 @@ class TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(TFSharedE
     the forward function.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, offset, **kwargs):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, **kwargs):
         # {{cookiecutter.camelcase_modelname}} is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models dont have this hack
-        self.offset = offset
         assert padding_idx is not None, "padding_idx cannot be None"
-        num_embeddings += offset
         super().__init__(num_embeddings, embedding_dim, **kwargs)
 
     def call(self, input_shape: tf.TensorShape, past_key_values_length: int = 0):
@@ -1508,57 +1506,7 @@ class TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(TFSharedE
         positions = tf.range(
             past_key_values_length, seq_len + past_key_values_length, delta=1, dtype=tf.int32, name="range"
         )
-        return super().call(positions + self.offset)  # super object is not callable for some reason
-
-
-# Copied from transformers.models.bart.modeling_tf_bart.TFBartSinusoidalPositionalEmbedding with Bart->{{cookiecutter.camelcase_modelname}}
-class TF{{cookiecutter.camelcase_modelname}}SinusoidalPositionalEmbedding(tf.keras.layers.Embedding):
-    """This module produces sinusoidal positional embeddings of any length."""
-
-    def __init__(self, num_positions: int, embedding_dim: int, **kwargs):
-
-        if embedding_dim % 2 != 0:
-            raise NotImplementedError(f"odd embedding_dim {embedding_dim} not supported")
-        super().__init__(
-            num_positions,
-            embedding_dim,
-            **kwargs,
-        )
-
-    def build(self, input_shape: tf.TensorShape):
-        """
-        Build shared token embedding layer Shared weights logic adapted from
-        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
-        """
-        super().build(input_shape)  # Instantiates self.weight so it can be loaded
-        weight: np.ndarray = self._init_weight(self.input_dim, self.output_dim)
-        self.set_weights([weight])  # overwrite self.weight to correct value
-
-    @staticmethod
-    def _init_weight(n_pos: int, dim: int):
-        """
-        Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
-        the 2nd half of the vector. [dim // 2:]
-        """
-        position_enc = np.array(
-            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
-        )
-        # index 0 is all zero
-        position_enc[:, 0 : dim // 2] = np.sin(position_enc[:, 0::2])
-        position_enc[:, dim // 2 :] = np.cos(position_enc[:, 1::2])
-        # convert to tensor
-        table = tf.convert_to_tensor(position_enc, dtype=tf.float32)
-        tf.stop_gradient(table)
-        return table
-
-    def call(self, input_shape: tf.TensorShape, past_key_values_length: int = 0):
-        """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = input_shape[:2]
-
-        positions = tf.range(
-            past_key_values_length, seq_len + past_key_values_length, delta=1, dtype=tf.int32, name="range"
-        )
-        return super().call(positions)
+        return super().call(positions)  # super object is not callable for some reason
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->{{cookiecutter.camelcase_modelname}}
@@ -1693,7 +1641,6 @@ class TF{{cookiecutter.camelcase_modelname}}EncoderLayer(tf.keras.layers.Layer):
         self.self_attn = TF{{cookiecutter.camelcase_modelname}}Attention(
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, name="self_attn"
         )
-        self.normalize_before = config.normalize_before
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.activation_fn = ACT2FN[config.activation_function]
@@ -1710,8 +1657,6 @@ class TF{{cookiecutter.camelcase_modelname}}EncoderLayer(tf.keras.layers.Layer):
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
         """
         residual = hidden_states
-        if self.normalize_before:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, self_attn_weights, _ = self.self_attn(
             hidden_states=hidden_states, attention_mask=attention_mask
         )
@@ -1722,19 +1667,15 @@ class TF{{cookiecutter.camelcase_modelname}}EncoderLayer(tf.keras.layers.Layer):
         )
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
-        if not self.normalize_before:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
-        if self.normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = self.activation_dropout(hidden_states, training=training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
-        if not self.normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.final_layer_norm(hidden_states)
 
         return hidden_states, self_attn_weights
 
@@ -1754,7 +1695,6 @@ class TF{{cookiecutter.camelcase_modelname}}DecoderLayer(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
-        self.normalize_before = config.normalize_before
 
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
         self.encoder_attn = TF{{cookiecutter.camelcase_modelname}}Attention(
@@ -1789,8 +1729,6 @@ class TF{{cookiecutter.camelcase_modelname}}DecoderLayer(tf.keras.layers.Layer):
             past_key_value (:obj:`Tuple(tf.Tensor)`): cached past key and value projection states
         """
         residual = hidden_states
-        if self.normalize_before:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
@@ -1803,15 +1741,12 @@ class TF{{cookiecutter.camelcase_modelname}}DecoderLayer(tf.keras.layers.Layer):
         )
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
-        if not self.normalize_before:
-            hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
         cross_attn_present_key_value = None
         if encoder_hidden_states is not None:
             residual = hidden_states
-            if self.normalize_before:
-                hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -1823,24 +1758,19 @@ class TF{{cookiecutter.camelcase_modelname}}DecoderLayer(tf.keras.layers.Layer):
             )
             hidden_states = self.dropout(hidden_states, training=training)
             hidden_states = residual + hidden_states
-            if not self.normalize_before:
-                hidden_states = self.encoder_attn_layer_norm(hidden_states)
+            hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # add cross-attn to positions 3,4 of present_key_value tuple
             present_key_value = present_key_value + cross_attn_present_key_value
 
         # Fully Connected
         residual = hidden_states
-        if self.normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = self.activation_dropout(hidden_states, training=training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
-
-        if not self.normalize_before:
-            hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.final_layer_norm(hidden_states)
 
         return (
             hidden_states,
@@ -1972,37 +1902,19 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
         self.config = config
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.layerdrop = config.encoder_layerdrop
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
 
         self.embed_tokens = embed_tokens
-        if config.static_position_embeddings:
-            self.embed_positions = TF{{cookiecutter.camelcase_modelname}}SinusoidalPositionalEmbedding(
-                config.max_position_embeddings,
-                config.d_model,
-                name="embed_positions",
-            )
-        else:
-            self.embed_positions = TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(
-                config.max_position_embeddings,
-                config.d_model,
-                self.padding_idx,
-                config.extra_pos_embeddings,
-                name="embed_positions",
-            )
+        self.embed_positions = TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(
+            config.max_position_embeddings,
+            config.d_model,
+            self.padding_idx,
+            name="embed_positions",
+        )
         self.layers = [TF{{cookiecutter.camelcase_modelname}}EncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
-        self.layernorm_embedding = (
-            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
-            if config.normalize_embedding
-            else tf.keras.layers.Layer()
-        )
-        self.layer_norm = (
-            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
-            if config.add_final_layer_norm
-            else None
-        )
-
+        self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
+        
     def call(
         self,
         input_ids=None,
@@ -2072,7 +1984,7 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
         else:
             inputs_embeds = inputs["inputs_embeds"]
 
-        inputs_embeds = inputs_embeds * self.embed_scale
+        inputs_embeds = inputs_embeds
 
         embed_pos = self.embed_positions(input_shape)
         hidden_states = inputs_embeds + embed_pos
@@ -2103,8 +2015,7 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
 
             if inputs["output_attentions"]:
                 all_attentions += (attn,)
-        if self.layer_norm:
-            hidden_states = self.layer_norm(hidden_states)
+
         if inputs["output_hidden_states"]:
             encoder_states = encoder_states + (hidden_states,)
 
@@ -2131,33 +2042,15 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
         self.config = config
         self.padding_idx = config.pad_token_id
         self.embed_tokens = embed_tokens
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.layerdrop = config.decoder_layerdrop
-        if config.static_position_embeddings:
-            self.embed_positions = TF{{cookiecutter.camelcase_modelname}}SinusoidalPositionalEmbedding(
-                config.max_position_embeddings,
-                config.d_model,
-                name="embed_positions",
-            )
-        else:
-            self.embed_positions = TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(
-                config.max_position_embeddings,
-                config.d_model,
-                self.padding_idx,
-                config.extra_pos_embeddings,
-                name="embed_positions",
-            )
+        self.embed_positions = TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(
+            config.max_position_embeddings,
+            config.d_model,
+            self.padding_idx,
+            name="embed_positions",
+        )
         self.layers = [TF{{cookiecutter.camelcase_modelname}}DecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
-        self.layernorm_embedding = (
-            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
-            if config.normalize_embedding
-            else tf.keras.layers.Layer()
-        )
-        self.layer_norm = (
-            tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
-            if config.add_final_layer_norm
-            else None
-        )
+        self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.do_blenderbot_90_layernorm = config.do_blenderbot_90_layernorm
@@ -2265,7 +2158,7 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
         else:
             inputs_embeds = inputs["inputs_embeds"]
 
-        hidden_states = inputs_embeds * self.embed_scale
+        hidden_states = inputs_embeds
 
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
@@ -2325,10 +2218,6 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
             if inputs["output_attentions"]:
                 all_self_attns += (layer_self_attn,)
 
-        if self.layer_norm is not None:  # same as if config.add_final_layer_norm
-            hidden_states = self.layer_norm(hidden_states)
-
-        # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
         if inputs["output_hidden_states"]:
             all_hidden_states += (hidden_states,)
         else:
@@ -2673,16 +2562,6 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
                 tuple(tf.gather(layer_past_key_value, beam_idx) for layer_past_key_value in layer_past_key_values),
             )
         return (past[0], reordered_past)
-
-    def adjust_logits_during_generation(self, logits, cur_len, max_length):
-        if cur_len == 1 and self.config.force_bos_token_to_be_generated:
-            vocab_range = tf.constant(range(self.config.vocab_size))
-            return tf.where(vocab_range != self.config.bos_token_id, LARGE_NEGATIVE, logits)
-        elif cur_len == max_length - 1:
-            vocab_range = tf.constant(range(self.config.vocab_size))
-            return tf.where(vocab_range != self.config.eos_token_id, LARGE_NEGATIVE, logits)
-        else:
-            return logits
 
     def get_output_embeddings(self):
         return self.model.shared
