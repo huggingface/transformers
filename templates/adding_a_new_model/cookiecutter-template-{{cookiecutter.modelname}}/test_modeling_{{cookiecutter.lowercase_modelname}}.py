@@ -437,13 +437,10 @@ if is_torch_available():
         {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
         {{cookiecutter.camelcase_modelname}}Model,
         {{cookiecutter.camelcase_modelname}}Tokenizer,
-        {{cookiecutter.camelcase_modelname}}TokenizerFast,
     )
     from transformers.models.{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_modelname}} import (
         {{cookiecutter.camelcase_modelname}}Decoder,
         {{cookiecutter.camelcase_modelname}}Encoder,
-        {{cookiecutter.camelcase_modelname}}SinusoidalPositionalEmbedding,
-        shift_tokens_right,
     )
 
 
@@ -751,7 +748,7 @@ class {{cookiecutter.camelcase_modelname}}ModelIntegrationTests(unittest.TestCas
         # change to intended input
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        inputs_dict = prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(model.config, input_ids. decoder_input_ids)
+        inputs_dict = prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(model.config, input_ids, decoder_input_ids)
         with torch.no_grad():
             output = model(**inputs_dict)[0]
         expected_shape = torch.Size((1, 11, model.config.vocab_size))
@@ -800,7 +797,4 @@ class {{cookiecutter.camelcase_modelname}}ModelIntegrationTests(unittest.TestCas
             hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
         )
         assert generated == EXPECTED
-
-
-
-{% endif %}
+{% endif -%}

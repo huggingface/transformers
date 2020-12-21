@@ -321,11 +321,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.TestCa
         tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-4)
 
 {% else %}
-
-
 import unittest
-
-import numpy as np
 
 from transformers import {{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}Tokenizer, is_tf_available
 from transformers.file_utils import cached_property
@@ -340,6 +336,7 @@ if is_tf_available():
 
     from transformers import TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration, TF{{cookiecutter.camelcase_modelname}}Model
 
+
 @require_tf
 class TF{{cookiecutter.camelcase_modelname}}ModelTester:
     config_cls = {{cookiecutter.camelcase_modelname}}Config
@@ -347,7 +344,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
     hidden_act = "gelu"
 
     def __init__(
-        self, 
+        self,
         parent,
         batch_size=13,
         seq_length=7,
@@ -588,5 +585,4 @@ class TF{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.TestCa
             hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
         )
         assert generated == EXPECTED
-
-{% endif %}
+{%- endif %}
