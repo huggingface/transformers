@@ -39,11 +39,13 @@ from flax.optim import Adam
 from flax.training import common_utils
 from flax.training.common_utils import get_metrics
 from jax.nn import log_softmax
+from modeling_flax_performer import FlaxPerformerForMaskedLM
 from transformers import (
     CONFIG_MAPPING,
     MODEL_FOR_MASKED_LM_MAPPING,
     AutoConfig,
     AutoTokenizer,
+    BertConfig,
     FlaxBertForMaskedLM,
     HfArgumentParser,
     PreTrainedTokenizerBase,
@@ -51,9 +53,8 @@ from transformers import (
     TrainingArguments,
     is_tensorboard_available,
     set_seed,
-    BertConfig,
 )
-from modeling_flax_performer import FlaxPerformerForMaskedLM
+
 
 # Cache the result
 has_tensorboard = is_tensorboard_available()
