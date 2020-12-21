@@ -1100,6 +1100,20 @@ class TFLxmertLMPredictionHead(tf.keras.layers.Layer):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
         super().build(input_shape)
 
+    def get_output_embeddings(self):
+        return self.input_embeddings.word_embeddings
+
+    def set_output_embeddings(self, value):
+        self.input_embeddings.word_embeddings = value
+        self.input_embeddings.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
+
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
@@ -1289,37 +1303,8 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             **({"obj_labels": obj_labels} if self.config.task_obj_predict else {}),
         }
 
-    def get_output_embeddings(self):
-        try:
-            return self.cls.predictions.input_embeddings.word_embeddings
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.cls.predictions.input_embeddings.word_embeddings
-
-    def set_output_embeddings(self, value):
-        if value is not None:
-            try:
-                self.cls.predictions.input_embeddings.word_embeddings = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.cls.predictions.input_embeddings.word_embeddings = value
-            self.cls.predictions.input_embeddings.vocab_size = shape_list(value)[0]
-
-    def get_bias(self):
-        try:
-            return self.cls.predictions.bias
-        except AttributeError:
-            self(self.dummy_inputs)
-            return self.cls.predictions.bias
-
-    def set_bias(self, value):
-        if value is not None:
-            try:
-                self.cls.predictions.bias = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                self.cls.predictions.bias = value
-            self.cls.predictions.vocab_size = shape_list(value)[0]
+    def get_lm_head(self):
+        return self.cls.predictions
 
     @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFLxmertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
