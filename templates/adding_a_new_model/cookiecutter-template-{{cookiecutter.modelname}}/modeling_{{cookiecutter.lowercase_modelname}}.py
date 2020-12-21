@@ -1513,12 +1513,9 @@ class {{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(nn.Embeddin
     the forward function.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, offset: int):
-        # {{cookiecutter.camelcase_modelname}} is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models dont have this hack
-        self.offset = offset
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int):
         assert padding_idx is not None, "`padding_idx` should not be None, but of type int"
-        num_embeddings += offset
+        num_embeddings
         super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
 
     def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
@@ -1527,7 +1524,7 @@ class {{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(nn.Embeddin
         positions = torch.arange(
             past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
         )
-        return super().forward(positions + self.offset)
+        return super().forward(positions)
 
 
 # Copied from transformers.models.bart.modeling_bart.BartSinusoidalPositionalEmbedding with Bart->{{cookiecutter.camelcase_modelname}}
@@ -2030,7 +2027,6 @@ class {{cookiecutter.camelcase_modelname}}Encoder({{cookiecutter.camelcase_model
             config.max_position_embeddings,
             embed_dim,
             self.padding_idx,
-            config.extra_pos_embeddings,
         )
         self.layers = nn.ModuleList([{{cookiecutter.camelcase_modelname}}EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = {{cookiecutter.camelcase_modelname}}LayerNorm(embed_dim)
@@ -2158,7 +2154,6 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
             config.max_position_embeddings,
             config.d_model,
             self.padding_idx,
-            config.extra_pos_embeddings,
         )
         self.layers = nn.ModuleList([{{cookiecutter.camelcase_modelname}}DecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = {{cookiecutter.camelcase_modelname}}LayerNorm(config.d_model)
