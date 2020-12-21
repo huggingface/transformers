@@ -30,6 +30,7 @@ if is_torch_available():
         BatchEncoding,
         MBartConfig,
         MBartForConditionalGeneration,
+        MBartModel,
     )
 
 
@@ -59,7 +60,7 @@ class ModelTester:
 
 @require_torch
 class SelectiveCommonTest(unittest.TestCase):
-    all_model_classes = (MBartForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (MBartForConditionalGeneration, MBartModel) if is_torch_available() else ()
 
     test_save_load__keys_to_ignore_on_save = ModelTesterMixin.test_save_load__keys_to_ignore_on_save
 

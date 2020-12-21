@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..bart.modeling_bart import BartForConditionalGeneration
+from ..bart.modeling_bart import BartForConditionalGeneration, BartModel
 from .configuration_mbart import MBartConfig
 
 
@@ -24,6 +24,23 @@ MBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/mbart-large-en-ro",
     # See all multilingual BART models at https://huggingface.co/models?filter=mbart
 ]
+
+
+class MBartModel(BartModel):
+    r"""
+    This class overrides :class:`~transformers.BartModel`. Please check the superclass for the appropriate
+    documentation alongside usage examples.
+    """
+
+    config_class = MBartConfig
+    _keys_to_ignore_on_load_missing = [
+        "encoder.embed_positions.weight",
+        "decoder.embed_positions.weight",
+    ]
+    _keys_to_ignore_on_save = [
+        "encoder.embed_positions.weight",
+        "decoder.embed_positions.weight",
+    ]
 
 
 class MBartForConditionalGeneration(BartForConditionalGeneration):

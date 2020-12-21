@@ -50,7 +50,7 @@ from ..bert.modeling_bert import (
     BertModel,
 )
 from ..bert_generation.modeling_bert_generation import BertGenerationDecoder, BertGenerationEncoder
-from ..blenderbot.modeling_blenderbot import BlenderbotForConditionalGeneration
+from ..blenderbot.modeling_blenderbot import BlenderbotForConditionalGeneration, BlenderbotModel
 from ..camembert.modeling_camembert import (
     CamembertForCausalLM,
     CamembertForMaskedLM,
@@ -111,7 +111,7 @@ from ..longformer.modeling_longformer import (
 )
 from ..lxmert.modeling_lxmert import LxmertForPreTraining, LxmertForQuestionAnswering, LxmertModel
 from ..marian.modeling_marian import MarianMTModel
-from ..mbart.modeling_mbart import MBartForConditionalGeneration
+from ..mbart.modeling_mbart import MBartForConditionalGeneration, MBartModel
 from ..mobilebert.modeling_mobilebert import (
     MobileBertForMaskedLM,
     MobileBertForMultipleChoice,
@@ -132,7 +132,7 @@ from ..mpnet.modeling_mpnet import (
 )
 from ..mt5.modeling_mt5 import MT5ForConditionalGeneration, MT5Model
 from ..openai.modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
-from ..pegasus.modeling_pegasus import PegasusForConditionalGeneration
+from ..pegasus.modeling_pegasus import PegasusForConditionalGeneration, PegasusModel
 from ..prophetnet.modeling_prophetnet import ProphetNetForCausalLM, ProphetNetForConditionalGeneration, ProphetNetModel
 from ..rag.modeling_rag import (  # noqa: F401 - need to import all RagModels to be in globals() function
     RagModel,
@@ -255,6 +255,10 @@ MODEL_MAPPING = OrderedDict(
         (RetriBertConfig, RetriBertModel),
         (MT5Config, MT5Model),
         (T5Config, T5Model),
+        (PegasusConfig, PegasusModel),
+        (MarianConfig, MarianMTModel),
+        (MBartConfig, MBartModel),
+        (BlenderbotConfig, BlenderbotModel),
         (DistilBertConfig, DistilBertModel),
         (AlbertConfig, AlbertModel),
         (CamembertConfig, CamembertModel),

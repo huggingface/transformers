@@ -32,6 +32,7 @@ if is_torch_available():
         AutoTokenizer,
         BlenderbotConfig,
         BlenderbotForConditionalGeneration,
+        BlenderbotModel,
         BlenderbotSmallTokenizer,
         BlenderbotTokenizer,
     )
@@ -90,7 +91,7 @@ class BlenderbotModelTester:
 class BlenderbotTesterMixin(ModelTesterMixin, unittest.TestCase):
     if is_torch_available():
         all_generative_model_classes = (BlenderbotForConditionalGeneration,)
-        all_model_classes = (BlenderbotForConditionalGeneration,)
+        all_model_classes = (BlenderbotForConditionalGeneration, BlenderbotModel)
     else:
         all_generative_model_classes = ()
         all_model_classes = ()
