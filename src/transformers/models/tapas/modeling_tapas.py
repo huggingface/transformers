@@ -592,6 +592,8 @@ class TapasEncoder(nn.Module):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        past_key_values=None,
+        use_cache=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
@@ -608,7 +610,7 @@ class TapasEncoder(nn.Module):
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
+                        return module(*inputs, past_key_values, output_attentions)
 
                     return custom_forward
 
@@ -627,6 +629,7 @@ class TapasEncoder(nn.Module):
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    past_key_values,
                     output_attentions,
                 )
             hidden_states = layer_outputs[0]
