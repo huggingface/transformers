@@ -192,7 +192,7 @@ class TFCTRLModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_ctrl_sequence_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_ctrl_for_sequence_classification(*config_and_inputs)
-    
+
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         list_lm_models = [TFCTRLLMHeadModel]
