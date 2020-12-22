@@ -6,6 +6,6 @@
   "authors": "The HuggingFace Team",
   "checkpoint_identifier": "new-tf-enc-dec-base",
   "tokenizer_type": "Based on BART",
-  "generate_tensorflow_and_pytorch": "Tensorflow",
+  "generate_tensorflow_and_pytorch": "TensorFlow",
   "is_encoder_decoder_model": "True"
 }
