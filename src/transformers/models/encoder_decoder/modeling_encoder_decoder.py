@@ -419,7 +419,6 @@ class EncoderDecoderModel(PreTrainedModel):
             **kwargs_decoder,
         )
 
-        # TODO(PVP): currently it is not possible to use `past`
         if not return_dict:
             return decoder_outputs + encoder_outputs
 

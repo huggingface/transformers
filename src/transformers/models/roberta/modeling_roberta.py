@@ -412,7 +412,7 @@ class RobertaLayer(nn.Module):
                 self, "crossattention"
             ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
 
-            # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
+            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             cross_attention_outputs = self.crossattention(
                 attention_output,
@@ -749,8 +749,10 @@ class RobertaModel(RobertaPreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
+            batch_size, seq_length = input_shape
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
+            batch_size, seq_length = input_shape
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -759,11 +761,8 @@ class RobertaModel(RobertaPreTrainedModel):
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
-        batch_size, seq_length = input_shape
-        real_seq_length = seq_length + past_key_values_length
-
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, real_seq_length)), device=device)
+            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 

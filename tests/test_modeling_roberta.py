@@ -221,6 +221,7 @@ class RobertaModelTester:
         # first forward pass
         outputs = model(
             input_ids,
+            attention_mask=input_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             use_cache=True,
