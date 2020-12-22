@@ -430,7 +430,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTester:
         next_attention_mask = tf.concat([attention_mask, next_attn_mask], axis=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[0]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask past_key_values=past_key_values)[0]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[0]
 
         self.parent.assertEqual(next_tokens.shape[1], output_from_past.shape[1])
 
