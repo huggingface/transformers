@@ -1482,7 +1482,6 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     return (1.0 - expanded_mask) * LARGE_NEGATIVE
 
 
-# Copied from transformers.models.{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase_modelname}}.TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding with {{cookiecutter.camelcase_modelname}}->{{cookiecutter.camelcase_modelname}}
 class TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(TFSharedEmbeddings):
     """
     This module learns positional embeddings up to a fixed maximum size. Padding ids are ignored by either offsetting
@@ -1506,7 +1505,6 @@ class TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(TFSharedE
         return super().call(positions)  # super object is not callable for some reason
 
 
-# Copied from transformers.models.{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase_modelname}}.TF{{cookiecutter.camelcase_modelname}}Attention with {{cookiecutter.camelcase_modelname}}->{{cookiecutter.camelcase_modelname}}
 class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
     """Multi-headed attention from "Attention Is All You Need"""
 
@@ -1630,7 +1628,6 @@ class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase_modelname}}.TF{{cookiecutter.camelcase_modelname}}EncoderLayer with {{cookiecutter.camelcase_modelname}}->{{cookiecutter.camelcase_modelname}}
 class TF{{cookiecutter.camelcase_modelname}}EncoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
         super().__init__(**kwargs)
@@ -1677,7 +1674,6 @@ class TF{{cookiecutter.camelcase_modelname}}EncoderLayer(tf.keras.layers.Layer):
         return hidden_states, self_attn_weights
 
 
-# Copied from transformers.models.{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase_modelname}}.TF{{cookiecutter.camelcase_modelname}}DecoderLayer with {{cookiecutter.camelcase_modelname}}->{{cookiecutter.camelcase_modelname}}
 class TF{{cookiecutter.camelcase_modelname}}DecoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
         super().__init__(**kwargs)

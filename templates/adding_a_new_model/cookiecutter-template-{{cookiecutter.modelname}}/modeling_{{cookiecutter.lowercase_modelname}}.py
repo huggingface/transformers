@@ -1524,42 +1524,6 @@ class {{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(nn.Embeddin
         return super().forward(positions)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartSinusoidalPositionalEmbedding with Bart->{{cookiecutter.camelcase_modelname}}
-class {{cookiecutter.camelcase_modelname}}SinusoidalPositionalEmbedding(nn.Embedding):
-    """This module produces sinusoidal positional embeddings of any length."""
-
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
-        super().__init__(num_positions, embedding_dim)
-        self.weight = self._init_weight(self.weight)
-
-    @staticmethod
-    def _init_weight(out: nn.Parameter):
-        """
-        Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
-        the 2nd half of the vector. [dim // 2:]
-        """
-        n_pos, dim = out.shape
-        position_enc = np.array(
-            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
-        )
-        out.requires_grad = False  # set early to avoid an error in pytorch-1.8+
-        sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
-        out[:, 0:sentinel] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
-        out[:, sentinel:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
-        out.detach_()
-        return out
-
-    @torch.no_grad()
-    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
-        """`input_ids_shape` is expected to be [bsz x seqlen]."""
-        bsz, seq_len = input_ids_shape[:2]
-        positions = torch.arange(
-            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
-        )
-        return super().forward(positions)
-
-
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -1694,7 +1658,6 @@ class {{cookiecutter.camelcase_modelname}}Attention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.bart.modeling_bart.BartEncoderLayer with Bart->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}EncoderLayer(nn.Module):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config):
         super().__init__()
@@ -1742,7 +1705,6 @@ class {{cookiecutter.camelcase_modelname}}EncoderLayer(nn.Module):
         return hidden_states, attn_weights
 
 
-# Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}DecoderLayer(nn.Module):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config):
         super().__init__()
@@ -1880,8 +1842,6 @@ class {{cookiecutter.camelcase_modelname}}PreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, {{cookiecutter.camelcase_modelname}}SinusoidalPositionalEmbedding):
-            pass
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
