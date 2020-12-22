@@ -154,6 +154,7 @@ from .models.mmbt import MMBTConfig
 from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
 from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
 from .models.mt5 import MT5Config
+from .models.muril import MURIL_PRETRAINED_CONFIG_ARCHIVE_MAP, MuRILConfig, MuRILTokenizer
 from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
 from .models.pegasus import PegasusConfig
 from .models.phobert import PhobertTokenizer
@@ -873,6 +874,18 @@ if is_tf_available():
         TFMPNetPreTrainedModel,
     )
     from .models.mt5 import TFMT5EncoderModel, TFMT5ForConditionalGeneration, TFMT5Model
+    from .models.muril import (
+        TF_MURIL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFMuRILForCausalLM,
+        TFMuRILForMaskedLM,
+        TFMuRILForMultipleChoice,
+        TFMuRILForQuestionAnswering,
+        TFMuRILForSequenceClassification,
+        TFMuRILForTokenClassification,
+        TFMuRILLayer,
+        TFMuRILModel,
+        TFMuRILPreTrainedModel,
+    )
     from .models.openai import (
         TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFOpenAIGPTDoubleHeadsModel,
