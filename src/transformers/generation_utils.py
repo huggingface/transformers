@@ -839,6 +839,8 @@ class GenerationMixin:
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
+                output_scores=output_scores,
+                return_dict_in_generate=return_dict_in_generate,
                 **model_kwargs,
             )
 
@@ -875,6 +877,8 @@ class GenerationMixin:
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
+                output_scores=output_scores,
+                return_dict_in_generate=return_dict_in_generate,
                 **model_kwargs,
             )
 
@@ -911,6 +915,8 @@ class GenerationMixin:
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
+                output_scores=output_scores,
+                return_dict_in_generate=return_dict_in_generate,
                 **model_kwargs,
             )
 
@@ -1319,6 +1325,10 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_scores: Optional[bool] = None,
+        return_dict_in_generate: Optional[bool] = None,
         **model_kwargs,
     ):
         r"""
@@ -1344,15 +1354,24 @@ class GenerationMixin:
                 The id of the `padding` token.
             eos_token_id (:obj:`int`, `optional`):
                 The id of the `end-of-sequence` token.
+            output_attentions (:obj:`bool`, `optional`, defaults to `False`):
+                Whether to return attention weights in output
+            output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
+                Whether to return hidden states in output
+            output_scores (:obj:`bool`, `optional`, defaults to `False`):
+                Whether to return the logits in output
+            return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
+                Whether the output should be a dict (:obj:`SampleOutput`) or just the generated sequence
+                (:obj:`torch.LongTensor`).
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
 
 
         Return:
-            :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
-            sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all
-            batches finished early due to the :obj:`eos_token_id`.
+            Either :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`
+            containing the generated sequences (default behaviour) or :obj:`BeamSearchOutput`if
+            :obj:`return_dict_in_generate` is set to True.
 
 
         Examples::
@@ -1407,6 +1426,26 @@ class GenerationMixin:
         max_length = max_length if max_length is not None else self.config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        output_scores = output_scores if output_scores is not None else self.config.output_scores
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict_in_generate = (
+            return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
+        )
+
+        # init attention / hidden states / scores tuples
+        logits = () if (return_dict_in_generate and output_scores) else None
+        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
+        decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
+
+        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
+        if return_dict_in_generate and self.config.is_encoder_decoder:
+            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
+            encoder_hidden_states = (
+                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
+            )
 
         batch_size = len(beam_scorer._beam_hyps)
         num_beams = beam_scorer.num_beams
@@ -1424,13 +1463,34 @@ class GenerationMixin:
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
-            outputs = self(**model_inputs, return_dict=True)
+            outputs = self(
+                **model_inputs,
+                return_dict=True,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
             next_token_logits = outputs.logits[:, -1, :]
 
             # adjust tokens for Bart, *e.g.*
             next_token_logits = self.adjust_logits_during_generation(
                 next_token_logits, cur_len=cur_len, max_length=max_length
             )
+
+            # Store logits, attentions and hidden_states when required
+            if return_dict_in_generate:
+                if output_scores:
+                    logits += (next_token_logits,)
+                if output_attentions:
+                    decoder_attentions += (
+                        (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
+                    )
+
+                if output_hidden_states:
+                    decoder_hidden_states += (
+                        (outputs.decoder_hidden_states,)
+                        if self.config.is_encoder_decoder
+                        else (outputs.hidden_states,)
+                    )
 
             next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
@@ -1476,7 +1536,25 @@ class GenerationMixin:
             input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id
         )
 
-        return decoded
+        if return_dict_in_generate:
+            if self.config.is_encoder_decoder:
+                return BeamSearchEncoderDecoderOutput(
+                    sequences=decoded,
+                    logits=logits,
+                    encoder_attentions=encoder_attentions,
+                    encoder_hidden_states=encoder_hidden_states,
+                    decoder_attentions=decoder_attentions,
+                    decoder_hidden_states=decoder_hidden_states,
+                )
+            else:
+                return BeamSearchDecoderOnlyOutput(
+                    sequences=decoded,
+                    logits=logits,
+                    attentions=decoder_attentions,
+                    hidden_states=decoder_hidden_states,
+                )
+        else:
+            return decoded
 
     def beam_sample(
         self,
@@ -1487,6 +1565,10 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_scores: Optional[bool] = None,
+        return_dict_in_generate: Optional[bool] = None,
         **model_kwargs,
     ):
         r"""
@@ -1516,15 +1598,24 @@ class GenerationMixin:
                 The id of the `padding` token.
             eos_token_id (:obj:`int`, `optional`):
                 The id of the `end-of-sequence` token.
+            output_attentions (:obj:`bool`, `optional`, defaults to `False`):
+                Whether to return attention weights in output
+            output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
+                Whether to return hidden states in output
+            output_scores (:obj:`bool`, `optional`, defaults to `False`):
+                Whether to return the logits in output
+            return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
+                Whether the output should be a dict (:obj:`SampleOutput`) or just the generated sequence
+                (:obj:`torch.LongTensor`).
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
 
 
         Return:
-            :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
-            sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all
-            batches finished early due to the :obj:`eos_token_id`.
+            Either :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`
+            containing the generated sequences (default behaviour) or :obj:`BeamSearchOutput`if
+            :obj:`return_dict_in_generate` is set to True.
 
 
         Examples::
@@ -1587,6 +1678,26 @@ class GenerationMixin:
         max_length = max_length if max_length is not None else self.config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        output_scores = output_scores if output_scores is not None else self.config.output_scores
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict_in_generate = (
+            return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
+        )
+
+        # init attention / hidden states / scores tuples
+        logits = () if (return_dict_in_generate and output_scores) else None
+        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
+        decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
+
+        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
+        if return_dict_in_generate and self.config.is_encoder_decoder:
+            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
+            encoder_hidden_states = (
+                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
+            )
 
         batch_size = len(beam_scorer._beam_hyps)
         num_beams = beam_scorer.num_beams
@@ -1599,13 +1710,33 @@ class GenerationMixin:
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
-            outputs = self(**model_inputs, return_dict=True)
+            outputs = self(
+                **model_inputs,
+                return_dict=True,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
             next_token_logits = outputs.logits[:, -1, :]
 
             # adjust token scores (a no-op by default)
             next_token_logits = self.adjust_logits_during_generation(
                 next_token_logits, cur_len=cur_len, max_length=max_length
             )
+            # Store logits, attentions and hidden_states when required
+            if return_dict_in_generate:
+                if output_scores:
+                    logits += (next_token_logits,)
+                if output_attentions:
+                    decoder_attentions += (
+                        (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
+                    )
+
+                if output_hidden_states:
+                    decoder_hidden_states += (
+                        (outputs.decoder_hidden_states,)
+                        if self.config.is_encoder_decoder
+                        else (outputs.hidden_states,)
+                    )
 
             next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
@@ -1656,7 +1787,25 @@ class GenerationMixin:
             input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id
         )
 
-        return decoded
+        if return_dict_in_generate:
+            if self.config.is_encoder_decoder:
+                return BeamSearchEncoderDecoderOutput(
+                    sequences=decoded,
+                    logits=logits,
+                    encoder_attentions=encoder_attentions,
+                    encoder_hidden_states=encoder_hidden_states,
+                    decoder_attentions=decoder_attentions,
+                    decoder_hidden_states=decoder_hidden_states,
+                )
+            else:
+                return BeamSearchDecoderOnlyOutput(
+                    sequences=decoded,
+                    logits=logits,
+                    attentions=decoder_attentions,
+                    hidden_states=decoder_hidden_states,
+                )
+        else:
+            return decoded
 
     def group_beam_search(
         self,
@@ -1666,6 +1815,10 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        output_scores: Optional[bool] = None,
+        return_dict_in_generate: Optional[bool] = None,
         **model_kwargs,
     ):
         r"""
@@ -1691,15 +1844,24 @@ class GenerationMixin:
                 The id of the `padding` token.
             eos_token_id (:obj:`int`, `optional`):
                 The id of the `end-of-sequence` token.
+            output_attentions (:obj:`bool`, `optional`, defaults to `False`):
+                Whether to return attention weights in output
+            output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
+                Whether to return hidden states in output
+            output_scores (:obj:`bool`, `optional`, defaults to `False`):
+                Whether to return the logits in output
+            return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
+                Whether the output should be a dict (:obj:`SampleOutput`) or just the generated sequence
+                (:obj:`torch.LongTensor`).
             model_kwargs:
                 Additional model specific kwargs that will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
 
 
         Return:
-            :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
-            sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all
-            batches finished early due to the :obj:`eos_token_id`.
+            Either :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`
+            containing the generated sequences (default behaviour) or :obj:`BeamSearchOutput`if
+            :obj:`return_dict_in_generate` is set to True.
 
 
         Examples::
@@ -1757,6 +1919,26 @@ class GenerationMixin:
         max_length = max_length if max_length is not None else self.config.max_length
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        output_scores = output_scores if output_scores is not None else self.config.output_scores
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict_in_generate = (
+            return_dict_in_generate if return_dict_in_generate is not None else self.config.return_dict_in_generate
+        )
+
+        # init attention / hidden states / scores tuples
+        logits = () if (return_dict_in_generate and output_scores) else None
+        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
+        decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
+
+        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
+        if return_dict_in_generate and self.config.is_encoder_decoder:
+            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
+            encoder_hidden_states = (
+                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
+            )
 
         batch_size = len(beam_scorer._beam_hyps)
         num_beams = beam_scorer.num_beams
@@ -1785,7 +1967,12 @@ class GenerationMixin:
 
             # do one decoder step on all beams of all sentences in batch
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-            outputs = self(**model_inputs, return_dict=True)
+            outputs = self(
+                **model_inputs,
+                return_dict=True,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
 
             for beam_group_idx in range(num_beam_groups):
                 group_start_idx = beam_group_idx * num_sub_beams
@@ -1807,6 +1994,21 @@ class GenerationMixin:
                 next_token_logits = self.adjust_logits_during_generation(
                     next_token_logits, cur_len=cur_len, max_length=max_length
                 )
+                # Store logits, attentions and hidden_states when required
+                if return_dict_in_generate:
+                    if output_scores:
+                        logits += (next_token_logits,)
+                    if output_attentions:
+                        decoder_attentions += (
+                            (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
+                        )
+
+                    if output_hidden_states:
+                        decoder_hidden_states += (
+                            (outputs.decoder_hidden_states,)
+                            if self.config.is_encoder_decoder
+                            else (outputs.hidden_states,)
+                        )
 
                 next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * group_size, vocab_size)
                 vocab_size = next_token_scores.shape[-1]
@@ -1866,7 +2068,25 @@ class GenerationMixin:
             input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id
         )
 
-        return decoded
+        if return_dict_in_generate:
+            if self.config.is_encoder_decoder:
+                return BeamSearchEncoderDecoderOutput(
+                    sequences=decoded,
+                    logits=logits,
+                    encoder_attentions=encoder_attentions,
+                    encoder_hidden_states=encoder_hidden_states,
+                    decoder_attentions=decoder_attentions,
+                    decoder_hidden_states=decoder_hidden_states,
+                )
+            else:
+                return BeamSearchDecoderOnlyOutput(
+                    sequences=decoded,
+                    logits=logits,
+                    attentions=decoder_attentions,
+                    hidden_states=decoder_hidden_states,
+                )
+        else:
+            return decoded
 
 
 def top_k_top_p_filtering(
