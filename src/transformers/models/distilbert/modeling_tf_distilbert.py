@@ -655,6 +655,12 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
     def get_output_embeddings(self):
         return self.vocab_projector.input_embeddings
 
+    def get_output_layer_with_bias(self):
+        return self.vocab_projector
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.vocab_projector.name
+
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,

@@ -63,8 +63,16 @@ try:
     import ray  # noqa: F401
 
     _has_ray = True
+    try:
+        # Ray Tune has additional dependencies.
+        from ray import tune  # noqa: F401
+
+        _has_ray_tune = True
+    except (ImportError):
+        _has_ray_tune = False
 except (ImportError):
     _has_ray = False
+    _has_ray_tune = False
 
 try:
     from torch.utils.tensorboard import SummaryWriter  # noqa: F401
@@ -91,6 +99,13 @@ try:
     _has_mlflow = True
 except ImportError:
     _has_mlflow = False
+
+try:
+    import fairscale  # noqa: F401
+
+    _has_fairscale = True
+except ImportError:
+    _has_fairscale = False
 
 # No transformer imports above this point
 
@@ -120,6 +135,10 @@ def is_ray_available():
     return _has_ray
 
 
+def is_ray_tune_available():
+    return _has_ray_tune
+
+
 def is_azureml_available():
     return _has_azureml
 
@@ -128,11 +147,15 @@ def is_mlflow_available():
     return _has_mlflow
 
 
+def is_fairscale_available():
+    return _has_fairscale
+
+
 def hp_params(trial):
     if is_optuna_available():
         if isinstance(trial, optuna.Trial):
             return trial.params
-    if is_ray_available():
+    if is_ray_tune_available():
         if isinstance(trial, dict):
             return trial
 
@@ -142,7 +165,7 @@ def hp_params(trial):
 def default_hp_search_backend():
     if is_optuna_available():
         return "optuna"
-    elif is_ray_available():
+    elif is_ray_tune_available():
         return "ray"
 
 

@@ -678,6 +678,25 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
             extended_model = tf.keras.Model(inputs=[input_ids, visual_feats, visual_pos], outputs=[outputs])
             extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
 
+    def test_model_common_attributes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        list_lm_models = [TFLxmertForPreTraining]
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+
+            if model_class in list_lm_models:
+                x = model.get_output_layer_with_bias()
+                assert isinstance(x, tf.keras.layers.Layer)
+                name = model.get_prefix_bias_name()
+                assert isinstance(name, str)
+            else:
+                x = model.get_output_layer_with_bias()
+                assert x is None
+                name = model.get_prefix_bias_name()
+                assert x is None
+
     @slow
     def test_saved_model_with_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

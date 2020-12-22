@@ -317,6 +317,9 @@ class PretrainedConfig(object):
             proxies (:obj:`Dict[str, str]`, `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+            use_auth_token (:obj:`str` or `bool`, `optional`):
+                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
             revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
@@ -331,6 +334,10 @@ class PretrainedConfig(object):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
                 by the ``return_unused_kwargs`` keyword parameter.
+
+        .. note::
+
+            Passing :obj:`use_auth_token=True` is required when you want to use a private model.
 
         Returns:
             :class:`PretrainedConfig`: The configuration object instantiated from this pretrained model.
@@ -373,6 +380,7 @@ class PretrainedConfig(object):
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
+        use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
 
@@ -395,6 +403,7 @@ class PretrainedConfig(object):
                 proxies=proxies,
                 resume_download=resume_download,
                 local_files_only=local_files_only,
+                use_auth_token=use_auth_token,
             )
             # Load config dict
             config_dict = cls._dict_from_json_file(resolved_config_file)

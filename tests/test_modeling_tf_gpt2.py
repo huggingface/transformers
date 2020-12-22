@@ -219,20 +219,26 @@ class TFGPT2ModelTester:
         model = TFGPT2Model(config=config)
 
         # first forward pass
-        outputs = model(input_ids, token_type_ids=token_type_ids, use_cache=True)
+        outputs = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, use_cache=True)
 
         output, past = outputs.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
         next_token_types = ids_tensor((self.batch_size, 3), self.type_vocab_size)
+        next_attn_mask = ids_tensor((self.batch_size, 3), 2)
 
         # append to next input_ids and token_type_ids
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
         next_token_type_ids = tf.concat([token_type_ids, next_token_types], axis=-1)
+        next_attention_mask = tf.concat([input_mask, next_attn_mask], axis=-1)
 
-        output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, token_type_ids=next_token_types, past=past)["last_hidden_state"]
+        output_from_no_past = model(
+            next_input_ids, token_type_ids=next_token_type_ids, attention_mask=next_attention_mask
+        )["last_hidden_state"]
+        output_from_past = model(
+            next_tokens, token_type_ids=next_token_types, attention_mask=next_attention_mask, past=past
+        )["last_hidden_state"]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
         # select random slice
@@ -352,6 +358,17 @@ class TFGPT2ModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_gpt2_double_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_double_head(*config_and_inputs)
+
+    def test_model_common_attributes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+            x = model.get_output_layer_with_bias()
+            assert x is None
+            name = model.get_prefix_bias_name()
+            assert name is None
 
     def test_gpt2_sequence_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

@@ -44,9 +44,9 @@ Tips:
 
   For more information about which prefix to use, it is easiest to look into Appendix D of the `paper
   <https://arxiv.org/pdf/1910.10683.pdf>`__. - For sequence-to-sequence generation, it is recommended to use
-  :obj:`T5ForConditionalGeneration.generate()``. This method takes care of feeding the encoded input via
-  cross-attention layers to the decoder and auto-regressively generates the decoder output. - T5 uses relative scalar
-  embeddings. Encoder input padding can be done on the left and on the right.
+  :obj:`T5ForConditionalGeneration.generate()`. This method takes care of feeding the encoded input via cross-attention
+  layers to the decoder and auto-regressively generates the decoder output. - T5 uses relative scalar embeddings.
+  Encoder input padding can be done on the left and on the right.
 
 The original code can be found `here <https://github.com/google-research/text-to-text-transfer-transformer>`__.
 
@@ -55,7 +55,7 @@ Training
 
 T5 is an encoder-decoder model and converts all NLP problems into a text-to-text format. It is trained using teacher
 forcing. This means that for training we always need an input sequence and a target sequence. The input sequence is fed
-to the model using :obj:`input_ids``. The target sequence is shifted to the right, i.e., prepended by a start-sequence
+to the model using :obj:`input_ids`. The target sequence is shifted to the right, i.e., prepended by a start-sequence
 token and fed to the decoder using the :obj:`decoder_input_ids`. In teacher-forcing style, the target sequence is then
 appended by the EOS token and corresponds to the :obj:`labels`. The PAD token is hereby used as the start-sequence
 token. T5 can be trained / fine-tuned both in a supervised and unsupervised fashion.
@@ -131,7 +131,7 @@ T5EncoderModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.T5EncoderModel
-    :members: forward
+    :members: forward, parallelize, deparallelize
 
 TFT5Model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

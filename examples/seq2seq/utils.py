@@ -434,7 +434,8 @@ def use_task_specific_params(model, task):
 
     if task_specific_params is not None:
         pars = task_specific_params.get(task, {})
-        logger.info(f"using task specific params for {task}: {pars}")
+        logger.info(f"setting model.config to task specific params for {task}:\n {pars}")
+        logger.info("note: command line args may override some of these")
         model.config.update(pars)
 
 
@@ -462,7 +463,7 @@ def save_git_info(folder_path: str) -> None:
 
 def save_json(content, path, indent=4, **json_dump_kwargs):
     with open(path, "w") as f:
-        json.dump(content, f, indent=indent, **json_dump_kwargs)
+        json.dump(content, f, indent=indent, sort_keys=True, **json_dump_kwargs)
 
 
 def load_json(path):
