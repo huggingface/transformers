@@ -81,8 +81,8 @@ class GreedySearchEncoderDecoderOutput(ModelOutput):
             Classification scores for each token of the generated sequences. :obj:`(max_length,)`-shaped tuple of
             :obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`.
         encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer of the decoder) of shape
-            :obj:`(batch_size, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer of the decoder) of shape :obj:`(batch_size,
+            num_heads, sequence_length, sequence_length)`.
         encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`.
@@ -621,11 +621,11 @@ class GenerationMixin:
 
         Return:
             Either :obj:`GreedySearchOutput`, :obj:`SampleOutput`, :obj:`BeamSearchOutput` or :obj:`torch.LongTensor`:
-            :obj:`GreedySearchOutput`if the generate method is `greedy_search` and ``return_dict_in_generate=True``
-            is passed or ``config.return_dict_in_generate=True``;:obj:`SampleOutput`if the generate method is `sample`
-            and ``return_dict_in_generate=True`` is passed or ``config.return_dict_in_generate=True``;
-            :obj:`BeamSearchOutput`if the generate method is `beam_search` and ``return_dict_in_generate=True``
-            is passed or ``config.return_dict_in_generate=True``; :obj:`torch.LongTensor` of shape :obj:`(batch_size *
+            :obj:`GreedySearchOutput`if the generate method is `greedy_search` and ``return_dict_in_generate=True`` is
+            passed or ``config.return_dict_in_generate=True``;:obj:`SampleOutput`if the generate method is `sample` and
+            ``return_dict_in_generate=True`` is passed or ``config.return_dict_in_generate=True``;
+            :obj:`BeamSearchOutput`if the generate method is `beam_search` and ``return_dict_in_generate=True`` is
+            passed or ``config.return_dict_in_generate=True``; :obj:`torch.LongTensor` of shape :obj:`(batch_size *
             num_return_sequences, sequence_length)` containing just the generated sentence otherwise. The second
             dimension (sequence_length) is either equal to :obj:`max_length` or shorter if all batches finished early
             due to the :obj:`eos_token_id`
