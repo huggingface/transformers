@@ -888,17 +888,15 @@ class TFBartDecoder(tf.keras.layers.Layer):
             inputs["attention_mask"] = tf.cast(
                 tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id), inputs["input_ids"].dtype
             )
-            attention_mask = tf.concat(
-                [tf.ones((input_shape[0], past_key_values_length), dtype=attention_mask.dtype), attention_mask],
+            inputs["attention_mask"] = tf.concat(
+                [tf.ones((input_shape[0], past_key_values_length), dtype=inputs["attention_mask"].dtype), inputs["attention_mask"]],
                 axis=-1,
             )
         else:
-            inputs["attention_mask"] = tf.ones(input_shape, dtype=tf.int32)
+            inputs["attention_mask"] = tf.ones((input_shape[0], input_shape[1] + past_key_values_length), dtype=tf.int32)
 
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = combined_attention_mask + _expand_mask(
-            inputs["attention_mask"], past_key_values_length=past_key_values_length
-        )
+        combined_attention_mask = combined_attention_mask + _expand_mask(inputs["attention_mask"], tgt_len=input_shape[-1])
 
         if inputs["encoder_hidden_states"] is not None and inputs["encoder_attention_mask"] is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -924,6 +922,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
                 continue
 
             past_key_value = inputs["past_key_values"][idx] if inputs["past_key_values"] is not None else None
+
             hidden_states, layer_self_attn, present_key_value = decoder_layer(
                 hidden_states,
                 attention_mask=combined_attention_mask,
