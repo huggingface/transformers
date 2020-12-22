@@ -495,6 +495,7 @@ class GenerativeQAModule(BaseTransformer):
             "for the distributed retriever. Has no effect when "
             "distributed_retriever is set to pytorch.",
         )
+        return parser
 
     @staticmethod
     def add_ray_specific_args(parser):
