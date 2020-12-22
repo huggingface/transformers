@@ -7,5 +7,5 @@
   "checkpoint_identifier": "new-tf-enc-dec-base",
   "tokenizer_type": "Based on BART",
   "generate_tensorflow_and_pytorch": "Tensorflow",
-	"is_encoder_decoder_model": "True"
+  "is_encoder_decoder_model": "True"
 }
