@@ -880,10 +880,10 @@ class TFBartDecoder(tf.keras.layers.Layer):
         hidden_states = inputs["inputs_embeds"] * self.embed_scale
 
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = tf.fill(dims=input_shape, value=-1.)
+        combined_attention_mask = tf.fill(dims=input_shape, value=-1.0)
         if input_shape[-1] > 1:
             combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
-        
+
         is_combined_None = tf.reduce_any(combined_attention_mask == -1)
 
         if inputs["attention_mask"] is None and inputs["input_ids"] is not None and input_shape[-1] > 1:
@@ -938,14 +938,14 @@ class TFBartDecoder(tf.keras.layers.Layer):
             past_key_value = inputs["past_key_values"][idx] if inputs["past_key_values"] is not None else None
 
             def true_fn():
-                return  decoder_layer(
+                return decoder_layer(
                     hidden_states,
                     attention_mask=None,
                     encoder_hidden_states=inputs["encoder_hidden_states"],
                     encoder_attention_mask=inputs["encoder_attention_mask"],
                     past_key_value=past_key_value,
                 )
-            
+
             def false_fn():
                 return decoder_layer(
                     hidden_states,
