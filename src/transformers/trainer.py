@@ -1178,6 +1178,8 @@ class Trainer:
         elif self.use_apex:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
+        elif self.args.deepspeed:
+            model.module.backward(loss)
         else:
             loss.backward()
 
