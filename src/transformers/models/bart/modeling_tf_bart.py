@@ -946,7 +946,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
                     past_key_value=past_key_value,
                 )
 
-            def false_fn():
+            def compute_result_with_attention():
                 return decoder_layer(
                     hidden_states,
                     attention_mask=combined_attention_mask,
