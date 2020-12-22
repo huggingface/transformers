@@ -137,8 +137,8 @@ class TestFinetuneTrainer(TestCasePlus):
             --n_train 8
             --n_val 8
             --max_source_length {max_len}
-            --max_length {max_len}
-            --eval_max_length {max_len}
+            --max_target_length {max_len}
+            --val_max_target_length {max_len}
             --do_train
             --do_eval
             --do_predict

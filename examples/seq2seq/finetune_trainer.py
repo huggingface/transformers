@@ -93,19 +93,27 @@ class DataTrainingArguments:
             "than this will be truncated, sequences shorter will be padded."
         },
     )
-    max_length: Optional[int] = field(
+    max_target_length: Optional[int] = field(
         default=128,
         metadata={
             "help": "The maximum total sequence length for target text after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded."
         },
     )
-    eval_max_length: Optional[int] = field(
+    val_max_target_length: Optional[int] = field(
         default=142,
         metadata={
             "help": "The maximum total sequence length for validation target text after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded. "
+            "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
+            "during ``evaluate`` and ``predict``."
+        },
+    )
+    test_max_target_length: Optional[int] = field(
+        default=142,
+        metadata={
+            "help": "The maximum total sequence length for test target text after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded."
-            " This argument is also used to override the ``max_length`` param of ``model.generate``, which is used during ``evaluate`` and ``predict``"
         },
     )
     n_train: Optional[int] = field(default=-1, metadata={"help": "# training examples. -1 means use all."})
@@ -233,7 +241,7 @@ def main():
             type_path="train",
             data_dir=data_args.data_dir,
             n_obs=data_args.n_train,
-            max_target_length=data_args.max_length,
+            max_target_length=data_args.max_target_length,
             max_source_length=data_args.max_source_length,
             prefix=model.config.prefix or "",
         )
@@ -246,7 +254,7 @@ def main():
             type_path="val",
             data_dir=data_args.data_dir,
             n_obs=data_args.n_val,
-            max_target_length=data_args.eval_max_length,
+            max_target_length=data_args.val_max_target_length,
             max_source_length=data_args.max_source_length,
             prefix=model.config.prefix or "",
         )
@@ -259,7 +267,7 @@ def main():
             type_path="test",
             data_dir=data_args.data_dir,
             n_obs=data_args.n_test,
-            max_target_length=data_args.eval_max_length,
+            max_target_length=data_args.test_max_target_length,
             max_source_length=data_args.max_source_length,
             prefix=model.config.prefix or "",
         )
@@ -310,7 +318,7 @@ def main():
         logger.info("*** Evaluate ***")
 
         metrics = trainer.evaluate(
-            metric_key_prefix="val", max_length=data_args.eval_max_length, num_beams=data_args.eval_beams
+            metric_key_prefix="val", max_length=data_args.val_max_target_length, num_beams=data_args.eval_beams
         )
         metrics["val_n_objs"] = data_args.n_val
         metrics["val_loss"] = round(metrics["val_loss"], 4)
@@ -326,7 +334,7 @@ def main():
         test_output = trainer.predict(
             test_dataset=test_dataset,
             metric_key_prefix="test",
-            max_length=data_args.eval_max_length,
+            max_length=data_args.val_max_target_length,
             num_beams=data_args.eval_beams,
         )
         metrics = test_output.metrics
