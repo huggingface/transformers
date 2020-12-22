@@ -1356,7 +1356,7 @@ def shape_list(tensor: tf.Tensor) -> List[int]:
     dynamic = tf.shape(tensor)
 
     if tensor.shape == tf.TensorShape(None):
-        return dynamic.as_list()
+        return dynamic
 
     static = tensor.shape.as_list()
 
