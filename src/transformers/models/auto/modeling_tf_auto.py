@@ -53,7 +53,7 @@ from ..camembert.modeling_tf_camembert import (
     TFCamembertForTokenClassification,
     TFCamembertModel,
 )
-from ..ctrl.modeling_tf_ctrl import TFCTRLLMHeadModel, TFCTRLModel
+from ..ctrl.modeling_tf_ctrl import TFCTRLForSequenceClassification, TFCTRLLMHeadModel, TFCTRLModel
 from ..distilbert.modeling_tf_distilbert import (
     TFDistilBertForMaskedLM,
     TFDistilBertForMultipleChoice,
@@ -131,7 +131,11 @@ from ..roberta.modeling_tf_roberta import (
     TFRobertaModel,
 )
 from ..t5.modeling_tf_t5 import TFT5ForConditionalGeneration, TFT5Model
-from ..transfo_xl.modeling_tf_transfo_xl import TFTransfoXLLMHeadModel, TFTransfoXLModel
+from ..transfo_xl.modeling_tf_transfo_xl import (
+    TFTransfoXLForSequenceClassification,
+    TFTransfoXLLMHeadModel,
+    TFTransfoXLModel,
+)
 from ..xlm.modeling_tf_xlm import (
     TFXLMForMultipleChoice,
     TFXLMForQuestionAnsweringSimple,
@@ -342,6 +346,8 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (GPT2Config, TFGPT2ForSequenceClassification),
         (MPNetConfig, TFMPNetForSequenceClassification),
         (OpenAIGPTConfig, TFOpenAIGPTForSequenceClassification),
+        (TransfoXLConfig, TFTransfoXLForSequenceClassification),
+        (CTRLConfig, TFCTRLForSequenceClassification),
     ]
 )
 
