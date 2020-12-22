@@ -480,6 +480,17 @@ class TFBartPretrainedModel(TFPreTrainedModel):
             "input_ids": input_ids,
         }
         return dummy_inputs
+    
+    @tf.function(input_signature=[{
+        "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+        "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+        "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+        "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
+    }])
+    def serving(self, inputs):
+        output = self.call(inputs)
+        
+        return self.serving_output(output)
 
 
 class TFPretrainedBartModel(TFBartPretrainedModel):
@@ -1101,6 +1112,25 @@ class TFBartModel(TFBartPretrainedModel):
             encoder_hidden_states=inputs["encoder_outputs"].hidden_states,
             encoder_attentions=inputs["encoder_outputs"].attentions,
         )
+    
+    def serving_output(self, output):
+        return TFSeq2SeqModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            past_key_values=output.past_key_values,
+            decoder_hidden_states=tf.convert_to_tensor(output.decoder_hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            decoder_attentions=tf.convert_to_tensor(output.decoder_attentions)
+            if self.config.output_attentions
+            else None,
+            encoder_last_hidden_state=output.encoder_last_hidden_state,
+            encoder_hidden_states=tf.convert_to_tensor(output.encoder_hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            encoder_attentions=tf.convert_to_tensor(output.decoder_attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
     def get_input_embeddings(self):
         return self.shared
@@ -1246,6 +1276,26 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel):
             encoder_last_hidden_state=outputs.last_hidden_state,  # index 0 of encoder outputs
             encoder_hidden_states=outputs.encoder_hidden_states,  # 1 of e out
             encoder_attentions=outputs.encoder_attentions,  # 2 of e out
+        )
+    
+    def serving_output(self, output):
+        return TFSeq2SeqLMOutput(
+            loss=None,
+            logits=output.logits,
+            past_key_values=output.past_key_values,
+            decoder_hidden_states=tf.convert_to_tensor(output.decoder_hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            decoder_attentions=tf.convert_to_tensor(output.decoder_attentions)
+            if self.config.output_attentions
+            else None,
+            encoder_last_hidden_state=output.encoder_last_hidden_state,
+            encoder_hidden_states=tf.convert_to_tensor(output.encoder_hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            encoder_attentions=tf.convert_to_tensor(output.decoder_attentions)
+            if self.config.output_attentions
+            else None,
         )
 
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs) -> Dict:

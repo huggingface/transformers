@@ -594,11 +594,25 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
     }])
     def serving(self, inputs):
+        """
+        Method used for serving the model.
+
+        Args:
+            inputs (:obj:`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionnary of tensors.
+        """
         output = self.call(inputs)
         
         return self.serving_output(output)
     
     def serving_output(output):
+        """
+        Prepare the output of the saved model.
+
+        Args:
+            output (:obj:`~transformers.TFBaseModelOutput`):
+                The output returned by the model.
+        """
         raise NotImplementedError
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
