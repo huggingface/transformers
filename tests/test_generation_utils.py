@@ -36,7 +36,16 @@ if is_torch_available():
         TopKLogitsWarper,
         TopPLogitsWarper,
     )
-    from transformers.generation_utils import GreedySearchDecoderOnlyOutput, GreedySearchEncoderDecoderOutput
+    from transformers.generation_utils import (
+        BeamSearchDecoderOnlyOutput,
+        BeamSearchEncoderDecoderOutput,
+        GreedySearchDecoderOnlyOutput,
+        GreedySearchEncoderDecoderOutput,
+        SampleDecoderOnlyOutput,
+        SampleEncoderDecoderOutput,
+        BeamSearchEncoderDecoderOutput,
+        BeamSearchDecoderOnlyOutput,
+    )
 
 
 class GenerationTesterMixin:
@@ -259,7 +268,7 @@ class GenerationTesterMixin:
             self.assertListEqual(output_generate.sequences.tolist(), output_greedy.sequences.tolist())
 
             for output in (output_greedy, output_generate):
-                self._check_outptus(output, input_ids, model.config)
+                self._check_outputs(output, input_ids, model.config)
 
     def test_greedy_generate_dict_outputs_use_cache(self):
         for model_class in self.all_generative_model_classes:
@@ -286,16 +295,17 @@ class GenerationTesterMixin:
             self.assertListEqual(output_generate.sequences.tolist(), output_greedy.sequences.tolist())
 
             for output in (output_greedy, output_generate):
-                self._check_outptus(output, input_ids, model.config, use_cache=True)
+                self._check_outputs(output, input_ids, model.config, use_cache=True)
 
-    def _check_outptus(self, output, input_ids, config, use_cache=False):
+    def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
         batch_size, seq_length = input_ids.shape
+        num_sequences_in_output = batch_size * num_return_sequences
         gen_len = (
             output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - seq_length
         )
 
         # Logits
-        self._check_logits(batch_size, output.logits, length=gen_len, config=config)
+        self._check_logits(num_sequences_in_output, output.logits, length=gen_len, config=config)
 
         # Attentions
         if config.is_encoder_decoder:
@@ -307,7 +317,7 @@ class GenerationTesterMixin:
             )
             # decoder
             self._check_attentions_for_generate(
-                batch_size,
+                num_sequences_in_output,
                 output.decoder_attentions,
                 min_length=1,
                 max_length=output.sequences.shape[-1],
@@ -319,7 +329,7 @@ class GenerationTesterMixin:
             attentions = output.attentions if not use_cache else output.attentions[1:]
             min_length = seq_length if not use_cache else seq_length + 1
             self._check_attentions_for_generate(
-                batch_size,
+                num_sequences_in_output,
                 attentions=attentions,
                 min_length=min_length,
                 max_length=output.sequences.shape[-1],
@@ -340,7 +350,7 @@ class GenerationTesterMixin:
             )
             # decoder
             self._check_hidden_states_for_generate(
-                batch_size,
+                num_sequences_in_output,
                 output.decoder_hidden_states,
                 min_length=1,
                 max_length=output.sequences.shape[-1],
@@ -352,7 +362,7 @@ class GenerationTesterMixin:
             hidden_states = output.hidden_states if not use_cache else output.hidden_states[1:]
             min_length = seq_length if not use_cache else seq_length + 1
             self._check_hidden_states_for_generate(
-                batch_size,
+                num_sequences_in_output,
                 hidden_states,
                 min_length=min_length,
                 max_length=output.sequences.shape[-1],
@@ -364,7 +374,7 @@ class GenerationTesterMixin:
         expected_shape = (batch_size, config.vocab_size)
         self.assertIsInstance(logits, tuple)
         self.assertTrue(len(logits) == length)
-        self.assertTrue(all(iter_logits.shape == expected_shape for iter_logits in logits))
+        self.assertListEqual([iter_logits.shape for iter_logits in logits], [expected_shape] * len(logits))
 
     def _check_attentions_for_generate(self, batch_size, attentions, min_length, max_length, config, use_cache=False):
         self.assertIsInstance(attentions, tuple)
@@ -394,93 +404,122 @@ class GenerationTesterMixin:
                 all(layer_hidden_states.shape == expected_shape for layer_hidden_states in iter_hidden_states)
             )
 
+    def _sample_generate(
+        self,
+        model,
+        input_ids,
+        attention_mask,
+        max_length,
+        num_return_sequences,
+        output_scores=False,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict_in_generate=False,
+    ):
+        process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+            input_ids.shape[-1], model.config.eos_token_id
+        )
+        logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
+
+        if model.config.is_encoder_decoder:
+            max_length = 4
+
+        torch.manual_seed(0)
+        output_generate = model.generate(
+            input_ids,
+            do_sample=True,
+            num_beams=1,
+            max_length=max_length,
+            num_return_sequences=num_return_sequences,
+            attention_mask=attention_mask,
+            output_scores=output_scores,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict_in_generate=return_dict_in_generate,
+            **logits_warper_kwargs,
+            **process_kwargs,
+        )
+
+        torch.manual_seed(0)
+        kwargs = {}
+        if model.config.is_encoder_decoder:
+            encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
+                model, input_ids, attention_mask, num_interleave=num_return_sequences
+            )
+            kwargs["encoder_outputs"] = encoder_outputs
+            input_ids_clone = input_ids_clone.repeat_interleave(num_return_sequences, dim=0)
+        else:
+            attention_mask_clone = attention_mask.repeat_interleave(num_return_sequences, dim=0)
+            input_ids_clone = input_ids.repeat_interleave(num_return_sequences, dim=0)
+
+        with torch.no_grad():
+            output_sample = model.sample(
+                input_ids_clone,
+                attention_mask=attention_mask_clone,
+                max_length=max_length,
+                logits_processor=logits_processor,
+                logits_warper=logits_warper,
+                output_scores=output_scores,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict_in_generate=return_dict_in_generate,
+                **kwargs,
+            )
+        return output_sample, output_generate
+
     def test_sample_generate(self):
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
-            process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-                input_ids.shape[-1], config.eos_token_id
-            )
-            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
-
-            model = model_class(config).to(torch_device)
-            model.eval()
-
+            model = model_class(config).to(torch_device).eval()
             # check `generate()` and `sample()` are equal
-            if model.config.is_encoder_decoder:
-                max_length = 4
-
-            torch.manual_seed(0)
-            output_ids_generate = model.generate(
-                input_ids,
-                do_sample=True,
-                num_beams=1,
-                max_length=max_length,
+            output_sample, output_generate = self._sample_generate(
+                model=model,
+                input_ids=input_ids,
                 attention_mask=attention_mask,
-                **logits_warper_kwargs,
-                **process_kwargs,
+                max_length=max_length,
+                num_return_sequences=1,
             )
-
-            torch.manual_seed(0)
-            kwargs = {}
-            if model.config.is_encoder_decoder:
-                encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
-                    model, input_ids, attention_mask
-                )
-                kwargs["encoder_outputs"] = encoder_outputs
-            else:
-                attention_mask_clone = attention_mask
-                input_ids_clone = input_ids
-
-            with torch.no_grad():
-                output_ids_sample = model.sample(
-                    input_ids_clone,
-                    attention_mask=attention_mask_clone,
-                    max_length=max_length,
-                    logits_processor=logits_processor,
-                    logits_warper=logits_warper,
-                    **kwargs,
-                )
-            self.assertListEqual(output_ids_generate.tolist(), output_ids_sample.tolist())
+            self.assertListEqual(output_sample.tolist(), output_generate.tolist())
 
             # check `generate()` and `sample()` yield equal results for `num_return_sequences`
-            num_return_sequences = 3
-            if model.config.is_encoder_decoder:
-                max_length = 4
-
-            torch.manual_seed(0)
-            output_ids_generate = model.generate(
-                input_ids,
-                do_sample=True,
-                num_beams=1,
-                max_length=max_length,
-                num_return_sequences=num_return_sequences,
+            output_sample, output_generate = self._sample_generate(
+                model=model,
+                input_ids=input_ids,
                 attention_mask=attention_mask,
-                **logits_warper_kwargs,
-                **process_kwargs,
+                max_length=max_length,
+                num_return_sequences=3,
+            )
+            self.assertListEqual(output_sample.tolist(), output_generate.tolist())
+
+    def test_sample_generate_dict_output(self):
+        for model_class in self.all_generative_model_classes:
+            # disable cache
+            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
+            config.use_cache = False
+            model = model_class(config).to(torch_device).eval()
+            output_sample, output_generate = self._sample_generate(
+                model=model,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_length=max_length,
+                num_return_sequences=2,
+                output_scores=True,
+                output_hidden_states=True,
+                output_attentions=True,
+                return_dict_in_generate=True,
             )
 
-            torch.manual_seed(0)
-            kwargs = {}
             if model.config.is_encoder_decoder:
-                encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
-                    model, input_ids, attention_mask, num_interleave=num_return_sequences
-                )
-                kwargs["encoder_outputs"] = encoder_outputs
-                input_ids_clone = input_ids_clone.repeat_interleave(num_return_sequences, dim=0)
+                self.assertIsInstance(output_sample, SampleEncoderDecoderOutput)
+                self.assertIsInstance(output_generate, SampleEncoderDecoderOutput)
             else:
-                attention_mask_clone = attention_mask.repeat_interleave(num_return_sequences, dim=0)
-                input_ids_clone = input_ids.repeat_interleave(num_return_sequences, dim=0)
+                self.assertIsInstance(output_sample, SampleDecoderOnlyOutput)
+                self.assertIsInstance(output_generate, SampleDecoderOnlyOutput)
 
-            with torch.no_grad():
-                output_ids_sample = model.sample(
-                    input_ids_clone,
-                    attention_mask=attention_mask_clone,
-                    max_length=max_length,
-                    logits_processor=logits_processor,
-                    logits_warper=logits_warper,
-                    **kwargs,
-                )
-            self.assertListEqual(output_ids_generate.tolist(), output_ids_sample.tolist())
+            self.assertListEqual(output_generate.sequences.tolist(), output_sample.sequences.tolist())
+
+            for output in (output_sample, output_generate):
+                self._check_outputs(output, input_ids, model.config, num_return_sequences=2)
 
     def test_beam_search_generate(self):
         for model_class in self.all_generative_model_classes:
