@@ -25,8 +25,7 @@ objectives in our [model summary](https://huggingface.co/transformers/model_summ
 These scripts leverage the 🤗 Datasets library and the Trainer API. You can easily customize them to your needs if you
 need extra processing on your datasets.
 
-**Note:** The old script `run_language_modeling.py` is still available
-[here](https://github.com/huggingface/transformers/blob/master/examples/contrib/legacy/run_language_modeling.py).
+**Note:** The old script `run_language_modeling.py` is still available [here](https://github.com/huggingface/transformers/blob/master/examples/legacy/run_language_modeling.py).
 
 The following examples, will run on a datasets hosted on our [hub](https://huggingface.co/datasets) or with your own
 text files for training and validation. We give examples of both below.
