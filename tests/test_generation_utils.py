@@ -418,7 +418,7 @@ class GenerationTesterMixin:
             # check hidden size
             self.assertListEqual(
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
-                [expected_shape] * len(hidden_states),
+                [expected_shape] * len(iter_hidden_states),
             )
 
     def _sample_generate(
