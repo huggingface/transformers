@@ -854,15 +854,13 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 the retriever.
 
                 If the model has is not initialized with a ``retriever`` or ``input_ids`` is not given,
-                :obj:`context_input_ids` has to be provided to the forward pass. :obj:`context_input_ids` are returned
-                by :meth:`~transformers.RagRetriever.__call__`.
+                :obj:`context_input_ids` and :obj:`context_attention_mask` have to be provided to the forward pass. They are returned by :meth:`~transformers.RagRetriever.__call__`.
             doc_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.n_docs)`):
                 Score between each retrieved document embeddings (see :obj:`retrieved_doc_embeds`) and
                 :obj:`question_encoder_last_hidden_state`.
 
                 If the model has is not initialized with a ``retriever`` or ``input_ids`` is not given,
-                :obj:`context_input_ids` has to be provided to the forward pass. :obj:`context_input_ids` are returned
-                by :meth:`~transformers.RagRetriever.__call__`.
+                :obj:`doc_scores` has to be provided to the forward pass. :obj:`doc_scores` are returned by :meth:`~transformers.RagRetriever.__call__`.
             do_deduplication (:obj:`bool`, `optional`):
                 Whether or not to deduplicate the generations from different context documents for a given input. Has
                 to be set to :obj:`False` if used while training with distributed backend.
