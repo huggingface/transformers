@@ -576,8 +576,16 @@ class BertEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
 
         EXPECTED_SUMMARY_AMERICA = """the 2013 america's cup will be faster than ever. the 34th edition of the competition will be held in 2011. the 2013 race will be between multi - hull vessels with wings rather than traditional sails. the new america'' cup will provide increased commercial revenue. the event will also be expanded to a youth america'cup."""
 
-        input_dict = tokenizer([ARTICLE_SIGMA, ARTICLE_AMERICA], padding="max_length", pad_to_max_length=True, max_length=512, return_tensors="pt")
-        output_ids = model.generate(input_dict["input_ids"].to(torch_device), attention_mask=input_dict["attention_mask"].to(torch_device))
+        input_dict = tokenizer(
+            [ARTICLE_SIGMA, ARTICLE_AMERICA],
+            padding="max_length",
+            pad_to_max_length=True,
+            max_length=512,
+            return_tensors="pt",
+        )
+        output_ids = model.generate(
+            input_dict["input_ids"].to(torch_device), attention_mask=input_dict["attention_mask"].to(torch_device)
+        )
         summary = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
         self.assertEqual(summary, [EXPECTED_SUMMARY_SIGMA, EXPECTED_SUMMARY_AMERICA])
@@ -642,8 +650,12 @@ class BertGenerationEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCa
 
         EXPECTED_SUMMARY_TOSHIBA = """Japanese electronics giant Toshiba overstated its annual earnings by more than a third last year, according to a report."""
 
-        input_dict = tokenizer([ARTICLE_PS3, ARTICLE_TOSHIBA], max_length=512, padding="max_length", return_tensors="pt")
-        output_ids = model.generate(input_dict["input_ids"].to(torch_device), attention_mask=input_dict["attention_mask"].to(torch_device))
+        input_dict = tokenizer(
+            [ARTICLE_PS3, ARTICLE_TOSHIBA], max_length=512, padding="max_length", return_tensors="pt"
+        )
+        output_ids = model.generate(
+            input_dict["input_ids"].to(torch_device), attention_mask=input_dict["attention_mask"].to(torch_device)
+        )
         summary = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
         self.assertEqual(summary, [EXPECTED_SUMMARY_PS3, EXPECTED_SUMMARY_TOSHIBA])
