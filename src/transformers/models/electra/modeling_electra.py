@@ -459,7 +459,6 @@ class ElectraLayer(nn.Module):
         # if decoder, the last output is tuple of self-attn cache
         if self.is_decoder:
             outputs = self_attention_outputs[1:-1]
-            # tuple of self-attn cache
             present_key_value = self_attention_outputs[-1]
         else:
             outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -493,7 +492,7 @@ class ElectraLayer(nn.Module):
         )
         outputs = (layer_output,) + outputs
 
-        # if decoder, return the attn cache as the last output
+        # if decoder, return the attn key/values as the last output
         if self.is_decoder:
             outputs = outputs + (present_key_value,)
 
