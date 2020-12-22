@@ -43,8 +43,6 @@ if is_torch_available():
         GreedySearchEncoderDecoderOutput,
         SampleDecoderOnlyOutput,
         SampleEncoderDecoderOutput,
-        BeamSearchEncoderDecoderOutput,
-        BeamSearchDecoderOnlyOutput,
     )
 
 
@@ -444,7 +442,12 @@ class GenerationTesterMixin:
         kwargs = {}
         if model.config.is_encoder_decoder:
             encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
-                model, input_ids, attention_mask, num_interleave=num_return_sequences
+                model,
+                input_ids,
+                attention_mask,
+                num_interleave=num_return_sequences,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
             )
             kwargs["encoder_outputs"] = encoder_outputs
             input_ids_clone = input_ids_clone.repeat_interleave(num_return_sequences, dim=0)
