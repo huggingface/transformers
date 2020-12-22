@@ -1837,7 +1837,9 @@ class TFLongformerPreTrainedModel(TFPreTrainedModel):
         "global_attention_mask": tf.TensorSpec((None, None), tf.int32, name="global_attention_mask"),
     }])
     def serving(self, inputs):
-        return dict(self.call(inputs))
+        output = self.call(inputs)
+        
+        return self.serving_output(output)
 
 
 LONGFORMER_START_DOCSTRING = r"""
@@ -2006,6 +2008,21 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
         )
 
         return outputs
+    
+    def serving_output(self, output):
+        return TFLongformerBaseModelOutputWithPooling(
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
+            global_attentions=tf.convert_to_tensor(output.global_attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 
 @add_start_docstrings(
@@ -2102,6 +2119,21 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             global_attentions=outputs.global_attentions,
+        )
+    
+    def serving_output(self, output):
+        return TFLongformerMaskedLMOutput(
+            loss=None,
+            logits=output.logits,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
+            global_attentions=tf.convert_to_tensor(output.global_attentions)
+            if self.config.output_attentions
+            else None,
         )
 
 
@@ -2233,6 +2265,22 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
             attentions=outputs.attentions,
             global_attentions=outputs.global_attentions,
         )
+    
+    def serving_output(self, output):
+        return TFLongformerQuestionAnsweringModelOutput(
+            loss=None,
+            start_logits=output.start_logits,
+            end_logits=output.end_logits,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
+            global_attentions=tf.convert_to_tensor(output.global_attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 
 class TFLongformerClassificationHead(tf.keras.layers.Layer):
@@ -2356,6 +2404,21 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
             attentions=outputs.attentions,
             global_attentions=outputs.global_attentions,
         )
+    
+    def serving_output(self, output):
+        return TFLongformerSequenceClassifierOutput(
+            loss=None,
+            logits=output.logits,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
+            global_attentions=tf.convert_to_tensor(output.global_attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 
 @add_start_docstrings(
@@ -2384,14 +2447,6 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         # make sure global layers are initialized
         global_attention_mask = tf.convert_to_tensor([[[0, 0, 0, 1], [0, 0, 0, 1]]] * 2)
         return {"input_ids": input_ids, "global_attention_mask": global_attention_mask}
-    
-    @tf.function(input_signature=[{
-        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-        "global_attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="global_attention_mask"),
-    }])
-    def serving(self, inputs):
-        return dict(self.call(inputs))
 
     @add_start_docstrings_to_model_forward(
         LONGFORMER_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
@@ -2499,6 +2554,31 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
             attentions=outputs.attentions,
             global_attentions=outputs.global_attentions,
         )
+    
+    @tf.function(input_signature=[{
+        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+        "global_attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="global_attention_mask"),
+    }])
+    def serving(self, inputs):
+        output = self.call(inputs)
+        
+        return self.serving_output(output)
+    
+    def serving_output(self, output):
+        return TFLongformerMultipleChoiceModelOutput(
+            loss=None,
+            logits=output.logits,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
+            global_attentions=tf.convert_to_tensor(output.global_attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 
 @add_start_docstrings(
@@ -2593,4 +2673,19 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             global_attentions=outputs.global_attentions,
+        )
+    
+    def serving_output(self, output):
+        return TFLongformerTokenClassifierOutput(
+            loss=None,
+            logits=output.logits,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
+            global_attentions=tf.convert_to_tensor(output.global_attentions)
+            if self.config.output_attentions
+            else None,
         )

@@ -593,6 +593,20 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
             training=inputs["training"],
         )
         return outputs
+    
+    def serving_output(self, output):
+        return TFBaseModelOutputWithPast(
+            last_hidden_state=output.last_hidden_state,
+            past_key_values=tf.convert_to_tensor(output.past_key_values)
+            if self.config.use_cache
+            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.attentions
+            else None,
+        )
 
 
 class TFCTRLLMHead(tf.keras.layers.Layer):
@@ -727,6 +741,21 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+        )
+    
+    def serving_output(self, output):
+        return TFCausalLMOutputWithPast(
+            loss=None,
+            logits=output.logits,
+            past_key_values=tf.convert_to_tensor(output.past_key_values)
+            if self.config.use_cache
+            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.attentions
+            else None,
         )
 
 
@@ -884,4 +913,19 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
             logits=pooled_logits,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+        )
+    
+    def serving_output(self, output):
+        return TFSequenceClassifierOutput(
+            loss=None,
+            logits=output.logits,
+            past_key_values=tf.convert_to_tensor(output.past_key_values)
+            if self.config.use_cache
+            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.attentions
+            else None,
         )

@@ -73,6 +73,25 @@ TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST = [
 INF = 1e6
 
 
+def tuples_to_ragged_tensors(encoder_output, decoder_output=None):
+    output = list(encoder_output)
+    ref_shape = shape_list(output[0])
+
+    for i, v in enumerate(output):
+        current_shape = shape_list(output[i])
+        padding_shape = []
+
+        for ref, current in zip(ref_shape, current_shape):
+            padding_shape.append([0, ref - current])
+
+        output[i] = tf.pad(output[i], tf.convert_to_tensor(padding_shape), constant_values=-1)
+
+    if decoder_output is not None:
+        output.extend(decoder_output)
+
+    return tf.RaggedTensor.from_tensor(output, padding=tf.fill(ref_shape[1:], -1.0))
+
+
 class TFFunnelEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word embeddings."""
 
@@ -1188,6 +1207,17 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
+    
+    def serving_output(self, output):
+        return TFBaseModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            hidden_states=tuples_to_ragged_tensors(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tuples_to_ragged_tensors(output.attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 
 @add_start_docstrings(
@@ -1241,6 +1271,17 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+        )
+    
+    def serving_output(self, output):
+        return TFBaseModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            hidden_states=tuples_to_ragged_tensors(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tuples_to_ragged_tensors(output.attentions)
+            if self.config.output_attentions
+            else None,
         )
 
 
@@ -1318,6 +1359,17 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
             logits=logits,
             hidden_states=discriminator_hidden_states.hidden_states,
             attentions=discriminator_hidden_states.attentions,
+        )
+    
+    def serving_output(self, output):
+        return TFFunnelForPreTrainingOutput(
+            last_hidden_state=output.last_hidden_state,
+            hidden_states=tuples_to_ragged_tensors(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tuples_to_ragged_tensors(output.attentions)
+            if self.config.output_attentions
+            else None,
         )
 
 
@@ -1403,6 +1455,18 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+    
+    def serving_output(self, output):
+        return TFMaskedLMOutput(
+            loss=None,
+            logits=output.logits,
+            hidden_states=tuples_to_ragged_tensors(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tuples_to_ragged_tensors(output.attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 
 @add_start_docstrings(
@@ -1486,6 +1550,18 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+    
+    def serving_output(self, output):
+        return TFSequenceClassifierOutput(
+            loss=None,
+            logits=output.logits,
+            hidden_states=tuples_to_ragged_tensors(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tuples_to_ragged_tensors(output.attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 
 @add_start_docstrings(
@@ -1511,14 +1587,6 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
             tf.Tensor with dummy inputs
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
-    
-    @tf.function(input_signature=[{
-        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-        "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
-    }])
-    def serving(self, inputs):
-        return dict(self.call(inputs))
 
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
@@ -1609,6 +1677,28 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+    
+    @tf.function(input_signature=[{
+        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+        "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
+    }])
+    def serving(self, inputs):
+        output = self.call(inputs)
+        
+        return self.serving_output(output)
+    
+    def serving_output(self, output):
+        return TFMultipleChoiceModelOutput(
+            loss=None,
+            logits=output.logits,
+            hidden_states=tuples_to_ragged_tensors(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tuples_to_ragged_tensors(output.attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 
 @add_start_docstrings(
@@ -1694,6 +1784,18 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+    
+    def serving_output(self, output):
+        return TFTokenClassifierOutput(
+            loss=None,
+            logits=output.logits,
+            hidden_states=tuples_to_ragged_tensors(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tuples_to_ragged_tensors(output.attentions)
+            if self.config.output_attentions
+            else None,
         )
 
 
@@ -1792,4 +1894,17 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
             end_logits=end_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+    
+    def serving_output(self, output):
+        return TFQuestionAnsweringModelOutput(
+            loss=None,
+            start_logits=output.start_logits,
+            end_logits=output.end_logits,
+            hidden_states=tuples_to_ragged_tensors(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tuples_to_ragged_tensors(output.attentions)
+            if self.config.output_attentions
+            else None,
         )
