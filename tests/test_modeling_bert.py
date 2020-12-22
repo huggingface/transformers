@@ -287,18 +287,22 @@ class BertModelTester:
 
         # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
 
         # append to next input_ids and
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
         output_from_no_past = model(
             next_input_ids,
+            attention_mask=next_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             output_hidden_states=True,
         )["hidden_states"][0]
         output_from_past = model(
             next_tokens,
+            attention_mask=next_attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
