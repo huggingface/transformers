@@ -99,7 +99,8 @@ class BertConfig(PretrainedConfig):
             `Method 4` in `Improve Transformer Models with Better Relative Position Embeddings (Huang et al.)
             <https://arxiv.org/abs/2009.13658>`__.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if ``config.is_decoder=True``.
 
     Examples::
 

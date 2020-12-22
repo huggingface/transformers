@@ -243,8 +243,9 @@ class BaseModelOutputWithPoolingAndPastAndCrossAttentions(ModelOutput):
             Linear layer and a Tanh activation function. The Linear layer weights are trained from the next sentence
             prediction (classification) objective during pretraining.
         past_key_values (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
-            List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`, with each tensor of shape :obj:`(2,
-            batch_size, num_heads, sequence_length, embed_size_per_head)`).
+            Tuple of :obj:`torch.FloatTensor` tuples of length :obj:`config.n_layers`, with each tuple containing the
+            cached key, value states of the self-attention and the cross-attention layers if model is used in
+            encoder-decoder setting. Only relevant if ``config.is_decoder = True``.
 
             Contains pre-computed hidden-states (key and values in the attention blocks) that can be used (see
             :obj:`past_key_values` input) to speed up sequential decoding.
@@ -269,7 +270,7 @@ class BaseModelOutputWithPoolingAndPastAndCrossAttentions(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     pooler_output: torch.FloatTensor = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
