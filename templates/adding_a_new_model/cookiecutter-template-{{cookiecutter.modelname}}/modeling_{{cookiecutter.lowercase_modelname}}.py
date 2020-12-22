@@ -1436,7 +1436,7 @@ _TOKENIZER_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Tokenizer"
 
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
-    Shift input ids one token to the right, and wrap the last non pad token (usually <eos>).
+    Shift input ids one token to the right.
     """
     shifted_input_ids = input_ids.new_zeros(input_ids.shape)
     shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
@@ -1501,12 +1501,9 @@ def {{cookiecutter.camelcase_modelname}}LayerNorm(normalized_shape: torch.Size, 
     return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->{{cookiecutter.camelcase_modelname}}
 class {{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(nn.Embedding):
     """
-    This module learns positional embeddings up to a fixed maximum size. Padding ids are ignored by either offsetting
-    based on padding_idx or by setting padding_idx to None and ensuring that the appropriate position ids are passed to
-    the forward function.
+    This module learns positional embeddings up to a fixed maximum size. 
     """
 
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int):
@@ -2461,7 +2458,6 @@ class {{cookiecutter.camelcase_modelname}}ForConditionalGeneration({{cookiecutte
 
         Conditional generation example::
 
-            >>> # Mask filling only works for {{cookiecutter.lowercase_modelname}}-large
             >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, {{cookiecutter.camelcase_modelname}}ForConditionalGeneration
             >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
             >>> TXT = "My friends are <mask> but they eat too many carbs."
@@ -2475,7 +2471,6 @@ class {{cookiecutter.camelcase_modelname}}ForConditionalGeneration({{cookiecutte
             >>> values, predictions = probs.topk(5)
 
             >>> tokenizer.decode(predictions).split()
-            >>> # ['good', 'great', 'all', 'really', 'very']
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2502,7 +2497,6 @@ class {{cookiecutter.camelcase_modelname}}ForConditionalGeneration({{cookiecutte
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            # TODO(SS): do we need to ignore pad tokens in labels?
             masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:

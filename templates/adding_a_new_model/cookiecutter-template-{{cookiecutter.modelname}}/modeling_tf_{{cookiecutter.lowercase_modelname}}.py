@@ -1424,10 +1424,10 @@ _TOKENIZER_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Tokenizer"
 LARGE_NEGATIVE = -1e8
 
 
-def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, eos_token_id: int):
+def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
     shifted_input_ids = tf.cast(input_ids, tf.int32)
     shifted_input_ids = tf.roll(shifted_input_ids, 1, axis=-1)
-    start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), eos_token_id)
+    start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), decoder_start_token_id)
     shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, 1:]], -1)
     # replace possible -100 values in labels by `pad_token_id`
     shifted_input_ids = tf.where(
@@ -1484,14 +1484,10 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
 
 class TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(TFSharedEmbeddings):
     """
-    This module learns positional embeddings up to a fixed maximum size. Padding ids are ignored by either offsetting
-    based on padding_idx or by setting padding_idx to None and ensuring that the appropriate position ids are passed to
-    the forward function.
+    This module learns positional embeddings up to a fixed maximum size.
     """
 
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, **kwargs):
-        # {{cookiecutter.camelcase_modelname}} is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models dont have this hack
         assert padding_idx is not None, "padding_idx cannot be None"
         super().__init__(num_embeddings, embedding_dim, **kwargs)
 
@@ -1502,7 +1498,7 @@ class TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(TFSharedE
         positions = tf.range(
             past_key_values_length, seq_len + past_key_values_length, delta=1, dtype=tf.int32, name="range"
         )
-        return super().call(positions)  # super object is not callable for some reason
+        return super().call(positions)
 
 
 class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
@@ -2419,17 +2415,16 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
 
         Examples::
 
-            # Mask filling only works for {{cookiecutter.lowercase_modelname}}-large
-            from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
-            import tensorflow as tf
-            mname = '{{cookiecutter.checkpoint_identifier}}'
-            tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained(mname)
-            TXT = "My friends are <mask> but they eat too many carbs."
-            model = TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained(mname)
-            batch = tokenizer([TXT], return_tensors='tf')
-            logits = model(inputs=batch.input_ids).logits
-            probs = tf.nn.softmax(logits[0])
-            # probs[5] is associated with the mask token
+            >>> from transformers import {{cookiecutter.camelcase_modelname}}Tokenizer, TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
+            >>> import tensorflow as tf
+            >>> mname = '{{cookiecutter.checkpoint_identifier}}'
+            >>> tokenizer = {{cookiecutter.camelcase_modelname}}Tokenizer.from_pretrained(mname)
+            >>> TXT = "My friends are <mask> but they eat too many carbs."
+            >>> model = TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained(mname)
+            >>> batch = tokenizer([TXT], return_tensors='tf')
+            >>> logits = model(inputs=batch.input_ids).logits
+            >>> probs = tf.nn.softmax(logits[0])
+            >>> # probs[5] is associated with the mask token
         """
         inputs = input_processing(
             func=self.call,
@@ -2455,7 +2450,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
             inputs["use_cache"] = False
             if inputs["decoder_input_ids"] is None:
                 inputs["decoder_input_ids"] = shift_tokens_right(
-                    inputs["labels"], self.config.pad_token_id, self.config.eos_token_id
+                    inputs["labels"], self.config.pad_token_id, self.config.decoder_start_token_id
                 )
 
         outputs = self.model(
