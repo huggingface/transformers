@@ -205,7 +205,7 @@ class TFT5ModelTester:
         self.batch_size = 1
 
         # first forward pass
-        outputs = model(input_ids, use_cache=True)
+        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
