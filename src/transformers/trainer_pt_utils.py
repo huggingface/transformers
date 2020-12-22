@@ -366,7 +366,7 @@ class DistributedTensorGatherer:
 @dataclass
 class LabelSmoother:
     """
-    Adds the label-smoothing on a pre-computed output from a Transformers models.
+    Adds label-smoothing on a pre-computed output from a Transformers model.
 
     Args:
         epsilon (:obj:`float`, `optional`, defaults to 0.1):

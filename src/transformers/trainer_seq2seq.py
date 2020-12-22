@@ -89,12 +89,12 @@ class Seq2SeqTrainer(Trainer):
                 Pass a dataset if you wish to override :obj:`self.eval_dataset`. If it is an :obj:`datasets.Dataset`,
                 columns not accepted by the ``model.forward()`` method are automatically removed. It must implement the
                 :obj:`__len__` method.
-            ignore_keys (:obj:`Lst[str]`, `optional`):
+            ignore_keys (:obj:`List[str]`, `optional`):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
             metric_key_prefix (:obj:`str`, `optional`, defaults to :obj:`"eval"`):
                 An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
-                "eval_bleu" if the prefix is "eval" (default)
+                "eval_bleu" if the prefix is ``"eval"`` (default)
             max_target_length (:obj:`int`, `optional`):
                 The maximum target length to use when predicting with the generate method.
             num_beams (:obj:`int`, `optional`):
@@ -114,7 +114,7 @@ class Seq2SeqTrainer(Trainer):
         test_dataset: Dataset,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
-        max_target_length: Optional[int] = None,
+        max_length: Optional[int] = None,
         num_beams: Optional[int] = None,
     ) -> PredictionOutput:
         """
@@ -127,12 +127,12 @@ class Seq2SeqTrainer(Trainer):
             test_dataset (:obj:`Dataset`):
                 Dataset to run the predictions on. If it is an :obj:`datasets.Dataset`, columns not accepted by the
                 ``model.forward()`` method are automatically removed. Has to implement the method :obj:`__len__`
-            ignore_keys (:obj:`Lst[str]`, `optional`):
+            ignore_keys (:obj:`List[str]`, `optional`):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
             metric_key_prefix (:obj:`str`, `optional`, defaults to :obj:`"eval"`):
                 An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
-                "eval_bleu" if the prefix is "eval" (default)
+                "eval_bleu" if the prefix is ``"eval"`` (default)
             max_target_length (:obj:`int`, `optional`):
                 The maximum target length to use when predicting with the generate method.
             num_beams (:obj:`int`, `optional`):
@@ -141,7 +141,7 @@ class Seq2SeqTrainer(Trainer):
 
         .. note::
 
-            If your predictions or labels have different sequence length (for instance because you're doing dynamic
+            If your predictions or labels have different sequence lengths (for instance because you're doing dynamic
             padding in a token classification task) the predictions will be padded (on the right) to allow for
             concatenation into one array. The padding index is -100.
 
