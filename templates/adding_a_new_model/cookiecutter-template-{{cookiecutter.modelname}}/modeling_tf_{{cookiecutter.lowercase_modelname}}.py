@@ -1486,16 +1486,6 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
 
     expanded_mask = tf.cast(tf.broadcast_to(mask[:, None, None, :], (bsz, 1, tgt_len, src_len)), tf.float32)
 
-    if past_key_values_length > 0:
-        # concat fully attendend attention_mask to the beginning if `past_key_values` are used
-        expanded_mask = tf.concat(
-            [
-                tf.ones((bsz, 1, tgt_len, past_key_values_length), dtype=tf.float32),
-                expanded_mask,
-            ],
-            axis=-1,
-        )
-
     return (1.0 - expanded_mask) * LARGE_NEGATIVE
 
 
@@ -2150,35 +2140,39 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
         # embed positions
         positions = self.embed_positions(input_shape, past_key_values_length)
 
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(inputs["input_ids"])
-        else:
-            inputs_embeds = inputs["inputs_embeds"]
+        if inputs["inputs_embeds"] is None:
+            inputs["inputs_embeds"] = self.embed_tokens(inputs["input_ids"])
 
-        hidden_states = inputs_embeds
+        hidden_states = inputs["inputs_embeds"]
 
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
         if input_shape[-1] > 1:
             combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
+        else:
+            combined_attention_mask = _expand_mask(
+                tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
+            )
 
         if inputs["attention_mask"] is None and inputs["input_ids"] is not None and input_shape[-1] > 1:
-            attention_mask = tf.cast(
+            inputs["attention_mask"] = tf.cast(
                 tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id), inputs["input_ids"].dtype
             )
+            inputs["attention_mask"] = tf.concat(
+                [
+                    tf.ones((input_shape[0], past_key_values_length), dtype=inputs["attention_mask"].dtype),
+                    inputs["attention_mask"],
+                ],
+                axis=-1,
+            )
         else:
-            attention_mask = tf.ones(input_shape, dtype=tf.int32)
-
-        if attention_mask is not None and combined_attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            combined_attention_mask = combined_attention_mask + _expand_mask(
-                attention_mask, past_key_values_length=past_key_values_length
+            inputs["attention_mask"] = tf.ones(
+                (input_shape[0], input_shape[1] + past_key_values_length), dtype=tf.int32
             )
 
-        encoder_hidden_states = inputs["encoder_hidden_states"]
-        if encoder_hidden_states is not None and inputs["encoder_attention_mask"] is not None:
+        if inputs["encoder_hidden_states"] is not None and inputs["encoder_attention_mask"] is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _expand_mask(inputs["encoder_attention_mask"], tgt_len=input_shape[-1])
+            inputs["encoder_attention_mask"] = _expand_mask(inputs["encoder_attention_mask"], tgt_len=input_shape[-1])
 
         hidden_states = self.layernorm_embedding(hidden_states + positions)
         hidden_states = self.dropout(hidden_states, training=inputs["training"])
@@ -2201,8 +2195,8 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
             hidden_states, layer_self_attn, present_key_value = decoder_layer(
                 hidden_states,
                 attention_mask=combined_attention_mask,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
+                encoder_hidden_states=inputs["encoder_hidden_states"],
+                encoder_attention_mask=inputs["encoder_attention_mask"],
                 past_key_value=past_key_value,
             )
 
