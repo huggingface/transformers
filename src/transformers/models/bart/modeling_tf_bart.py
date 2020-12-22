@@ -937,7 +937,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
 
             past_key_value = inputs["past_key_values"][idx] if inputs["past_key_values"] is not None else None
 
-            def true_fn():
+            def compute_result_with_no_attention:
                 return decoder_layer(
                     hidden_states,
                     attention_mask=None,
