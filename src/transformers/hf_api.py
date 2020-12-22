@@ -214,7 +214,7 @@ class HfApi:
         d = r.json()
         return [ModelInfo(**x) for x in d]
 
-    def list_repos_objs(self, token: str, organization: Optional[str] = None) -> List[S3Obj]:
+    def list_repos_objs(self, token: str, organization: Optional[str] = None) -> List[RepoObj]:
         """
         HuggingFace git-based system, used for models.
 
