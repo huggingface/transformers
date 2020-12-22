@@ -94,7 +94,7 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     return tf.broadcast_to(mask[None, None, :, :], (bsz, 1, tgt_len, tgt_len + past_key_values_length))
 
 
-def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
+def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -102,16 +102,6 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     tgt_len = tgt_len if tgt_len is not None else src_len
 
     expanded_mask = tf.cast(tf.broadcast_to(mask[:, None, None, :], (bsz, 1, tgt_len, src_len)), tf.float32)
-
-    if past_key_values_length > 0:
-        # concat fully attendend attention_mask to the beginning if `past_key_values` are used
-        expanded_mask = tf.concat(
-            [
-                tf.ones((bsz, 1, tgt_len, past_key_values_length), dtype=tf.float32),
-                expanded_mask,
-            ],
-            axis=-1,
-        )
 
     return (1.0 - expanded_mask) * LARGE_NEGATIVE
 
@@ -902,14 +892,16 @@ class TFBartDecoder(tf.keras.layers.Layer):
             attention_mask = tf.cast(
                 tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id), inputs["input_ids"].dtype
             )
+            attention_mask = tf.concat(
+                [tf.ones((input_shape[0], past_key_values_length), dtype=attention_mask.dtype), attention_mask],
+                axis=-1,
+            )
         else:
-            attention_mask = tf.ones(input_shape, dtype=tf.int32)
+            attention_mask = tf.ones((input_shape[0], input_shape[1] + past_key_values_length), dtype=tf.int32)
 
         if attention_mask is not None and combined_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            combined_attention_mask = combined_attention_mask + _expand_mask(
-                attention_mask, past_key_values_length=past_key_values_length
-            )
+            combined_attention_mask = combined_attention_mask + _expand_mask(attention_mask, tgt_len=input_shape[-1])
 
         encoder_hidden_states = inputs["encoder_hidden_states"]
         if encoder_hidden_states is not None and inputs["encoder_attention_mask"] is not None:

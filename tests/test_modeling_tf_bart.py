@@ -90,6 +90,7 @@ class TFBartModelTester:
         input_ids = inputs_dict["input_ids"]
 
         input_ids = input_ids[:1, :]
+        attention_mask = inputs_dict["attention_mask"][:1, :]
         self.batch_size = 1
 
         # first forward pass
@@ -100,12 +101,14 @@ class TFBartModelTester:
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_attn_mask = tf.cast(ids_tensor((self.batch_size, 3), 2), tf.int8)
 
         # append to next input_ids and
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
+        next_attention_mask = tf.concat([attention_mask, next_attn_mask], axis=-1)
 
-        output_from_no_past = model(next_input_ids)[0]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)[0]
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[0]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[0]
 
         self.parent.assertEqual(next_tokens.shape[1], output_from_past.shape[1])
 
