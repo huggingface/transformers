@@ -901,7 +901,15 @@ class TFBartDecoder(tf.keras.layers.Layer):
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             combined_attention_mask = combined_attention_mask + _expand_mask(attention_mask, tgt_len=input_shape[-1])
 
+<<<<<<< HEAD
         combined_attention_mask = tf.cond(is_combined_None, lambda: combined_attention_mask, combined_false)
+=======
+            return combined_attention_mask + _expand_mask(
+                inputs["attention_mask"], past_key_values_length=past_key_values_length
+            )
+
+        combined_attention_mask = tf.cond(tf.greater(input_shape[-1], 1), make_fake_combined_mask, make_combined_mask)
+>>>>>>> 70f43276... Apply style
 
         if inputs["encoder_hidden_states"] is not None and inputs["encoder_attention_mask"] is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -946,7 +954,13 @@ class TFBartDecoder(tf.keras.layers.Layer):
                     past_key_value=past_key_value,
                 )
 
+<<<<<<< HEAD
             hidden_states, layer_self_attn, present_key_value = tf.cond(is_combined_None, true_fn, false_fn)
+=======
+            hidden_states, layer_self_attn, present_key_value = tf.cond(
+                tf.greater(input_shape[-1], 1), compute_result_with_no_attention, compute_result_with_attention
+            )
+>>>>>>> 70f43276... Apply style
 
             if inputs["use_cache"]:
                 present_key_values += (present_key_value,)
