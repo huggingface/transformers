@@ -219,7 +219,7 @@ class TFGPT2ModelTester:
         model = TFGPT2Model(config=config)
 
         # first forward pass
-        outputs = model(input_ids, token_type_ids=token_type_ids, use_cache=True)
+        outputs = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, use_cache=True)
 
         output, past = outputs.to_tuple()
 
