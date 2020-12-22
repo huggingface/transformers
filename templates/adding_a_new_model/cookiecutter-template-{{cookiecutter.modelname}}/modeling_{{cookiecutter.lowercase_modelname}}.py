@@ -1667,7 +1667,8 @@ class {{cookiecutter.camelcase_modelname}}EncoderLayer(nn.Module):
             hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (:obj:`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            output_attentions (:obj:`bool`): Whether the base model outputs attentions. This requires the attentions tensor to be reshaped in this function.
+            output_attentions (:obj:`bool`): Whether the base model outputs attentions.
+                This requires the attentions tensor to be reshaped in this function.
         """
         residual = hidden_states
         hidden_states, attn_weights, _ = self.self_attn(
@@ -1736,7 +1737,8 @@ class {{cookiecutter.camelcase_modelname}}DecoderLayer(nn.Module):
             encoder_attention_mask (:obj:`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             past_key_value (:obj:`Tuple(torch.FloatTensor)`): cached past key and value projection states
-            output_attentions (:obj:`bool`): Whether the base model outputs attentions. This requires the attentions tensor to be reshaped in this function.
+            output_attentions (:obj:`bool`): Whether the base model outputs attentions.
+                This requires the attentions tensor to be reshaped in this function.
         """
         residual = hidden_states
 
@@ -1854,7 +1856,8 @@ class {{cookiecutter.camelcase_modelname}}PreTrainedModel(PreTrainedModel):
     general usage and behavior.
 
     Parameters:
-        config (:class:`~transformers.{{cookiecutter.camelcase_modelname}}Config`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.{{cookiecutter.camelcase_modelname}}Config`):
+            Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
             weights.
