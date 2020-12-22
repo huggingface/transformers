@@ -15,12 +15,13 @@
 """PyTorch optimization for BERT model."""
 
 import math
-from typing import Callable, Iterable, Tuple
+from typing import Callable, Iterable, Optional, Tuple, Union
 
 import torch
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
 
+from .trainer_utils import SchedulerType
 from .utils import logging
 
 
@@ -213,6 +214,56 @@ def get_polynomial_decay_schedule_with_warmup(
             return decay / lr_init  # as LambdaLR multiplies by lr_init
 
     return LambdaLR(optimizer, lr_lambda, last_epoch)
+
+
+TYPE_TO_SCHEDULER_FUNCTION = {
+    SchedulerType.LINEAR: get_linear_schedule_with_warmup,
+    SchedulerType.COSINE: get_cosine_schedule_with_warmup,
+    SchedulerType.COSINE_WITH_RESTARTS: get_cosine_with_hard_restarts_schedule_with_warmup,
+    SchedulerType.POLYNOMIAL: get_polynomial_decay_schedule_with_warmup,
+    SchedulerType.CONSTANT: get_constant_schedule,
+    SchedulerType.CONSTANT_WITH_WARMUP: get_constant_schedule_with_warmup,
+}
+
+
+def get_scheduler(
+    name: Union[str, SchedulerType],
+    optimizer: Optimizer,
+    num_warmup_steps: Optional[int] = None,
+    num_training_steps: Optional[int] = None,
+):
+    """
+    Unified API to get any scheduler from its name.
+
+    Args:
+        name (:obj:`str` or `:obj:`SchedulerType`):
+            The name of the scheduler to use.
+        optimizer (:obj:`torch.optim.Optimizer`):
+            The optimizer that will be used during training.
+        num_warmup_steps (:obj:`int`, `optional`):
+            The number of warmup steps to do. This is not required by all schedulers (hence the argument being
+            optional), the function will raise an error if it's unset and the scheduler type requires it.
+        num_training_steps (:obj:`int`, `optional`):
+            The number of training steps to do. This is not required by all schedulers (hence the argument being
+            optional), the function will raise an error if it's unset and the scheduler type requires it.
+    """
+    name = SchedulerType(name)
+    schedule_func = TYPE_TO_SCHEDULER_FUNCTION[name]
+    if name == SchedulerType.CONSTANT:
+        return schedule_func(optimizer)
+
+    # All other schedulers require `num_warmup_steps`
+    if num_warmup_steps is None:
+        raise ValueError(f"{name} requires `num_warmup_steps`, please provide that argument.")
+
+    if name == SchedulerType.CONSTANT_WITH_WARMUP:
+        return schedule_func(optimizer, num_warmup_steps=num_warmup_steps)
+
+    # All other schedulers require `num_training_steps`
+    if num_training_steps is None:
+        raise ValueError(f"{name} requires `num_training_steps`, please provide that argument.")
+
+    return schedule_func(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
 
 
 class AdamW(Optimizer):

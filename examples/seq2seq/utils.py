@@ -330,7 +330,7 @@ class Seq2SeqDataCollator:
             [x["src_texts"] for x in batch],
             tgt_texts=[x["tgt_texts"] for x in batch],
             max_length=self.data_args.max_source_length,
-            max_target_length=self.data_args.max_target_length,
+            max_target_length=self.data_args.max_length,
             padding="max_length" if self.tpu_num_cores is not None else "longest",  # TPU hack
             return_tensors="pt",
             **self.dataset_kwargs,
@@ -434,7 +434,8 @@ def use_task_specific_params(model, task):
 
     if task_specific_params is not None:
         pars = task_specific_params.get(task, {})
-        logger.info(f"using task specific params for {task}: {pars}")
+        logger.info(f"setting model.config to task specific params for {task}:\n {pars}")
+        logger.info("note: command line args may override some of these")
         model.config.update(pars)
 
 
