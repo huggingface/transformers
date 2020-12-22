@@ -372,8 +372,7 @@ class LabelSmoother:
         epsilon (:obj:`float`, `optional`, defaults to 0.1):
             The label smoothing factor.
         ignore_index (:obj:`int`, `optional`, defaults to -100):
-            The index in the labels to ignore when computing the loss. Set to :obj:`None` to ignore none of the
-            indices.
+            The index in the labels to ignore when computing the loss.
     """
 
     epsilon: float = 0.1
@@ -383,9 +382,10 @@ class LabelSmoother:
         model_loss = model_output["loss"] if isinstance(model_output, dict) else model_output[0]
         logits = model_output["logits"] if isinstance(model_output, dict) else model_output[1]
         log_probs = -torch.nn.functional.log_softmax(logits, dim=-1)
-        if self.ignore_index is not None:
-            padding_mask = labels.unsqueeze(-1).eq(self.ignore_index)
-            log_probs.masked_fill_(padding_mask, 0.0)
+
+        # Look at the ignored index and mask the corresponding log_probs.
+        padding_mask = labels.unsqueeze(-1).eq(self.ignore_index)
+        log_probs.masked_fill_(padding_mask, 0.0)
 
         # Take the mean over the label dimensions, then divide by the number of active elements (i.e. not-padded):
         smoothed_loss = log_probs.mean(dim=-1).sum() / (padding_mask.numel() - padding_mask.long().sum())

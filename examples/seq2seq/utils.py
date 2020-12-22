@@ -330,7 +330,7 @@ class Seq2SeqDataCollator:
             [x["src_texts"] for x in batch],
             tgt_texts=[x["tgt_texts"] for x in batch],
             max_length=self.data_args.max_source_length,
-            max_target_length=self.data_args.max_target_length,
+            max_target_length=self.data_args.max_length,
             padding="max_length" if self.tpu_num_cores is not None else "longest",  # TPU hack
             return_tensors="pt",
             **self.dataset_kwargs,

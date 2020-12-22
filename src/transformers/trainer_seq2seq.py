@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
+
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
@@ -22,7 +22,7 @@ from torch.utils.data.dataset import Dataset
 
 from .file_utils import is_torch_tpu_available
 from .trainer import Trainer
-from .trainer_pt_utils import LabelSmoother, get_tpu_sampler
+from .trainer_pt_utils import get_tpu_sampler
 from .trainer_utils import PredictionOutput
 from .training_args import ParallelMode
 from .utils import logging
@@ -36,20 +36,6 @@ logger = logging.get_logger(__name__)
 
 
 class Seq2SeqTrainer(Trainer):
-    def __init__(self, *args, ignore_pad_token_for_loss=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        # TODO: When BART uses -100 everywhere, this can be removed entirely.
-        if ignore_pad_token_for_loss is not None:
-            warnings.warn(
-                "Passing `ignore_pad_token_for_loss` is deprecated. Your model should always use -100 to mark tokens "
-                "to ignore in the loss."
-            )
-            if self.label_smoother is not None:
-                self.label_smoother = LabelSmoother(
-                    epsilon=self.args.label_smoothing_factor,
-                    ignore_index=ignore_pad_token_for_loss,
-                )
-
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
         if isinstance(self.train_dataset, torch.utils.data.IterableDataset):
             return None
@@ -73,7 +59,7 @@ class Seq2SeqTrainer(Trainer):
         eval_dataset: Optional[Dataset] = None,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
-        max_target_length: Optional[int] = None,
+        max_length: Optional[int] = None,
         num_beams: Optional[int] = None,
     ) -> Dict[str, float]:
         """
@@ -95,7 +81,7 @@ class Seq2SeqTrainer(Trainer):
             metric_key_prefix (:obj:`str`, `optional`, defaults to :obj:`"eval"`):
                 An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
                 "eval_bleu" if the prefix is ``"eval"`` (default)
-            max_target_length (:obj:`int`, `optional`):
+            max_length (:obj:`int`, `optional`):
                 The maximum target length to use when predicting with the generate method.
             num_beams (:obj:`int`, `optional`):
                 Number of beams for beam search that will be used when predicting with the generate method. 1 means no
@@ -105,7 +91,7 @@ class Seq2SeqTrainer(Trainer):
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
             dictionary also contains the epoch number which comes from the training state.
         """
-        self._max_target_length = max_target_length
+        self._max_length = max_length
         self._num_beams = num_beams
         return super().evaluate(eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
@@ -133,7 +119,7 @@ class Seq2SeqTrainer(Trainer):
             metric_key_prefix (:obj:`str`, `optional`, defaults to :obj:`"eval"`):
                 An optional prefix to be used as the metrics key prefix. For example the metrics "bleu" will be named
                 "eval_bleu" if the prefix is ``"eval"`` (default)
-            max_target_length (:obj:`int`, `optional`):
+            max_length (:obj:`int`, `optional`):
                 The maximum target length to use when predicting with the generate method.
             num_beams (:obj:`int`, `optional`):
                 Number of beams for beam search that will be used when predicting with the generate method. 1 means no
@@ -152,7 +138,7 @@ class Seq2SeqTrainer(Trainer):
             - metrics (:obj:`Dict[str, float]`, `optional`): The potential dictionary of metrics (if the dataset
               contained labels).
         """
-        self._max_target_length = max_target_length
+        self._max_length = max_length
         self._num_beams = num_beams
         return super().predict(test_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
@@ -191,9 +177,7 @@ class Seq2SeqTrainer(Trainer):
         inputs = self._prepare_inputs(inputs)
 
         gen_kwargs = {
-            "max_length": self._max_target_length
-            if self._max_target_length is not None
-            else self.model.config.max_length,
+            "max_length": self._max_length if self._max_length is not None else self.model.config.max_length,
             "num_beams": self._num_beams if self._num_beams is not None else self.model.config.num_beams,
         }
 
