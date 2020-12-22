@@ -545,6 +545,7 @@ class TapasLayer(nn.Module):
         past_key_value=None,
         output_attentions=False,
     ):
+        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
             hidden_states,
@@ -555,8 +556,10 @@ class TapasLayer(nn.Module):
         )
         attention_output = self_attention_outputs[0]
 
+        # if decoder, the last output is tuple of self-attn cache
         if self.is_decoder:
             outputs = self_attention_outputs[1:-1]
+            # tuple of self-attn cache
             present_key_value = self_attention_outputs[-1]
         else:
             outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -566,6 +569,8 @@ class TapasLayer(nn.Module):
             assert hasattr(
                 self, "crossattention"
             ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+
+            # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             cross_attention_outputs = self.crossattention(
                 attention_output,
@@ -577,14 +582,18 @@ class TapasLayer(nn.Module):
                 output_attentions,
             )
             attention_output = cross_attention_outputs[0]
-            cross_attn_present_key_value = cross_attention_outputs[-1]
             outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
+
+            # add cross-attn cache to positions 3,4 of present_key_value tuple
+            cross_attn_present_key_value = cross_attention_outputs[-1]
             present_key_value = present_key_value + cross_attn_present_key_value
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
         outputs = (layer_output,) + outputs
+
+        # if decoder, return the attn cache as the last output
         if self.is_decoder:
             outputs = outputs + (present_key_value,)
 
