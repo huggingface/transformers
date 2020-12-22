@@ -30,6 +30,7 @@ if is_tokenizers_available():
     from .tokenization_{{cookiecutter.lowercase_modelname}}_fast import {{cookiecutter.camelcase_modelname}}TokenizerFast
 
 {%- if (cookiecutter.generate_tensorflow_and_pytorch == "PyTorch & TensorFlow" or cookiecutter.generate_tensorflow_and_pytorch == "PyTorch") %}
+{% if cookiecutter.is_encoder_decoder_model == "False" %}
 if is_torch_available():
     from .modeling_{{cookiecutter.lowercase_modelname}} import (
         {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -44,8 +45,20 @@ if is_torch_available():
         {{cookiecutter.camelcase_modelname}}PreTrainedModel,
         load_tf_weights_in_{{cookiecutter.lowercase_modelname}},
     )
+{% else %}
+if is_torch_available():
+    from .modeling_{{cookiecutter.lowercase_modelname}} import (
+        {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
+        {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+        {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
+        {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
+        {{cookiecutter.camelcase_modelname}}Model,
+        {{cookiecutter.camelcase_modelname}}PreTrainedModel,
+    )
+{% endif %}
 {% endif %}
 {%- if (cookiecutter.generate_tensorflow_and_pytorch == "PyTorch & TensorFlow" or cookiecutter.generate_tensorflow_and_pytorch == "TensorFlow") %}
+{% if cookiecutter.is_encoder_decoder_model == "False" %}
 if is_tf_available():
     from .modeling_tf_{{cookiecutter.lowercase_modelname}} import (
         TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -59,4 +72,12 @@ if is_tf_available():
         TF{{cookiecutter.camelcase_modelname}}Model,
         TF{{cookiecutter.camelcase_modelname}}PreTrainedModel,
     )
+{% else %}
+if is_tf_available():
+    from .modeling_tf_{{cookiecutter.lowercase_modelname}} import (
+        TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+        TF{{cookiecutter.camelcase_modelname}}Model,
+        TF{{cookiecutter.camelcase_modelname}}PreTrainedModel,
+    )
+{% endif %}
 {% endif %}

@@ -6,5 +6,6 @@
   "authors": "{{cookiecutter.authors}}",
   "checkpoint_identifier": "{{cookiecutter.checkpoint_identifier}}",
   "tokenizer_type": "{{cookiecutter.tokenizer_type}}",
-  "generate_tensorflow_and_pytorch": "{{cookiecutter.generate_tensorflow_and_pytorch}}"
+  "generate_tensorflow_and_pytorch": "{{cookiecutter.generate_tensorflow_and_pytorch}}",
+  "is_encoder_decoder_model": ["True", "False"]
 }

@@ -40,6 +40,8 @@ jobs:
           transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/pt-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
           transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/standalone.json --path=templates/adding_a_new_model
           transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/tf-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/tf-seq-2-seq-bart-tokenizer.json --path=templates/adding_a_new_model
+          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/pt-seq-2-seq-bart-tokenizer.json --path=templates/adding_a_new_model
           make style
           python utils/check_table.py --fix_and_overwrite
           python utils/check_dummies.py --fix_and_overwrite

@@ -1077,7 +1077,7 @@ class TFBartModel(TFBartPretrainedModel):
 
         decoder_outputs = self.decoder(
             inputs["decoder_input_ids"],
-            attention_mask=decoder_attention_mask,
+            attention_mask=inputs["decoder_attention_mask"],
             encoder_hidden_states=inputs["encoder_outputs"][0],
             encoder_attention_mask=inputs["attention_mask"],
             past_key_values=inputs["past_key_values"],
@@ -1228,6 +1228,7 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel):
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
+            training=inputs["training"],
         )
         lm_logits = self.model.shared(outputs[0], mode="linear")
         lm_logits = lm_logits + self.final_logits_bias

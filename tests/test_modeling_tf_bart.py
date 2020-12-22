@@ -94,7 +94,7 @@ class TFBartModelTester:
         self.batch_size = 1
 
         # first forward pass
-        outputs = model(input_ids, use_cache=True)
+        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
         output, past_key_values = outputs.to_tuple()
         past_key_values = past_key_values[1]
