@@ -443,7 +443,6 @@ class GenerativeQAModule(BaseTransformer):
             type=str,
             help="RAG model type: sequence or token, if none specified, the type is inferred from the model_name_or_path",
         )
-
         return parser
 
     @staticmethod
@@ -499,15 +498,6 @@ class GenerativeQAModule(BaseTransformer):
 
     @staticmethod
     def add_ray_specific_args(parser):
-        parser.add_argument(
-            "--num_retrieval_workers",
-            type=int,
-            default=1,
-            help="The number of retrieval actors to use when Ray is selected"
-            "for the distributed retriever. Has no effect when "
-            "distributed_retriever is set to pytorch.",
-        )
-
         # Ray cluster address.
         parser.add_argument(
             "--ray-address",
@@ -518,7 +508,6 @@ class GenerativeQAModule(BaseTransformer):
             "cluster. Has no effect if pytorch is used as the distributed "
             "retriever.",
         )
-
         return parser
 
 
