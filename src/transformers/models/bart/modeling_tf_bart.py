@@ -1081,7 +1081,7 @@ class TFBartModel(TFBartPretrainedModel):
 
         decoder_outputs = self.decoder(
             inputs["decoder_input_ids"],
-            attention_mask=decoder_attention_mask,
+            attention_mask=inputs["decoder_attention_mask"],
             encoder_hidden_states=inputs["encoder_outputs"][0],
             encoder_attention_mask=inputs["attention_mask"],
             past_key_values=inputs["past_key_values"],
