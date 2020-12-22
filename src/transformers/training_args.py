@@ -19,7 +19,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 from .file_utils import cached_property, is_torch_available, is_torch_tpu_available, torch_required
-from .trainer_utils import EvaluationStrategy
+from .trainer_utils import EvaluationStrategy, SchedulerType
 from .utils import logging
 
 
@@ -121,6 +121,9 @@ class TrainingArguments:
         max_steps (:obj:`int`, `optional`, defaults to -1):
             If set to a positive number, the total number of training steps to perform. Overrides
             :obj:`num_train_epochs`.
+        lr_scheduler_type (:obj:`str` or :class:`~transformers.SchedulerType`, `optional`, defaults to :obj:`"linear"`):
+            The scheduler type to use. See the documentation of :class:`~transformers.SchedulerType` for all possible
+            values.
         warmup_steps (:obj:`int`, `optional`, defaults to 0):
             Number of steps used for a linear warmup from 0 to :obj:`learning_rate`.
         logging_dir (:obj:`str`, `optional`):
@@ -217,6 +220,13 @@ class TrainingArguments:
         sharded_ddp (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Use Sharded DDP training from `FairScale <https://github.com/facebookresearch/fairscale>`__ (in distributed
             training only). This is an experimental feature.
+        label_smoothing_factor (:obj:`float`, `optional`, defaults to 0.0):
+            The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
+            labels are changed from 0s and 1s to :obj:`label_smoothing_factor/num_labels` and :obj:`1 -
+            label_smoothing_factor + label_smoothing_factor/num_labels` respectively.
+        adafactor (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use the :class:`~transformers.Adafactor` optimizer instead of
+            :class:`~transformers.AdamW`.
     """
 
     output_dir: str = field(
@@ -246,7 +256,7 @@ class TrainingArguments:
     )
     evaluation_strategy: EvaluationStrategy = field(
         default="no",
-        metadata={"help": "Run evaluation during training at each logging step."},
+        metadata={"help": "The evaluation strategy to use."},
     )
     prediction_loss_only: bool = field(
         default=False,
@@ -295,6 +305,10 @@ class TrainingArguments:
     max_steps: int = field(
         default=-1,
         metadata={"help": "If > 0: set total number of training steps to perform. Override num_train_epochs."},
+    )
+    lr_scheduler_type: SchedulerType = field(
+        default="linear",
+        metadata={"help": "The scheduler type to use."},
     )
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
@@ -392,11 +406,16 @@ class TrainingArguments:
         default=False,
         metadata={"help": "Whether or not to use sharded DDP training (in distributed training only)."},
     )
+    label_smoothing_factor: float = field(
+        default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
+    )
+    adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace Adam by Adafactor."})
 
     def __post_init__(self):
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
         self.evaluation_strategy = EvaluationStrategy(self.evaluation_strategy)
+        self.lr_scheduler_type = SchedulerType(self.lr_scheduler_type)
         if self.do_eval is False and self.evaluation_strategy != EvaluationStrategy.NO:
             self.do_eval = True
         if self.eval_steps is None:

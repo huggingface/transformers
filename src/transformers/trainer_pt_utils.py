@@ -19,6 +19,7 @@ Torch utilities for the Trainer class.
 import math
 import warnings
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import List, Optional, Union
 
 import numpy as np
@@ -360,3 +361,32 @@ class DistributedTensorGatherer:
         if self._offsets[0] != self.process_length:
             logger.warn("Not all data has been set. Are you sure you passed all values?")
         return nested_truncate(self._storage, self.num_samples)
+
+
+@dataclass
+class LabelSmoother:
+    """
+    Adds label-smoothing on a pre-computed output from a Transformers model.
+
+    Args:
+        epsilon (:obj:`float`, `optional`, defaults to 0.1):
+            The label smoothing factor.
+        ignore_index (:obj:`int`, `optional`, defaults to -100):
+            The index in the labels to ignore when computing the loss.
+    """
+
+    epsilon: float = 0.1
+    ignore_index: int = -100
+
+    def __call__(self, model_output, labels):
+        model_loss = model_output["loss"] if isinstance(model_output, dict) else model_output[0]
+        logits = model_output["logits"] if isinstance(model_output, dict) else model_output[1]
+        log_probs = -torch.nn.functional.log_softmax(logits, dim=-1)
+
+        # Look at the ignored index and mask the corresponding log_probs.
+        padding_mask = labels.unsqueeze(-1).eq(self.ignore_index)
+        log_probs.masked_fill_(padding_mask, 0.0)
+
+        # Take the mean over the label dimensions, then divide by the number of active elements (i.e. not-padded):
+        smoothed_loss = log_probs.mean(dim=-1).sum() / (padding_mask.numel() - padding_mask.long().sum())
+        return (1 - self.epsilon) * model_loss + self.epsilon * smoothed_loss

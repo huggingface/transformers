@@ -22,7 +22,10 @@ from transformers.testing_utils import require_torch
 
 
 if is_torch_available():
-    from transformers.trainer_pt_utils import DistributedTensorGatherer
+    import torch
+
+    from transformers.modeling_outputs import SequenceClassifierOutput
+    from transformers.trainer_pt_utils import DistributedTensorGatherer, LabelSmoother
 
 
 @require_torch
@@ -56,3 +59,31 @@ class TrainerUtilsTest(unittest.TestCase):
         self.assertTrue(np.array_equal(result[0], predictions))
         self.assertTrue(np.array_equal(result[1][0], predictions))
         self.assertTrue(np.array_equal(result[1][1], predictions))
+
+    def test_label_smoothing(self):
+        epsilon = 0.1
+        num_labels = 12
+        random_logits = torch.randn(4, 5, num_labels)
+        random_labels = torch.randint(0, num_labels, (4, 5))
+        loss = torch.nn.functional.cross_entropy(random_logits.view(-1, num_labels), random_labels.view(-1))
+        model_output = SequenceClassifierOutput(loss=loss, logits=random_logits)
+        label_smoothed_loss = LabelSmoother(0.1)(model_output, random_labels)
+        log_probs = -torch.nn.functional.log_softmax(random_logits, dim=-1)
+        expected_loss = (1 - epsilon) * loss + epsilon * log_probs.mean()
+        self.assertTrue(torch.allclose(label_smoothed_loss, expected_loss))
+
+        # With a few -100 labels
+        random_labels[0, 1] = -100
+        random_labels[2, 1] = -100
+        random_labels[2, 3] = -100
+
+        loss = torch.nn.functional.cross_entropy(random_logits.view(-1, num_labels), random_labels.view(-1))
+        model_output = SequenceClassifierOutput(loss=loss, logits=random_logits)
+        label_smoothed_loss = LabelSmoother(0.1)(model_output, random_labels)
+        log_probs = -torch.nn.functional.log_softmax(random_logits, dim=-1)
+        # Mask the log probs with the -100 labels
+        log_probs[0, 1] = 0.0
+        log_probs[2, 1] = 0.0
+        log_probs[2, 3] = 0.0
+        expected_loss = (1 - epsilon) * loss + epsilon * log_probs.sum() / (num_labels * 17)
+        self.assertTrue(torch.allclose(label_smoothed_loss, expected_loss))

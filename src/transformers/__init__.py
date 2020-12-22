@@ -287,8 +287,9 @@ from .trainer_callback import (
     TrainerControl,
     TrainerState,
 )
-from .trainer_utils import EvalPrediction, EvaluationStrategy, set_seed
+from .trainer_utils import EvalPrediction, EvaluationStrategy, SchedulerType, set_seed
 from .training_args import TrainingArguments
+from .training_args_seq2seq import Seq2SeqTrainingArguments
 from .training_args_tf import TFTrainingArguments
 from .utils import logging
 
@@ -682,11 +683,13 @@ if is_torch_available():
         get_cosine_with_hard_restarts_schedule_with_warmup,
         get_linear_schedule_with_warmup,
         get_polynomial_decay_schedule_with_warmup,
+        get_scheduler,
     )
 
     # Trainer
     from .trainer import Trainer
     from .trainer_pt_utils import torch_distributed_zero_first
+    from .trainer_seq2seq import Seq2SeqTrainer
 else:
     from .utils.dummy_pt_objects import *
 
