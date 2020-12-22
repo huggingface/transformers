@@ -39,6 +39,7 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
 
 
     Args:
+        {% if cookiecutter.is_encoder_decoder_model == "False" -%}
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
             Vocabulary size of the {{cookiecutter.modelname}} model. Defines the number of different tokens that can be represented by the
             :obj:`inputs_ids` passed when calling :class:`~transformers.{{cookiecutter.camelcase_modelname}}Model` or
@@ -47,27 +48,12 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
             can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.{{cookiecutter.camelcase_modelname}}Model`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        {% if cookiecutter.is_encoder_decoder_model == "False" -%}
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (:obj:`int`, `optional`, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         intermediate_size (:obj:`int`, `optional`, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        {% else -%}
-        encoder_layers (:obj:`int`, `optional`, defaults to 12):
-            Number of encoder layers, 6 are used for the `bart-base` model.
-        decoder_layers (:obj:`int`, `optional`, defaults to 12):
-            Number of decoder layers, 6 are used for the `bart-base` model.
-        encoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_intermediate_dim (:obj:`int`, `optional`, defaults to 4096):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_intermediate_dim (:obj:`int`, `optional`, defaults to 4096):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
-        {% endif -%}
         hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler.
             If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
@@ -85,6 +71,50 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        {% else -%}
+        vocab_size (:obj:`int`, `optional`, defaults to 50265):
+            Vocabulary size of the {{cookiecutter.modelname}} model. Defines the number of different tokens that can be represented by the
+            :obj:`inputs_ids` passed when calling :class:`~transformers.{{cookiecutter.camelcase_modelname}}Model` or
+            :class:`~transformers.TF{{cookiecutter.camelcase_modelname}}Model`.
+        d_model (:obj:`int`, `optional`, defaults to 1024):
+            Dimensionality of the layers and the pooler layer.
+        encoder_layers (:obj:`int`, `optional`, defaults to 12):
+            Number of encoder layers.
+        decoder_layers (:obj:`int`, `optional`, defaults to 12):
+            Number of decoder layers.
+        encoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        decoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        decoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+        encoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+        activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string,
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
+        dropout (:obj:`float`, `optional`, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_dropout (:obj:`float`, `optional`, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        activation_dropout (:obj:`float`, `optional`, defaults to 0.0):
+            The dropout ratio for activations inside the fully connected layer.
+        classifier_dropout (:obj:`float`, `optional`, defaults to 0.0):
+            The dropout ratio for classifier.
+        max_position_embeddings (:obj:`int`, `optional`, defaults to 1024):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
+        init_std (:obj:`float`, `optional`, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        encoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
+            The LayerDrop probability for the encoder. See the `LayerDrop paper <see
+            https://arxiv.org/abs/1909.11556>`__ for more details.
+        decoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
+            The LayerDrop probability for the decoder. See the `LayerDrop paper <see
+            https://arxiv.org/abs/1909.11556>`__ for more details.
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not the model should return the last key/values attentions (not used by all models).
+        {% endif -%}
 
     Example::
 
@@ -105,19 +135,18 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         self,
         {% if cookiecutter.is_encoder_decoder_model == "False" -%}
         vocab_size=30522,
-        max_position_embeddings=512,
+        hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
         intermediate_size=3072,
-        use_cache=False,
-        is_encoder_decoder=False,
         hidden_act="gelu",
-        hidden_size=768,
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
+        max_position_embeddings=512,
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
+        is_encoder_decoder=False,
         {% else -%}
         vocab_size=50265,
         max_position_embeddings=1024,
