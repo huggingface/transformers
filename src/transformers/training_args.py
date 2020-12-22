@@ -218,7 +218,8 @@ class TrainingArguments:
             Use Sharded DDP training from `FairScale <https://github.com/facebookresearch/fairscale>`__ (in distributed
             training only). This is an experimental feature.
         deepspeed (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Use `Deepspeed <https://github.com/microsoft/deepspeed>`__. This is an experimental feature and its API may evolve in the future.
+            Use `Deepspeed <https://github.com/microsoft/deepspeed>`__. This is an experimental feature and its API may
+            evolve in the future.
         deepspeed_config (:obj:`str`, `optional`):
             If ``deepspeed`` is used this is the location of its json config file.
     """
