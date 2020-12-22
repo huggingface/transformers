@@ -324,9 +324,11 @@ class Trainer:
         self.use_amp = False
 
         # deepspeed manages its own fp16, so don't interfere
-        # XXX: perhaps assert if --fp16 is passed with --deepspeed?
-        if args.deepspeed:
-            args.fp16 = False
+        if args.deepspeed and args.fp16:
+            ds_config_file = args.deepspeed_config if args.deepspeed_config is not None else ""
+            raise ValueError(
+                f"Please use deepspeed's json configuration file {ds_config_file} to enable fp16 and not via --fp16 cl arg"
+            )
 
         if args.fp16:
             if args.fp16_backend == "auto":
