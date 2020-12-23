@@ -120,7 +120,7 @@ class SummarizationPipeline(Pipeline):
                     )
                 )
 
-            # Args can be used by _parse_and_tokenize
+            # truncation should be used by _parse_and_tokenize
             generate_kwargs.pop("truncation", None)
 
             summaries = self.model.generate(
@@ -233,6 +233,9 @@ class TranslationPipeline(Pipeline):
                     )
                 )
 
+            # truncation should be used by _parse_and_tokenize
+            generate_kwargs.pop("truncation", None)
+
             translations = self.model.generate(
                 inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
@@ -327,6 +330,9 @@ class Text2TextGenerationPipeline(Pipeline):
 
             if self.framework == "pt":
                 inputs = self.ensure_tensor_on_device(**inputs)
+
+            # truncation should be used by _parse_and_tokenize
+            generate_kwargs.pop("truncation", None)
 
             generations = self.model.generate(
                 inputs["input_ids"],
