@@ -816,8 +816,8 @@ class RobertaModel(RobertaPreTrainedModel):
         return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
             past_key_values=encoder_outputs.past_key_values,
+            hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
         )
@@ -946,8 +946,8 @@ class RobertaForCausalLM(RobertaPreTrainedModel):
         return CausalLMOutputWithCrossAttentions(
             loss=lm_loss,
             logits=prediction_scores,
-            hidden_states=outputs.hidden_states,
             past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )

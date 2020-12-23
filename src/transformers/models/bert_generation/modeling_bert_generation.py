@@ -549,8 +549,8 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
         return CausalLMOutputWithCrossAttentions(
             loss=lm_loss,
             logits=prediction_scores,
-            hidden_states=outputs.hidden_states,
             past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
