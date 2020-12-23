@@ -878,7 +878,7 @@ if is_tf_available():
         TFOpenAIGPTPreTrainedModel,
     )
     from .models.pegasus import TFPegasusForConditionalGeneration
-    from .models.rag import TFRagModel, TFRagTokenForGeneration
+    from .models.rag import TFRagModel, TFRagTokenForGeneration, TFRagSequenceForGeneration
     from .models.roberta import (
         TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFRobertaForMaskedLM,
