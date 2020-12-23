@@ -19,6 +19,7 @@ if is_tf_available() and is_datasets_available() and is_faiss_available():
         TFDPRQuestionEncoder,
         TFRagModel,
         TFRagTokenForGeneration,
+        TFRagSequenceForGeneration
     )
 
 
@@ -43,6 +44,12 @@ class TFRagModelIntegrationTests(unittest.TestCase):
     @cached_property
     def token_model(self):
         return TFRagTokenForGeneration.from_pretrained_question_encoder_generator(
+            "facebook/dpr-question_encoder-single-nq-base", "facebook/bart-large-cnn"
+        )
+
+    @cached_property
+    def sequence_model(self):
+        return TFRagSequenceForGeneration.from_pretrained_question_encoder_generator(
             "facebook/dpr-question_encoder-single-nq-base", "facebook/bart-large-cnn"
         )
 
@@ -75,6 +82,41 @@ class TFRagModelIntegrationTests(unittest.TestCase):
             retrieval_vector_size=768,
             retrieval_batch_size=8,
         )
+
+    @slow
+    def test_rag_sequence_inference(self):
+        rag_config = self.get_rag_config()
+        rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+        rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
+            "facebook/dpr-question_encoder-single-nq-base"
+        )
+        rag_retriever = RagRetriever(
+            rag_config,
+            question_encoder_tokenizer=rag_question_encoder_tokenizer,
+            generator_tokenizer=rag_decoder_tokenizer,
+        )
+
+        rag_sequence = self.sequence_model
+        rag_sequence.set_retriever(rag_retriever)
+
+        input_ids = rag_question_encoder_tokenizer(
+            "who sings does he love me with reba", return_tensors="tf"
+        ).input_ids
+        decoder_input_ids = rag_decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
+
+        output = rag_sequence(
+            input_ids,
+            labels=decoder_input_ids,
+        )
+
+        expected_shape = tf.TensorShape([5, 5, 50264])
+        self.assertEqual(output.logits.shape, expected_shape)
+
+        expected_doc_scores = tf.convert_to_tensor([[75.0286, 74.4998, 74.0804, 74.0306, 73.9504]])
+        expected_loss = tf.convert_to_tensor([36.7368])
+
+        tf.debugging.assert_near(output.loss, expected_loss, atol=1e-3)
+        tf.debugging.assert_near(output.doc_scores, expected_doc_scores, atol=1e-3)
 
     @slow
     def test_rag_token_inference(self):
@@ -237,15 +279,15 @@ class TFRagModelIntegrationTests(unittest.TestCase):
             "what is the first step in the evolution of the eye",
             "where is gall bladder situated in human body",
             "what is the main mineral in lithium batteries",
-            "who is the president of usa right now?",
+            "who is the president of usa right now",
             "where do the greasers live in the outsiders",
             "panda is a national animal of which country",
-            #             "what is the name of manchester united stadium",
+            "what is the name of manchester united stadium",
         ]
 
     @slow
     def test_rag_token_generate_batch(self):
-        # NOTE: temporarily change to greedy-search gold labels instead of num_beam=4 gold labels
+        # NOTE: gold labels comes from num_beam=4 -- if change gold labels to greedy-generated, test will pass
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
         retriever = RagRetriever.from_pretrained("facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True)
         rag_token = TFRagTokenForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever, from_pt=True)
@@ -260,7 +302,7 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         input_ids = input_dict.input_ids
         attention_mask = input_dict.attention_mask
 
-        rag_token.config.num_beams = 1
+#         rag_token.config.num_beams = 1 -> different in 2 answers (obama, united stadium) to num_beams=4 labels
         output_ids = rag_token.generate(
             input_ids,
             attention_mask=attention_mask,
@@ -283,6 +325,95 @@ class TFRagModelIntegrationTests(unittest.TestCase):
             " obama",
             " northern new jersey",
             " india",
-            #             " united stadium",
+            " united stadium",
+        ]
+        self.assertListEqual(outputs, EXPECTED_OUTPUTS)
+
+    @slow
+    def test_rag_sequence_generate_batch(self):
+        tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
+        retriever = RagRetriever.from_pretrained("facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True)
+        rag_sequence = TFRagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever, from_pt=True)
+
+        input_dict = tokenizer(
+            self.test_data_questions,
+            return_tensors="tf",
+            padding=True,
+            truncation=True,
+        )
+
+        input_ids = input_dict.input_ids
+        attention_mask = input_dict.attention_mask
+
+        output_ids = rag_sequence.generate(
+            input_ids,
+            attention_mask=attention_mask,
+        )
+
+        outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+
+        EXPECTED_OUTPUTS = [
+            " albert einstein",
+            " june 22, 2018",
+            " amplitude modulation",
+            " tim besley ( chairman )",
+            " june 20, 2018",
+            " 1980",
+            " 7.0",
+            " 8",
+            " reticular formation",
+            " walls of the abdomen",
+            " spodumene",
+            " obama",
+            " new orleans",
+            " japan",
+            " old trafford",
+        ]
+        self.assertListEqual(outputs, EXPECTED_OUTPUTS)
+
+    @slow
+    def test_rag_sequence_generate_batch_from_context_input_ids(self):
+        tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
+        retriever = RagRetriever.from_pretrained(
+            "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True
+        )
+        rag_sequence = TFRagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever, from_pt=True)
+        input_dict = tokenizer(
+            self.test_data_questions,
+            return_tensors="tf",
+            padding=True,
+            truncation=True,
+        )
+
+        input_ids = input_dict.input_ids
+        attention_mask = input_dict.attention_mask
+
+        question_hidden_states = rag_sequence.question_encoder(input_ids)[0]
+        docs_dict = retriever(input_ids.numpy(), question_hidden_states.numpy(), return_tensors="tf")
+        doc_scores = tf.squeeze(tf.matmul(tf.expand_dims(question_hidden_states, axis=[1]), docs_dict["retrieved_doc_embeds"], transpose_b=True), axis=[1])
+        output_ids = rag_sequence.generate(context_input_ids=docs_dict["context_input_ids"], 
+                                           context_attention_mask=docs_dict["context_attention_mask"], 
+                                           doc_scores=doc_scores, 
+                                           do_deduplication=True,
+                                           )
+
+        outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+
+        EXPECTED_OUTPUTS = [
+            " albert einstein",
+            " june 22, 2018",
+            " amplitude modulation",
+            " tim besley ( chairman )",
+            " june 20, 2018",
+            " 1980",
+            " 7.0",
+            " 8",
+            " reticular formation",
+            " walls of the abdomen",
+            " spodumene",
+            " obama",
+            " new orleans",
+            " japan",
+            " old trafford",
         ]
         self.assertListEqual(outputs, EXPECTED_OUTPUTS)
