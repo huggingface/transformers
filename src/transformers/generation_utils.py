@@ -117,10 +117,12 @@ class SampleDecoderOnlyOutput(ModelOutput):
             with each tensor of shape :obj:`(num_return_sequences * batch_size, config.vocab_size)`).
         attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(num_return_sequences * batch_size, num_heads, generated_length, sequence_length)`.
+            :obj:`torch.FloatTensor` of shape :obj:`(num_return_sequences * batch_size, num_heads, generated_length,
+            sequence_length)`.
         hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(num_return_sequences * batch_size, generated_length, hidden_size)`.
+            :obj:`torch.FloatTensor` of shape :obj:`(num_return_sequences * batch_size, generated_length,
+            hidden_size)`.
     """
 
     sequences: torch.LongTensor = None
@@ -150,10 +152,12 @@ class SampleEncoderDecoderOutput(ModelOutput):
             of shape :obj:`(batch_size * num_return_sequences, sequence_length, hidden_size)`.
         decoder_attentions (:obj:`tupletuple((torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequences, num_heads, generated_length, sequence_length)`.
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequences, num_heads, generated_length,
+            sequence_length)`.
         decoder_hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequences, generated_length, hidden_size)`.
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequences, generated_length,
+            hidden_size)`.
     """
 
     sequences: torch.LongTensor = None
@@ -179,7 +183,8 @@ class BeamSearchDecoderOnlyOutput(ModelOutput):
             with each tensor of shape :obj:`(batch_size * num_beams, config.vocab_size)`).
         attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams, num_heads, generated_length, sequence_length)`.
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams, num_heads, generated_length,
+            sequence_length)`.
         hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams, generated_length, hidden_size)`.
@@ -212,7 +217,8 @@ class BeamSearchEncoderDecoderOutput(ModelOutput):
             of shape :obj:`(batch_size * num_beams, sequence_length, hidden_size)`.
         decoder_attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams, num_heads, generated_length, sequence_length)`.
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams, num_heads, generated_length,
+            sequence_length)`.
         decoder_hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams, generated_length, hidden_size)`.
