@@ -1543,3 +1543,470 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         loss = (1.0 - smooth_epsilon) * nll_loss + eps_i * smooth_loss
 
         return loss
+    
+@add_start_docstrings_to_model_forward(
+    """
+    A TF RAG-sequence model implementation. It performs RAG-sequence specific marginalization in the forward pass.
+    """,
+    RAG_START_DOCSTRING,
+)
+class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss):
+
+    load_weight_prefix = "tf_rag_sequence_for_generation_1/rag"
+
+    def __init__(
+        self,
+        config: Optional[PretrainedConfig] = None,
+        question_encoder: Optional[TFPreTrainedModel] = None,
+        generator: Optional[TFPreTrainedModel] = None,
+        retriever: Optional = None,
+        **kwargs,
+    ):
+        assert config is not None or (
+            question_encoder is not None and generator is not None
+        ), "Either a configuration or an encoder and a generator has to be provided."
+
+        if config is None:
+            config = RagConfig.from_question_encoder_generator_configs(
+                question_encoder.config, generator.config, **kwargs
+            )
+
+        super().__init__(config)
+
+        # instantiate model
+        self.rag = TFRagModel(
+            config=config,
+            question_encoder=question_encoder,
+            generator=generator,
+            retriever=retriever,
+            load_weight_prefix=self.load_weight_prefix,
+            name="rag",
+        )
+
+    # UGLY HACK: (TEMPorarily put the hack back again to show case of the new nq_checkpoint test) 
+    # really ugly fixed and require torch model: manually and ineffcient fixed of two weights name mismatched
+    @classmethod
+    def from_pretrained(cls, path_or_weight_name, model_pt=None, **kwargs):
+       
+        print(path_or_weight_name, kwargs)
+        model = super(TFRagSequenceForGeneration, cls).from_pretrained(path_or_weight_name, **kwargs)
+
+        if path_or_weight_name == "facebook/rag-sequence-nq":
+            import gc
+            import tensorflow.keras.backend as K
+            from transformers import RagSequenceForGeneration
+
+            gc.collect()
+            if model_pt is None:
+                model_pt = RagSequenceForGeneration.from_pretrained(path_or_weight_name, **kwargs)
+          
+            K.set_value(model.rag.generator.model.shared.weight, model_pt.rag.generator.model.shared.weight.detach().numpy())
+            K.set_value(model.rag.generator.final_logits_bias, model_pt.rag.generator.final_logits_bias.detach().numpy())
+            del model_pt
+            gc.collect()
+            print('*** Ugly fix of %s weights loading -- not a generalizable solution ***' % path_or_weight_name)
+
+        return model
+
+    def set_retriever(self, retriever: RagRetriever):
+        self.rag.retriever = retriever
+
+    @property
+    def retriever(self):
+        return self.rag.retriever
+
+    @property
+    def generator(self):
+        return self.rag.generator
+
+    @property
+    def question_encoder(self):
+        return self.rag.question_encoder
+
+    @add_start_docstrings_to_model_forward(RAG_FORWARD_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFRetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
+    def call(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        encoder_outputs=None,
+        past_key_values=None,
+        doc_scores=None,
+        context_input_ids=None,
+        context_attention_mask=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        output_retrieved=None,
+        n_docs=None,
+        exclude_bos_score=None,
+        labels=None,
+        reduce_loss=None,
+        training=False,
+        **kwargs  # needs kwargs for generation
+    ):
+        r"""
+        exclude_bos_score (:obj:`bool`, `optional`):
+            Only relevant if ``labels`` is passed. If :obj:`True`, the score of the BOS token is disregarded when
+            computing the loss.
+        reduce_loss (:obj:`bool`, `optional`):
+            Only relevant if ``labels`` is passed. If :obj:`True`, the NLL loss is reduced using the ``tf.Tensor.sum``
+            operation.
+        kwargs (:obj:`Dict[str, any]`, optional, defaults to `{}`):
+            Legacy dictionary, which is required so that model can use `generate()` function.
+
+        Returns:
+
+        Example::
+
+            >>> from transformers import RagTokenizer, RagRetriever, TFRagSequenceForGeneration
+
+            >>> tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
+            >>> retriever = RagRetriever.from_pretrained("facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True)
+            >>> # initialize with RagRetriever to do everything in one forward call
+            >>> model = TFRagRagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever, from_pt=True)
+
+            >>> input_dict = tokenizer.prepare_seq2seq_batch("How many people live in Paris?", "In Paris, there are 10 million people.", return_tensors="tf")
+            >>> outputs = model(input_dict, output_retrieved=True)
+
+            >>> # or use retriever separately
+            >>> # 1. Encode
+            >>> input_ids = input_dict["input_ids"]
+            >>> question_hidden_states = model.question_encoder(input_ids)[0]
+            >>> # 2. Retrieve
+            >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.numpy(), return_tensors="tf")
+            >>> doc_scores = tf.squeeze(tf.matmul(tf.expand_dims(question_hidden_states, axis=[1]), docs_dict["retrieved_doc_embeds"], transpose_b=True), axis=[1])
+            >>> # 3. Forward to generator
+            >>> outputs = model(inputs=None, context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores, decoder_input_ids=input_dict["labels"])
+
+            >>> # or directly generate
+            >>> generated = model.generate(context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores)
+            >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
+        """
+
+        assert (
+            "decoder_cached_states" not in kwargs
+        ), "Please use past_key_values to cache intermediate outputs"  # from modeling_tf_bart.py
+
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            encoder_outputs=encoder_outputs,
+            past_key_values=past_key_values,
+            doc_scores=doc_scores,
+            context_input_ids=context_input_ids,
+            context_attention_mask=context_attention_mask,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            output_retrieved=output_retrieved,
+            n_docs=n_docs,
+            exclude_bos_score=exclude_bos_score,
+            labels=labels,
+            reduce_loss=reduce_loss,
+            training=training,
+            kwargs_call=kwargs,
+        )
+
+        inputs["exclude_bos_score"] = inputs["exclude_bos_score"] if inputs["exclude_bos_score"] else self.config.exclude_bos_score
+        inputs["reduce_loss"] = inputs["reduce_loss"] if inputs["reduce_loss"] else self.config.reduce_loss
+
+        if inputs["labels"] is not None:
+            if inputs["decoder_input_ids"] is None:
+                inputs["decoder_input_ids"] = inputs["labels"]
+            inputs["use_cache"] = False
+
+        outputs = self.rag(
+            inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            encoder_outputs=inputs["encoder_outputs"],
+            decoder_input_ids=inputs["decoder_input_ids"],
+            decoder_attention_mask=inputs["decoder_attention_mask"],
+            context_input_ids=inputs["context_input_ids"],
+            context_attention_mask=inputs["context_attention_mask"],
+            doc_scores=inputs["doc_scores"],
+            past_key_values=inputs["past_key_values"],
+            use_cache=inputs["use_cache"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            output_retrieved=inputs["output_retrieved"],
+            n_docs=inputs["n_docs"],
+            training=inputs["training"],
+        )
+
+        loss = None
+        if inputs["labels"] is not None:
+            loss = self.get_nll(
+                outputs.logits,
+                outputs.doc_scores,
+                inputs["labels"],
+                reduce_loss=inputs["reduce_loss"],
+                epsilon=self.config.label_smoothing,
+                n_docs=inputs["n_docs"],
+            )
+
+        return TFRetrievAugLMMarginOutput(
+            loss=loss,
+            logits=outputs.logits,
+            doc_scores=outputs.doc_scores,
+            past_key_values=outputs.past_key_values,
+            context_input_ids=outputs.context_input_ids,
+            context_attention_mask=outputs.context_attention_mask,
+            retrieved_doc_embeds=outputs.retrieved_doc_embeds,
+            retrieved_doc_ids=outputs.retrieved_doc_ids,
+            question_encoder_last_hidden_state=outputs.question_encoder_last_hidden_state,
+            question_enc_hidden_states=outputs.question_enc_hidden_states,
+            question_enc_attentions=outputs.question_enc_attentions,
+            generator_enc_last_hidden_state=outputs.generator_enc_last_hidden_state,
+            generator_enc_hidden_states=outputs.generator_enc_hidden_states,
+            generator_enc_attentions=outputs.generator_enc_attentions,
+            generator_dec_hidden_states=outputs.generator_dec_hidden_states,
+            generator_dec_attentions=outputs.generator_dec_attentions,
+        )
+
+    def get_nll(
+        self, seq_logits, doc_scores, target, reduce_loss=False, epsilon=0.0, exclude_bos_score=False, n_docs=None
+    ):
+        # shift tokens left
+        target = tf.concat([target[:, 1:], tf.fill([target.shape[0], 1], self.config.generator.pad_token_id)], axis=1)
+
+        # bos_token_id is None for T5
+        bos_token_id = self.config.bos_token_id or self.config.generator.bos_token_id
+        n_docs = n_docs if n_docs is not None else self.config.n_docs
+        equal_bos_token_id_all = tf.reduce_all(tf.equal(target[:, 0], bos_token_id))
+        use_bos = bos_token_id is not None and equal_bos_token_id_all
+        
+        def _mask_pads(ll, smooth_obj):
+            pad_mask = tf.equal(target, self.config.generator.pad_token_id)
+            if tf.reduce_any(pad_mask):
+                ll = tf.where(pad_mask, 0.0, ll)
+                smooth_obj = tf.where(pad_mask, 0.0, smooth_obj)
+            return tf.squeeze(ll, axis=-1), tf.squeeze(smooth_obj, axis=-1)
+
+        # seq_logits.shape = (batch*n_docs, tgt_len , vocabs)
+        seq_logprobs = tf.nn.log_softmax(seq_logits, axis=-1)
+        seq_logprobs = tf.reshape(seq_logprobs, (
+            seq_logits.shape[0] // n_docs, n_docs, -1, seq_logits.shape[-1]
+        ) )  # (batch_size, n_docs, tgt_len, vocabs)
+        doc_logprobs = tf.nn.log_softmax(doc_scores, axis=1)
+        doc_logprobs = tf.expand_dims(doc_logprobs, axis=-1)
+        doc_logprobs = tf.expand_dims(doc_logprobs, axis=-1) # done twice to get 4-D
+
+        # RAG-sequence marginalization
+        first_token_scores = seq_logprobs[:, :, :1, :]
+        second_token_scores = seq_logprobs[:, :, 1:2, :]
+        remainder = seq_logprobs[:, :, 2:, :]
+        rag_logprobs = tf.concat([first_token_scores, second_token_scores + doc_logprobs, remainder], axis=2)
+
+        # calculate loss
+        target = tf.expand_dims(target, axis=1) # n_docs dimension
+        target = tf.expand_dims(target, axis=-1) # logits dimension
+        target = tf.repeat(target,n_docs,axis=1 )
+        assert len(target.shape) == len(rag_logprobs.shape)
+        
+        # last-axis gathering only - use 2D-reshape-trick for Torch's style nD gathering
+        def torch_gather(param, id_tensor): 
+            # 2d-gather torch equivalent: https://stackoverflow.com/questions/52129909/tensorflow-equivalent-of-torch-gather
+            def gather2d(target, id_tensor):
+                idx = tf.stack([tf.range(tf.shape(id_tensor)[0]),id_tensor[:,0]],axis=-1)
+                result = tf.gather_nd(target,idx)
+                return tf.expand_dims(result,axis=-1)
+
+            target = tf.reshape(param, (-1, param.shape[-1])) # reshape 2D
+            target_shape = id_tensor.shape
+
+            id_tensor = tf.reshape(id_tensor, (-1, 1)) # also 2D-index
+            result = gather2d(target, id_tensor)
+            return tf.reshape(result, target_shape)
+
+        ll = torch_gather(rag_logprobs, id_tensor=target)
+        smooth_obj = tf.reduce_sum(rag_logprobs, axis=-1, keepdims=True) # total sum of all (normalised) logits
+
+        ll, smooth_obj = _mask_pads(ll, smooth_obj)
+
+        # sum over tokens, exclude bos while scoring
+        if exclude_bos_score and use_bos :
+            ll = tf.reduce_sum(ll[:, :, 1:], axis=2) 
+        else: 
+            ll = tf.reduce_sum(ll, axis=2) 
+
+        smooth_obj = tf.reduce_sum(smooth_obj, axis=2)
+        ll = tf.math.reduce_logsumexp(ll,axis=1) # logsumexp over docs
+        smooth_obj = tf.math.reduce_logsumexp(smooth_obj,axis=1)
+
+        nll_loss = -ll
+        smooth_loss = -smooth_obj
+
+        if reduce_loss:
+            nll_loss = tf.reduce_sum(nll_loss)
+            smooth_loss = tf.reduce_sum(smooth_loss)
+
+        eps_i = epsilon / rag_logprobs.shape[-1]
+        loss = (1.0 - epsilon) * nll_loss + eps_i * smooth_loss
+        return loss
+
+    def generate(
+        self,
+        input_ids: Optional[tf.Tensor] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        context_input_ids=None,
+        context_attention_mask=None,
+        doc_scores=None,
+        do_deduplication=None,  # defaults to True
+        num_return_sequences=None,  # defaults to 1
+        num_beams=None,  # defaults to 1
+        n_docs=None,
+        **model_kwargs
+    ):
+        """
+        Implements RAG sequence "thorough" decoding. Read the :meth:`~transformers.PreTrainedModel.generate``
+        documentation for more information on how to set other generate input parameters.
+        Args:
+            input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                The sequence used as a prompt for the generation. If :obj:`input_ids` is not passed, then
+                :obj:`context_input_ids` has to be provided.
+            attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+                `What are attention masks? <../glossary.html#attention-mask>`__
+            context_input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size * config.n_docs, config.max_combined_length)`, `optional`, returned when `output_retrieved=True`):
+                Input IDs post-processed from the retrieved documents and the question encoder input_ids by the
+                retriever.
+            context_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size * config.n_docs, config.max_combined_length)`, `optional`, returned when `output_retrieved=True`):
+                Attention mask post-processed from the retrieved documents and the question encoder :obj:`input_ids` by
+                the retriever.
+                If the model has is not initialized with a ``retriever`` or ``input_ids`` is not given,
+                :obj:`context_input_ids` and :obj:`context_attention_mask` have to be provided to the forward pass. They are returned
+                by :meth:`~transformers.RagRetriever.__call__`.
+            doc_scores (:obj:`tf.Tensor` of shape :obj:`(batch_size, config.n_docs)`):
+                Score between each retrieved document embeddings (see :obj:`retrieved_doc_embeds`) and
+                :obj:`question_encoder_last_hidden_state`.
+                If the model has is not initialized with a ``retriever`` or ``input_ids`` is not given,
+                :obj:`doc_scores` has to be provided to the forward pass. :obj:`doc_scores` are returned
+                by :meth:`~transformers.RagRetriever.__call__`.
+            do_deduplication (:obj:`bool`, `optional`):
+                Whether or not to deduplicate the generations from different context documents for a given input. Has
+                to be set to :obj:`False` if used while training with distributed backend.
+            num_return_sequences(:obj:`int`, `optional`, defaults to 1):
+                The number of independently computed returned sequences for each element in the batch. Note that this
+                is not the value we pass to the ``generator``'s `:func:`~transformers.PreTrainedModel.generate``
+                function, where we set ``num_return_sequences`` to :obj:`num_beams`.
+            num_beams (:obj:`int`, `optional`, defaults to 1):
+                Number of beams for beam search. 1 means no beam search.
+            n_docs (:obj:`int`, `optional`, defaults to :obj:`config.n_docs`)
+                Number of documents to retrieve and/or number of documents for which to generate an answer.
+            kwargs:
+                Additional kwargs will be passed to :meth:`~transformers.PreTrainedModel.generate`.
+        Return:
+            :obj:`tf.Tensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
+            sequences. The second dimension (sequence length) is either equal to :obj:`max_length` or shorter if all
+            batches finished early due to the :obj:`eos_token_id`.
+        """
+
+        n_docs = n_docs if n_docs is not None else self.config.n_docs
+        do_deduplication = do_deduplication if do_deduplication is not None else self.config.do_deduplication
+        num_doc_return_sequences = (
+            num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
+        )
+        num_beams = num_beams if num_beams is not None else self.config.num_beams
+
+        assert (
+            input_ids is not None or context_input_ids is not None
+        ), " At least one of input_ids or context_input_ids must be given"
+
+        if self.retriever is not None and context_input_ids is None:
+            question_hidden_states = self.question_encoder(input_ids, attention_mask=attention_mask)[0]
+            context_input_ids = self.retriever(
+                input_ids,
+                question_hidden_states.numpy(),
+                prefix=self.generator.config.prefix,
+                n_docs=n_docs,
+                return_tensors="tf",
+            )["context_input_ids"]
+
+        hypos = []
+        model_kwargs["num_beams"] = num_beams
+        model_kwargs["num_return_sequences"] = num_beams # put here so that not confused with num_doc_return_sequences
+        model_kwargs["attention_mask"] = None
+
+        batch_size = input_ids.shape[0] if input_ids is not None else context_input_ids.shape[0] // n_docs
+
+        for index in range(batch_size):
+            # first, generate beams from documents:
+            generator_input_ids = context_input_ids[index * n_docs : (index + 1) * n_docs]  # (n_docs, max_len)
+
+            output_sequences = self.generator.generate(
+                generator_input_ids,
+                **model_kwargs,
+            )  # n_docs * n_beam, tgt_len
+            if do_deduplication:
+                # do_deduplication -- for TF, work on Eager mode only!
+                output_sequences = tf.stack(list({str(k.numpy().tolist()): k for k in output_sequences}.values()))
+
+            num_candidates = output_sequences.shape[
+                0
+            ]  # after deduplication, this number can be less than n_docs*n_beam
+
+            # then, run model forwards to get nll scores:
+            if input_ids is not None:
+                new_input_ids = tf.tile(input_ids[index : index + 1], (num_candidates, 1))
+                outputs = self(new_input_ids, labels=output_sequences, exclude_bos_score=True)
+            else:  # input_ids is None, need context_input_ids/mask and doc_scores
+                assert (
+                    context_attention_mask is not None
+                ), "Make sure that `context_attention_mask` are passed, if no `input_ids` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
+                assert (
+                    doc_scores is not None
+                ), "Make sure that `doc_scores` are passed, if no `input_ids` is set. Alternatively, you can set a retriever using the `set_retriever(...)` function."
+
+                individual_input_ids = tf.tile(generator_input_ids, (num_candidates, 1))  # (num_candidates*n_docs, max_len)
+
+                individual_attention_mask = context_attention_mask[index * n_docs : (index + 1) * n_docs]
+                individual_attention_mask = tf.tile(individual_attention_mask, (num_candidates, 1))
+
+                individual_doc_scores = doc_scores[index : (index + 1), :]  # doc_scores.shape = [batch, n_docs]
+                individual_doc_scores = tf.tile(individual_doc_scores, (num_candidates, 1))  # [num_candidates, n_docs]
+
+                outputs = self(
+                    input_ids=None,
+                    context_input_ids=individual_input_ids,
+                    context_attention_mask=individual_attention_mask,
+                    doc_scores=individual_doc_scores,
+                    labels=output_sequences,
+                    exclude_bos_score=True,
+                )
+
+            top_cand_inds = tf.math.top_k((-outputs["loss"]), k=num_doc_return_sequences)[1]
+
+            # add hypothesis
+            hypos.append(tf.gather(output_sequences, top_cand_inds))
+
+        return self._cat_and_pad(hypos, pad_token_id=self.config.generator.pad_token_id)
+
+    @staticmethod
+    def _cat_and_pad(tensors, pad_token_id): 
+    # used by generate(): tensors is a (batched) list of (candidates, len); len is varied across batch
+
+        # Initialize padded tensor with shape ( all_candidates , max_candidate_length ),
+        # where all_candidates counted from all inputs
+        new_shape = sum([t.shape[0] for t in tensors]), max([t.shape[1] for t in tensors])
+        output = tf.fill(new_shape, pad_token_id)
+
+        # Normal tensor doesn't support slice assignment, so we need tf.Variable
+        output = tf.Variable(output)
+            
+        # Assign, and then convert back to tensor
+        ind = 0
+        for t in tensors:
+            output[ind : ind + t.shape[0], : t.shape[1]].assign(t)
+            ind += t.shape[0]
+
+        output = tf.convert_to_tensor(output)
+        return tf.cast(output, tensors[0][0][0].dtype)
