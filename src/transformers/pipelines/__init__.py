@@ -42,7 +42,6 @@ from transformers.pipelines.base import (
     TableQuestionAnsweringPipeline,
     Text2TextGenerationPipeline,
     TextClassificationPipeline,
-    TextGenerationPipeline,
     TokenClassificationArgumentHandler,
     TokenClassificationPipeline,
     TranslationPipeline,
@@ -50,6 +49,7 @@ from transformers.pipelines.base import (
     ZeroShotClassificationPipeline,
 )
 from transformers.pipelines.feature_extraction import FeatureExtractionPipeline
+from transformers.pipelines.text_generation import TextGenerationPipeline
 from transformers.tokenization_utils import PreTrainedTokenizer
 from transformers.utils import logging
 
@@ -96,6 +96,7 @@ if TYPE_CHECKING:
     from transformers.modeling_utils import PreTrainedModel
 
 logger = logging.get_logger(__name__)
+
 
 # Register all the supported tasks here
 SUPPORTED_TASKS = {
