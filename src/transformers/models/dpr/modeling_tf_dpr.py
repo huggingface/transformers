@@ -299,6 +299,95 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
         )
 
 
+class TFDPRSpanPredictor(TFPreTrainedModel):
+
+    base_model_prefix = "encoder"
+
+    def __init__(self, config: DPRConfig, **kwargs):
+        super().__init__(**kwargs)
+        self.encoder = TFDPRSpanPredictorLayer(config)
+
+    def call(
+        self,
+        input_ids: tf.Tensor = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = False,
+        training: bool = False,
+        **kwargs,
+    ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
+        inputs = input_processing(
+            func=self.call,
+            config=self.encoder.bert_model.config,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        outputs = self.encoder(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
+
+        return outputs
+
+
+class TFDPREncoder(TFPreTrainedModel):
+    base_model_prefix = "encoder"
+
+    def __init__(self, config: DPRConfig, **kwargs):
+        super().__init__(config, **kwargs)
+
+        self.encoder = TFDPREncoderLayer(config)
+    
+    def call(
+        self,
+        input_ids: tf.Tensor = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = False,
+        training: bool = False,
+        **kwargs,
+    ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
+        inputs = input_processing(
+            func=self.call,
+            config=self.encoder.bert_model.config,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        outputs = self.encoder(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
+        return outputs
 ##################
 # PreTrainedModel
 ##################
