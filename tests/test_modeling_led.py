@@ -337,18 +337,18 @@ class LEDModelIntegrationTests(unittest.TestCase):
         return LEDTokenizer.from_pretrained("allenai/led-base-16384")
 
     def test_inference_no_head(self):
-        # skip for now
-        return
         model = LEDModel.from_pretrained("allenai/led-base-16384").to(torch_device)
-        input_ids = _long_tensor([128 * [0, 31414, 232, 328, 740, 1140, 12695, 69]])
+        input_ids = _long_tensor([512 * [0, 31414, 232, 328, 740, 1140, 12695, 69]])
         decoder_input_ids = _long_tensor([128 * [0, 31414, 232, 328, 740, 1140, 12695, 69]])
         inputs_dict = prepare_led_inputs_dict(model.config, input_ids, decoder_input_ids)
         with torch.no_grad():
             output = model(**inputs_dict).last_hidden_state
-        expected_shape = torch.Size((1, 1024, 1024))
+        expected_shape = torch.Size((1, 1024, 768))
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
-        expected_slice = torch.tensor([[], [], []], device=torch_device)
+        expected_slice = torch.tensor(
+            [[2.3050, 2.8279, 0.6531], [-1.8457, -0.1455, -3.5661], [-1.0186, 0.4586, -2.2043]], device=torch_device
+        )
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_head(self):
