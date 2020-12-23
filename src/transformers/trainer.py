@@ -268,7 +268,13 @@ class Trainer:
         if model is not None and not self.args.model_parallel:
             model = model.to(args.device)
 
-        self.model = model
+        if args.deepspeed:
+            self.model = model.module
+            self.wrapped_model = model
+        else:
+            self.model = model
+            self.wrapped_model = None
+
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
@@ -703,8 +709,9 @@ class Trainer:
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(model_path)
 
+        model = self.wrapped_model if self.wrapped_model else self.model
+
         # Mixed precision training with apex (torch < 1.6)
-        model = self.model
         if self.use_apex:
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
 
@@ -728,6 +735,14 @@ class Trainer:
             )
             # find_unused_parameters breaks checkpointing as per
             # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
+
+        # for the rest of this function ``model`` is the outside model, whether it was wrapped or not
+        if model != self.model:
+            self.wrapped_model = model
+
+        # important: at this point:
+        # self.model         is the Transformers Model
+        # self.wrapped_model is DDP(Transformers Model), DDP(Deepspeed(Transformers Model)), etc.
 
         # Train!
         if is_torch_tpu_available():
@@ -1199,7 +1214,8 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         elif self.args.deepspeed:
-            model.module.backward(loss)
+            # calling on DS engine (wrapped_model == DDP(Deepspeed(PretrainedModule)))
+            self.wrapped_model.module.backward(loss)
         else:
             loss.backward()
 
