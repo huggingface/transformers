@@ -352,7 +352,7 @@ class TFDPREncoder(TFPreTrainedModel):
         super().__init__(config, **kwargs)
 
         self.encoder = TFDPREncoderLayer(config)
-    
+
     def call(
         self,
         input_ids: tf.Tensor = None,
@@ -388,6 +388,8 @@ class TFDPREncoder(TFPreTrainedModel):
             training=inputs["training"],
         )
         return outputs
+
+
 ##################
 # PreTrainedModel
 ##################
