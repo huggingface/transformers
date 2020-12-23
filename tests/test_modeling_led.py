@@ -59,7 +59,7 @@ def prepare_led_inputs_dict(
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
-        "decoder_attention_mask": attention_mask,
+        "decoder_attention_mask": decoder_attention_mask,
     }
 
 
@@ -351,20 +351,50 @@ class LEDModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor([[], [], []], device=torch_device)
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
+    @staticmethod
+    def print_memory_trace_statistics(summary):
+        print(
+            "\nLine by line memory consumption:\n"
+            + "\n".join(
+                f"{state.frame.filename}:{state.frame.line_number}: mem {state.cpu_gpu}: {state.frame.line_text}"
+                for state in summary.sequential
+            )
+        )
+        print(
+            "\nLines with top memory consumption:\n"
+            + "\n".join(
+                f"=> {state.frame.filename}:{state.frame.line_number}: mem {state.cpu_gpu}: {state.frame.line_text}"
+                for state in summary.cumulative[:6]
+            )
+        )
+        print(
+            "\nLines with lowest memory consumption:\n"
+            + "\n".join(
+                f"=> {state.frame.filename}:{state.frame.line_number}: mem {state.cpu_gpu}: {state.frame.line_text}"
+                for state in summary.cumulative[-6:]
+            )
+        )
+        print(f"\nTotal memory increase: {summary.total}")
+
     def test_inference_head(self):
+        from transformers.benchmark.benchmark_utils import start_memory_tracing, stop_memory_tracing
         model = LEDForConditionalGeneration.from_pretrained("allenai/led-base-16384").to(torch_device)
 
         # change to intended input
-        input_ids = _long_tensor([128 * [0, 31414, 232, 328, 740, 1140, 12695, 69]])
+        input_ids = _long_tensor([512 * [0, 31414, 232, 328, 740, 1140, 12695, 69]])
         decoder_input_ids = _long_tensor([128 * [0, 31414, 232, 328, 740, 1140, 12695, 69]])
         inputs_dict = prepare_led_inputs_dict(model.config, input_ids, decoder_input_ids)
+#        trace = start_memory_tracing("transformers")
         with torch.no_grad():
-            output = model(**inputs_dict).logits
+            output = model(**inputs_dict, use_cache=False).logits
+#        summary = stop_memory_tracing(trace)
+#        self.print_memory_trace_statistics(summary)
+        print(torch.cuda.max_memory_allocated())
         expected_shape = torch.Size((1, 1024, model.config.vocab_size))
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
         expected_slice = torch.tensor(
-            [[34.0854, 6.5597, 16.7543], [4.5405, -2.3544, 10.7500], [-2.3153, -4.0728, 4.6200]], device=torch_device
+            [[33.6507, 6.4572, 16.8089], [5.8739, -2.4238, 11.2902], [-3.2139, -4.3149, 4.2783]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
@@ -382,6 +412,9 @@ class LEDModelIntegrationTests(unittest.TestCase):
             padding="max_length",
             return_tensors="pt",
         )
+
+        with torch.no_grad():
+            hf.model.encoder(input_ids=dct["input_ids"].to(torch_device), attention_mask=dct["attention_mask"].to(torch_device))
 
         hypotheses_batch = hf.generate(
             input_ids=dct["input_ids"].to(torch_device),

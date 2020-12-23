@@ -14,6 +14,8 @@
 # limitations under the License.
 """ LED model configuration """
 
+from typing import List, Union
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -66,9 +68,10 @@ class LEDConfig(PretrainedConfig):
             The dropout ratio for activations inside the fully connected layer.
         classifier_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout ratio for classifier.
-        max_position_embeddings (:obj:`int`, `optional`, defaults to 1024):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
+        max_encoder_position_embeddings (:obj:`int`, `optional`, defaults to 16384):
+            The maximum sequence length that the encoder might ever be used with.
+        max_decoder_position_embeddings (:obj:`int`, `optional`, defaults to 16384):
+            The maximum sequence length that the decoder might ever be used with.
         init_std (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         encoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
@@ -98,7 +101,8 @@ class LEDConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=50265,
-        max_position_embeddings=1024,
+        max_encoder_position_embeddings=16384,
+        max_decoder_position_embeddings=1024,
         encoder_layers=12,
         encoder_ffn_dim=4096,
         encoder_attention_heads=16,
@@ -120,6 +124,7 @@ class LEDConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        attention_window: Union[List[int], int] = 512,
         **kwargs
     ):
         super().__init__(
@@ -132,7 +137,8 @@ class LEDConfig(PretrainedConfig):
         )
 
         self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
+        self.max_encoder_position_embeddings = max_encoder_position_embeddings
+        self.max_decoder_position_embeddings = max_decoder_position_embeddings
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layers = encoder_layers
@@ -150,6 +156,7 @@ class LEDConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
+        self.attention_window = attention_window
 
     @property
     def num_attention_heads(self) -> int:
