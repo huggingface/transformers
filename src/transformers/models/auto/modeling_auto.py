@@ -23,6 +23,12 @@ from ...file_utils import add_start_docstrings
 from ...utils import logging
 
 # Add modeling imports here
+from ..led.modeling_led import (
+    LEDForConditionalGeneration,
+    LEDForQuestionAnswering,
+    LEDForSequenceClassification,
+    LEDModel,
+)
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -203,6 +209,7 @@ from ..xlnet.modeling_xlnet import (
     XLNetModel,
 )
 from .configuration_auto import (
+    LEDConfig,
     AlbertConfig,
     AutoConfig,
     BartConfig,
@@ -252,6 +259,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
+        (LEDConfig, LEDModel),
         (RetriBertConfig, RetriBertModel),
         (MT5Config, MT5Model),
         (T5Config, T5Model),
@@ -327,6 +335,8 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
+
+        (LEDConfig, LEDForConditionalGeneration),
         (LayoutLMConfig, LayoutLMForMaskedLM),
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
@@ -407,6 +417,8 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+
+        (LEDConfig, LEDForConditionalGeneration),
         (MT5Config, MT5ForConditionalGeneration),
         (T5Config, T5ForConditionalGeneration),
         (PegasusConfig, PegasusForConditionalGeneration),
@@ -424,6 +436,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        (LEDConfig, LEDForSequenceClassification),
         (DistilBertConfig, DistilBertForSequenceClassification),
         (AlbertConfig, AlbertForSequenceClassification),
         (CamembertConfig, CamembertForSequenceClassification),
@@ -453,6 +466,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
+        (LEDConfig, LEDForQuestionAnswering),
         (DistilBertConfig, DistilBertForQuestionAnswering),
         (AlbertConfig, AlbertForQuestionAnswering),
         (CamembertConfig, CamembertForQuestionAnswering),

@@ -101,6 +101,7 @@ from .modeling_tf_pytorch_utils import (
     load_tf2_weights_in_pytorch_model,
 )
 from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
 from .models.auto import (
     ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     CONFIG_MAPPING,
@@ -243,6 +244,7 @@ else:
     from .utils.dummy_sentencepiece_objects import *
 
 if is_tokenizers_available():
+    from .models.led import LEDTokenizerFast
     from .models.albert import AlbertTokenizerFast
     from .models.bart import BartTokenizerFast
     from .models.barthez import BarthezTokenizerFast
@@ -299,6 +301,14 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Modeling
 if is_torch_available():
+
+    from .models.led import (
+        LED_PRETRAINED_MODEL_ARCHIVE_LIST,
+        LEDForConditionalGeneration,
+        LEDForQuestionAnswering,
+        LEDForSequenceClassification,
+        LEDModel,
+    )
     # Benchmarks
     from .benchmark.benchmark import PyTorchBenchmark
     from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -695,6 +705,12 @@ else:
 
 # TensorFlow
 if is_tf_available():
+
+    from .models.led import (
+        TFLEDForConditionalGeneration,
+        TFLEDModel,
+        TFLEDPreTrainedModel,
+    )
     from .benchmark.benchmark_args_tf import TensorFlowBenchmarkArguments
 
     # Benchmarks
