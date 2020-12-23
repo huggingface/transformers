@@ -33,8 +33,6 @@ from transformers.pipelines.base import (
     Pipeline,
     PipelineDataFormat,
     PipelineException,
-    QuestionAnsweringArgumentHandler,
-    QuestionAnsweringPipeline,
     SummarizationPipeline,
     TableQuestionAnsweringArgumentHandler,
     TableQuestionAnsweringPipeline,
@@ -45,6 +43,7 @@ from transformers.pipelines.base import (
 )
 from transformers.pipelines.feature_extraction import FeatureExtractionPipeline
 from transformers.pipelines.fill_mask import FillMaskPipeline
+from transformers.pipelines.question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from transformers.pipelines.text_classification import TextClassificationPipeline
 from transformers.pipelines.text_generation import TextGenerationPipeline
 from transformers.pipelines.token_classification import (
