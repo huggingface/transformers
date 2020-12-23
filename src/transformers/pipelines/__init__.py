@@ -44,12 +44,16 @@ from transformers.pipelines.base import (
     TokenClassificationArgumentHandler,
     TokenClassificationPipeline,
     TranslationPipeline,
-    ZeroShotClassificationArgumentHandler,
-    ZeroShotClassificationPipeline,
+    get_default_model,
+    get_framework,
 )
 from transformers.pipelines.feature_extraction import FeatureExtractionPipeline
 from transformers.pipelines.text_classification import TextClassificationPipeline
 from transformers.pipelines.text_generation import TextGenerationPipeline
+from transformers.pipelines.zero_shot_classification import (
+    ZeroShotClassificationArgumentHandler,
+    ZeroShotClassificationPipeline,
+)
 from transformers.tokenization_utils import PreTrainedTokenizer
 from transformers.utils import logging
 
