@@ -29,6 +29,7 @@ PATH_TO_DOC = "docs/source"
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = [
+    # models to ignore for not tested
     "BartDecoder",  # Building part of bigger (tested) model.
     "BartEncoder",  # Building part of bigger (tested) model.
     "BertLMHeadModel",  # Needs to be setup as decoder.
@@ -62,6 +63,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = [
+    # models to ignore for model xxx mapping
     "BartDecoder",
     "BartEncoder",
     "DPRContextEncoder",
