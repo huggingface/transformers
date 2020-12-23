@@ -34,7 +34,7 @@ from transformers.pipelines.base import (
     get_default_model,
     get_framework,
 )
-from transformers.pipelines.conversation import Conversation, ConversationalPipeline
+from transformers.pipelines.conversational import Conversation, ConversationalPipeline
 from transformers.pipelines.feature_extraction import FeatureExtractionPipeline
 from transformers.pipelines.fill_mask import FillMaskPipeline
 from transformers.pipelines.question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
