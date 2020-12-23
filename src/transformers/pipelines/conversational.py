@@ -3,6 +3,7 @@ from typing import List, Optional, Union
 
 from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from ..utils import logging
+from ..tokenization_utils import TruncationStrategy
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
@@ -273,12 +274,14 @@ class ConversationalPipeline(Pipeline):
             else:
                 return output
 
-    def _parse_and_tokenize(self, inputs, **kwargs):
+    def _parse_and_tokenize(
+        self, inputs, add_special_tokens=False, padding=False, truncation=TruncationStrategy.DO_NOT_TRUNCATE, **kwargs
+    ):
         """
         Parse arguments and tokenize, adding an EOS token at the end of the user input
         """
         # Parse arguments
-        inputs = self.tokenizer(inputs, add_special_tokens=False, padding=False).get("input_ids", [])
+        inputs = self.tokenizer(inputs, add_special_tokens=add_special_tokens, padding=padding).get("input_ids", [])
         for input in inputs:
             input.append(self.tokenizer.eos_token_id)
         return inputs

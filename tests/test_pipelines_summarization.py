@@ -14,13 +14,77 @@
 
 import unittest
 
-from transformers import pipeline
+from transformers import is_torch_available, pipeline
+from transformers.models.bart import BartConfig, BartForConditionalGeneration
 from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.tokenization_utils import TruncationStrategy
 
 from .test_pipelines_common import MonoInputPipelineCommonMixin
 
 
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
+
+if is_torch_available():
+    import torch
+
+
+class DummyTok:
+    pad_token_id = 0
+
+    def __init__(self, **kwargs):
+        for name, v in kwargs.items():
+            setattr(self, name, v)
+
+    def __call__(self, inputs, **kwargs):
+        if isinstance(inputs, str):
+            input_ids = self.encode(inputs).unsqueeze(0)
+        else:
+            input_ids = torch.nn.utils.rnn.pad_sequence(
+                [self.encode(input_) for input_ in inputs],
+                padding_value=self.pad_token_id,
+            )
+
+        if kwargs.get("truncation", TruncationStrategy.DO_NOT_TRUNCATE) == TruncationStrategy.ONLY_FIRST:
+            input_ids = input_ids[:, : self.model_max_length]
+        attention_mask = torch.zeros_like(input_ids).long() + 1
+        return {"input_ids": input_ids, "attention_mask": attention_mask}
+
+    def encode(self, input_):
+        return torch.LongTensor(list(input_.encode("utf-8")))
+
+    def decode(self, sequence, **kwargs):
+        try:
+            return bytes(sequence).decode("utf-8")
+        except Exception:
+            return "D" * len(sequence)
+
+
+class SimpleSummarizationPipelineTests(unittest.TestCase):
+    @require_torch
+    def test_input_too_long(self):
+        config = BartConfig(
+            vocab_size=257,
+            d_model=32,
+            encoder_layers=1,
+            decoder_layers=1,
+            encoder_ffn_dim=32,
+            decoder_ffn_dim=32,
+            # So any text > 4 should raise an exception
+            max_position_embeddings=4,
+            encoder_attention_heads=1,
+            decoder_attention_heads=1,
+            max_length=4,
+            min_length=1,
+        )
+        model = BartForConditionalGeneration(config)
+        tokenizer = DummyTok(model_max_length=4)
+        nlp = pipeline(task="summarization", model=model, tokenizer=tokenizer)
+
+        with self.assertRaises(IndexError):
+            _ = nlp("This is a test")
+
+        output = nlp("This is a test", truncation=TruncationStrategy.ONLY_FIRST)
+        self.assertEquals(output, [{"summary_text": "\0\0\0\0"}])
 
 
 class SummarizationPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
