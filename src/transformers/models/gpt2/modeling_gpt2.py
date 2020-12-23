@@ -1036,7 +1036,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             >>> mc_token_ids = torch.tensor([cls_token_location])  # Batch size: 1
 
             >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
-            >>> lm_logits = outputs.lm_logits
+            >>> lm_logits = outputs.logits
             >>> mc_logits = outputs.mc_logits
 
         """
