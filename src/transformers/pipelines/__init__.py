@@ -41,7 +41,6 @@ from transformers.pipelines.base import (
     TableQuestionAnsweringArgumentHandler,
     TableQuestionAnsweringPipeline,
     Text2TextGenerationPipeline,
-    TextClassificationPipeline,
     TokenClassificationArgumentHandler,
     TokenClassificationPipeline,
     TranslationPipeline,
@@ -49,6 +48,7 @@ from transformers.pipelines.base import (
     ZeroShotClassificationPipeline,
 )
 from transformers.pipelines.feature_extraction import FeatureExtractionPipeline
+from transformers.pipelines.text_classification import TextClassificationPipeline
 from transformers.pipelines.text_generation import TextGenerationPipeline
 from transformers.tokenization_utils import PreTrainedTokenizer
 from transformers.utils import logging
