@@ -578,10 +578,10 @@ class ElectraEncoder(nn.Module):
                 v
                 for v in [
                     hidden_states,
+                    next_decoder_cache,
                     all_hidden_states,
                     all_self_attentions,
                     all_cross_attentions,
-                    next_decoder_cache,
                 ]
                 if v is not None
             )
