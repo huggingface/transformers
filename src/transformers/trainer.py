@@ -25,6 +25,7 @@ import shutil
 import time
 import warnings
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 
@@ -246,9 +247,11 @@ class Trainer:
             model = self.call_model_init()
 
         if args.deepspeed:
+            # for clarity extract what args are being passed to deepspeed
+            ds_args = {k: getattr(args, k, None) for k in ["deepspeed", "deepspeed_config", "local_rank"]}
             model_parameters = filter(lambda p: p.requires_grad, model.parameters())
             model, optimizer, training_dataloader, lr_scheduler = deepspeed.initialize(
-                args=args,
+                args=SimpleNamespace(**ds_args),  # expects an obj
                 model=model,
                 model_parameters=model_parameters,
                 # optimizer=optimizer,
