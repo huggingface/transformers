@@ -302,8 +302,8 @@ class GenerationTesterMixin:
             output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - seq_length
         ) * num_beam_groups
 
-        # Logits
-        self._check_logits(num_sequences_in_output, output.logits, length=gen_len, config=config)
+        # scores
+        self._check_scores(num_sequences_in_output, output.scores, length=gen_len, config=config)
 
         # Attentions
         if config.is_encoder_decoder:
@@ -372,11 +372,11 @@ class GenerationTesterMixin:
                 num_beam_groups=num_beam_groups,
             )
 
-    def _check_logits(self, batch_size, logits, length, config):
+    def _check_scores(self, batch_size, scores, length, config):
         expected_shape = (batch_size, config.vocab_size)
-        self.assertIsInstance(logits, tuple)
-        self.assertEqual(len(logits), length)
-        self.assertListEqual([iter_logits.shape for iter_logits in logits], [expected_shape] * len(logits))
+        self.assertIsInstance(scores, tuple)
+        self.assertEqual(len(scores), length)
+        self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1

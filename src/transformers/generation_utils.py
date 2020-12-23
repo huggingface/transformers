@@ -50,7 +50,7 @@ class GreedySearchDecoderOnlyOutput(ModelOutput):
         sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
-        logits (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+        scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Tuple of :obj:`torch.FloatTensor` of length :obj:`max_length` or shorter if all batches finished early,
             with each tensor of shape :obj:`(batch_size, config.vocab_size)`).
         attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
@@ -62,7 +62,7 @@ class GreedySearchDecoderOnlyOutput(ModelOutput):
     """
 
     sequences: torch.LongTensor = None
-    logits: Optional[Tuple[torch.FloatTensor]] = None
+    scores: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
@@ -77,7 +77,7 @@ class GreedySearchEncoderDecoderOutput(ModelOutput):
         sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
-        logits (:obj:`torch.FloatTensor` of shape :ob:`(batch_size, sequence_length, config.vocab_size)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+        scores (:obj:`torch.FloatTensor` of shape :ob:`(batch_size, sequence_length, config.vocab_size)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Classification scores for each token of the generated sequences. :obj:`(max_length,)`-shaped tuple of
             :obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`.
         encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
@@ -95,7 +95,7 @@ class GreedySearchEncoderDecoderOutput(ModelOutput):
     """
 
     sequences: torch.LongTensor = None
-    logits: Optional[Tuple[torch.FloatTensor]] = None
+    scores: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
@@ -109,22 +109,22 @@ class SampleDecoderOnlyOutput(ModelOutput):
 
 
     Args:
-        sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size * num_return_sequence, sequence_length)`):
+        sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
-        logits (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+        scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Tuple of :obj:`torch.FloatTensor` of length :obj:`max_length` or shorter if all batches finished early,
-            with each tensor of shape :obj:`(batch_size, config.vocab_size)`).
+            with each tensor of shape :obj:`(num_return_sequences * batch_size, config.vocab_size)`).
         attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
+            :obj:`torch.FloatTensor` of shape :obj:`(num_return_sequences * batch_size, num_heads, generated_length, sequence_length)`.
         hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size, generated_length, hidden_size)`.
+            :obj:`torch.FloatTensor` of shape :obj:`(num_return_sequences * batch_size, generated_length, hidden_size)`.
     """
 
     sequences: torch.LongTensor = None
-    logits: Optional[Tuple[torch.FloatTensor]] = None
+    scores: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
@@ -139,7 +139,7 @@ class SampleEncoderDecoderOutput(ModelOutput):
         sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
-        logits (:obj:`torch.FloatTensor` of shape :ob:`(batch_size * num_return_sequence, sequence_length, config.vocab_size)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+        scores (:obj:`torch.FloatTensor` of shape :ob:`(batch_size * num_return_sequence, sequence_length, config.vocab_size)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Classification scores for each token of the generated sequences. :obj:`(max_length,)`-shaped tuple of
             :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequence, config.num_labels)`.
         encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
@@ -147,17 +147,17 @@ class SampleEncoderDecoderOutput(ModelOutput):
             num_return_sequence, num_heads, sequence_length, sequence_length)`.
         encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+            of shape :obj:`(batch_size * num_return_sequences, sequence_length, hidden_size)`.
         decoder_attentions (:obj:`tupletuple((torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequences, num_heads, generated_length, sequence_length)`.
         decoder_hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size, generated_length, hidden_size)`.
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequences, generated_length, hidden_size)`.
     """
 
     sequences: torch.LongTensor = None
-    logits: Optional[Tuple[torch.FloatTensor]] = None
+    scores: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
@@ -171,22 +171,22 @@ class BeamSearchDecoderOnlyOutput(ModelOutput):
 
 
     Args:
-        sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size * num_beams, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
-        logits (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+        scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Tuple of :obj:`torch.FloatTensor` of length :obj:`max_length` or shorter if all batches finished early,
-            with each tensor of shape :obj:`(batch_size, config.vocab_size)`).
+            with each tensor of shape :obj:`(batch_size * num_beams, config.vocab_size)`).
         attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams, num_heads, generated_length, sequence_length)`.
         hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size, generated_length, hidden_size)`.
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams, generated_length, hidden_size)`.
     """
 
     sequences: torch.LongTensor = None
-    logits: Optional[Tuple[torch.FloatTensor]] = None
+    scores: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
@@ -198,28 +198,28 @@ class BeamSearchEncoderDecoderOutput(ModelOutput):
 
 
     Args:
-        sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
+        sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size * num_beams, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
-        logits (:obj:`torch.FloatTensor` of shape :ob:`(batch_size * num_return_sequence, sequence_length, config.vocab_size)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+        scores (:obj:`tuple(torch.FloatTensor)` of shape :ob:`(batch_size * num_beams, sequence_length, config.vocab_size)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Classification scores for each token of the generated sequences. :obj:`(max_length,)`-shaped tuple of
             :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequence, config.num_labels)`.
         encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer of the decoder) of shape :obj:`(batch_size *
-            num_return_sequence, num_heads, sequence_length, sequence_length)`.
+            num_beams, num_heads, sequence_length, sequence_length)`.
         encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
-        decoder_attentions (:obj:`tupletuple((torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            of shape :obj:`(batch_size * num_beams, sequence_length, hidden_size)`.
+        decoder_attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams, num_heads, generated_length, sequence_length)`.
         decoder_hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size, generated_length, hidden_size)`.
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams, generated_length, hidden_size)`.
     """
 
     sequences: torch.LongTensor = None
-    logits: Optional[Tuple[torch.FloatTensor]] = None
+    scores: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
@@ -609,7 +609,7 @@ class GenerationMixin:
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
                 Whether to return hidden states in output
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
-                Whether to return the logits in output
+                Whether to return the scores in output
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether to return a dict if the generation method supports it
 
@@ -957,7 +957,7 @@ class GenerationMixin:
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
                 Whether to return hidden states in output
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
-                Whether to return the logits in output
+                Whether to return the scores in output
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether the output should be a dict (:obj:`GreedySearchOutput`) or just the generated sequence
                 (:obj:`torch.LongTensor`).
@@ -1014,7 +1014,7 @@ class GenerationMixin:
         )
 
         # init attention / hidden states / scores tuples
-        logits = () if (return_dict_in_generate and output_scores) else None
+        scores = () if (return_dict_in_generate and output_scores) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
@@ -1043,10 +1043,10 @@ class GenerationMixin:
             )
             next_token_logits = outputs.logits[:, -1, :]
 
-            # Store logits, attentions and hidden_states when required
+            # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_scores:
-                    logits += (next_token_logits,)
+                    scores += (next_token_logits,)
                 if output_attentions:
                     decoder_attentions += (
                         (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
@@ -1060,10 +1060,10 @@ class GenerationMixin:
                     )
 
             # pre-process distribution
-            scores = logits_processor(input_ids, next_token_logits)
+            next_tokens_scores = logits_processor(input_ids, next_token_logits)
 
             # argmax
-            next_tokens = torch.argmax(scores, dim=-1)
+            next_tokens = torch.argmax(next_tokens_scores, dim=-1)
 
             # add code that transfomers next_tokens to tokens_to_add
             if eos_token_id is not None:
@@ -1095,7 +1095,7 @@ class GenerationMixin:
             if self.config.is_encoder_decoder:
                 return GreedySearchEncoderDecoderOutput(
                     sequences=input_ids,
-                    logits=logits,
+                    scores=scores,
                     encoder_attentions=encoder_attentions,
                     encoder_hidden_states=encoder_hidden_states,
                     decoder_attentions=decoder_attentions,
@@ -1104,7 +1104,7 @@ class GenerationMixin:
             else:
                 return GreedySearchDecoderOnlyOutput(
                     sequences=input_ids,
-                    logits=logits,
+                    scores=scores,
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
                 )
@@ -1153,7 +1153,7 @@ class GenerationMixin:
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
                 Whether to return hidden states in output
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
-                Whether to return the logits in output
+                Whether to return the scores in output
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether the output should be a dict (:obj:`SampleOutput`) or just the generated sequence
                 (:obj:`torch.LongTensor`).
@@ -1219,7 +1219,7 @@ class GenerationMixin:
         )
 
         # init attention / hidden states / scores tuples
-        logits = () if (return_dict_in_generate and output_scores) else None
+        scores = () if (return_dict_in_generate and output_scores) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
@@ -1249,10 +1249,14 @@ class GenerationMixin:
             )
             next_token_logits = outputs.logits[:, -1, :]
 
-            # Store logits, attentions and hidden_states when required
+            # pre-process distribution
+            next_token_scores = logits_processor(input_ids, next_token_logits)
+            next_token_scores = logits_warper(input_ids, next_token_scores)
+
+            # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_scores:
-                    logits += (next_token_logits,)
+                    scores += (next_token_scores,)
                 if output_attentions:
                     decoder_attentions += (
                         (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
@@ -1265,12 +1269,8 @@ class GenerationMixin:
                         else (outputs.hidden_states,)
                     )
 
-            # pre-process distribution
-            scores = logits_processor(input_ids, next_token_logits)
-            scores = logits_warper(input_ids, scores)
-
             # sample
-            probs = F.softmax(scores, dim=-1)
+            probs = F.softmax(next_token_scores, dim=-1)
             next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
 
             # add code that transfomers next_tokens to tokens_to_add
@@ -1301,7 +1301,7 @@ class GenerationMixin:
             if self.config.is_encoder_decoder:
                 return SampleEncoderDecoderOutput(
                     sequences=input_ids,
-                    logits=logits,
+                    scores=scores,
                     encoder_attentions=encoder_attentions,
                     encoder_hidden_states=encoder_hidden_states,
                     decoder_attentions=decoder_attentions,
@@ -1310,7 +1310,7 @@ class GenerationMixin:
             else:
                 return SampleDecoderOnlyOutput(
                     sequences=input_ids,
-                    logits=logits,
+                    scores=scores,
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
                 )
@@ -1359,7 +1359,7 @@ class GenerationMixin:
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
                 Whether to return hidden states in output
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
-                Whether to return the logits in output
+                Whether to return the scores in output
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether the output should be a dict (:obj:`SampleOutput`) or just the generated sequence
                 (:obj:`torch.LongTensor`).
@@ -1436,7 +1436,7 @@ class GenerationMixin:
         )
 
         # init attention / hidden states / scores tuples
-        logits = () if (return_dict_in_generate and output_scores) else None
+        scores = () if (return_dict_in_generate and output_scores) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
@@ -1476,10 +1476,15 @@ class GenerationMixin:
                 next_token_logits, cur_len=cur_len, max_length=max_length
             )
 
-            # Store logits, attentions and hidden_states when required
+            next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
+
+            next_token_scores = logits_processor(input_ids, next_token_scores)
+            next_token_scores = next_token_scores + beam_scores[:, None].expand_as(next_token_scores)
+
+            # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_scores:
-                    logits += (next_token_logits,)
+                    scores += (next_token_scores,)
                 if output_attentions:
                     decoder_attentions += (
                         (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
@@ -1492,10 +1497,6 @@ class GenerationMixin:
                         else (outputs.hidden_states,)
                     )
 
-            next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
-
-            next_token_scores = logits_processor(input_ids, next_token_scores)
-            next_token_scores = next_token_scores + beam_scores[:, None].expand_as(next_token_scores)
             # reshape for beam search
             vocab_size = next_token_scores.shape[-1]
             next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
@@ -1540,7 +1541,7 @@ class GenerationMixin:
             if self.config.is_encoder_decoder:
                 return BeamSearchEncoderDecoderOutput(
                     sequences=decoded,
-                    logits=logits,
+                    scores=scores,
                     encoder_attentions=encoder_attentions,
                     encoder_hidden_states=encoder_hidden_states,
                     decoder_attentions=decoder_attentions,
@@ -1549,7 +1550,7 @@ class GenerationMixin:
             else:
                 return BeamSearchDecoderOnlyOutput(
                     sequences=decoded,
-                    logits=logits,
+                    scores=scores,
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
                 )
@@ -1603,7 +1604,7 @@ class GenerationMixin:
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
                 Whether to return hidden states in output
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
-                Whether to return the logits in output
+                Whether to return the scores in output
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether the output should be a dict (:obj:`SampleOutput`) or just the generated sequence
                 (:obj:`torch.LongTensor`).
@@ -1688,7 +1689,7 @@ class GenerationMixin:
         )
 
         # init attention / hidden states / scores tuples
-        logits = () if (return_dict_in_generate and output_scores) else None
+        scores = () if (return_dict_in_generate and output_scores) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
@@ -1722,10 +1723,17 @@ class GenerationMixin:
             next_token_logits = self.adjust_logits_during_generation(
                 next_token_logits, cur_len=cur_len, max_length=max_length
             )
-            # Store logits, attentions and hidden_states when required
+
+            next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
+
+            next_token_scores = logits_processor(input_ids, next_token_scores)
+            next_token_scores = next_token_scores + beam_scores[:, None].expand_as(next_token_scores)
+            next_token_scores = logits_warper(input_ids, next_token_scores)
+
+            # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_scores:
-                    logits += (next_token_logits,)
+                    scores += (next_token_scores,)
                 if output_attentions:
                     decoder_attentions += (
                         (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
@@ -1737,12 +1745,6 @@ class GenerationMixin:
                         if self.config.is_encoder_decoder
                         else (outputs.hidden_states,)
                     )
-
-            next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
-
-            next_token_scores = logits_processor(input_ids, next_token_scores)
-            next_token_scores = next_token_scores + beam_scores[:, None].expand_as(next_token_scores)
-            next_token_scores = logits_warper(input_ids, next_token_scores)
 
             # reshape for beam search
             vocab_size = next_token_scores.shape[-1]
@@ -1791,7 +1793,7 @@ class GenerationMixin:
             if self.config.is_encoder_decoder:
                 return BeamSearchEncoderDecoderOutput(
                     sequences=decoded,
-                    logits=logits,
+                    scores=scores,
                     encoder_attentions=encoder_attentions,
                     encoder_hidden_states=encoder_hidden_states,
                     decoder_attentions=decoder_attentions,
@@ -1800,7 +1802,7 @@ class GenerationMixin:
             else:
                 return BeamSearchDecoderOnlyOutput(
                     sequences=decoded,
-                    logits=logits,
+                    scores=scores,
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
                 )
@@ -1849,7 +1851,7 @@ class GenerationMixin:
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
                 Whether to return hidden states in output
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
-                Whether to return the logits in output
+                Whether to return the scores in output
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether the output should be a dict (:obj:`SampleOutput`) or just the generated sequence
                 (:obj:`torch.LongTensor`).
@@ -1929,7 +1931,7 @@ class GenerationMixin:
         )
 
         # init attention / hidden states / scores tuples
-        logits = () if (return_dict_in_generate and output_scores) else None
+        scores = () if (return_dict_in_generate and output_scores) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
@@ -1994,21 +1996,6 @@ class GenerationMixin:
                 next_token_logits = self.adjust_logits_during_generation(
                     next_token_logits, cur_len=cur_len, max_length=max_length
                 )
-                # Store logits, attentions and hidden_states when required
-                if return_dict_in_generate:
-                    if output_scores:
-                        logits += (next_token_logits,)
-                    if output_attentions:
-                        decoder_attentions += (
-                            (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
-                        )
-
-                    if output_hidden_states:
-                        decoder_hidden_states += (
-                            (outputs.decoder_hidden_states,)
-                            if self.config.is_encoder_decoder
-                            else (outputs.hidden_states,)
-                        )
 
                 next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * group_size, vocab_size)
                 vocab_size = next_token_scores.shape[-1]
@@ -2026,6 +2013,22 @@ class GenerationMixin:
                 next_token_scores, next_tokens = torch.topk(
                     next_token_scores, 2 * group_size, dim=1, largest=True, sorted=True
                 )
+
+                # Store scores, attentions and hidden_states when required
+                if return_dict_in_generate:
+                    if output_scores:
+                        scores += (next_token_scores,)
+                    if output_attentions:
+                        decoder_attentions += (
+                            (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
+                        )
+
+                    if output_hidden_states:
+                        decoder_hidden_states += (
+                            (outputs.decoder_hidden_states,)
+                            if self.config.is_encoder_decoder
+                            else (outputs.hidden_states,)
+                        )
 
                 next_indices = next_tokens // vocab_size
                 next_tokens = next_tokens % vocab_size
@@ -2072,7 +2075,7 @@ class GenerationMixin:
             if self.config.is_encoder_decoder:
                 return BeamSearchEncoderDecoderOutput(
                     sequences=decoded,
-                    logits=logits,
+                    scores=scores,
                     encoder_attentions=encoder_attentions,
                     encoder_hidden_states=encoder_hidden_states,
                     decoder_attentions=decoder_attentions,
@@ -2081,7 +2084,7 @@ class GenerationMixin:
             else:
                 return BeamSearchDecoderOnlyOutput(
                     sequences=decoded,
-                    logits=logits,
+                    scores=scores,
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
                 )
