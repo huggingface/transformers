@@ -53,10 +53,7 @@ class DummyTok:
         return torch.LongTensor(list(input_.encode("utf-8")))
 
     def decode(self, sequence, **kwargs):
-        try:
-            return bytes(sequence).decode("utf-8")
-        except Exception:
-            return "D" * len(sequence)
+        return "D" * len(sequence)
 
 
 class SimpleSummarizationPipelineTests(unittest.TestCase):
@@ -84,7 +81,8 @@ class SimpleSummarizationPipelineTests(unittest.TestCase):
             _ = nlp("This is a test")
 
         output = nlp("This is a test", truncation=TruncationStrategy.ONLY_FIRST)
-        self.assertEquals(output, [{"summary_text": "\0\0\0\0"}])
+
+        self.assertEqual(output, [{"summary_text": "DDDD"}])
 
 
 class SummarizationPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
