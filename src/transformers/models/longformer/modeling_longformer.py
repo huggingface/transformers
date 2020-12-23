@@ -424,7 +424,6 @@ def _compute_global_attention_mask(input_ids, sep_token_id, before_sep_token=Tru
     return attention_mask
 
 
-# Copied from transformers.models.roberta.modeling_roberta.create_position_ids_from_input_ids
 def create_position_ids_from_input_ids(input_ids, padding_idx):
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols

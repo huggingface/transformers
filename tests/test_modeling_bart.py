@@ -150,7 +150,7 @@ class BartModelTester:
         input_ids = inputs_dict["input_ids"]
 
         # first forward pass
-        outputs = model(input_ids, use_cache=True)
+        outputs = model(input_ids, attention_mask=inputs_dict["attention_mask"], use_cache=True)
 
         output, past_key_values = outputs.to_tuple()
 
