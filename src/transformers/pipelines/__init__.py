@@ -29,22 +29,22 @@ from uuid import UUID
 
 import numpy as np
 
-from .configuration_utils import PretrainedConfig
-from .data import SquadExample, SquadFeatures, squad_convert_examples_to_features
-from .file_utils import add_end_docstrings, is_tf_available, is_torch_available, requires_pandas
-from .modelcard import ModelCard
-from .models.auto.configuration_auto import AutoConfig
-from .models.auto.tokenization_auto import AutoTokenizer
-from .models.bert.tokenization_bert import BasicTokenizer
-from .tokenization_utils import PreTrainedTokenizer
-from .tokenization_utils_base import PaddingStrategy
-from .utils import logging
+from transformers.configuration_utils import PretrainedConfig
+from transformers.data import SquadExample, SquadFeatures, squad_convert_examples_to_features
+from transformers.file_utils import add_end_docstrings, is_tf_available, is_torch_available, requires_pandas
+from transformers.modelcard import ModelCard
+from transformers.models.auto.configuration_auto import AutoConfig
+from transformers.models.auto.tokenization_auto import AutoTokenizer
+from transformers.models.bert.tokenization_bert import BasicTokenizer
+from transformers.tokenization_utils import PreTrainedTokenizer
+from transformers.tokenization_utils_base import PaddingStrategy
+from transformers.utils import logging
 
 
 if is_tf_available():
     import tensorflow as tf
 
-    from .models.auto.modeling_tf_auto import (
+    from transformers.models.auto.modeling_tf_auto import (
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -62,7 +62,7 @@ if is_tf_available():
 if is_torch_available():
     import torch
 
-    from .models.auto.modeling_auto import (
+    from transformers.models.auto.modeling_auto import (
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
@@ -80,8 +80,8 @@ if is_torch_available():
     )
 
 if TYPE_CHECKING:
-    from .modeling_tf_utils import TFPreTrainedModel
-    from .modeling_utils import PreTrainedModel
+    from transformers.modeling_tf_utils import TFPreTrainedModel
+    from transformers.modeling_utils import PreTrainedModel
 
 
 logger = logging.get_logger(__name__)
