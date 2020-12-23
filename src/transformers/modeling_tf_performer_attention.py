@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Optional
 import logging
 import math
 import random
@@ -6,159 +6,93 @@ import tensorflow as tf
 
 
 from .configuration_performer_attention import PerformerAttentionConfig
-from .modeling_utils import (
-    find_pruneable_heads_and_indices,
-    prune_linear_layer
-)
 
 KERNEL_CALLABLES = {
-    'cosh': lambda x, h: tf.concat((tf.exp(h + x), tf.exp(h - x)), dim=-1),
+    'cosh': lambda x, h: tf.concat((tf.exp(h + x), tf.exp(h - x)), axis=-1),
     'exp': lambda x, h: tf.exp(h + x),  # Default
     'elu': lambda x: tf.nn.elu(x) + 1,
     'relu': tf.nn.relu
 }
 
-SHORT_SEQUENCE_BEHAVIOR_CALLABLES = {
-    'use_softmax_eval_only': lambda L, M, training: False if training else L < 2.0 * M,
-    'use_softmax_eval_and_train': lambda L, M, training: L < 2.0 * M, 
-    'never_use_softmax': lambda L, M, training: False
-}
-
 
 class TFPerformerAttention(tf.keras.layers.Layer):
-    def __init__(self, config: Optional[Union[dict, PerformerAttentionConfig]] = None, **kwargs):
+    def __init__(self, config: Optional[PerformerAttentionConfig] = None, **kwargs):
         super().__init__()
-        
-        if config is not None:
-            # config can either be a dictionary or a PerformerAttentionConfig object
-            if not isinstance(config, dict):
-                config = config.__dict__
-            
-            # Just copy over all the parameters
-            self.__dict__.update(config)
-        else:
-            # Make sure we have all the default values filled in
-            config = PerformerAttentionConfig(**kwargs)
-            kwargs = config.__dict__
-        
+
+        config = config or PerformerAttentionConfig()
+
         # kwargs take precedence over the default values that might be stored in the config object
-        self.__dict__.update(kwargs)
-        
-        if self.num_heads is None or self.d_model is None:
-            raise ValueError("PerformerAttention: num_heads and d_model must be non-None")
+        for k, v in kwargs.items():
+            assert hasattr(config, k), "'{k}' is an invalid config parameter"
+            setattr(config, k, v)
+
+        self.__dict__.update(config.__dict__)
+
+        assert self.num_heads and self.d_model, "Num_heads and d_model must be non-None"
+        assert self.d_model % self.num_heads == 0
         
         self.dropout = tf.keras.layers.Dropout(rate=self.attention_dropout)
         self.calls_since_last_redraw = 0
+
         self.random_features = None
-        
-        behavior = self.short_sequence_behavior
-        if not behavior:
-            behavior = 'never_use_softmax' if self.kernel_type == 'relu' else 'use_softmax_eval_only'
-            self.should_fallback_to_softmax = SHORT_SEQUENCE_BEHAVIOR_CALLABLES[behavior]
-        
-        elif self.kernel_type == 'relu' and behavior != 'never_use_softmax':
-            raise ValueError(f"PerformerAttention: short_sequence_behavior = {behavior} cannot be combined with the relu "
-                             "kernel type")
-        
-        elif isinstance(behavior, str):
-            self.should_fallback_to_softmax = SHORT_SEQUENCE_BEHAVIOR_CALLABLES[behavior]
-        elif callable(behavior):
-            self.should_fallback_to_softmax = behavior
-        else:
-            raise ValueError("PerformerAttention: short_sequence_behavior must be either str or Callable")
-        
+
+        # Recurrent state
+        if self.use_recurrent_decoding:
+            self.s = None
+            self.z = None
+
+        assert self.kernel_type in KERNEL_CALLABLES, "Invalid kernel type"
         self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
-        assert self.d_model % self.num_heads == 0
-        
         if self.use_qkv_linear_layers:
-            self.q_lin = tf.keras.layers.Dense(units=self.d_model)
-            self.k_lin = tf.keras.layers.Dense(units=self.d_model)
-            self.v_lin = tf.keras.layers.Dense(units=self.d_model)
+            self.qkv_linear_layers = [tf.keras.layers.Dense(units=self.d_model) for _ in range(3)]
         
         self.out_lin = tf.keras.layers.Dense(units=self.d_model)
 
-        self.pruned_heads = set()
-
     def prune_heads(self, heads):
-        attention_head_size = self.d_model // self.num_heads
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(heads, self.num_heads, attention_head_size, self.pruned_heads)
-        # Prune linear layers
-        if self.use_qkv_linear_layers:
-            self.q_lin = prune_linear_layer(self.q_lin, index)
-            self.k_lin = prune_linear_layer(self.k_lin, index)
-            self.v_lin = prune_linear_layer(self.v_lin, index)
-        
-        self.out_lin = prune_linear_layer(self.out_lin, index, dim=1)
-        # Update hyper params
-        self.num_heads = self.num_heads - len(heads)
-        self.d_model = attention_head_size * self.num_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
+        raise NotImplementedError
     
     def redraw_features_now(self):
-        self._generate_feature_matrix()
+        batch = self.random_features.shape[0]
+        self._generate_feature_matrix(batch)
         
         if self.training and self.redraw_verbose:
-            logging.info("PerformerAttention: Just redrew random features.")
+            logging.getLogger().info("PerformerAttention: Just redrew random features.")
         
         self.calls_since_last_redraw = 0
 
-    def call(self, query, key, value, mask=None, head_mask=None, output_attentions=False):
+    def call(self, q, k, v, mask=None, head_mask=None, output_attentions=False):
         """
         Parameters:
-            query: torch.tensor(bs, seq_length, dim)
-            key: torch.tensor(bs, seq_length, dim)
-            value: torch.tensor(bs, seq_length, dim)
+            q: torch.tensor(bs, seq_length, dim)
+            k: torch.tensor(bs, seq_length, dim)
+            v: torch.tensor(bs, seq_length, dim)
             mask: torch.tensor(bs, seq_length)
 
         Returns:
             weights: tf.tensor(bs, num_heads, seq_length, seq_length) Attention weights context: tf.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
-        bs, q_length, dim = query.size()
-        k_length = key.size(1)
-        # assert dim == self.d_model, 'Dimensions do not match: %s input vs %s configured' % (dim, self.d_model)
-        # assert key.size() == value.size()
-
+        bs, q_length, dim = q.shape
         dim_per_head = self.d_model // self.num_heads
-        mask_reshp = (bs, 1, 1, k_length)
 
         def shape(x):
             """ separate heads """
             new_shape = tf.concat((x.shape[:-1], tf.constant([self.num_heads, dim_per_head])), axis=0)
             return tf.transpose(tf.reshape(x, new_shape), perm=[0, 2, 1, 3])
-        
+
         if self.use_qkv_linear_layers:
-            q = self.q_lin(query)
-            k = self.k_lin(key)
-            v = self.v_lin(value)
-        else:
-            q, k, v = query, key, value
+            q, k, v = (linear(x) for linear, x in zip(self.qkv_linear_layers, (q, k, v)))
         
         # (bs, num_heads, q_length, dim_per_head)
         q, k, v = (shape(x) for x in (q, k, v))
-        
-        # If the sequence length is short enough that FAVOR+ would use considerably more time and/or memory than just
-        # using softmax attention, use softmax. This works because FAVOR+ is an unbiased estimator of softmax attention.
-        m = self.num_random_features or round(dim_per_head * math.log(dim_per_head))
-        if self.should_fallback_to_softmax(q_length, m, self.training):
-            scores = q @ tf.linalg.matrix_transpose(k) / (dim ** 0.5)
-            
-            if mask is not None:
-                mask = tf.reshape((mask == 0), mask_reshp)  # .expand_as(scores)  # (bs, num_heads, q_length, k_length)
-                scores -= 1e9 * tf.cast(mask, q.dtype)  # (bs, num_heads, q_length, k_length)
-            
-            attn_map = tf.nn.softmax(scores, dim=-1)
-            attn_map = self.dropout(attn_map)  # (bs, num_heads, q_length, k_length)
-            return self._finalize_attention_output(attn_map @ v, head_mask, attn_map)
-        
+
         # When we're using FAVOR+ we can't output the attention matrix
-        if output_attentions:
-            raise ValueError("TFPerformerAttention: Can't output attention maps when using FAVOR+ linear attention.")
+        assert not output_attentions, "Can't output attention maps when using Performer attention."
+        if self.use_recurrent_decoding:
+            assert q_length == 1, "When use_recurrent_decoding == True, we only input and output one token at a time."
         
-        self._redraw_features_if_needed()
+        self._redraw_features_if_needed(bs)
         
         # Get the transformed values of Q and K
         q_prime, k_prime = self.get_projected_queries_and_keys(q, k)
@@ -166,24 +100,19 @@ class TFPerformerAttention(tf.keras.layers.Layer):
     
     # Turns Q into Q', K into K'
     def get_projected_queries_and_keys(self, q, k):
-        # Broadcast the feature matrix across the batch dimension
-        # new_shape = list(q.shape)
-        # new_shape[-2] = self.random_features.shape[-2]
-        W_t = tf.linalg.matrix_transpose(self.random_features)  # .expand(new_shape)
-        
         # Instead of dividing the product QK^T by sqrt(d), we divide Q and K by the 4th root of d.
         q = q / (self.d_model ** 0.25)
         k = k / (self.d_model ** 0.25)
         
-        projected_q = q @ W_t
-        projected_k = k @ W_t
+        projected_q = q @ self.random_features
+        projected_k = k @ self.random_features
         
         # Special logic for kernels that attempt to approximate softmax
         if self.kernel_type in ('cosh', 'exp'):
             # The h(x) function is defined in Lemma 1 in Choromanski et al. pg. 4 as exp(-||x||**2 / 2). For numerical
             # stability we leverage the fact that exp(x)*exp(y) = exp(x + y) here and delay computing the exp().
-            h_of_q = -tf.reduce_sum(q ** 2, dim=-1, keepdim=True) / 2
-            h_of_k = -tf.reduce_sum(k ** 2, dim=-1, keepdim=True) / 2
+            h_of_q = -tf.math.reduce_sum(q ** 2, axis=-1, keepdims=True) / 2
+            h_of_k = -tf.math.reduce_sum(k ** 2, axis=-1, keepdims=True) / 2
             
             # Compute the numerical stabilizer that we subtract from the input to exp(). For some reason the original
             # Jax implementation uses different types of stabilizers for queries vs. keys, and we follow that here.
@@ -206,45 +135,64 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         # Generalized attention (ReLU, ELU...)
         else:
             return tuple(self.kernel_fn(x) + self.kernel_epsilon for x in (projected_q, projected_k))
-    
-    def compute_attention_with_projected_queries_and_keys(self, q_prime, k_prime, v, mask = None, head_mask = None):
+
+    def compute_attention_with_projected_queries_and_keys(self, q_prime, k_prime, v, mask=None, head_mask=None):
         # Apply the padding mask to K'. Also applying it to Q' would be redundant.
         if mask is not None:
-            k_prime *= tf.expand_dims(tf.expand_dims(mask, 1), -1)#.expand_as(k_prime)
+            k_prime *= tf.expand_dims(tf.expand_dims(mask, 1), -1)
 
-        if self.causal:
-            output = _causal_numerator(q_prime, k_prime, v)
-        else:
-            k_prime_t = tf.linalg.matrix_transpose(k_prime)
-            output = q_prime @ (k_prime_t @ v)
-        
-        # Ensure that the output vectors are convex combinations of input vectors; that is,
-        # the implied attention scores sum to 1
+        k_prime_t = tf.linalg.matrix_transpose(k_prime)
+        output = self._numerator_for_projected_queries_and_keys(q_prime, k_prime_t, v)
+
         if self.normalize_output:
-            if self.causal:
-                d = _causal_denominator
-            else:
-                # Equivalent to multiplying K'^T by a ones vector
-                d = q_prime @ tf.expand_dims(tf.math.reduce_sum(k_prime), -1)
-            
-            # Avoid dividing by very small numbers
-            d += 2 * self.normalization_stabilizer * (tf.abs(d) <= self.normalization_stabilizer)
-            output /= d
-        
+            output /= self._denominator_for_projected_queries_and_keys(q_prime, k_prime_t)
+
         return self._finalize_attention_output(output, head_mask)
+
+    def _numerator_for_projected_queries_and_keys(self, q_prime, k_prime_t, v):
+        # Noncausal
+        if not self.causal:
+            return q_prime @ (k_prime_t @ v)
+
+        # Causal, during training
+        if not self.use_recurrent_decoding:
+            return _headwise_causal_numerator(q_prime, k_prime_t, v)
+
+        # Causal, at inference time
+        s_delta = k_prime_t @ v
+        self.s = s_delta if self.s is None else self.s + s_delta
+
+        return q_prime @ self.s
+
+    def _denominator_for_projected_queries_and_keys(self, q_prime, k_prime_t):
+        # Noncausal
+        if not self.causal:
+            denom = q_prime @ tf.math.reduce_sum(k_prime_t, axis=-1, keepdims=True)  # Sum over positions
+
+        # Causal, during training
+        elif not self.use_recurrent_decoding:
+            prefix_sums = tf.cumsum(k_prime_t, axis=-1)               # Cumsum over positions
+            denom = tf.einsum("bhlm,bhml->bhl", q_prime, prefix_sums)
+            denom = tf.expand_dims(denom, axis=-1)
+
+        # Causal, at inference time
+        else:
+            self.z = k_prime_t if self.z is None else self.z + k_prime_t    # Incrementally sum over positions
+            denom = q_prime @ self.z
+
+        # Avoid dividing by very small numbers
+        extreme_vals = tf.cast(tf.math.abs(denom) <= self.normalization_stabilizer, denom.dtype)
+        return denom + 2 * self.normalization_stabilizer * extreme_vals
     
     def _finalize_attention_output(self, context, head_mask=None, att_map_to_output=None):
-        def unshape(x):
-            """ group heads """
-            x = tf.transpose(context, perm=[0, 2, 1, 3])  # [...seq_len, num_heads, dim_per_head]
-            new_last_dim = tf.constant(x.shape[-2] * x.shape[-1])  # Multiply num_heads * dim_per_head
-            return tf.reshape(x, tf.concat((x.shape[:-2], new_last_dim), axis=0))
-        
         # Mask heads if we want to
         if head_mask is not None:
             context = context * head_mask
-            
-        context = unshape(context)  # (bs, q_length, dim)
+
+        x = tf.transpose(context, perm=[0, 2, 1, 3])  # [...seq_len, num_heads, dim_per_head]
+        new_last_dim = x.shape[-2] * x.shape[-1]
+        context = tf.reshape(x, list(x.shape[:-2]) + [new_last_dim])  # (bs, q_length, dim)
+
         context = self.out_lin(context)  # (bs, q_length, dim)
 
         if att_map_to_output:
@@ -252,12 +200,10 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         else:
             return context,
 
-    def _generate_feature_matrix(self, batch):
+    def _generate_feature_matrix(self, batch_size):
         dim_per_head = self.d_model // self.num_heads
         num_rows = self.num_random_features or round(dim_per_head * math.log(dim_per_head))
-
-        if not self.use_thick_features:
-            batch = 1
+        batch = batch_size if self.use_thick_features else 1
         
         if not self.use_orthogonal_features:
             return tf.random.normal((batch, num_rows, dim_per_head))
@@ -267,7 +213,7 @@ class TFPerformerAttention(tf.keras.layers.Layer):
                 unstructured_block = tf.random.normal((batch, size, size))
                 orthog, r = tf.linalg.qr(unstructured_block)
 
-            return tf.transpose(orthog)
+            return tf.linalg.matrix_transpose(orthog)
 
         num_full_blocks = num_rows // dim_per_head
         block_list = [get_square_block(dim_per_head) for _ in range(num_full_blocks)]
@@ -277,23 +223,25 @@ class TFPerformerAttention(tf.keras.layers.Layer):
             q = get_square_block(dim_per_head)
             block_list.append(q[:remaining_rows])
         
-        final_matrix = tf.concat(block_list, axis=1)
+        final_tensor = tf.concat(block_list, axis=1)
         
         # This option yields SMREG
         if self.regularize_feature_norms:
-            final_matrix *= dim_per_head ** 0.5
+            final_tensor *= dim_per_head ** 0.5
         else:
             # Hack to make the matrix columns have the norm we would expect them to have if they were sampled straight
             # from a Gaussian, instead of being all norm 1 since they went through QR decomposition
-            multiplier = tf.random.normal((batch, num_rows, dim_per_head)).norm(dim = 1)
-            final_matrix = tf.linalg.diag(multiplier) @ final_matrix
+            multiplier = tf.norm(tf.random.normal((batch, num_rows, dim_per_head)), axis = 1)
+            final_tensor = tf.linalg.diag(multiplier) @ final_tensor
 
-        self.random_features = final_matrix
+        final_tensor = tf.expand_dims(final_tensor, axis=1)     # Add an attention head dimension
+        final_tensor = tf.linalg.matrix_transpose(final_tensor)
+        self.random_features = final_tensor
     
-    def _redraw_features_if_needed(self):
+    def _redraw_features_if_needed(self, batch):
         # We haven't created the projection matrix yet, let's create it
         if self.random_features is None:
-            self._generate_feature_matrix()
+            self._generate_feature_matrix(batch)
         
         elif self.feature_redraw_interval is not None:
             if self.redraw_stochastically:
@@ -310,112 +258,17 @@ class TFPerformerAttention(tf.keras.layers.Layer):
             else:
                 self.calls_since_last_redraw += 1
 
-def _noncausal_numerator(q_prime, k_prime, v):
-    """Computes not-normalized FAVOR noncausal attention AV.
-    Args:
-      q_prime: query_prime tensor of the shape [L,B,H,M].
-      k_prime: key_prime tensor of the shape [L,B,H,M].
-      v: value tensor of the shape [L,B,H,D].
-    Returns:
-      Not-normalized FAVOR noncausal attention AV.
-    """
-    kvs = tf.einsum("lbhm,lbhd->bhmd", k_prime, v)
-    return tf.einsum("lbhm,bhmd->lbhd", q_prime, kvs)
 
+def _headwise_causal_numerator(q_prime, k_prime_t, v):
+    results = []
 
-def _noncausal_denominator(q_prime, k_prime):
-    """Computes FAVOR normalizer in noncausal attention.
-    Args:
-      q_prime: query_prime tensor of the shape [L,B,H,M].
-      k_prime: key_prime tensor of the shape [L,B,H,M].
-    Returns:
-      FAVOR normalizer in noncausal attention.
-    """
-    all_ones = tf.ones([k_prime.shape[0]])
-    ks_sum = tf.einsum("lbhm,l->bhm", k_prime, all_ones)
-    return tf.einsum("lbhm,bhm->lbh", q_prime, ks_sum)
+    # Iterate over the attention heads to avoid allocating a very large tensor
+    for head in range(q_prime.shape[1]):
+        # Outer products- a sorta biggish tensor
+        outer_prods = tf.einsum('bml,bld->blmd', k_prime_t[:, head], v[:, head])
+        prefix_sums = tf.cumsum(outer_prods, axis=1)
 
-# Custom gradient functions
-@tf.custom_gradient
-def _causal_numerator(q_prime, k_prime, v):
-    """Computes not-normalized FAVOR causal attention using the prefix-sum method.
-    Args:
-      q_prime: query_prime tensor of the shape [L,B,H,M].
-      k_prime: key_prime tensor of the shape [L,B,H,M].
-      v: value tensor of the shape [L,B,H,D].
-    Returns:
-      Not-normalized FAVOR causal attention A_{masked}V.
-    """
-    result = []
-    sums = tf.zeros_like(tf.einsum("ijk,ijl->ijkl", k_prime[0], v[0]))
+        query_prods = tf.einsum('blmd,blm->bld', prefix_sums, q_prime[:, head])
+        results.append(tf.expand_dims(query_prods, axis=1))
 
-    for index in range(q_prime.shape[0]):
-        sums = sums + tf.einsum("ijk,ijl->ijkl", k_prime[index], v[index])
-        result.append(tf.einsum("ijkl,ijk->ijl", sums, q_prime[index])[None, Ellipsis])
-
-    result = tf.concat(result, axis=0)
-
-    # Function called later by TensorFlow to compute the gradient, if needed
-    def grad(res_grad):
-        grads = tf.zeros_like(tf.einsum("ijk,ijl->ijkl", k_prime[0], v[0]))
-        gr_sums = sums
-        q_grads = []
-        k_grads = []
-        v_grads = []
-
-        for i in range(q_prime.shape[0] - 1, -1, -1):
-            q_grads.append(
-                tf.einsum("ijkl,ijl->ijk", gr_sums, res_grad[i])[None, Ellipsis])
-            grads = grads + tf.einsum("ijk,ijl->ijkl", q_prime[i], res_grad[i])
-            k_grads.append(tf.einsum("ijkl,ijl->ijk", grads, v[i])[None, Ellipsis])
-            v_grads.append(tf.einsum("ijkl,ijk->ijl", grads, k_prime[i])[None, Ellipsis])
-            gr_sums = gr_sums - tf.einsum("ijk,ijl->ijkl", k_prime[i], v[i])
-
-        q_grads = tf.concat(q_grads[::-1], axis=0)
-        k_grads = tf.concat(k_grads[::-1], axis=0)
-        v_grads = tf.concat(v_grads[::-1], axis=0)
-        return q_grads, k_grads, v_grads
-
-    return result, grad
-
-@tf.custom_gradient
-def _causal_denominator(q_prime, k_prime):
-    """Computes FAVOR normalizer in causal attention using the prefix-sum method.
-    Args:
-      q_prime: query_prime tensor of the shape [L,B,H,M].
-      k_prime: key_prime tensor of the shape [L,B,H,M].
-    Returns:
-      FAVOR normalizer in causal attention.
-    """
-
-    result = []
-    sums = tf.zeros_like(k_prime[0])
-
-    for index in range(q_prime.shape[0]):
-        sums = sums + k_prime[index]
-        result.append(tf.reduce_sum(q_prime[index] * sums, axis=2)[None, Ellipsis])
-
-    result = tf.concat(result, axis=0)
-
-    # Function called later by TensorFlow to compute the gradient, if needed
-    def grad(res_grad):
-        k_grad = tf.zeros_like(k_prime[0])
-        gr_sums = sums
-
-        q_grads = []
-        k_grads = []
-
-        for i in range(q_prime.shape[0] - 1, -1, -1):
-
-            q_grads.append(
-                tf.einsum("ijk,ij->ijk", gr_sums, res_grad[i])[None, Ellipsis])
-            k_grad = k_grad + tf.einsum("ijk,ij->ijk", q_prime[i], res_grad[i])
-            k_grads.append(k_grad[None, Ellipsis])
-            gr_sums = gr_sums - k_prime[i]
-
-        q_grads = tf.concat(q_grads[::-1], axis=0)
-        k_grads = tf.concat(k_grads[::-1], axis=0)
-
-        return q_grads, k_grads
-
-    return result, grad
+    return tf.concat(results, axis=1)

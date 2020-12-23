@@ -1,5 +1,5 @@
 from torch import nn
-from typing import Optional, Union
+from typing import Optional
 import logging
 import math
 import random
@@ -19,12 +19,6 @@ KERNEL_CALLABLES = {
     'relu': F.relu
 }
 
-SHORT_SEQUENCE_BEHAVIOR_CALLABLES = {
-    'use_softmax_eval_only': lambda L, M, training: False if training else L < 2.0 * M,
-    'use_softmax_eval_and_train': lambda L, M, training: L < 2.0 * M,
-    'never_use_softmax': lambda L, M, training: False
-}
-
 
 class PerformerAttention(nn.Module):
     def __init__(self, config: Optional[PerformerAttentionConfig] = None, **kwargs):
@@ -34,128 +28,58 @@ class PerformerAttention(nn.Module):
 
         # kwargs take precedence over the default values that might be stored in the config object
         for k, v in kwargs.items():
-            if not hasattr(config, k):
-                raise AttributeError(f"PerformerAttention: '{k}' is an invalid config parameter")
-
+            assert hasattr(config, k), "'{k}' is an invalid config parameter"
             setattr(config, k, v)
 
         self.__dict__.update(config.__dict__)
 
-        if self.num_heads is None or self.d_model is None:
-            raise ValueError("PerformerAttention: num_heads and d_model must be non-None")
+        assert self.num_heads and self.d_model, "Num_heads and d_model must be non-None"
+        assert self.d_model % self.num_heads == 0, "Num_heads must divide d_model evenly"
 
         self.dropout = nn.Dropout(p=self.attention_dropout)
         self.calls_since_last_redraw = 0
+
         self.random_features = None
 
-        behavior = self.short_sequence_behavior
-        if not behavior:
-            behavior = 'never_use_softmax' if self.kernel_type == 'relu' else 'use_softmax_eval_only'
-            self.should_fallback_to_softmax = SHORT_SEQUENCE_BEHAVIOR_CALLABLES[behavior]
+        # Recurrent state, taken from 'Transformers are RNNs' Katharopoulos et al. 2020 paper
+        if self.use_recurrent_decoding:
+            self.s = None   # Numerator
+            self.z = None   # Denominator
 
-        elif self.kernel_type == 'relu' and behavior != 'never_use_softmax':
-            raise ValueError(
-                f"PerformerAttention: short_sequence_behavior = {behavior} cannot be combined with the relu "
-                "kernel type")
-
-        elif isinstance(behavior, str):
-            self.should_fallback_to_softmax = SHORT_SEQUENCE_BEHAVIOR_CALLABLES[behavior]
-        elif callable(behavior):
-            self.should_fallback_to_softmax = behavior
-        else:
-            raise ValueError("PerformerAttention: short_sequence_behavior must be either str or Callable")
-
+        assert self.kernel_type in KERNEL_CALLABLES, "Invalid kernel type"
         self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
-        assert self.d_model % self.num_heads == 0
-
         if self.use_qkv_linear_layers:
-            self.q_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
-            self.k_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
-            self.v_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
+            self.qkv_linear_layers = [nn.Linear(self.d_model, self.d_model) for _ in range(3)]
 
         self.out_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
 
         self.pruned_heads = set()
 
-    def prune_heads(self, heads):
-        attention_head_size = self.d_model // self.num_heads
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(heads, self.num_heads, attention_head_size, self.pruned_heads)
-        # Prune linear layers
-        if self.use_qkv_linear_layers:
-            self.q_lin = prune_linear_layer(self.q_lin, index)
-            self.k_lin = prune_linear_layer(self.k_lin, index)
-            self.v_lin = prune_linear_layer(self.v_lin, index)
-
-        self.out_lin = prune_linear_layer(self.out_lin, index, dim=1)
-        # Update hyper params
-        self.num_heads = self.num_heads - len(heads)
-        self.d_model = attention_head_size * self.num_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def redraw_features_now(self):
-        device = self.random_features.device
-        batch = self.random_features.shape[0]
-        self._generate_feature_matrix(batch, device)
-
-        if self.training and self.redraw_verbose:
-            logging.info("PerformerAttention: Just redrew random features.")
-
-        self.calls_since_last_redraw = 0
-
-    def forward(self, query, key, value, mask=None, head_mask=None, output_attentions=False):
+    def forward(self, q, k, v, mask=None, head_mask=None, output_attentions=False):
         """
         Parameters:
-            query: torch.tensor(bs, seq_length, dim)
-            key: torch.tensor(bs, seq_length, dim)
-            value: torch.tensor(bs, seq_length, dim)
+            q: torch.tensor(bs, seq_length, dim)
+            k: torch.tensor(bs, seq_length, dim)
+            v: torch.tensor(bs, seq_length, dim)
             mask: torch.tensor(bs, seq_length)
 
         Returns:
             weights: torch.tensor(bs, num_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
-        bs, q_length, dim = query.size()
-        k_length = key.size(1)
-        # assert dim == self.d_model, 'Dimensions do not match: %s input vs %s configured' % (dim, self.d_model)
-        # assert key.size() == value.size()
-
+        bs, q_length, dim = q.shape
         dim_per_head = self.d_model // self.num_heads
-        mask_reshp = (bs, 1, 1, k_length)
 
-        def shape(x):
-            """ separate heads """
-            return x.view(bs, -1, self.num_heads, dim_per_head).transpose(1, 2)
+        assert not output_attentions, "Can't output attention maps when using Performer attention."
+        if self.use_recurrent_decoding:
+            assert q_length == 1, "When use_recurrent_decoding == True, we only input and output one token at a time."
 
         if self.use_qkv_linear_layers:
-            q = self.q_lin(query)
-            k = self.k_lin(key)
-            v = self.v_lin(value)
-        else:
-            q, k, v = query, key, value
+            q, k, v = (linear(x) for linear, x in zip(self.qkv_linear_layers, (q, k, v)))
 
-        # (bs, num_heads, q_length, dim_per_head)
-        q, k, v = (shape(x) for x in (q, k, v))
-
-        # If the sequence length is short enough that FAVOR+ would use considerably more time and/or memory than just
-        # using softmax attention, use softmax. This works because FAVOR+ is an unbiased estimator of softmax attention.
-        m = self.num_random_features or round(dim_per_head * math.log(dim_per_head))
-        if self.should_fallback_to_softmax(q_length, m, self.training):
-            scores = q @ k.transpose(-2, -1) / (dim ** 0.5)
-
-            if mask is not None:
-                mask = (mask == 0).view(mask_reshp).expand_as(scores)  # (bs, num_heads, q_length, k_length)
-                scores.masked_fill_(mask, -float("inf"))  # (bs, num_heads, q_length, k_length)
-
-            attn_map = nn.Softmax(dim=-1)(scores)
-            attn_map = self.dropout(attn_map)  # (bs, num_heads, q_length, k_length)
-            return self._finalize_attention_output(attn_map @ v, head_mask, attn_map)
-
-        # When we're using FAVOR+ we can't output the attention matrix
-        if output_attentions:
-            raise ValueError("PerformerAttention: Can't output attention maps when using FAVOR+ linear attention.")
+        # Add the head dimension: (bs, num_heads, q_length, dim_per_head)
+        q, k, v = (x.view(bs, -1, self.num_heads, dim_per_head).transpose(1, 2) for x in (q, k, v))
 
         self._redraw_features_if_needed(bs, q.device)
 
@@ -209,36 +133,56 @@ class PerformerAttention(nn.Module):
         if mask is not None:
             k_prime *= mask.unsqueeze(1).unsqueeze(-1).expand_as(k_prime)
 
-        if self.causal:
-            output = _headwise_causal_numerator(q_prime, k_prime, v)
-        else:
-            k_prime_t = k_prime.transpose(-2, -1)
-            output = q_prime @ (k_prime_t @ v)
+        k_prime_t = k_prime.transpose(-2, -1)
+        output = self._numerator_for_projected_queries_and_keys(q_prime, k_prime_t, v)
 
-        # Ensure that the output vectors are convex combinations of input vectors; that is,
-        # the implied attention scores sum to 1
         if self.normalize_output:
-            if self.causal:
-                sums = k_prime.cumsum(dim=-2)
-                d = torch.einsum("bhlm,bhlm->bhl", q_prime, sums).unsqueeze(-1)
-            else:
-                # Equivalent to multiplying K'^T by a ones vector
-                d = q_prime @ k_prime.sum(dim=-2).unsqueeze(-1)
-
-            # Avoid dividing by very small numbers
-            d += 2 * self.normalization_stabilizer * (torch.abs(d) <= self.normalization_stabilizer)
-            output /= d
+            output /= self._denominator_for_projected_queries_and_keys(q_prime, k_prime_t)
 
         return self._finalize_attention_output(output, head_mask)
+
+    def _numerator_for_projected_queries_and_keys(self, q_prime, k_prime_t, v):
+        # Noncausal
+        if not self.causal:
+            return q_prime @ (k_prime_t @ v)
+
+        # Causal, during training
+        if not self.use_recurrent_decoding:
+            return _headwise_causal_numerator(q_prime, k_prime_t, v)
+
+        # Causal, at inference time- recurrent autoregressive decoding
+        s_delta = k_prime_t @ v
+        self.s = s_delta if self.s is None else self.s + s_delta
+
+        return q_prime @ self.s
+
+    def _denominator_for_projected_queries_and_keys(self, q_prime, k_prime_t):
+        # Noncausal
+        if not self.causal:
+            denom = q_prime @ k_prime_t.sum(dim=-1, keepdim=True)   # Sum over positions
+
+        # Causal, during training
+        elif not self.use_recurrent_decoding:
+            prefix_sums = k_prime_t.cumsum(dim=-1)                  # Cumsum over positions
+            denom = torch.einsum("bhlm,bhml->bhl", q_prime, prefix_sums)
+            denom.unsqueeze_(-1)
+
+        # Causal, at inference time- recurrent autoregressive decoding
+        else:
+            self.z = k_prime_t if self.z is None else self.z + k_prime_t    # Incrementally sum over positions
+            denom = q_prime @ self.z
+
+        # Avoid dividing by very small numbers
+        return denom + 2 * self.normalization_stabilizer * (torch.abs(denom) <= self.normalization_stabilizer)
 
     def _finalize_attention_output(self, context, head_mask=None, att_map_to_output=None):
         def unshape(x):
             """ group heads """
-            return x.transpose(1, 2).contiguous().view(x.shape[0], -1, x.shape[1] * x.shape[-1])
+            return x.transpose(1, 2).reshape(x.shape[0], -1, x.shape[1] * x.shape[-1])
 
         # Mask heads if we want to
         if head_mask is not None:
-            context = context * head_mask
+            context *= head_mask
 
         context = unshape(context)  # (bs, q_length, dim)
         context = self.out_lin(context)  # (bs, q_length, dim)
@@ -247,6 +191,20 @@ class PerformerAttention(nn.Module):
             return context, att_map_to_output
         else:
             return context,
+
+    def redraw_features_now(self):
+        device = self.random_features.device
+        batch = self.random_features.shape[0]
+        self._generate_feature_matrix(batch, device)
+
+        if self.training and self.redraw_verbose:
+            logging.getLogger().info("PerformerAttention: Just redrew random features.")
+
+        self.calls_since_last_redraw = 0
+
+    def reset_recurrent_state(self):
+        self.s = None
+        self.z = None
 
     def _generate_feature_matrix(self, batch_size, device):
         dim_per_head = self.d_model // self.num_heads
@@ -287,7 +245,7 @@ class PerformerAttention(nn.Module):
 
     def _redraw_features_if_needed(self, batch, device):
         # We haven't created the projection matrix yet, let's create it
-        if self.random_features is None:
+        if self.random_features is None or batch != self.random_features.shape[0]:
             self._generate_feature_matrix(batch, device)
 
         elif self.feature_redraw_interval is not None:
@@ -304,6 +262,23 @@ class PerformerAttention(nn.Module):
             # Keep track of how many forward passes we do before we redraw again
             else:
                 self.calls_since_last_redraw += 1
+
+    def prune_heads(self, heads):
+        if len(heads) == 0:
+            return
+
+        attention_head_size = self.d_model // self.num_heads
+        heads, index = find_pruneable_heads_and_indices(heads, self.num_heads, attention_head_size, self.pruned_heads)
+
+        # Prune linear layers
+        if self.use_qkv_linear_layers:
+            self.qkv_linear_layers = [prune_linear_layer(linear, index) for linear in self.qkv_linear_layers]
+
+        self.out_lin = prune_linear_layer(self.out_lin, index, dim=1)
+        # Update hyper params
+        self.num_heads = self.num_heads - len(heads)
+        self.d_model = attention_head_size * self.num_heads
+        self.pruned_heads = self.pruned_heads.union(heads)
 
 
 # Not currently used unless dim_per_head is odd
@@ -359,36 +334,16 @@ def _get_square_orthogonal_block_givens(batch, num_rows, device=None):
     return q.squeeze(-2)
 
 
-def _headwise_causal_numerator(q_prime, k_prime, v):
+def _headwise_causal_numerator(q_prime, k_prime_t, v):
     results = []
 
     # Iterate over the attention heads to avoid allocating a very large tensor
     for head in range(q_prime.shape[1]):
         # Outer products- a sorta biggish tensor
-        outer_prods = torch.einsum('blm,bld->blmd', k_prime[:, head], v[:, head])
+        outer_prods = torch.einsum('bml,bld->blmd', k_prime_t[:, head], v[:, head])
         prefix_sums = outer_prods.cumsum(dim=1)
 
         query_prods = torch.einsum('blmd,blm->bld', prefix_sums, q_prime[:, head])
         results.append(query_prods.unsqueeze(1))
 
     return torch.cat(results, dim=1)
-
-
-# Not currently used
-def _lengthwise_causal_numerator(q_prime, k_prime, v):
-    batch_size, num_heads, seq_len, num_features = k_prime.shape
-    d_model = v.shape[-1]
-
-    # Merge the batch and attention head dimensions so we can use baddbmm_()
-    prefix_sums = torch.zeros(batch_size * num_heads, num_features, d_model, device=v.device)
-    q_prime = q_prime.view(-1, seq_len, num_features)
-    k_prime = k_prime.view(-1, seq_len, num_features, 1)  # Add singleton dimension for outer product
-    v = v.reshape(-1, seq_len, 1, d_model)  # Add singleton dimension for outer product
-
-    result = []
-    for pos in range(seq_len):
-        prefix_sums.baddbmm_(k_prime[:, pos], v[:, pos])  # Fused in-place addition of outer products
-        result.append(torch.einsum("bmd,bm->bd", prefix_sums, q_prime[:, pos]).unsqueeze(-2))
-
-    # Unmerge the attention head and batch size dimensions
-    return torch.cat(result, dim=-2).view(batch_size, num_heads, seq_len, d_model)

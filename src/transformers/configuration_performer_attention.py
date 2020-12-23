@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional
 
 @dataclass
 class PerformerAttentionConfig:
@@ -20,17 +20,6 @@ class PerformerAttentionConfig:
             in better performance than :obj:`'exp'` and :obj:`'cosh'` in certain circumstances, but it is not an
             unbiased estimator of softmax attention and thus should not be used with pretrained models that were
             pretrained with softmax attention.
-        short_sequence_behavior (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`'use_softmax_eval_only'`):
-            This parameter determines if and when the module should fall back to regular softmax attention. Softmax
-            attention is generally faster than FAVOR+ when the sequence length is not significantly larger than the
-            number of random features used— which is equal to round(d*log(d)), where d is the number of dimensions per
-            attention head. The default behavior is to use FAVOR+ regardless of sequence length while training, but to
-            use softmax attention at test time when the sequence length is less than twice the number of random
-            features.
-            Possible values for this parameter are :obj:`'use_softmax_eval_only'`, :obj:`'use_softmax_eval_and_train'`,
-            :obj:`'never_use_softmax'`. The option :obj:`'use_softmax_eval_and_train'` should probably only be used if
-            the training set has a significant number of long sequences; otherwise, the model may not learn to deal with
-            the random noise inherent in the FAVOR+ algorithm.
         kernel_epsilon (:obj:`float`, `optional`, defaults to 1e-4):
             Stabilizer term added to the output of the kernel function to avoid dividing by very small numbers.
         normalize_output (:obj:`bool`, `optional`, defaults to True):
@@ -41,6 +30,11 @@ class PerformerAttentionConfig:
         num_random_features (:obj:`int`, `optional`, defaults to None):
             The dimensionality of the random feature vectors to use. When None, the dimensionality is set to
             D * log(D), where D is the dimensionality of each attention head.
+        use_recurrent_decoding (:obj:`bool`, `optional`, defaults to False):
+            Whether to use recurrent autoregressive decoding, as described in the 'Transformers are RNNs' paper. If
+            True, the PerformerAttention object will expect input tensors with a sequence length dimension of exactly 1,
+            and will output tensors with sequence length of 1. It will retain a recurrent hidden state between forward
+            passes that can be reset with the reset_recurrent_state() method.
         use_thick_features (:obj:`bool`, `optional`, defaults to False):
             Whether to generate a random feature tensor that has a batch dimension.
         use_orthogonal_features (:obj:`bool`, `optional`, defaults to True):
@@ -74,11 +68,10 @@ class PerformerAttentionConfig:
     """
     
     attention_dropout: float = 0.1
-    causal: bool = False
     kernel_type: str = 'exp'
-    
-    # Default determined in PerformerAttention.__init__()
-    short_sequence_behavior: Optional[Union[str, Callable]] = None
+
+    causal: bool = False
+    use_recurrent_decoding: bool = False
     
     kernel_epsilon: float = 1e-4
     normalize_output: bool = True
