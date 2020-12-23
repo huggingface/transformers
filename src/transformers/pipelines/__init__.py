@@ -28,7 +28,6 @@ from transformers.pipelines.base import (
     Conversation,
     ConversationalPipeline,
     CsvPipelineDataFormat,
-    FillMaskPipeline,
     JsonPipelineDataFormat,
     NerPipeline,
     PipedPipelineDataFormat,
@@ -48,6 +47,7 @@ from transformers.pipelines.base import (
     get_framework,
 )
 from transformers.pipelines.feature_extraction import FeatureExtractionPipeline
+from transformers.pipelines.fill_mask import FillMaskPipeline
 from transformers.pipelines.text_classification import TextClassificationPipeline
 from transformers.pipelines.text_generation import TextGenerationPipeline
 from transformers.pipelines.zero_shot_classification import (
