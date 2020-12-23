@@ -86,9 +86,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-def _expand_mask(
-    mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None
-):
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -115,7 +113,7 @@ def LEDLayerNorm(normalized_shape: torch.Size, eps: float = 1e-5, elementwise_af
 
 class LEDLearnedPositionalEmbedding(nn.Embedding):
     """
-    This module learns positional embeddings up to a fixed maximum size. 
+    This module learns positional embeddings up to a fixed maximum size.
     """
 
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int):
@@ -478,10 +476,9 @@ LED_START_DOCSTRING = r"""
 
     Parameters:
         config (:class:`~transformers.LEDConfig`):
-            Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
 LED_GENERATION_EXAMPLE = r"""
@@ -1090,7 +1087,9 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
 
         if labels is not None:
             if decoder_input_ids is None:
-                decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
+                decoder_input_ids = shift_tokens_right(
+                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                )
 
         outputs = self.model(
             input_ids,
@@ -1257,8 +1256,8 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
 
 @add_start_docstrings(
     """
-    LED Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    LED Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear layer
+    on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     LED_START_DOCSTRING,
 )

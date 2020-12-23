@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import LEDConfig, LEDTokenizer, is_tf_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_tf, slow
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -213,7 +213,7 @@ TOLERANCE = 1e-4
 @require_tf
 class TFLEDModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head(self):
-        model = TFLEDModel.from_pretrained('allenai/led-base-16384')
+        model = TFLEDModel.from_pretrained("allenai/led-base-16384")
         # change to intended input here
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -228,7 +228,7 @@ class TFLEDModelIntegrationTest(unittest.TestCase):
         self.assertTrue(tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_with_head(self):
-        model = TFLEDForConditionalGeneration.from_pretrained('allenai/led-base-16384')
+        model = TFLEDForConditionalGeneration.from_pretrained("allenai/led-base-16384")
         # change to intended input here
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -243,8 +243,8 @@ class TFLEDModelIntegrationTest(unittest.TestCase):
         self.assertTrue(tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        hf = TFLEDForConditionalGeneration.from_pretrained('allenai/led-base-16384')
-        tok = LEDTokenizer.from_pretrained('allenai/led-base-16384')
+        hf = TFLEDForConditionalGeneration.from_pretrained("allenai/led-base-16384")
+        tok = LEDTokenizer.from_pretrained("allenai/led-base-16384")
 
         batch_input = [
             # string 1,

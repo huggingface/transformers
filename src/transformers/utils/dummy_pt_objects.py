@@ -1179,6 +1179,45 @@ class LayoutLMModel:
         requires_pytorch(self)
 
 
+LED_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class LEDForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class LEDForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class LEDForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class LEDModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

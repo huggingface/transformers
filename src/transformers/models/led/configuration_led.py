@@ -28,21 +28,19 @@ LED_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class LEDConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.LEDModel`.
-    It is used to instantiate an LED model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the LED `allenai/led-base-16384 <https://huggingface.co/allenai/led-base-16384>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.LEDModel`. It is used to
+    instantiate an LED model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the LED `allenai/led-base-16384
+    <https://huggingface.co/allenai/led-base-16384>`__ architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50265):
             Vocabulary size of the LED model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.LEDModel` or
-            :class:`~transformers.TFLEDModel`.
+            :obj:`inputs_ids` passed when calling :class:`~transformers.LEDModel` or :class:`~transformers.TFLEDModel`.
         d_model (:obj:`int`, `optional`, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (:obj:`int`, `optional`, defaults to 12):
@@ -80,7 +78,8 @@ class LEDConfig(PretrainedConfig):
             The LayerDrop probability for the decoder. See the `LayerDrop paper <see
             https://arxiv.org/abs/1909.11556>`__ for more details.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
+            Whether or not the model should return the last key/values attentions (not used by all models)
+
         Example::
 
         >>> from transformers import LEDModel, LEDConfig
@@ -129,7 +128,7 @@ class LEDConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
-            **kwargs
+            **kwargs,
         )
 
         self.vocab_size = vocab_size
@@ -151,7 +150,7 @@ class LEDConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
-        
+
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads

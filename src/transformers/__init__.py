@@ -101,7 +101,6 @@ from .modeling_tf_pytorch_utils import (
     load_tf2_weights_in_pytorch_model,
 )
 from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
 from .models.auto import (
     ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     CONFIG_MAPPING,
@@ -147,6 +146,7 @@ from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, F
 from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
 from .models.herbert import HerbertTokenizer
 from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
+from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
 from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
 from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
 from .models.marian import MarianConfig
@@ -244,7 +244,6 @@ else:
     from .utils.dummy_sentencepiece_objects import *
 
 if is_tokenizers_available():
-    from .models.led import LEDTokenizerFast
     from .models.albert import AlbertTokenizerFast
     from .models.bart import BartTokenizerFast
     from .models.barthez import BarthezTokenizerFast
@@ -257,6 +256,7 @@ if is_tokenizers_available():
     from .models.gpt2 import GPT2TokenizerFast
     from .models.herbert import HerbertTokenizerFast
     from .models.layoutlm import LayoutLMTokenizerFast
+    from .models.led import LEDTokenizerFast
     from .models.longformer import LongformerTokenizerFast
     from .models.lxmert import LxmertTokenizerFast
     from .models.mbart import MBartTokenizerFast
@@ -302,13 +302,6 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 # Modeling
 if is_torch_available():
 
-    from .models.led import (
-        LED_PRETRAINED_MODEL_ARCHIVE_LIST,
-        LEDForConditionalGeneration,
-        LEDForQuestionAnswering,
-        LEDForSequenceClassification,
-        LEDModel,
-    )
     # Benchmarks
     from .benchmark.benchmark import PyTorchBenchmark
     from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -517,6 +510,13 @@ if is_torch_available():
         LayoutLMForTokenClassification,
         LayoutLMModel,
     )
+    from .models.led import (
+        LED_PRETRAINED_MODEL_ARCHIVE_LIST,
+        LEDForConditionalGeneration,
+        LEDForQuestionAnswering,
+        LEDForSequenceClassification,
+        LEDModel,
+    )
     from .models.longformer import (
         LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
         LongformerForMaskedLM,
@@ -706,11 +706,6 @@ else:
 # TensorFlow
 if is_tf_available():
 
-    from .models.led import (
-        TFLEDForConditionalGeneration,
-        TFLEDModel,
-        TFLEDPreTrainedModel,
-    )
     from .benchmark.benchmark_args_tf import TensorFlowBenchmarkArguments
 
     # Benchmarks
@@ -847,6 +842,7 @@ if is_tf_available():
         TFGPT2Model,
         TFGPT2PreTrainedModel,
     )
+    from .models.led import TFLEDForConditionalGeneration, TFLEDModel, TFLEDPreTrainedModel
     from .models.longformer import (
         TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFLongformerForMaskedLM,
