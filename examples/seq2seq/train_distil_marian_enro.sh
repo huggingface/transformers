@@ -34,5 +34,5 @@ python finetune_trainer.py \
     --do_train --do_eval --do_predict \
     --evaluation_strategy steps \
     --predict_with_generate --logging_first_step \
-    --task translation --label_smoothing 0.1 \
+    --task translation --label_smoothing_factor 0.1 \
     "$@"
