@@ -2006,13 +2006,6 @@ class GenerationMixin:
                 next_token_scores = next_token_scores + beam_scores[batch_group_indices].unsqueeze(-1).expand_as(
                     next_token_scores
                 )
-                # reshape for beam search
-
-                next_token_scores = next_token_scores.view(batch_size, group_size * vocab_size)
-
-                next_token_scores, next_tokens = torch.topk(
-                    next_token_scores, 2 * group_size, dim=1, largest=True, sorted=True
-                )
 
                 # Store scores, attentions and hidden_states when required
                 if return_dict_in_generate:
@@ -2029,6 +2022,13 @@ class GenerationMixin:
                             if self.config.is_encoder_decoder
                             else (outputs.hidden_states,)
                         )
+
+                # reshape for beam search
+                next_token_scores = next_token_scores.view(batch_size, group_size * vocab_size)
+
+                next_token_scores, next_tokens = torch.topk(
+                    next_token_scores, 2 * group_size, dim=1, largest=True, sorted=True
+                )
 
                 next_indices = next_tokens // vocab_size
                 next_tokens = next_tokens % vocab_size
