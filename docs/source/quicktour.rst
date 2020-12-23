@@ -158,7 +158,7 @@ Using the tokenizer
 
 We mentioned the tokenizer is responsible for the preprocessing of your texts. First, it will split a given text in
 words (or part of words, punctuation symbols, etc.) usually called `tokens`. There are multiple rules that can govern
-that process (you can learn more about them in the :doc:`tokenizer summary <tokenizer_summary>`, which is why we need
+that process (you can learn more about them in the :doc:`tokenizer summary <tokenizer_summary>`), which is why we need
 to instantiate the tokenizer using the name of the model, to make sure we use the same rules as when the model was
 pretrained.
 

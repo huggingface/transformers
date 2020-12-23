@@ -78,7 +78,7 @@ The library is built around three types of classes for each model:
 All these classes can be instantiated from pretrained instances and saved locally using two methods:
 
 - :obj:`from_pretrained()` lets you instantiate a model/configuration/tokenizer from a pretrained version either
-  provided by the library itself (the supported models are provided in the list :doc:`here <pretrained_models>` or
+  provided by the library itself (the supported models are provided in the list :doc:`here <pretrained_models>`) or
   stored locally (or on a server) by the user,
 - :obj:`save_pretrained()` lets you save a model/configuration/tokenizer locally so that it can be reloaded using
   :obj:`from_pretrained()`.

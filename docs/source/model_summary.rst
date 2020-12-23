@@ -16,7 +16,7 @@ Summary of the models
 This is a summary of the models available in 🤗 Transformers. It assumes you’re familiar with the original `transformer
 model <https://arxiv.org/abs/1706.03762>`_. For a gentle introduction check the `annotated transformer
 <http://nlp.seas.harvard.edu/2018/04/03/attention.html>`_. Here we focus on the high-level differences between the
-models. You can check them more in detail in their respective documentation. Also checkout the :doc:`pretrained model
+models. You can check them more in detail in their respective documentation. Also check out the :doc:`pretrained model
 page </pretrained_models>` to see the checkpoints available for each type of model and all `the community models
 <https://huggingface.co/models>`_.
 
@@ -30,7 +30,7 @@ Each one of the models in the library falls into one of the following categories
 
 Autoregressive models are pretrained on the classic language modeling task: guess the next token having read all the
 previous ones. They correspond to the decoder of the original transformer model, and a mask is used on top of the full
-sentence so that the attention heads can only see what was before in the next, and not what’s after. Although those
+sentence so that the attention heads can only see what was before in the text, and not what’s after. Although those
 models can be fine-tuned and achieve great results on many tasks, the most natural application is text generation. A
 typical example of such models is GPT.
 
@@ -512,8 +512,8 @@ BART
 <https://arxiv.org/abs/1910.13461>`_, Mike Lewis et al.
 
 Sequence-to-sequence model with an encoder and a decoder. Encoder is fed a corrupted version of the tokens, decoder is
-fed the original tokens (but has a mask to hide the future words like a regular transformers decoder). For the encoder
-, on the pretraining tasks, a composition of the following transformations are applied:
+fed the original tokens (but has a mask to hide the future words like a regular transformers decoder). A composition of
+the following transformations are applied on the pretraining tasks for the encoder:
 
   * mask random tokens (like in BERT)
   * delete random tokens

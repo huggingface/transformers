@@ -226,7 +226,7 @@ Contrary to RNNs that have the position of each token embedded within them, tran
 each token. Therefore, the position IDs (``position_ids``) are used by the model to identify each token's position in
 the list of tokens.
 
-They are an optional parameter. If no ``position_ids`` is passed to the model, the IDs are automatically created as
+They are an optional parameter. If no ``position_ids`` are passed to the model, the IDs are automatically created as
 absolute positional embeddings.
 
 Absolute positional embeddings are selected in the range ``[0, config.max_position_embeddings - 1]``. Some models use
