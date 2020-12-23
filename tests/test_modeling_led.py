@@ -351,45 +351,15 @@ class LEDModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor([[], [], []], device=torch_device)
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
-    @staticmethod
-    def print_memory_trace_statistics(summary):
-        print(
-            "\nLine by line memory consumption:\n"
-            + "\n".join(
-                f"{state.frame.filename}:{state.frame.line_number}: mem {state.cpu_gpu}: {state.frame.line_text}"
-                for state in summary.sequential
-            )
-        )
-        print(
-            "\nLines with top memory consumption:\n"
-            + "\n".join(
-                f"=> {state.frame.filename}:{state.frame.line_number}: mem {state.cpu_gpu}: {state.frame.line_text}"
-                for state in summary.cumulative[:6]
-            )
-        )
-        print(
-            "\nLines with lowest memory consumption:\n"
-            + "\n".join(
-                f"=> {state.frame.filename}:{state.frame.line_number}: mem {state.cpu_gpu}: {state.frame.line_text}"
-                for state in summary.cumulative[-6:]
-            )
-        )
-        print(f"\nTotal memory increase: {summary.total}")
-
     def test_inference_head(self):
-        from transformers.benchmark.benchmark_utils import start_memory_tracing, stop_memory_tracing
         model = LEDForConditionalGeneration.from_pretrained("allenai/led-base-16384").to(torch_device)
 
         # change to intended input
         input_ids = _long_tensor([512 * [0, 31414, 232, 328, 740, 1140, 12695, 69]])
         decoder_input_ids = _long_tensor([128 * [0, 31414, 232, 328, 740, 1140, 12695, 69]])
         inputs_dict = prepare_led_inputs_dict(model.config, input_ids, decoder_input_ids)
-#        trace = start_memory_tracing("transformers")
         with torch.no_grad():
             output = model(**inputs_dict, use_cache=False).logits
-#        summary = stop_memory_tracing(trace)
-#        self.print_memory_trace_statistics(summary)
-        print(torch.cuda.max_memory_allocated())
         expected_shape = torch.Size((1, 1024, model.config.vocab_size))
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
@@ -399,6 +369,7 @@ class LEDModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
+        # this test requires 16GB of RAM
         hf = LEDForConditionalGeneration.from_pretrained("allenai/led-large-16384-arxiv").to(torch_device)
         tok = LEDTokenizer.from_pretrained("allenai/led-large-16384-arxiv")
 
@@ -414,7 +385,9 @@ class LEDModelIntegrationTests(unittest.TestCase):
         )
 
         with torch.no_grad():
-            hf.model.encoder(input_ids=dct["input_ids"].to(torch_device), attention_mask=dct["attention_mask"].to(torch_device))
+            hf.model.encoder(
+                input_ids=dct["input_ids"].to(torch_device), attention_mask=dct["attention_mask"].to(torch_device)
+            )
 
         hypotheses_batch = hf.generate(
             input_ids=dct["input_ids"].to(torch_device),
@@ -425,15 +398,9 @@ class LEDModelIntegrationTests(unittest.TestCase):
             no_repeat_ngram_size=3,
         )
 
-        EXPECTED_LEP = """ the physics of @xmath0-boson will again play the central role in the frontier of particle physics if the gigaz option of the international linear collider ( ilc ) is realized in its first phase.
- the expected sensitivity to the branching ratio of rare decays, especially the flavor changing processes, can be greatly enhanced to @xcite. in light of this,
- its exotic or rare processes should be investigated comprehensively to evaluate their potential in probing new physics. in this paper
-, we study the rare decay into light higgs boson(s ) in the framework of the minimal supersymmetric standard model ( mssm ), where a light cp - odd higgs - boson with a singlet - dominant component may naturally arise from the spontaneous breaking of some approximate global symmetry like the peccei - quuin symmetry ( pec24 ).    *
- pacs numbers : * 12.38.lg, 13.85.hb, 14.40.gp   + * keywords : * exotic decays ; flavor changing ; rare decay ; higgs + * pacs : * 11.15.ha, 12.39.hg, 11.30
-        """
+        EXPECTED_LEP = " the physics of @xmath0-boson will again play the central role in the frontier of particle physics if the gigaz option of the international linear collider ( ilc ) is realized in its first phase. \n the expected sensitivity to the branching ratio of rare decays, especially the flavor changing processes, can be greatly enhanced to @xcite. in light of this, \n its exotic or rare processes should be investigated comprehensively to evaluate their potential in probing new physics. in this paper \n, we study the rare decay into light higgs boson(s ) in the framework of the minimal supersymmetric standard model ( mssm ), where a light cp - odd higgs - boson with a singlet - dominant component may naturally arise from the spontaneous breaking of some approximate global symmetry like the peccei - quuin symmetry ( pec24 ).    * \n pacs numbers : * 12.38.lg, 13.85.hb, 14.40.gp   + * keywords : * exotic decays ; flavor changing ; rare decay ; higgs + * pacs : * 11.15.ha, 12.39.hg, 11.30"
 
-        EXPECTED_MAGNET = """ the recent experiment in the surface states of the topological insulator bi@xmath0se @xmath1, however, reported that a large positive magnetoresistance becomes very linear above a characteristic magnetic field.
- it is striking that this observation is in conflict with abrikosov s model and also with the classical parish - littlewood model. so far a reliable theoretical scheme capable of explaining this novel experiment has still been lacking."""
+        EXPECTED_MAGNET = " the recent experiment in the surface states of the topological insulator bi@xmath0se @xmath1, however, reported that a large positive magnetoresistance becomes very linear above a characteristic magnetic field. \n it is striking that this observation is in conflict with abrikosov s model and also with the classical parish - littlewood model. so far a reliable theoretical scheme capable of explaining this novel experiment has still been lacking. "
 
         generated = tok.batch_decode(
             hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True

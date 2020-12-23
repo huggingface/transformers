@@ -15,11 +15,11 @@
 """ PyTorch LED model. """
 
 
+import math
 import random
 from typing import Optional, Tuple
 
 import torch
-import math
 import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
@@ -198,7 +198,13 @@ class LEDEncoderSelfAttention(nn.Module):
         self.one_sided_attn_window_size = attention_window // 2
 
     def forward(
-        self, hidden_states, attention_mask=None, is_index_masked=None, is_index_global_attn=None, is_global_attn=None, output_attentions=False,
+        self,
+        hidden_states,
+        attention_mask=None,
+        is_index_masked=None,
+        is_index_global_attn=None,
+        is_global_attn=None,
+        output_attentions=False,
     ):
         """
         LongformerSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`. Padding to
@@ -853,7 +859,15 @@ class LEDEncoderLayer(nn.Module):
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = LEDLayerNorm(self.embed_dim)
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, is_index_masked=None, is_index_global_attn=None, is_global_attn=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        is_index_masked=None,
+        is_index_global_attn=None,
+        is_global_attn=None,
+        output_attentions=False,
+    ):
         """
         Args:
             hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
@@ -862,7 +876,12 @@ class LEDEncoderLayer(nn.Module):
         """
         residual = hidden_states
         attn_outputs = self.self_attn(
-            hidden_states=hidden_states, attention_mask=attention_mask, is_index_masked=is_index_masked, is_index_global_attn=is_index_global_attn, is_global_attn=is_global_attn, output_attentions=output_attentions
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            is_index_masked=is_index_masked,
+            is_index_global_attn=is_index_global_attn,
+            is_global_attn=is_global_attn,
+            output_attentions=output_attentions,
         )
         hidden_states = attn_outputs[0]
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1264,7 +1283,14 @@ class LEDEncoder(LEDPreTrainedModel):
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None, None)
             else:
-                layer_outputs = encoder_layer(hidden_states=hidden_states, attention_mask=attention_mask, is_index_masked=is_index_masked, is_index_global_attn=is_index_global_attn, is_global_attn=is_global_attn, output_attentions=output_attentions)
+                layer_outputs = encoder_layer(
+                    hidden_states=hidden_states,
+                    attention_mask=attention_mask,
+                    is_index_masked=is_index_masked,
+                    is_index_global_attn=is_index_global_attn,
+                    is_global_attn=is_global_attn,
+                    output_attentions=output_attentions,
+                )
                 hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -1734,26 +1760,13 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
-        return past
-
-        # reorder states
-#        def _reorder_states(layer_past, beam_idx):
-#            reordered_layer_past = ()
-#            while len(layer_past) > 0:
-#                reordered_layer_past += (layer_past[0].index_select(0, beam_idx),)
-#                layer_past = layer_past[1:]
-#            return reordered_layer_past
-#
-#        reordered_past = ()
-#        while len(past) > 0:
-#            reordered_past += (_reorder_states(past[0], beam_idx),)
-#            past = past[1:]
-#        return reordered_past
-
-#         reordered_past = ()
-#        for layer_past in past:
-#            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
-#        return reordered_past
+        reordered_past = ()
+        for layer_past in past:
+            # cached cross_attention states don't have to be reordered -> they are always the same
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+            )
+        return reordered_past
 
 
 @add_start_docstrings(
