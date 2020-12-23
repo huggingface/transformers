@@ -1204,6 +1204,20 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
         )
 
         return outputs
+    
+    def serving_output(self, output):
+        return TFXLNetModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            mems=tf.convert_to_tensor(output.mems)
+            if output.mems is not None
+            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 
 @add_start_docstrings(
@@ -1266,16 +1280,6 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
             inputs["mems"] = tuple(layer_past[:-offset, :, :] for layer_past in past)
 
         return inputs
-    
-    @tf.function(input_signature=[{
-        "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-        "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-        "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
-        "perm_mask": tf.TensorSpec((None, None, None), tf.float32, name="perm_mask"),
-        "target_mapping": tf.TensorSpec((None, None, None), tf.float32, name="target_mapping"),
-    }])
-    def serving(self, inputs):
-        return dict(self.call(inputs))
 
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFXLNetLMHeadModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1385,6 +1389,21 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+    
+    def serving_output(self, output):
+        return TFXLNetLMHeadModelOutput(
+            loss=None,
+            logits=output.logits,
+            mems=tf.convert_to_tensor(output.mems)
+            if output.mems is not None
+            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 
 @add_start_docstrings(
@@ -1493,6 +1512,21 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+    
+    def serving_output(self, output):
+        return TFXLNetForSequenceClassificationOutput(
+            loss=None,
+            logits=output.logits,
+            mems=tf.convert_to_tensor(output.mems)
+            if output.mems is not None
+            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 
 @add_start_docstrings(
@@ -1523,14 +1557,6 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
             tf.Tensor with dummy inputs
         """
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
-    
-    @tf.function(input_signature=[{
-        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-        "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
-    }])
-    def serving(self, inputs):
-        return dict(self.call(inputs))
 
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
@@ -1641,6 +1667,31 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+    
+    @tf.function(input_signature=[{
+        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+        "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
+    }])
+    def serving(self, inputs):
+        output = self.call(inputs)
+        
+        return self.serving_output(output)
+    
+    def serving_output(self, output):
+        return TFXLNetForMultipleChoiceOutput(
+            loss=None,
+            logits=output.logits,
+            mems=tf.convert_to_tensor(output.mems)
+            if output.mems is not None
+            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 
 @add_start_docstrings(
@@ -1742,6 +1793,21 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
             mems=transformer_outputs.mems,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+        )
+    
+    def serving_output(self, output):
+        return TFXLNetForTokenClassificationOutput(
+            loss=None,
+            logits=output.logits,
+            mems=tf.convert_to_tensor(output.mems)
+            if output.mems is not None
+            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
         )
 
 
@@ -1858,4 +1924,20 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
             mems=transformer_outputs.mems,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+        )
+    
+    def serving_output(self, output):
+        return TFXLNetForQuestionAnsweringSimpleOutput(
+            loss=None,
+            start_logits=output.start_logits,
+            end_logits=output.end_logits,
+            mems=tf.convert_to_tensor(output.mems)
+            if output.mems is not None
+            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
         )

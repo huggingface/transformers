@@ -791,6 +791,18 @@ class TFMPNetModel(TFMPNetPreTrainedModel):
             training=inputs["training"],
         )
         return outputs
+    
+    def serving_output(self, output):
+        return TFBaseModelOutputWithPooling(
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 
 class TFMPNetLMHead(tf.keras.layers.Layer):
@@ -917,6 +929,18 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+    
+    def serving_output(self, output):
+        return TFMaskedLMOutput(
+            loss=None,
+            logits=output.logits,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 
 class TFMPNetClassificationHead(tf.keras.layers.Layer):
@@ -1033,6 +1057,18 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+    
+    def serving_output(self, output):
+        return TFSequenceClassifierOutput(
+            loss=None,
+            logits=output.logits,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
         )
 
 
@@ -1158,6 +1194,28 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+    
+    @tf.function(input_signature=[{
+        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+        "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
+    }])
+    def serving(self, inputs):
+        output = self.call(inputs)
+        
+        return self.serving_output(output)
+    
+    def serving_output(self, output):
+        return TFMultipleChoiceModelOutput(
+            loss=None,
+            logits=output.logits,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 
 @add_start_docstrings(
@@ -1252,6 +1310,18 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+    
+    def serving_output(self, output):
+        return TFTokenClassifierOutput(
+            loss=None,
+            logits=output.logits,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
         )
 
 
@@ -1360,4 +1430,17 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
             end_logits=end_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+    
+    def serving_output(self, output):
+        return TFQuestionAnsweringModelOutput(
+            loss=None,
+            start_logits=output.start_logits,
+            end_logits=output.end_logits,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
         )

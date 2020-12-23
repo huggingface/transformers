@@ -604,7 +604,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
             if self.config.output_hidden_states
             else None,
             attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.attentions
+            if self.config.output_attentions
             else None,
         )
 
@@ -754,7 +754,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
             if self.config.output_hidden_states
             else None,
             attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.attentions
+            if self.config.output_attentions
             else None,
         )
 
@@ -919,13 +919,10 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
         return TFSequenceClassifierOutput(
             loss=None,
             logits=output.logits,
-            past_key_values=tf.convert_to_tensor(output.past_key_values)
-            if self.config.use_cache
-            else None,
             hidden_states=tf.convert_to_tensor(output.hidden_states)
             if self.config.output_hidden_states
             else None,
             attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.attentions
+            if self.config.output_attentions
             else None,
         )

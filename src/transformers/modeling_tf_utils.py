@@ -272,14 +272,13 @@ def booleans_processing(config, **kwargs):
             if kwargs["output_hidden_states"] is not None
             else config.output_hidden_states
         )
-
-        if "return_dict" in kwargs:
-            final_booleans["return_dict"] = (
-                kwargs["return_dict"] if kwargs["return_dict"] is not None else config.return_dict
-            )
+        final_booleans["return_dict"] = (
+            kwargs["return_dict"] if kwargs["return_dict"] is not None else config.return_dict
+        )
 
         if "use_cache" in kwargs:
             final_booleans["use_cache"] = kwargs["use_cache"] if kwargs["use_cache"] is not None else config.use_cache
+        
     else:
         if (
             kwargs["output_attentions"] is not None
@@ -294,12 +293,11 @@ def booleans_processing(config, **kwargs):
         final_booleans["output_attentions"] = config.output_attentions
         final_booleans["output_hidden_states"] = config.output_hidden_states
 
-        if "return_dict" in kwargs:
-            if kwargs["return_dict"] is not None:
-                logger.warning(
-                    "The parameter `return_dict` cannot be set in graph mode and will always be set to `True`."
-                )
-            final_booleans["return_dict"] = True
+        if kwargs["return_dict"] is not None:
+            logger.warning(
+                "The parameter `return_dict` cannot be set in graph mode and will always be set to `True`."
+            )
+        final_booleans["return_dict"] = True
 
         if "use_cache" in kwargs:
             final_booleans["use_cache"] = config.use_cache
@@ -602,7 +600,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 The input of the saved model as a dictionnary of tensors.
         """
         output = self.call(inputs)
-        
+        print(output)
         return self.serving_output(output)
     
     def serving_output(output):
@@ -856,8 +854,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         os.makedirs(save_directory, exist_ok=True)
 
         if saved_model:
-            self.save(save_directory, include_optimizer=False, signatures=self.serving)
-            logger.info(f"Saved model saved in {save_directory}")
+            saved_model_dir = os.path.join(save_directory, "saved_model")
+            self.save(saved_model_dir, include_optimizer=False, signatures=self.serving)
+            logger.info(f"Saved model created in {saved_model_dir}")
 
         # Save configuration file
         self.config.save_pretrained(save_directory)

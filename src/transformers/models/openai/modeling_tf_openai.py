@@ -368,7 +368,9 @@ class TFOpenAIGPTPreTrainedModel(TFPreTrainedModel):
         "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
     }])
     def serving(self, inputs):
-        return dict(self.call(inputs))
+        output = self.call(inputs)
+        
+        return self.serving_output(output)
 
 
 @dataclass
@@ -550,6 +552,17 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
         )
         return outputs
 
+    def serving_output(self, output):
+        return TFBaseModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
+        )
+
 
 @add_start_docstrings(
     """
@@ -642,6 +655,18 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+    
+    def serving_output(self, output):
+        return TFBaseModelOutput(
+            loss=None,
+            logits=output.logits,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 
 @add_start_docstrings(
@@ -661,14 +686,6 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         self.multiple_choice_head = TFSequenceSummary(
             config, initializer_range=config.initializer_range, name="multiple_choice_head"
         )
-    
-    @tf.function(input_signature=[{
-        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-        "mc_token_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
-    }])
-    def serving(self, inputs):
-        return dict(self.call(inputs))
 
     def get_output_embeddings(self):
         return self.transformer.tokens_embed
@@ -777,6 +794,28 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             mc_logits=mc_logits,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+        )
+    
+    @tf.function(input_signature=[{
+        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+        "mc_token_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
+    }])
+    def serving(self, inputs):
+        output = self.call(inputs)
+        
+        return self.serving_output(output)
+    
+    def serving_output(self, output):
+        return TFOpenAIGPTDoubleHeadsModelOutput(
+            logits=output.logits,
+            mc_logits=output.mc_logits,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
         )
 
 
@@ -928,4 +967,16 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
             logits=pooled_logits,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+        )
+    
+    def serving_output(self, output):
+        return TFSequenceClassifierOutput(
+            loss=None,
+            logits=output.logits,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
         )

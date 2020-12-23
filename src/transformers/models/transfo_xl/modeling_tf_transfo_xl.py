@@ -663,7 +663,9 @@ class TFTransfoXLPreTrainedModel(TFPreTrainedModel):
         "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
     }])
     def serving(self, inputs):
-        return dict(self.call(inputs))
+        output = self.call(inputs)
+        
+        return self.serving_output(output)
 
 
 @dataclass
@@ -890,6 +892,18 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
         )
 
         return outputs
+    
+    def serving_output(self, output):
+        return TFTransfoXLModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            mems=output.mems,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 
 class TFTransfoXLMHead(tf.keras.layers.Layer):
@@ -1006,6 +1020,18 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
             mems=transformer_outputs.mems,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+        )
+    
+    def serving_output(self, output):
+        return TFTransfoXLLMHeadModelOutput(
+            prediction_scores=output.prediction_scores,
+            mems=output.mems,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
         )
 
     def prepare_inputs_for_generation(self, inputs, past, **model_kwargs):
@@ -1161,4 +1187,17 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
             mems=transformer_outputs.mems,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+        )
+    
+    def serving_output(self, output):
+        return TFTransfoXLSequenceClassifierOutputWithPast(
+            loss=None,
+            logits=output.logits,
+            mems=output.mems,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
         )

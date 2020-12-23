@@ -627,10 +627,10 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
     def serving_output(self, output):
         return TFBaseModelOutput(
             last_hidden_state=output.last_hidden_state,
-            hidden_states=tf.convert_to_tensor(output.all_hidden_states)
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
             if self.config.output_hidden_states
             else None,
-            attentions=tf.convert_to_tensor(output.all_attentions)
+            attentions=tf.convert_to_tensor(output.attentions)
             if self.config.output_attentions
             else None,
         )
@@ -754,10 +754,10 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         return TFMaskedLMOutput(
             loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.all_hidden_states)
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
             if self.config.output_hidden_states
             else None,
-            attentions=tf.convert_to_tensor(output.all_attentions)
+            attentions=tf.convert_to_tensor(output.attentions)
             if self.config.output_attentions
             else None,
         )
@@ -860,10 +860,10 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
         return TFSequenceClassifierOutput(
             loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.all_hidden_states)
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
             if self.config.output_hidden_states
             else None,
-            attentions=tf.convert_to_tensor(output.all_attentions)
+            attentions=tf.convert_to_tensor(output.attentions)
             if self.config.output_attentions
             else None,
         )
@@ -956,10 +956,10 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
         return TFTokenClassifierOutput(
             loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.all_hidden_states)
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
             if self.config.output_hidden_states
             else None,
-            attentions=tf.convert_to_tensor(output.all_attentions)
+            attentions=tf.convert_to_tensor(output.attentions)
             if self.config.output_attentions
             else None,
         )
@@ -1100,10 +1100,10 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
         return TFMultipleChoiceModelOutput(
             loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.all_hidden_states)
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
             if self.config.output_hidden_states
             else None,
-            attentions=tf.convert_to_tensor(output.all_attentions)
+            attentions=tf.convert_to_tensor(output.attentions)
             if self.config.output_attentions
             else None,
         )
@@ -1213,10 +1213,10 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
             loss=None,
             start_logits=output.start_logits,
             end_logits=output.end_logits,
-            hidden_states=tf.convert_to_tensor(output.all_hidden_states)
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
             if self.config.output_hidden_states
             else None,
-            attentions=tf.convert_to_tensor(output.all_attentions)
+            attentions=tf.convert_to_tensor(output.attentions)
             if self.config.output_attentions
             else None,
         )

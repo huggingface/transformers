@@ -840,7 +840,7 @@ class TFDPRReader(TFDPRPretrainedReader):
         )
     
     def serving_output(self, output):
-        return TFDPRQuestionEncoderOutput(
+        return TFDPRReaderOutput(
             start_logits=output.start_logits,
             end_logits=output.end_logits,
             relevance_logits=output.relevance_logits,

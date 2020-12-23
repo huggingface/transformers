@@ -776,6 +776,17 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
         )
 
         return outputs
+    
+    def serving_output(self, output):
+        return TFBaseModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 
 @add_start_docstrings("""{{cookiecutter.modelname}} Model with a `language modeling` head on top. """, {{cookiecutter.uppercase_modelname}}_START_DOCSTRING)
@@ -874,6 +885,18 @@ class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelca
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+    
+    def serving_output(self, output):
+        return TFMaskedLMOutput(
+            loss=None,
+            logits=output.logits,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 @add_start_docstrings(
     """{{cookiecutter.modelname}} Model with a `language modeling` head on top for CLM fine-tuning. """, {{cookiecutter.uppercase_modelname}}_START_DOCSTRING
@@ -971,6 +994,18 @@ class TF{{cookiecutter.camelcase_modelname}}ForCausalLM(TF{{cookiecutter.camelca
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+    
+    def serving_output(self, output):
+        return TFCausalLMOutput(
+            loss=None,
+            logits=output.logits,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
         )
 
 class TF{{cookiecutter.camelcase_modelname}}ClassificationHead(tf.keras.layers.Layer):
@@ -1082,6 +1117,18 @@ class TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification(TF{{cookie
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+    
+    def serving_output(self, output):
+        return TFSequenceClassifierOutput(
+            loss=None,
+            logits=output.logits,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
         )
 
 
@@ -1215,6 +1262,28 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+    
+    @tf.function(input_signature=[{
+        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+        "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
+    }])
+    def serving(self, inputs):
+        output = self.call(inputs)
+        
+        return self.serving_output(output)
+    
+    def serving_output(self, output):
+        return TFMultipleChoiceModelOutput(
+            loss=None,
+            logits=output.logits,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
 @add_start_docstrings(
     """{{cookiecutter.modelname}} Model with a token classification head on top (a linear layer on top of
@@ -1302,6 +1371,18 @@ class TF{{cookiecutter.camelcase_modelname}}ForTokenClassification(TF{{cookiecut
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+    
+    def serving_output(self, output):
+        return TFTokenClassifierOutput(
+            loss=None,
+            logits=output.logits,
+            hidden_states=tf.convert_to_tensor(output.hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            attentions=tf.convert_to_tensor(output.attentions)
+            if self.config.output_attentions
+            else None,
         )
 
 
@@ -2364,6 +2445,25 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
             encoder_hidden_states=inputs["encoder_outputs"].hidden_states,
             encoder_attentions=inputs["encoder_outputs"].attentions,
         )
+    
+    def serving_output(self, output):
+        return TFSeq2SeqModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            past_key_values=tf.tuple(output.past_key_values)[1],
+            decoder_hidden_states=tf.convert_to_tensor(output.decoder_hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            decoder_attentions=tf.convert_to_tensor(output.decoder_attentions)
+            if self.config.output_attentions
+            else None,
+            encoder_last_hidden_state=output.encoder_last_hidden_state,
+            encoder_hidden_states=tf.convert_to_tensor(output.encoder_hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            encoder_attentions=tf.convert_to_tensor(output.decoder_attentions)
+            if self.config.output_attentions
+            else None,
+        )
 
     def get_input_embeddings(self):
         return self.shared
@@ -2508,6 +2608,26 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
             encoder_last_hidden_state=outputs.last_hidden_state,  # index 0 of encoder outputs
             encoder_hidden_states=outputs.encoder_hidden_states,  # 1 of e out
             encoder_attentions=outputs.encoder_attentions,  # 2 of e out
+        )
+    
+    def serving_output(self, output):
+        return TFSeq2SeqLMOutput(
+            loss=None,
+            logits=output.logits,
+            past_key_values=tf.tuple(output.past_key_values)[1],
+            decoder_hidden_states=tf.convert_to_tensor(output.decoder_hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            decoder_attentions=tf.convert_to_tensor(output.decoder_attentions)
+            if self.config.output_attentions
+            else None,
+            encoder_last_hidden_state=output.encoder_last_hidden_state,
+            encoder_hidden_states=tf.convert_to_tensor(output.encoder_hidden_states)
+            if self.config.output_hidden_states
+            else None,
+            encoder_attentions=tf.convert_to_tensor(output.decoder_attentions)
+            if self.config.output_attentions
+            else None,
         )
 
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs) -> Dict:
