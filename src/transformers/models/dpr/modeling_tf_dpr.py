@@ -161,6 +161,12 @@ class TFDPREncoderLayer(tf.keras.layers.Layer):
             self.encode_proj = tf.keras.layers.Dense(
                 config.projection_dim, kernel_initializer=get_initializer(config.initializer_range), name="encode_proj"
             )
+    
+    def serving(self, inputs):
+        pass
+    
+    def serving_output(self, output):
+        pass
 
     def call(
         self,
@@ -235,6 +241,12 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
         self.qa_classifier = tf.keras.layers.Dense(
             1, kernel_initializer=get_initializer(config.initializer_range), name="qa_classifier"
         )
+    
+    def serving(self, inputs):
+        pass
+    
+    def serving_output(self, output):
+        pass
 
     def call(
         self,

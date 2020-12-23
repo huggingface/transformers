@@ -600,7 +600,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 The input of the saved model as a dictionnary of tensors.
         """
         output = self.call(inputs)
-        print(output)
+
         return self.serving_output(output)
     
     def serving_output(output):
