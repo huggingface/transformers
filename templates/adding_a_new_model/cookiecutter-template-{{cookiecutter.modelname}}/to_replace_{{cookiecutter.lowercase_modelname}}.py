@@ -305,17 +305,17 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase
 # Below: "models to ignore for model xxx mapping"
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
-{% else %}
-        "{{cookiecutter.camelcase_modelname}}Encoder",
-        "{{cookiecutter.camelcase_modelname}}Decoder",
+{% else -%}
+    "{{cookiecutter.camelcase_modelname}}Encoder",
+    "{{cookiecutter.camelcase_modelname}}Decoder",
 {% endif -%}
 # End.
 
 # Below: "models to ignore for not tested"
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
-{% else %}
-        "{{cookiecutter.camelcase_modelname}}Encoder",  # Building part of bigger (tested) model.
-        "{{cookiecutter.camelcase_modelname}}Decoder",  # Building part of bigger (tested) model.
+{% else -%}
+    "{{cookiecutter.camelcase_modelname}}Encoder",  # Building part of bigger (tested) model.
+    "{{cookiecutter.camelcase_modelname}}Decoder",  # Building part of bigger (tested) model.
 {% endif -%}
 # End.
