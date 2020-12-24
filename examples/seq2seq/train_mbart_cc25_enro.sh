@@ -24,8 +24,7 @@ python finetune_trainer.py \
     --src_lang en_XX --tgt_lang ro_RO \
     --freeze_embeds \
     --per_device_train_batch_size=4 --per_device_eval_batch_size=4 \
-    --max_source_length 128 --max_target_length 128 \
-    --val_max_target_length 128 --test_max_target_length 128 \
+    --max_source_length 128 --max_target_length 128 --val_max_target_length 128 --test_max_target_length 128\
     --sortish_sampler \
     --num_train_epochs 6 \
     --save_steps 25000 --eval_steps 25000 --logging_steps 1000 \

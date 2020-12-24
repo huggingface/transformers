@@ -10,17 +10,17 @@
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
     specific language governing permissions and limitations under the License.
 
-reprocessing data
+Preprocessing data
 =======================================================================================================================
 
 In this tutorial, we'll explore how to preprocess your data using 🤗 Transformers. The main tool for this is what we
 call a :doc:`tokenizer <main_classes/tokenizer>`. You can build one using the tokenizer class associated to the model
 you would like to use, or directly with the :class:`~transformers.AutoTokenizer` class.
 
-As we saw in the :doc:`quicktour </quicktour>`, the tokenizer will first split a given text in words (or part of words,
-punctuation symbols, etc.) usually called `tokens`. Then it will convert those `tokens` into numbers, to be able to
-build a tensor out of them and feed them to the model. It will also add any additional inputs the model might expect to
-work properly.
+As we saw in the :doc:`quick tour </quicktour>`, the tokenizer will first split a given text in words (or part of
+words, punctuation symbols, etc.) usually called `tokens`. Then it will convert those `tokens` into numbers, to be able
+to build a tensor out of them and feed them to the model. It will also add any additional inputs the model might expect
+to work properly.
 
 .. note::
 
@@ -131,7 +131,7 @@ ones it should not (because they represent padding in this case).
 
 
 Note that if your model does not have a maximum length associated to it, the command above will throw a warning. You
-can safely ignore it. You can also pass ``verbose=False`` to stop the tokenizer to throw those kinds of warnings.
+can safely ignore it. You can also pass ``verbose=False`` to stop the tokenizer from throwing those kinds of warnings.
 
 .. _sentence-pairs:
 
@@ -216,7 +216,6 @@ Everything you always wanted to know about padding and truncation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We have seen the commands that will work for most cases (pad your batch to the length of the maximum sentence and
-
 truncate to the maximum length the mode can accept). However, the API supports more strategies if you need them. The
 three arguments you need to know for this are :obj:`padding`, :obj:`truncation` and :obj:`max_length`.
 

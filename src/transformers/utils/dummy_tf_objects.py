@@ -256,6 +256,15 @@ class TFBartModel:
         requires_tf(self)
 
 
+class TFBartPretrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
 TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -418,6 +427,15 @@ class TFCamembertModel:
 
 
 TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFCTRLForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
 
 
 class TFCTRLLMHeadModel:
@@ -1116,6 +1134,15 @@ class TFOpenAIGPTDoubleHeadsModel:
         requires_tf(self)
 
 
+class TFOpenAIGPTForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
 class TFOpenAIGPTLMHeadModel:
     def __init__(self, *args, **kwargs):
         requires_tf(self)
@@ -1272,6 +1299,15 @@ TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 class TFAdaptiveEmbedding:
     def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFTransfoXLForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
         requires_tf(self)
 
 

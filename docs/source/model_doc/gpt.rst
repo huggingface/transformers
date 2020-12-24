@@ -138,3 +138,9 @@ TFOpenAIGPTDoubleHeadsModel
 
 .. autoclass:: transformers.TFOpenAIGPTDoubleHeadsModel
     :members: call
+
+TFOpenAIGPTForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFOpenAIGPTForSequenceClassification
+    :members: call

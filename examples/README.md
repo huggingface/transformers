@@ -54,12 +54,12 @@ Coming soon!
 | Task | Example datasets | Trainer support | TFTrainer support | 🤗 Datasets | Colab
 |---|---|:---:|:---:|:---:|:---:|
 | [**`language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/language-modeling)       | Raw text        | ✅ | -  | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/01_how_to_train.ipynb)
-| [**`multiple-choice`**](https://github.com/huggingface/transformers/tree/master/examples/multiple-choice)           | SWAG, RACE, ARC | ✅ | ✅ | - | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ViktorAlm/notebooks/blob/master/MPC_GPU_Demo_for_TF_and_PT.ipynb)
-| [**`question-answering`**](https://github.com/huggingface/transformers/tree/master/examples/question-answering)     | SQuAD           | ✅ | ✅ | ✅ | -
+| [**`multiple-choice`**](https://github.com/huggingface/transformers/tree/master/examples/multiple-choice)           | SWAG, RACE, ARC | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ViktorAlm/notebooks/blob/master/MPC_GPU_Demo_for_TF_and_PT.ipynb)
+| [**`question-answering`**](https://github.com/huggingface/transformers/tree/master/examples/question-answering)     | SQuAD           | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/huggingface/notebooks/blob/master/examples/question_answering.ipynb)
 | [**`summarization`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)                     | CNN/Daily Mail  | ✅  | - | - | -
 | [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/text-classification)   | GLUE, XNLI      | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/huggingface/notebooks/blob/master/examples/text_classification.ipynb)
 | [**`text-generation`**](https://github.com/huggingface/transformers/tree/master/examples/text-generation)           | -               | n/a | n/a | - | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/02_how_to_generate.ipynb)
-| [**`token-classification`**](https://github.com/huggingface/transformers/tree/master/examples/token-classification) | CoNLL NER       | ✅ | ✅ | ✅ | -
+| [**`token-classification`**](https://github.com/huggingface/transformers/tree/master/examples/token-classification) | CoNLL NER       | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/huggingface/notebooks/blob/master/examples/token_classification.ipynb)
 | [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)                       | WMT             | ✅  | - | - | -
 
 
@@ -69,6 +69,43 @@ Coming soon!
 **Coming soon!**
 -->
 
+## Distributed training and mixed precision
+
+All the PyTorch scripts mentioned above work out of the box with distributed training and mixed precision, thanks to
+the [Trainer API](https://huggingface.co/transformers/main_classes/trainer.html). To launch one of them on _n_ GPUS,
+use the following command:
+
+```bash
+python -m torch.distributed.launch \
+    --nproc_per_node number_of_gpu_you_have path_to_script.py \
+	--all_arguments_of_the_script 
+```
+
+As an example, here is how you would fine-tune the BERT large model (with whole word masking) on the text
+classification MNLI task using the `run_glue` script, with 8 GPUs:
+
+```bash
+python -m torch.distributed.launch \
+    --nproc_per_node 8 text-classification/run_glue.py \
+    --model_name_or_path bert-large-uncased-whole-word-masking \
+    --task_name mnli \
+    --do_train \
+    --do_eval \
+    --max_seq_length 128 \
+    --per_device_train_batch_size 8 \
+    --learning_rate 2e-5 \
+    --num_train_epochs 3.0 \
+    --output_dir /tmp/mnli_output/
+```
+
+If you have a GPU with mixed precision capabilities (architecture Pascal or more recent), you can use mixed precision
+training with PyTorch 1.6.0 or latest, or by installing the [Apex](https://github.com/NVIDIA/apex) library for previous
+versions. Just add the flag `--fp16` to your command launching one of the scripts mentioned above!
+
+Using mixed precision training usually results in 2x-speedup for training with the same final results (as shown in
+[this table](https://github.com/huggingface/transformers/tree/master/examples/text-classification#mixed-precision-training)
+for text classification).
+
 ## Running on TPUs
 
 When using Tensorflow, TPUs are supported out of the box as a `tf.distribute.Strategy`.
@@ -76,27 +113,34 @@ When using Tensorflow, TPUs are supported out of the box as a `tf.distribute.Str
 When using PyTorch, we support TPUs thanks to `pytorch/xla`. For more context and information on how to setup your TPU environment refer to Google's documentation and to the
 very detailed [pytorch/xla README](https://github.com/pytorch/xla/blob/master/README.md).
 
-In this repo, we provide a very simple launcher script named [xla_spawn.py](https://github.com/huggingface/transformers/tree/master/examples/xla_spawn.py) that lets you run our example scripts on multiple TPU cores without any boilerplate.
-Just pass a `--num_cores` flag to this script, then your regular training script with its arguments (this is similar to the `torch.distributed.launch` helper for torch.distributed). 
-Note that this approach does not work for examples that use `pytorch-lightning`.
-
-For example for `run_glue`:
+In this repo, we provide a very simple launcher script named
+[xla_spawn.py](https://github.com/huggingface/transformers/tree/master/examples/xla_spawn.py) that lets you run our
+example scripts on multiple TPU cores without any boilerplate. Just pass a `--num_cores` flag to this script, then your
+regular training script with its arguments (this is similar to the `torch.distributed.launch` helper for
+`torch.distributed`):
 
 ```bash
-python examples/xla_spawn.py --num_cores 8 \
-	examples/text-classification/run_glue.py \
-	--model_name_or_path bert-base-cased \
-	--task_name mnli \
-	--data_dir ./data/glue_data/MNLI \
-	--output_dir ./models/tpu \
-	--overwrite_output_dir \
-	--do_train \
-	--do_eval \
-	--num_train_epochs 1 \
-	--save_steps 20000
+python xla_spawn.py --num_cores num_tpu_you_have \
+    path_to_script.py \
+	--all_arguments_of_the_script 
 ```
 
-Feedback and more use cases and benchmarks involving TPUs are welcome, please share with the community.
+As an example, here is how you would fine-tune the BERT large model (with whole word masking) on the text
+classification MNLI task using the `run_glue` script, with 8 TPUs:
+
+```bash
+python xla_spawn.py --num_cores 8 \
+    text-classification/run_glue.py \
+    --model_name_or_path bert-large-uncased-whole-word-masking \
+    --task_name mnli \
+    --do_train \
+    --do_eval \
+    --max_seq_length 128 \
+    --per_device_train_batch_size 8 \
+    --learning_rate 2e-5 \
+    --num_train_epochs 3.0 \
+    --output_dir /tmp/mnli_output/
+```
 
 ## Logging & Experiment tracking
 

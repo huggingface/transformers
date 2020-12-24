@@ -262,7 +262,7 @@ class BatchEncoding(UserDict):
         :class:`~transformers.BatchEncoding`. Currently can be one of :obj:`None` (unknown), :obj:`1` (a single
         sentence) or :obj:`2` (a pair of sentences)
         """
-        return self.n_sequences
+        return self._n_sequences
 
     @property
     def is_fast(self) -> bool:
@@ -781,7 +781,7 @@ class BatchEncoding(UserDict):
         # This check catches things like APEX blindly calling "to" on all inputs to a module
         # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
         # into a HalfTensor
-        if isinstance(device, str) or isinstance(device, torch.device):
+        if isinstance(device, str) or isinstance(device, torch.device) or isinstance(device, int):
             self.data = {k: v.to(device=device) for k, v in self.data.items()}
         else:
             logger.warning(
@@ -1648,6 +1648,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             proxies (:obj:`Dict[str, str], `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+            use_auth_token (:obj:`str` or `bool`, `optional`):
+                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
             revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
@@ -1661,6 +1664,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 Will be passed to the Tokenizer ``__init__`` method. Can be used to set special tokens like
                 ``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``,
                 ``mask_token``, ``additional_special_tokens``. See parameters in the ``__init__`` for more details.
+
+        .. note::
+
+            Passing :obj:`use_auth_token=True` is required when you want to use a private model.
 
         Examples::
 
@@ -1689,6 +1696,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         local_files_only = kwargs.pop("local_files_only", False)
+        use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", None)
 
@@ -1770,6 +1778,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                         proxies=proxies,
                         resume_download=resume_download,
                         local_files_only=local_files_only,
+                        use_auth_token=use_auth_token,
                     )
                 except requests.exceptions.HTTPError as err:
                     if "404 Client Error" in str(err):
@@ -3170,7 +3179,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         assert already_has_special_tokens and token_ids_1 is None, (
             "You cannot use ``already_has_special_tokens=False`` with this tokenizer. "
             "Please use a slow (full python) tokenizer to activate this argument."
-            "Or set `return_special_token_mask=True` when calling the encoding method "
+            "Or set `return_special_tokens_mask=True` when calling the encoding method "
             "to get the special tokens mask in any tokenizer. "
         )
 

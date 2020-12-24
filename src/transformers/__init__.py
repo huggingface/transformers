@@ -16,7 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-__version__ = "4.1.0.dev0"
+__version__ = "4.2.0dev0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -164,6 +164,7 @@ from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBert
 from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
 from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
 from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
+from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
 from .models.transfo_xl import (
     TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     TransfoXLConfig,
@@ -189,6 +190,7 @@ from .pipelines import (
     PipelineDataFormat,
     QuestionAnsweringPipeline,
     SummarizationPipeline,
+    TableQuestionAnsweringPipeline,
     Text2TextGenerationPipeline,
     TextClassificationPipeline,
     TextGenerationPipeline,
@@ -217,6 +219,7 @@ from .integrations import (  # isort:skip
     is_comet_available,
     is_optuna_available,
     is_ray_available,
+    is_ray_tune_available,
     is_tensorboard_available,
     is_wandb_available,
 )
@@ -284,8 +287,9 @@ from .trainer_callback import (
     TrainerControl,
     TrainerState,
 )
-from .trainer_utils import EvalPrediction, EvaluationStrategy, set_seed
+from .trainer_utils import EvalPrediction, EvaluationStrategy, SchedulerType, set_seed
 from .training_args import TrainingArguments
+from .training_args_seq2seq import Seq2SeqTrainingArguments
 from .training_args_tf import TFTrainingArguments
 from .utils import logging
 
@@ -357,6 +361,7 @@ if is_torch_available():
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         MODEL_MAPPING,
         MODEL_WITH_LM_HEAD_MAPPING,
@@ -369,6 +374,7 @@ if is_torch_available():
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
+        AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
         AutoModelWithLMHead,
     )
@@ -401,7 +407,11 @@ if is_torch_available():
         BertGenerationEncoder,
         load_tf_weights_in_bert_generation,
     )
-    from .models.blenderbot import BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST, BlenderbotForConditionalGeneration
+    from .models.blenderbot import (
+        BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        BlenderbotForConditionalGeneration,
+        BlenderbotModel,
+    )
     from .models.camembert import (
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         CamembertForCausalLM,
@@ -517,7 +527,7 @@ if is_torch_available():
         LxmertXLayer,
     )
     from .models.marian import MarianMTModel
-    from .models.mbart import MBartForConditionalGeneration
+    from .models.mbart import MBartForConditionalGeneration, MBartModel
     from .models.mmbt import MMBTForClassification, MMBTModel, ModalEmbeddings
     from .models.mobilebert import (
         MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -554,7 +564,7 @@ if is_torch_available():
         OpenAIGPTPreTrainedModel,
         load_tf_weights_in_openai_gpt,
     )
-    from .models.pegasus import PegasusForConditionalGeneration
+    from .models.pegasus import PegasusForConditionalGeneration, PegasusModel
     from .models.prophetnet import (
         PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
         ProphetNetDecoder,
@@ -604,6 +614,13 @@ if is_torch_available():
         T5Model,
         T5PreTrainedModel,
         load_tf_weights_in_t5,
+    )
+    from .models.tapas import (
+        TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TapasForMaskedLM,
+        TapasForQuestionAnswering,
+        TapasForSequenceClassification,
+        TapasModel,
     )
     from .models.transfo_xl import (
         TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -666,11 +683,13 @@ if is_torch_available():
         get_cosine_with_hard_restarts_schedule_with_warmup,
         get_linear_schedule_with_warmup,
         get_polynomial_decay_schedule_with_warmup,
+        get_scheduler,
     )
 
     # Trainer
     from .trainer import Trainer
     from .trainer_pt_utils import torch_distributed_zero_first
+    from .trainer_seq2seq import Seq2SeqTrainer
 else:
     from .utils.dummy_pt_objects import *
 
@@ -717,7 +736,7 @@ if is_tf_available():
         TFAutoModelForTokenClassification,
         TFAutoModelWithLMHead,
     )
-    from .models.bart import TFBartForConditionalGeneration, TFBartModel
+    from .models.bart import TFBartForConditionalGeneration, TFBartModel, TFBartPretrainedModel
     from .models.bert import (
         TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFBertEmbeddings,
@@ -745,6 +764,7 @@ if is_tf_available():
     )
     from .models.ctrl import (
         TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFCTRLForSequenceClassification,
         TFCTRLLMHeadModel,
         TFCTRLModel,
         TFCTRLPreTrainedModel,
@@ -859,6 +879,7 @@ if is_tf_available():
     from .models.openai import (
         TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFOpenAIGPTDoubleHeadsModel,
+        TFOpenAIGPTForSequenceClassification,
         TFOpenAIGPTLMHeadModel,
         TFOpenAIGPTMainLayer,
         TFOpenAIGPTModel,
@@ -886,6 +907,7 @@ if is_tf_available():
     from .models.transfo_xl import (
         TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFAdaptiveEmbedding,
+        TFTransfoXLForSequenceClassification,
         TFTransfoXLLMHeadModel,
         TFTransfoXLMainLayer,
         TFTransfoXLModel,
@@ -936,6 +958,7 @@ else:
 
 
 if is_flax_available():
+    from .modeling_flax_utils import FlaxPreTrainedModel
     from .models.auto import FLAX_MODEL_MAPPING, FlaxAutoModel
     from .models.bert import FlaxBertForMaskedLM, FlaxBertModel
     from .models.roberta import FlaxRobertaModel

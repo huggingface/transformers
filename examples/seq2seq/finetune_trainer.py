@@ -20,9 +20,16 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import transformers
-from seq2seq_trainer import Seq2SeqTrainer
-from seq2seq_training_args import Seq2SeqTrainingArguments
-from transformers import AutoConfig, AutoModelForSeq2SeqLM, AutoTokenizer, HfArgumentParser, MBartTokenizer, set_seed
+from transformers import (
+    AutoConfig,
+    AutoModelForSeq2SeqLM,
+    AutoTokenizer,
+    HfArgumentParser,
+    MBartTokenizer,
+    Seq2SeqTrainer,
+    Seq2SeqTrainingArguments,
+    set_seed,
+)
 from transformers.trainer_utils import EvaluationStrategy, is_main_process
 from transformers.training_args import ParallelMode
 from utils import (
@@ -97,7 +104,9 @@ class DataTrainingArguments:
         default=142,
         metadata={
             "help": "The maximum total sequence length for validation target text after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "than this will be truncated, sequences shorter will be padded. "
+            "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
+            "during ``evaluate`` and ``predict``."
         },
     )
     test_max_target_length: Optional[int] = field(
@@ -117,6 +126,22 @@ class DataTrainingArguments:
         default=True,
         metadata={"help": "If only pad tokens should be ignored. This assumes that `config.pad_token_id` is defined."},
     )
+
+
+def handle_metrics(split, metrics, output_dir):
+    """
+    Log and save metrics
+
+    Args:
+    - split: one of train, val, test
+    - metrics: metrics dict
+    - output_dir: where to save the metrics
+    """
+
+    logger.info(f"***** {split} metrics *****")
+    for key in sorted(metrics.keys()):
+        logger.info(f"  {key} = {metrics[key]}")
+    save_json(metrics, os.path.join(output_dir, f"{split}_results.json"))
 
 
 def main():
@@ -256,54 +281,69 @@ def main():
     )
     trainer = Seq2SeqTrainer(
         model=model,
-        config=config,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         data_collator=Seq2SeqDataCollator(tokenizer, data_args, training_args.tpu_num_cores),
         compute_metrics=compute_metrics_fn,
-        data_args=data_args,
+        tokenizer=tokenizer,
     )
 
+    all_metrics = {}
     # Training
     if training_args.do_train:
-        trainer.train(
+        logger.info("*** Train ***")
+
+        train_result = trainer.train(
             model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
         )
-        trainer.save_model()
-        # For convenience, we also re-save the tokenizer to the same directory,
-        # so that you can share your model easily on huggingface.co/models =)
+        metrics = train_result.metrics
+        metrics["train_n_objs"] = data_args.n_train
+
+        trainer.save_model()  # this also saves the tokenizer
+
         if trainer.is_world_process_zero():
+            handle_metrics("train", metrics, training_args.output_dir)
+            all_metrics.update(metrics)
+
+            # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
             trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
+
+            # For convenience, we also re-save the tokenizer to the same directory,
+            # so that you can share your model easily on huggingface.co/models =)
             tokenizer.save_pretrained(training_args.output_dir)
 
     # Evaluation
-    eval_results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
-        result = trainer.evaluate()
+        metrics = trainer.evaluate(
+            metric_key_prefix="val", max_length=data_args.val_max_target_length, num_beams=data_args.eval_beams
+        )
+        metrics["val_n_objs"] = data_args.n_val
+        metrics["val_loss"] = round(metrics["val_loss"], 4)
 
         if trainer.is_world_process_zero():
-            logger.info("***** Eval results *****")
-            for key, value in result.items():
-                logger.info("  %s = %s", key, value)
-            save_json(result, os.path.join(training_args.output_dir, "eval_results.json"))
-            eval_results.update(result)
+
+            handle_metrics("val", metrics, training_args.output_dir)
+            all_metrics.update(metrics)
 
     if training_args.do_predict:
-        logging.info("*** Test ***")
+        logger.info("*** Predict ***")
 
-        test_output = trainer.predict(test_dataset=test_dataset)
-        test_metrics = {k.replace("eval", "test"): v for k, v in test_output.metrics.items()}
+        test_output = trainer.predict(
+            test_dataset=test_dataset,
+            metric_key_prefix="test",
+            max_length=data_args.val_max_target_length,
+            num_beams=data_args.eval_beams,
+        )
+        metrics = test_output.metrics
+        metrics["test_n_objs"] = data_args.n_test
 
         if trainer.is_world_process_zero():
-            logger.info("***** Test results *****")
-            for key, value in test_metrics.items():
-                logger.info("  %s = %s", key, value)
-
-            save_json(test_metrics, os.path.join(training_args.output_dir, "test_results.json"))
-            eval_results.update(test_metrics)
+            metrics["test_loss"] = round(metrics["test_loss"], 4)
+            handle_metrics("test", metrics, training_args.output_dir)
+            all_metrics.update(metrics)
 
             if training_args.predict_with_generate:
                 test_preds = tokenizer.batch_decode(
@@ -313,8 +353,9 @@ def main():
                 write_txt_file(test_preds, os.path.join(training_args.output_dir, "test_generations.txt"))
 
     if trainer.is_world_process_zero():
-        save_json(eval_results, "all_results.json")
-    return eval_results
+        save_json(all_metrics, os.path.join(training_args.output_dir, "all_results.json"))
+
+    return all_metrics
 
 
 def _mp_fn(index):
