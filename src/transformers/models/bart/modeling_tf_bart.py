@@ -1116,7 +1116,9 @@ class TFBartModel(TFBartPretrainedModel):
     def serving_output(self, output):
         return TFSeq2SeqModelOutput(
             last_hidden_state=output.last_hidden_state,
-            past_key_values=tf.tuple(output.past_key_values)[1],
+            past_key_values=tf.tuple(output.past_key_values)[1]
+            if self.config.use_cache
+            else None,
             decoder_hidden_states=tf.convert_to_tensor(output.decoder_hidden_states)
             if self.config.output_hidden_states
             else None,
@@ -1282,7 +1284,9 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel):
         return TFSeq2SeqLMOutput(
             loss=None,
             logits=output.logits,
-            past_key_values=tf.tuple(output.past_key_values)[1],
+            past_key_values=tf.tuple(output.past_key_values)[1]
+            if self.config.use_cache
+            else None,
             decoder_hidden_states=tf.convert_to_tensor(output.decoder_hidden_states)
             if self.config.output_hidden_states
             else None,
