@@ -71,6 +71,9 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if ``config.is_decoder=True``.
         {% else -%}
         vocab_size (:obj:`int`, `optional`, defaults to 50265):
             Vocabulary size of the {{cookiecutter.modelname}} model. Defines the number of different tokens that can be represented by the
@@ -146,6 +149,7 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
+        use_cache=True,
         is_encoder_decoder=False,
         {% else -%}
         vocab_size=50265,
@@ -199,6 +203,7 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
+        self.use_cache = use_cache
         {% else -%}
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
