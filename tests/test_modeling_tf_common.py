@@ -122,7 +122,7 @@ class TFModelTesterMixin:
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
 
             with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
+                model.save_pretrained(tmpdirname, saved_model=False)
                 model = model_class.from_pretrained(tmpdirname)
                 after_outputs = model(self._prepare_for_class(inputs_dict, model_class))
 
@@ -163,7 +163,7 @@ class TFModelTesterMixin:
             else:
                 expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
-    
+    @slow
     def test_saved_model_creation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -178,7 +178,7 @@ class TFModelTesterMixin:
                 saved_model_dir = os.path.join(tmpdirname, "saved_model")
                 self.assertTrue(os.path.exists(saved_model_dir))
     
-    # @slow
+    #@slow
     def test_saved_model_creation_extended(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
@@ -522,7 +522,7 @@ class TFModelTesterMixin:
             model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
             # Let's load it from the disk to be sure we can use pretrained weights
             with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
+                model.save_pretrained(tmpdirname, saved_model=False)
                 model = model_class.from_pretrained(tmpdirname)
 
             outputs_dict = model(input_ids)
