@@ -19,11 +19,13 @@
 import warnings
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union
 
-from transformers.configuration_utils import PretrainedConfig
-from transformers.file_utils import is_tf_available, is_torch_available
-from transformers.modelcard import ModelCard
-from transformers.models.auto.tokenization_auto import AutoTokenizer
-from transformers.pipelines.base import (
+from ..configuration_utils import PretrainedConfig
+from ..file_utils import is_tf_available, is_torch_available
+from ..modelcard import ModelCard
+from ..models.auto.tokenization_auto import AutoTokenizer
+from ..tokenization_utils import PreTrainedTokenizer
+from ..utils import logging
+from .base import (
     ArgumentHandler,
     CsvPipelineDataFormat,
     JsonPipelineDataFormat,
@@ -34,38 +36,22 @@ from transformers.pipelines.base import (
     get_default_model,
     get_framework,
 )
-from transformers.pipelines.conversational import Conversation, ConversationalPipeline
-from transformers.pipelines.feature_extraction import FeatureExtractionPipeline
-from transformers.pipelines.fill_mask import FillMaskPipeline
-from transformers.pipelines.question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
-from transformers.pipelines.table_question_answering import (
-    TableQuestionAnsweringArgumentHandler,
-    TableQuestionAnsweringPipeline,
-)
-from transformers.pipelines.text2text_generation import (
-    SummarizationPipeline,
-    Text2TextGenerationPipeline,
-    TranslationPipeline,
-)
-from transformers.pipelines.text_classification import TextClassificationPipeline
-from transformers.pipelines.text_generation import TextGenerationPipeline
-from transformers.pipelines.token_classification import (
-    NerPipeline,
-    TokenClassificationArgumentHandler,
-    TokenClassificationPipeline,
-)
-from transformers.pipelines.zero_shot_classification import (
-    ZeroShotClassificationArgumentHandler,
-    ZeroShotClassificationPipeline,
-)
-from transformers.tokenization_utils import PreTrainedTokenizer
-from transformers.utils import logging
+from .conversational import Conversation, ConversationalPipeline
+from .feature_extraction import FeatureExtractionPipeline
+from .fill_mask import FillMaskPipeline
+from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
+from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
+from .text2text_generation import SummarizationPipeline, Text2TextGenerationPipeline, TranslationPipeline
+from .text_classification import TextClassificationPipeline
+from .text_generation import TextGenerationPipeline
+from .token_classification import NerPipeline, TokenClassificationArgumentHandler, TokenClassificationPipeline
+from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 
 
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.models.auto.modeling_tf_auto import (
+    from ..models.auto.modeling_tf_auto import (
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -83,7 +69,7 @@ if is_tf_available():
 if is_torch_available():
     import torch
 
-    from transformers.models.auto.modeling_auto import (
+    from ..models.auto.modeling_auto import (
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
@@ -100,8 +86,8 @@ if is_torch_available():
         AutoModelForTokenClassification,
     )
 if TYPE_CHECKING:
-    from transformers.modeling_tf_utils import TFPreTrainedModel
-    from transformers.modeling_utils import PreTrainedModel
+    from ..modeling_tf_utils import TFPreTrainedModel
+    from ..modeling_utils import PreTrainedModel
 
 logger = logging.get_logger(__name__)
 

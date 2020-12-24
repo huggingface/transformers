@@ -2,15 +2,14 @@ import collections
 
 import numpy as np
 
-from transformers.file_utils import add_end_docstrings, is_torch_available, requires_pandas
-
+from ..file_utils import add_end_docstrings, is_torch_available, requires_pandas
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
 
 
 if is_torch_available():
     import torch
 
-    from transformers.models.auto.modeling_auto import MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING
 
 
 class TableQuestionAnsweringArgumentHandler(ArgumentHandler):

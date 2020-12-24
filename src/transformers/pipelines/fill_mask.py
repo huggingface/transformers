@@ -2,27 +2,26 @@ from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
-from transformers.file_utils import add_end_docstrings, is_tf_available, is_torch_available
-from transformers.modelcard import ModelCard
-from transformers.tokenization_utils import PreTrainedTokenizer
-from transformers.utils import logging
-
+from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
+from ..modelcard import ModelCard
+from ..tokenization_utils import PreTrainedTokenizer
+from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline, PipelineException
 
 
 if TYPE_CHECKING:
-    from transformers.modeling_tf_utils import TFPreTrainedModel
-    from transformers.modeling_utils import PreTrainedModel
+    from ..modeling_tf_utils import TFPreTrainedModel
+    from ..modeling_utils import PreTrainedModel
 
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.models.auto.modeling_tf_auto import TF_MODEL_WITH_LM_HEAD_MAPPING
+    from ..models.auto.modeling_tf_auto import TF_MODEL_WITH_LM_HEAD_MAPPING
 
 if is_torch_available():
     import torch
 
-    from transformers.models.auto.modeling_auto import MODEL_FOR_MASKED_LM_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_MASKED_LM_MAPPING
 
 
 logger = logging.get_logger(__name__)

@@ -2,26 +2,25 @@ from typing import TYPE_CHECKING, List, Optional, Union
 
 import numpy as np
 
-from transformers.file_utils import add_end_docstrings, is_tf_available, is_torch_available
-from transformers.modelcard import ModelCard
-from transformers.models.bert.tokenization_bert import BasicTokenizer
-from transformers.tokenization_utils import PreTrainedTokenizer
-
+from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
+from ..modelcard import ModelCard
+from ..models.bert.tokenization_bert import BasicTokenizer
+from ..tokenization_utils import PreTrainedTokenizer
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
 
 
 if TYPE_CHECKING:
-    from transformers.modeling_tf_utils import TFPreTrainedModel
-    from transformers.modeling_utils import PreTrainedModel
+    from ..modeling_tf_utils import TFPreTrainedModel
+    from ..modeling_utils import PreTrainedModel
 
 if is_tf_available():
 
-    from transformers.models.auto.modeling_tf_auto import TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
 if is_torch_available():
     import torch
 
-    from transformers.models.auto.modeling_auto import MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING
 
 
 class TokenClassificationArgumentHandler(ArgumentHandler):

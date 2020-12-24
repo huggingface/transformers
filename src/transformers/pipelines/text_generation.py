@@ -1,5 +1,4 @@
-from transformers.file_utils import add_end_docstrings
-
+from ..file_utils import add_end_docstrings
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 

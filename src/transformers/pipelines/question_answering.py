@@ -3,28 +3,27 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from transformers.data import SquadExample, SquadFeatures, squad_convert_examples_to_features
-from transformers.file_utils import add_end_docstrings, is_tf_available, is_torch_available
-from transformers.modelcard import ModelCard
-from transformers.tokenization_utils import PreTrainedTokenizer
-from transformers.tokenization_utils_base import PaddingStrategy
-
+from ..data import SquadExample, SquadFeatures, squad_convert_examples_to_features
+from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
+from ..modelcard import ModelCard
+from ..tokenization_utils import PreTrainedTokenizer
+from ..tokenization_utils_base import PaddingStrategy
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
 
 
 if TYPE_CHECKING:
-    from transformers.modeling_tf_utils import TFPreTrainedModel
-    from transformers.modeling_utils import PreTrainedModel
+    from ..modeling_tf_utils import TFPreTrainedModel
+    from ..modeling_utils import PreTrainedModel
 
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.models.auto.modeling_tf_auto import TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
 if is_torch_available():
     import torch
 
-    from transformers.models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
 
 class QuestionAnsweringArgumentHandler(ArgumentHandler):

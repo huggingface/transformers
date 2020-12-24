@@ -1,9 +1,8 @@
 import uuid
 from typing import List, Optional, Union
 
-from transformers.file_utils import add_end_docstrings, is_tf_available, is_torch_available
-from transformers.utils import logging
-
+from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
+from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 

@@ -1,19 +1,15 @@
-from transformers.file_utils import add_end_docstrings, is_tf_available, is_torch_available
-from transformers.utils import logging
-
+from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
+from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.models.auto.modeling_tf_auto import (
-        TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
-        TF_MODEL_WITH_LM_HEAD_MAPPING,
-    )
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING, TF_MODEL_WITH_LM_HEAD_MAPPING
 
 if is_torch_available():
-    from transformers.models.auto.modeling_auto import MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
+    from ..models.auto.modeling_auto import MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING
 
 logger = logging.get_logger(__name__)
 

@@ -22,25 +22,25 @@ from contextlib import contextmanager
 from os.path import abspath, exists
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
-from transformers.file_utils import add_end_docstrings, is_tf_available, is_torch_available
-from transformers.modelcard import ModelCard
-from transformers.tokenization_utils import PreTrainedTokenizer
-from transformers.utils import logging
+from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
+from ..modelcard import ModelCard
+from ..tokenization_utils import PreTrainedTokenizer
+from ..utils import logging
 
 
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.models.auto.modeling_tf_auto import TFAutoModel
+    from ..models.auto.modeling_tf_auto import TFAutoModel
 
 if is_torch_available():
     import torch
 
-    from transformers.models.auto.modeling_auto import AutoModel
+    from ..models.auto.modeling_auto import AutoModel
 
 if TYPE_CHECKING:
-    from transformers.modeling_tf_utils import TFPreTrainedModel
-    from transformers.modeling_utils import PreTrainedModel
+    from ..modeling_tf_utils import TFPreTrainedModel
+    from ..modeling_utils import PreTrainedModel
 
 
 logger = logging.get_logger(__name__)

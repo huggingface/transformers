@@ -1,14 +1,13 @@
 from typing import TYPE_CHECKING, Optional, Union
 
-from transformers.modelcard import ModelCard
-from transformers.tokenization_utils import PreTrainedTokenizer
-
+from ..modelcard import ModelCard
+from ..tokenization_utils import PreTrainedTokenizer
 from .base import ArgumentHandler, Pipeline
 
 
 if TYPE_CHECKING:
-    from transformers.modeling_tf_utils import TFPreTrainedModel
-    from transformers.modeling_utils import PreTrainedModel
+    from ..modeling_tf_utils import TFPreTrainedModel
+    from ..modeling_utils import PreTrainedModel
 
 
 # Can't use @add_end_docstrings(PIPELINE_INIT_ARGS) here because this one does not accept `binary_output`
