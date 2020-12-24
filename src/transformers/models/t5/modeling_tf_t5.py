@@ -1147,12 +1147,13 @@ class TFT5Model(TFT5PreTrainedModel):
             training=inputs["training"],
         )
 
-        past = (inputs["encoder_outputs"].to_tuple(), decoder_outputs[1]) if inputs["use_cache"] else None
-
         if not inputs["return_dict"]:
+            past = (inputs["encoder_outputs"], decoder_outputs[1]) if inputs["use_cache"] else None
             if past is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
             return decoder_outputs + inputs["encoder_outputs"]
+
+        past = (inputs["encoder_outputs"].to_tuple(), decoder_outputs[1]) if inputs["use_cache"] else None
 
         return TFSeq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1332,8 +1333,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        past = (inputs["encoder_outputs"].to_tuple(), decoder_outputs[1]) if inputs["use_cache"] else None
         if not inputs["return_dict"]:
+            past = (inputs["encoder_outputs"], decoder_outputs[1]) if inputs["use_cache"] else None
             if past is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
             output = (logits,) + decoder_outputs[1:] + inputs["encoder_outputs"]
@@ -1357,6 +1358,8 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
                 hidden_states=hidden_states,
                 attentions=attentions,
             )
+
+        past = (inputs["encoder_outputs"].to_tuple(), decoder_outputs[1]) if inputs["use_cache"] else None
 
         return TFSeq2SeqLMOutput(
             loss=loss,
