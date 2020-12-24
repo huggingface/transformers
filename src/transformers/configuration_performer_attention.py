@@ -76,14 +76,14 @@ class PerformerAttentionConfig:
     kernel_epsilon: float = 1e-4
     normalize_output: bool = True
     normalization_stabilizer: float = 1e-6
+    use_qkv_linear_layers: bool = True
 
     num_random_features: Optional[int] = None
     use_thick_features: bool = False
     use_orthogonal_features: bool = True
-    use_qkv_linear_layers: bool = True
     regularize_feature_norms: bool = True
     
-    feature_redraw_interval: int = 1000
+    feature_redraw_interval: int = 1
     redraw_stochastically: bool = False
     redraw_verbose: bool = False
     

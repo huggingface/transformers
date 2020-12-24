@@ -1,3 +1,4 @@
+from itertools import count
 from torch import nn
 from typing import Optional
 import logging
@@ -41,6 +42,7 @@ class PerformerAttention(nn.Module):
         self.dropout = nn.Dropout(p=self.attention_dropout)
         self.calls_since_last_redraw = 0
 
+        self.random_feature_chain = None
         self.random_features = None
 
         assert self.kernel_type in KERNEL_CALLABLES, "Invalid kernel type"
@@ -216,18 +218,18 @@ class PerformerAttention(nn.Module):
     def redraw_features_now(self):
         device = self.random_features.device
         batch = self.random_features.shape[0]
-        self._generate_feature_matrix(batch, device)
+        self._get_feature_matrix(batch, device)
 
         if self.training and self.redraw_verbose:
             logging.getLogger().info("PerformerAttention: Just redrew random features.")
 
-        self.calls_since_last_redraw = 0
+        self.calls_since_last_redraw = 1
 
     def reset_recurrent_state(self):
         self.s = None
         self.z = None
 
-    def _generate_feature_matrix(self, batch_size, device):
+    def _get_feature_matrix(self, batch_size, device):
         dim_per_head = self.d_model // self.num_heads
         num_rows = self.num_random_features or round(dim_per_head * math.log(dim_per_head))
         batch = batch_size if self.use_thick_features else 1
@@ -235,18 +237,10 @@ class PerformerAttention(nn.Module):
         if not self.use_orthogonal_features:
             return torch.randn(batch, num_rows, dim_per_head, device=device)
 
-        # The Givens rotation algorithm currently only supports matrices with an even number of rows/columns.
-        # This should be fine for all widely used Transformer models, but we can use QR decomposition as a backup.
-        num_full_blocks = num_rows // dim_per_head
-        orthog_func = _get_square_orthogonal_block_givens if dim_per_head % 2 == 0 else _get_square_orthogonal_block_qr
-        block_list = [orthog_func(batch, dim_per_head, device) for _ in range(num_full_blocks)]
+        if not self.random_feature_chain:
+            self.random_feature_chain = _get_orthogonal_feature_chain(batch_size, num_rows, dim_per_head, device)
 
-        remaining_rows = num_rows - num_full_blocks * dim_per_head
-        if remaining_rows > 0:
-            q = orthog_func(batch, dim_per_head, device)
-            block_list.append(q[:, :remaining_rows])
-
-        final_tensor = torch.cat(block_list, dim=1)
+        final_tensor = next(self.random_feature_chain)
 
         # This option yields SMREG
         if self.regularize_feature_norms:
@@ -267,7 +261,7 @@ class PerformerAttention(nn.Module):
     def _redraw_features_if_needed(self, batch, device):
         # We haven't created the projection matrix yet, let's create it
         if self.random_features is None or batch != self.random_features.shape[0]:
-            self._generate_feature_matrix(batch, device)
+            self._get_feature_matrix(batch, device)
 
         elif self.feature_redraw_interval is not None:
             if self.redraw_stochastically:
@@ -309,6 +303,23 @@ def _get_square_orthogonal_block_qr(batch, size, device=None):
     return q.transpose(-2, -1)
 
 
+def _get_orthogonal_feature_chain(batch, num_rows, dim_per_head, device=None):
+    # The algorithm requires an even number of rows, so round down to the nearest even number
+    rows_per_block = dim_per_head - dim_per_head % 2
+
+    total_num_blocks = int(math.ceil(num_rows / rows_per_block))
+    extra_rows = total_num_blocks * rows_per_block - num_rows
+
+    block_chains = [_get_kacs_random_walk_chain(batch, rows_per_block, device) for _ in range(total_num_blocks)]
+
+    while True:
+        blocks = [next(chain) for chain in block_chains]
+        if extra_rows > 0:
+            blocks[-1] = blocks[-1][:, extra_rows:]
+
+        yield torch.cat(blocks, dim=1)
+
+
 # Not ideal but all we can do until https://github.com/pytorch/pytorch/issues/42502 gets implemented
 def _batch_randperm(batch, n, dtype=torch.int64, device=None):
     out_tensor = torch.empty(batch, n, dtype=dtype, device=device)
@@ -318,42 +329,37 @@ def _batch_randperm(batch, n, dtype=torch.int64, device=None):
     return out_tensor
 
 
-# Fast parallelizable way of making random orthogonal matrices- O(n log(n)) vs. O(n^3) for QR
+# Parallelized version of Kac's random walk, a Markov chain that quickly generates random orthogonal matrices. Samples
+# are autocorrelated with a mixing time of roughly (2 log n), but this should actually be good for training stability.
 @torch.no_grad()
-def _get_square_orthogonal_block_givens(batch, num_rows, device=None):
-    r"""Constructs a 2D-tensor which is a product of Givens random rotations.
-    Constructs a 2D-tensor of the form G_1 * ... * G_k, where G_i is a Givens
-    random rotation. The resulting tensor mimics a matrix taken uniformly at
-    random form the orthogonal group.
-    Args:
-      num_rows: number of rows/columns of the resulting 2D-tensor.
-    Returns:
-      The product of Givens random rotations.
-    """
-    q = torch.eye(num_rows, device=device)  # Start with identity matrix
-    q = q.expand(batch, num_rows, num_rows)
+def _get_kacs_random_walk_chain(batch, num_rows, device=None):
+    # Start with identity matrix
+    block = torch.eye(num_rows, device=device)
+    block = block.expand(batch, num_rows, num_rows)
+    block.unsqueeze_(2)
 
-    # Compute the cosines and sines of the rotations up front
-    num_iterations = 2 * int(math.ceil(math.log(num_rows)))
-    angles = math.pi * torch.rand(batch, num_iterations, num_rows // 2, 1, device=device)
-    cosines, sines = torch.cos(angles), torch.sin(angles)
-    q.unsqueeze_(2)
+    burnin_steps = 2 * int(math.ceil(math.log(num_rows)))
+    for n in count():
+        # Compute the cosines and sines of the rotations up front
+        angles = math.pi * torch.rand(batch, num_rows // 2, 1, device=device)
+        cosines, sines = torch.cos(angles), torch.sin(angles)
 
-    # Group the matrix into random, non-overlapping pairs of rows. Because these pairs are non-overlapping, we can
-    # perform each set of rotations in parallel.
-    for n in range(num_iterations):
+        # Group the matrix into random, non-overlapping pairs of rows. Because these pairs are non-overlapping, we can
+        # perform each set of rotations in parallel.
         shuffled_rows = _batch_randperm(batch, num_rows, device=device).view(batch, -1, 1, 1)
-        random_row_pairs = q.gather(1, shuffled_rows.expand_as(q)).view(batch, -1, 2, num_rows)
+        random_row_pairs = block.gather(1, shuffled_rows.expand_as(block)).view(batch, -1, 2, num_rows)
 
         rows1, rows2 = random_row_pairs[:, :, 0], random_row_pairs[:, :, 1]
-        new_rows1 = cosines[:, n] * rows1 + sines[:, n] * rows2
-        new_rows2 = -sines[:, n] * rows1 + cosines[:, n] * rows2
+        new_rows1 = cosines * rows1 + sines * rows2
+        new_rows2 = -sines * rows1 + cosines * rows2
 
         random_row_pairs[:, :, 0], random_row_pairs[:, :, 1] = new_rows1, new_rows2
 
-        q = random_row_pairs.view(batch, -1, 1, num_rows)  # Ungroup all the rows again
+        block = random_row_pairs.view(batch, -1, 1, num_rows)  # Ungroup all the rows again
 
-    return q.squeeze(-2)
+        # Only yield the block after we've completed 2 log(n) burn-in iterations
+        if n >= burnin_steps:
+            yield block.squeeze(-2)
 
 
 def _headwise_causal_numerator(q_prime, k_prime_t, v):
