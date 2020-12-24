@@ -889,7 +889,7 @@ class {{cookiecutter.camelcase_modelname}}Model({{cookiecutter.camelcase_modelna
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=sequence_output,
-            past_key_values=next_cache,
+            past_key_values=encoder_outputs.past_key_values,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
             cross_attentions=encoder_outputs.cross_attentions,
