@@ -28,15 +28,44 @@ There are two main venues to receive support: [the forums](https://discuss.huggi
 
 If you have a difficulty with deploying this library or some questions, or you'd like to discuss a new feature, please first consider discussing those things at the forums. Only when you feel your subject matter has been crystalized and you still need support from the library developers do proceed to file an [Issue](https://github.com/huggingface/transformers/issues).
 
+In particular all "Please explain" questions or objectively very user-specific feature requests belong to the forums. Here are some example of such questions:
+
+* "I would like to use a BertModel within a RL-Agent for a customer support service. How can I use a BertForMaskedLM in my ChatBotModel?"
+
+* "Could you please explain why T5 has no positional embedding matrix under T5Model?"
+
+* "How should I set my generation parameters for translation?"
+
+* "How to train T5 on De->En translation?"
+
+
 ## The github Issues
 
-If you are filing an [Issue](https://github.com/huggingface/transformers/issues) and would like to increase your chances for that Issue to be addressed and resolved, please consider following these guidelines. If after reading this document there are remaining questions on how and why or there is a need for further elucidation, please, don't hesitate to use forums to ask "How do I?" type of questions.
+Everything which hints at a bug should be opened as an [Issue](https://github.com/huggingface/transformers/issues).
+
+You are not required to read the following guidelines before opening an Issue. However, if you notice that your issue is not being addressed, chances are that the developers have one or several difficulties with the quality of that Issue. In which case please read the following guidelines and adjust your Issue accordingly.
 
 The guidelines:
 
-1. Keep the Issue short, providing the information that you think will aid the developers to understand your situation. Put yourself in the shoes of the person who has never seen your code or knows anything about your custom setup. This mental exercise will help a lot for you to know what to share and what not.
+1. Before posting an Issue, first search for already posted issues, since chances are someone has already asked a similar question before you. 
 
-2. If there is a software failure, always provide the full traceback, for example:
+    If you use Google your search query should be:
+    
+    ```
+    "huggingface" "transformers" your query 
+    ```
+    
+    The first two quoted words tell Google to limit the search to the context of the Huggingface Transformers. The remainder is your query - most commonly this would be an assert line if the software fails with an assert. 
+    
+    The results of such query will typically match github Issues, huggingface forums and StackExchange and people's blogs.
+    
+    If you find relevant hints, you may choose to continue the discussion there if you have follow up questions. 
+    
+    If what you found is similar but doesn't quite answer your problem, please, post a new Issue and do include links to similar Issues or forum discussions you may have found.
+    
+2. Keep the Issue short, providing the information that you think will aid the developers to understand your situation. Put yourself in the shoes of the person who has never seen your code or knows anything about your custom setup. This mental exercise will help a lot for you to know what to share and what not.
+
+3. If there is a software failure, always provide the full traceback, for example:
 
    ```python
    $ python -c 'import transformers'
@@ -59,7 +88,7 @@ The guidelines:
    
    If your application is running on more than one GPU (e.g. under `DistributedDataParallel`) and typically getting every log and traceback printed multiple times, please make sure that you paste only one copy of it. At times the traceback from parallel processes may get interleaved - so either disentangle these or change the loggers to log only for `local_rank==0` so that only one process logs things.
    
-3. When quoting a traceback, command line instructions and any type of code always enclose it in triple backticks inside the editor window, that is:
+4. When quoting a traceback, command line instructions and any type of code always enclose it in triple backticks inside the editor window, that is:
 
    ````
    ```
@@ -86,7 +115,7 @@ The guidelines:
    
    The backslashes allow us to copy the command directly into the console to run it, without needing to edit it.
 
-4. Include only the important information that you think will help the developer to quickly identify the problem.
+5. Include only the important information that you think will help the developer to quickly identify the problem.
 
    For example applications often create huge amounts of logs. Ask yourself whether providing all or parts of the log is useful. 
    
@@ -122,25 +151,25 @@ The guidelines:
    
     You could also provide a link to a pastebin service, but this is less beneficial since those links tend to expire quickly and future readers of your Issue might not be able to access that log file anymore and may lack some context. 
 
-5. If this is an Issue in your code, do try to reduce that code to a minimal example that still demonstrates the problem. Please ask at the forums if you have a hard time figuring how to do that. Please realize that we don't have the luxury of having time to try and understand all of your custom code.
+6. If this is an Issue in your code, do try to reduce that code to a minimal example that still demonstrates the problem. Please ask at the forums if you have a hard time figuring how to do that. Please realize that we don't have the luxury of having time to try and understand all of your custom code.
 
    If you really tried to make a short reproducible code but couldn't figure it out, it might be that having a traceback wil give the developer enough information to know what's going on. But if it is not enough and we can't reproduce the problem, we can't really solve it.
    
    Do not dispair if you can't figure it out from the begining, just share what you can and perhaps someone else will be able to help you at the forums.
    
-6. If you forked off some of this project's code or example applications, please, do not ask us to go into your code repository and figure out what you may have done. The code is already very complex and unless there is an easy way to do a diff and it's a small diff, it won't be possible to find someone with time on their hands to make a lengthy investigation. Albeit, you might find someone at the forums who will be generous to do this for you. 
+7. If you forked off some of this project's code or example applications, please, do not ask us to go into your code repository and figure out what you may have done. The code is already very complex and unless there is an easy way to do a diff and it's a small diff, it won't be possible to find someone with time on their hands to make a lengthy investigation. Albeit, you might find someone at the forums who will be generous to do this for you. 
 
-7. Before reporting an Issue, first, always try to update your environment to the latest official version of this library. We have no resources to go and debug older revisions, which could easily have bugs that have been fixed in the latest released version.
+8. Before reporting an Issue, first, always try to update your environment to the latest official version of this library. We have no resources to go and debug older revisions, which could easily have bugs that have been fixed in the latest released version.
 
    We understand that this is not always possible, especially when APIs change, in which case file an Issue against the highest library version your environment can support.
    
    Of course, if you upgrade the library, always retest that the problem is still there.
 
-8. Please do not ask us to reproduce an Issue with your custom data, since we don't have it. So, either you should use some existing dataset supported by HF datasets or you need to supply a code that generates a small sample on the fly, or some another quick and simple way to get it.
+9. Please do not ask us to reproduce an Issue with your custom data, since we don't have it. So, either you should use some existing dataset supported by HF datasets or you need to supply a code that generates a small sample on the fly, or some another quick and simple way to get it.
 
    Please do not send us any non-public domain data that may require a license or a permission to be used.
 
-9. Do not tag multiple developers on the Issue unless you know this is expected, either because you asked them and they gave you an explicit permission to tag them or the Issue template instructs you to do so. 
+10. Do not tag multiple developers on the Issue unless you know this is expected, either because you asked them and they gave you an explicit permission to tag them or the Issue template instructs you to do so. 
 
    The "who to tag for what domain" part of the Issue template is there to help users direct their questions to the right developers who are designated maintainers of project's specific domains. They can then decide at their own discretion to tag other developers if they feel it'd help move the Issue forward.
    
@@ -152,7 +181,7 @@ The guidelines:
    
    If you see a certain developer doing multiple and/or recent commits into a specific area of the project that you feel is relevant to your Issue, it is not a good reason to tag them. Various developers may be fixing things that prevent them from moving forward, but often their work is focused on a totally different domain. And while they may or may not know how to help you with the problem at hand, it would benefit the whole community much more if they focus on the domain of their unique expertise.
 
-10. Use the Edit button. Take your time, and re-read and improve the wording and formatting to make your posts and comments as easy to understand as possible.
+11. Use the Edit button. Take your time, and re-read and improve the wording and formatting to make your posts and comments as easy to understand as possible.
 
     Avoid posting multiple comments in a row, as each comment generates a notification for the developers tagged in that issue. If you happened to post multiple comments in a row, and nobody followed up yet - consider merging those into one or a few comments while editing the combined content to be coherent.
     
@@ -167,7 +196,7 @@ The guidelines:
     Try not use italics and bold text too much as these often make the text more difficult to read.
     
 
-11. If you are cross-referencing a specific comment in a given thread or another Issue, always link to that specific comment, rather than using the Issue link. If you do the latter it could be quite impossible to find which specific comment you're referring to.
+12. If you are cross-referencing a specific comment in a given thread or another Issue, always link to that specific comment, rather than using the Issue link. If you do the latter it could be quite impossible to find which specific comment you're referring to.
 
     To get the link to the specific comment do not copy the url from the location bar of your browser, but instead, click the `...` icon in the upper right corner of the comment and then select "Copy Link".
     
@@ -177,7 +206,7 @@ The guidelines:
     2. https://github.com/huggingface/transformers/Issues/9257#Issuecomment-749945162
 
     
-12. If you are replying to a last comment, it's totally fine to make your reply with just your comment in it. The readers can follow the information flow here.
+13. If you are replying to a last comment, it's totally fine to make your reply with just your comment in it. The readers can follow the information flow here.
 
     But if you're replying to a comment that happened some comments back it's always a good practice to quote just the relevant lines you're replying it. The `>` is used for quoting, or you can always use the menu to do so. For example your editor box will look like:
 
@@ -193,5 +222,4 @@ In general the best way to figure out what works the best is learn from Issues p
 
 Thank you for reading this somewhat lengthy document. We would like to conclude that these are not rules, but guidelines that will help maximize the chances for us to understand what you are trying to communicate, reproduce the problem and resolve it to your satisfaction and the benefit of the whole community.
 
-If for any reason you feel that something is unclear and you have further questions please don't hesitate to ask in the following sub-section of the forums: [XXX: @sgugger].
-
+If after reading this document there are remaining questions on how and why or there is a need for further elucidation, please, don't hesitate to ask "How do I?" type of questions in the following sub-section of the forums: [XXX: @sgugger].
