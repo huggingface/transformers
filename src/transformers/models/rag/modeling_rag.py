@@ -853,14 +853,14 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 Attention mask post-processed from the retrieved documents and the question encoder :obj:`input_ids` by
                 the retriever.
 
-                If the model has is not initialized with a ``retriever`` or ``input_ids`` is not given,
+                If the model is not initialized with a ``retriever`` or ``input_ids`` is not given,
                 :obj:`context_input_ids` and :obj:`context_attention_mask` have to be provided to the forward pass.
                 They are returned by :meth:`~transformers.RagRetriever.__call__`.
             doc_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.n_docs)`):
                 Score between each retrieved document embeddings (see :obj:`retrieved_doc_embeds`) and
                 :obj:`question_encoder_last_hidden_state`.
 
-                If the model has is not initialized with a ``retriever`` or ``input_ids`` is not given,
+                If the model is not initialized with a ``retriever`` or ``input_ids`` is not given,
                 :obj:`doc_scores` has to be provided to the forward pass. :obj:`doc_scores` are returned by
                 :meth:`~transformers.RagRetriever.__call__`.
             do_deduplication (:obj:`bool`, `optional`):
@@ -991,7 +991,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         # seq_logits dim = (batch*n_docs, tgt_len , #vocabs)
         seq_logprobs = torch.nn.functional.log_softmax(seq_logits, dim=-1).view(
             seq_logits.shape[0] // n_docs, n_docs, -1, seq_logits.size(-1)
-        )  # batch_size x n_docs x tgt_len x #vocabs
+        )  # batch_size x n_docs x tgt_len x #vocab_size
         doc_logprobs = torch.nn.functional.log_softmax(doc_scores, dim=1).unsqueeze(-1).unsqueeze(-1)
 
         # RAG-sequence marginalization
