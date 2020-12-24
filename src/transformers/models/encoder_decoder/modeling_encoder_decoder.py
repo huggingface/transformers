@@ -30,7 +30,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "EncoderDecoderConfig"
 
 ENCODER_DECODER_START_DOCSTRING = r"""
-    This class can be used to initialize a sequence-tsequencece model with any pretrained autoencoding model as the
+    This class can be used to initialize a sequence-to-sequence model with any pretrained autoencoding model as the
     encoder and any pretrained autoregressive model as the decoder. The encoder is loaded via
     :meth:`~transformers.AutoModel.from_pretrained` function and the decoder is loaded via
     :meth:`~transformers.AutoModelForCausalLM.from_pretrained` function. Cross-attention layers are automatically added
