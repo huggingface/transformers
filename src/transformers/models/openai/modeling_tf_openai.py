@@ -657,7 +657,7 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
         )
     
     def serving_output(self, output):
-        return TFBaseModelOutput(
+        return TFCausalLMOutput(
             loss=None,
             logits=output.logits,
             hidden_states=tf.convert_to_tensor(output.hidden_states)
