@@ -237,16 +237,18 @@ class PerformerAttention(nn.Module):
             return torch.randn(batch, num_rows, dim_per_head, device=device)
 
         if not self.random_feature_chain:
-            # This option yields SMREG
-            if self.regularize_feature_norms:
-                seed = torch.eye(num_rows, device=device) * dim_per_head ** 0.5
-            else:
-                multiplier = torch.randn(batch, num_rows, dim_per_head, device=device).norm(dim=2)
-                seed = torch.diag(multiplier)   # Automatically orthogonal
-
-            self.random_feature_chain = _get_orthogonal_feature_chain(batch_size, num_rows, dim_per_head, seed, device)
+            self.random_feature_chain = _get_orthogonal_feature_chain(batch_size, num_rows, dim_per_head, device)
 
         output_tensor = next(self.random_feature_chain)
+
+        # This option yields SMREG
+        if self.regularize_feature_norms:
+            output_tensor *= dim_per_head ** 0.5
+        else:
+            # Hack to make the matrix columns have the norm we would expect them to have if they were sampled straight
+            # from a Gaussian, instead of being all norm 1
+            multiplier = torch.randn(batch, num_rows, dim_per_head, device=device).norm(dim=-1)
+            output_tensor = torch.diag_embed(multiplier) @ output_tensor
 
         # Add an attention head dimension
         output_tensor.unsqueeze_(1)
@@ -300,14 +302,14 @@ def _get_square_orthogonal_block_qr(batch, size, device=None):
     return q.transpose(-2, -1)
 
 
-def _get_orthogonal_feature_chain(batch, num_rows, dim_per_head, seed=None, device=None):
+def _get_orthogonal_feature_chain(batch, num_rows, dim_per_head, device=None):
     # The algorithm requires an even number of rows, so round down to the nearest even number
     rows_per_block = dim_per_head - dim_per_head % 2
 
     total_num_blocks = int(math.ceil(num_rows / rows_per_block))
     extra_rows = total_num_blocks * rows_per_block - (num_rows + dim_per_head % 2)
 
-    block_chains = [_get_kacs_random_walk_chain(batch, rows_per_block, seed, device) for _ in range(total_num_blocks)]
+    block_chains = [_get_kacs_random_walk_chain(batch, rows_per_block, device) for _ in range(total_num_blocks)]
 
     while True:
         blocks = [next(chain) for chain in block_chains]
@@ -330,9 +332,9 @@ def _batch_randperm(batch, n, dtype=torch.int64, device=None):
 # are autocorrelated with a mixing time of roughly (2 log n), but this should actually be good for training stability.
 # Each sample is generated in O(n^2) time, after 2 log n burn-in steps.
 @torch.no_grad()
-def _get_kacs_random_walk_chain(batch, num_rows, seed=None, device=None):
-    # Start with identity matrix if seed == None. If seed is not None, then it's assumed to be orthogonal.
-    block = seed or torch.eye(num_rows, device=device)
+def _get_kacs_random_walk_chain(batch, num_rows, device=None):
+    # Start with identity matrix
+    block = torch.eye(num_rows, device=device)
     block = block.expand(batch, num_rows, num_rows)
     block.unsqueeze_(2)
 
