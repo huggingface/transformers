@@ -162,6 +162,7 @@ class LEDEncoderAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.longformer.modeling_longformer.LongformerSelfAttention with Longformer->LEDEncoder
 class LEDEncoderSelfAttention(nn.Module):
     def __init__(self, config, layer_id):
         super().__init__()
@@ -206,8 +207,8 @@ class LEDEncoderSelfAttention(nn.Module):
         output_attentions=False,
     ):
         """
-        LongformerSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`. Padding to
-        `attention_window` happens in LongformerModel.forward to avoid redoing the padding on each layer.
+         LEDEncoderSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`. Padding to
+         `attention_window` happens in LongformerModel.forward to avoid redoing the padding on each layer.
 
         The `attention_mask` is changed in `BertModel.forward` from 0, 1, 2 to -ve: no attention
 
@@ -1114,6 +1115,16 @@ LED_INPUTS_DOCSTRING = r"""
             If you want to change padding behavior, you should read :func:`modeling_led._prepare_decoder_inputs` and
             modify to your needs. See diagram 1 in `the paper <https://arxiv.org/abs/1910.13461>`__ for more
             information on the default strategy.
+        global_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Mask to decide the attention given on each token, local attention or global attention for the encoder.
+            Tokens with global attention attends to all other tokens, and all other tokens attend to them. This is
+            important for task-specific finetuning because it makes the model more flexible at representing the task.
+            For example, for classification, the <s> token should be given global attention. For QA, all question
+            tokens should also have global attention. Please refer to the `Longformer paper
+            <https://arxiv.org/abs/2004.05150>`__ for more details. Mask values selected in ``[0, 1]``:
+
+            - 0 for local attention (a sliding window attention),
+            - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
         encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
             Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
             :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
@@ -1196,10 +1207,64 @@ class LEDEncoder(LEDPreTrainedModel):
 
         self.init_weights()
 
+    def _merge_to_attention_mask(self, attention_mask: torch.Tensor, global_attention_mask: torch.Tensor):
+        # longformer self attention expects attention mask to have 0 (no attn), 1 (local attn), 2 (global attn)
+        # (global_attention_mask + 1) => 1 for local attention, 2 for global attention
+        # => final attention_mask => 0 for no attention, 1 for local attention 2 for global attention
+        if attention_mask is not None:
+            attention_mask = attention_mask * (global_attention_mask + 1)
+        else:
+            # simply use `global_attention_mask` as `attention_mask`
+            # if no `attention_mask` is given
+            attention_mask = global_attention_mask + 1
+        return attention_mask
+
+    def _pad_to_window_size(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        inputs_embeds: torch.Tensor,
+        pad_token_id: int,
+    ):
+        """A helper function to pad tokens and mask to work with implementation of Longformer self-attention."""
+        # padding
+        attention_window = (
+            self.config.attention_window
+            if isinstance(self.config.attention_window, int)
+            else max(self.config.attention_window)
+        )
+
+        assert attention_window % 2 == 0, f"`attention_window` should be an even value. Given {attention_window}"
+        input_shape = input_ids.shape if input_ids is not None else inputs_embeds.shape
+        batch_size, seq_len = input_shape[:2]
+
+        padding_len = (attention_window - seq_len % attention_window) % attention_window
+        if padding_len > 0:
+            logger.info(
+                "Input ids are automatically padded from {} to {} to be a multiple of `config.attention_window`: {}".format(
+                    seq_len, seq_len + padding_len, attention_window
+                )
+            )
+            if input_ids is not None:
+                input_ids = F.pad(input_ids, (0, padding_len), value=pad_token_id)
+            if inputs_embeds is not None:
+                input_ids_padding = inputs_embeds.new_full(
+                    (batch_size, padding_len),
+                    self.config.pad_token_id,
+                    dtype=torch.long,
+                )
+                inputs_embeds_padding = self.embed_tokens(input_ids_padding)
+                inputs_embeds = torch.cat([inputs_embeds, inputs_embeds_padding], dim=-2)
+
+            attention_mask = F.pad(attention_mask, (0, padding_len), value=False)  # no attention on the padding tokens
+
+        return padding_len, input_ids, attention_mask, inputs_embeds
+
     def forward(
         self,
         input_ids=None,
         attention_mask=None,
+        global_attention_mask=None,
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1223,6 +1288,16 @@ class LEDEncoder(LEDPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
+            global_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                Mask to decide the attention given on each token, local attention or global attention for the encoder.
+                Tokens with global attention attends to all other tokens, and all other tokens attend to them. This is
+                important for task-specific finetuning because it makes the model more flexible at representing the
+                task. For example, for classification, the <s> token should be given global attention. For QA, all
+                question tokens should also have global attention. Please refer to the `Longformer paper
+                <https://arxiv.org/abs/2004.05150>`__ for more details. Mask values selected in ``[0, 1]``:
+
+                - 0 for local attention (a sliding window attention),
+                - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
             inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
                 Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
                 representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
@@ -1242,19 +1317,43 @@ class LEDEncoder(LEDPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # retrieve input_ids and inputs_embeds
+        # check input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
+        elif input_ids is None and inputs_embeds is None:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
+
+        # merge `global_attention_mask` and `attention_mask`
+        if global_attention_mask is not None:
+            attention_mask = self._merge_to_attention_mask(attention_mask, global_attention_mask)
+
+        # pad input if necessary
+        padding_len, input_ids, attention_mask, inputs_embeds = self._pad_to_window_size(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            pad_token_id=self.config.pad_token_id,
+        )
+
+        # retrieve input_shape
+        if input_ids is not None:
+            input_shape = input_ids.size()
+            input_ids = input_ids.view(-1, input_shape[-1])
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+
+        # convert attention_mask to float
+        if attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, seq_len]; 1 -> 0.0; 0 -> "-inf"
+            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)[:, 0, 0, :]
+
+        # get masking tensors
+        is_index_masked = attention_mask < 0
+        is_index_global_attn = attention_mask > 0
+        is_global_attn = is_index_global_attn.flatten().any().item()
 
         embed_pos = self.embed_positions(input_shape)
 
@@ -1264,15 +1363,6 @@ class LEDEncoder(LEDPreTrainedModel):
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
-
-        # convert attention_mask to float
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, seq_len]; 1 -> 0.0; 0 -> "-inf"
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)[:, 0, 0, :]
-
-        is_index_masked = attention_mask < 0
-        is_index_global_attn = attention_mask > 0
-        is_global_attn = is_index_global_attn.flatten().any().item()
 
         for encoder_layer in self.layers:
             if output_hidden_states:
@@ -1298,6 +1388,11 @@ class LEDEncoder(LEDPreTrainedModel):
 
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
+
+        # undo padding
+        if padding_len > 0:
+            # unpad `hidden_states` because the calling function is expecting a length == input_ids.size(1)
+            hidden_states = hidden_states[:, :-padding_len]
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
@@ -1341,6 +1436,7 @@ class LEDDecoder(LEDPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
+        global_attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         past_key_values=None,
@@ -1368,6 +1464,16 @@ class LEDDecoder(LEDPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
+            global_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                Mask to decide the attention given on each token, local attention or global attention. Tokens with
+                global attention attends to all other tokens, and all other tokens attend to them. This is important
+                for task-specific finetuning because it makes the model more flexible at representing the task. For
+                example, for classification, the <s> token should be given global attention. For QA, all question
+                tokens should also have global attention. Please refer to the `Longformer paper
+                <https://arxiv.org/abs/2004.05150>`__ for more details. Mask values selected in ``[0, 1]``:
+
+                - 0 for local attention (a sliding window attention),
+                - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
             encoder_hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, encoder_sequence_length, hidden_size)`, `optional`):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
@@ -1545,6 +1651,7 @@ class LEDModel(LEDPreTrainedModel):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        global_attention_mask=None,
         encoder_outputs=None,
         past_key_values=None,
         inputs_embeds=None,
@@ -1565,6 +1672,7 @@ class LEDModel(LEDPreTrainedModel):
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
+                global_attention_mask=global_attention_mask,
                 inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -1662,6 +1770,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        global_attention_mask=None,
         encoder_outputs=None,
         past_key_values=None,
         inputs_embeds=None,
@@ -1708,8 +1817,9 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
-            encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
+            encoder_outputs=encoder_outputs,
+            global_attention_mask=global_attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
@@ -1801,6 +1911,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        global_attention_mask=None,
         encoder_outputs=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
@@ -1829,6 +1940,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            global_attention_mask=global_attention_mask,
             encoder_outputs=encoder_outputs,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
@@ -1902,6 +2014,7 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        global_attention_mask=None,
         encoder_outputs=None,
         start_positions=None,
         end_positions=None,
@@ -1931,6 +2044,7 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            global_attention_mask=global_attention_mask,
             encoder_outputs=encoder_outputs,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,

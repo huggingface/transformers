@@ -69,7 +69,7 @@ class LEDModelTester:
         self,
         parent,
         batch_size=13,
-        seq_length=7,
+        seq_length=11,
         is_training=True,
         use_labels=False,
         vocab_size=99,
@@ -80,10 +80,11 @@ class LEDModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
+        max_position_embeddings=32,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
+        attention_window=4,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -102,6 +103,7 @@ class LEDModelTester:
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
+        self.attention_window = attention_window
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -127,6 +129,7 @@ class LEDModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
+            attention_window=self.attention_window,
         )
         inputs_dict = prepare_led_inputs_dict(config, input_ids, decoder_input_ids)
         return config, inputs_dict

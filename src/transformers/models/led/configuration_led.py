@@ -165,3 +165,7 @@ class LEDConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
+
+    @property
+    def attention_probs_dropout_prob(self) -> float:
+        return self.attention_dropout
