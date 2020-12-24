@@ -21,6 +21,8 @@ KERNEL_CALLABLES = {
 
 
 class PerformerAttention(nn.Module):
+    causal_numerator_fn = None  # Either refers to _headwise_causal_numerator or the fast_transformers CUDA kernel
+
     def __init__(self, config: Optional[PerformerAttentionConfig] = None, **kwargs):
         super().__init__()
 
@@ -41,20 +43,39 @@ class PerformerAttention(nn.Module):
 
         self.random_features = None
 
-        # Recurrent state, taken from 'Transformers are RNNs' Katharopoulos et al. 2020 paper
-        if self.use_recurrent_decoding:
-            self.s = None   # Numerator
-            self.z = None   # Denominator
-
         assert self.kernel_type in KERNEL_CALLABLES, "Invalid kernel type"
         self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
         if self.use_qkv_linear_layers:
             self.qkv_linear_layers = [nn.Linear(self.d_model, self.d_model) for _ in range(3)]
 
-        self.out_lin = nn.Linear(in_features=self.d_model, out_features=self.d_model)
-
+        self.output_linear = nn.Linear(in_features=self.d_model, out_features=self.d_model)
         self.pruned_heads = set()
+
+        if self.causal:
+            # Try to load the custom CUDA kernel for fast causal attention if available
+            if not self.causal_numerator_fn:
+                try:
+                    from fast_transformers.causal_product import CausalDotProduct
+
+                    def cuda_causal_numerator(queries, keys_t, values):
+                        return CausalDotProduct.apply(queries, keys_t.transpose(-2, -1), values)
+
+                    self.causal_numerator_fn = cuda_causal_numerator
+                except ImportError:
+                    CausalDotProduct = None
+
+                    logger = logging.getLogger()
+                    logger.info("Failed to load custom CUDA kernel for fast causal attention from the fast_transformers"
+                                " library. Falling back on a ~2x slower alternative. For the faster algorithm, type"
+                                " `pip install pytorch-fast-transformers` on the command line.")
+
+                    self.causal_numerator_fn = _headwise_causal_numerator
+
+            # Recurrent state, taken from 'Transformers are RNNs' Katharopoulos et al. 2020 paper
+            if self.use_recurrent_decoding:
+                self.s = None   # Numerator
+                self.z = None   # Denominator
 
     def forward(self, q, k, v, mask=None, head_mask=None, output_attentions=False):
         """
@@ -148,7 +169,7 @@ class PerformerAttention(nn.Module):
 
         # Causal, during training
         if not self.use_recurrent_decoding:
-            return _headwise_causal_numerator(q_prime, k_prime_t, v)
+            return self.causal_numerator_fn(q_prime, k_prime_t, v)
 
         # Causal, at inference time- recurrent autoregressive decoding
         s_delta = k_prime_t @ v
@@ -185,7 +206,7 @@ class PerformerAttention(nn.Module):
             context *= head_mask
 
         context = unshape(context)  # (bs, q_length, dim)
-        context = self.out_lin(context)  # (bs, q_length, dim)
+        context = self.output_linear(context)  # (bs, q_length, dim)
 
         if att_map_to_output:
             return context, att_map_to_output
@@ -274,7 +295,7 @@ class PerformerAttention(nn.Module):
         if self.use_qkv_linear_layers:
             self.qkv_linear_layers = [prune_linear_layer(linear, index) for linear in self.qkv_linear_layers]
 
-        self.out_lin = prune_linear_layer(self.out_lin, index, dim=1)
+        self.output_linear = prune_linear_layer(self.output_linear, index, dim=1)
         # Update hyper params
         self.num_heads = self.num_heads - len(heads)
         self.d_model = attention_head_size * self.num_heads
@@ -298,6 +319,7 @@ def _batch_randperm(batch, n, dtype=torch.int64, device=None):
 
 
 # Fast parallelizable way of making random orthogonal matrices- O(n log(n)) vs. O(n^3) for QR
+@torch.no_grad()
 def _get_square_orthogonal_block_givens(batch, num_rows, device=None):
     r"""Constructs a 2D-tensor which is a product of Givens random rotations.
     Constructs a 2D-tensor of the form G_1 * ... * G_k, where G_i is a Givens

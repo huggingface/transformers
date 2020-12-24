@@ -47,7 +47,7 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         if self.use_qkv_linear_layers:
             self.qkv_linear_layers = [tf.keras.layers.Dense(units=self.d_model) for _ in range(3)]
         
-        self.out_lin = tf.keras.layers.Dense(units=self.d_model)
+        self.output_linear = tf.keras.layers.Dense(units=self.d_model)
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -87,7 +87,6 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         # (bs, num_heads, q_length, dim_per_head)
         q, k, v = (shape(x) for x in (q, k, v))
 
-        # When we're using FAVOR+ we can't output the attention matrix
         assert not output_attentions, "Can't output attention maps when using Performer attention."
         if self.use_recurrent_decoding:
             assert q_length == 1, "When use_recurrent_decoding == True, we only input and output one token at a time."
@@ -193,7 +192,7 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         new_last_dim = x.shape[-2] * x.shape[-1]
         context = tf.reshape(x, list(x.shape[:-2]) + [new_last_dim])  # (bs, q_length, dim)
 
-        context = self.out_lin(context)  # (bs, q_length, dim)
+        context = self.output_linear(context)  # (bs, q_length, dim)
 
         if att_map_to_output:
             return context, att_map_to_output
