@@ -896,7 +896,7 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
     def serving_output(self, output):
         return TFTransfoXLModelOutput(
             last_hidden_state=output.last_hidden_state,
-            mems=output.mems,
+            mems=tf.convert_to_tensor(output.mems),
             hidden_states=tf.convert_to_tensor(output.hidden_states)
             if self.config.output_hidden_states
             else None,
@@ -1025,7 +1025,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
     def serving_output(self, output):
         return TFTransfoXLLMHeadModelOutput(
             prediction_scores=output.prediction_scores,
-            mems=output.mems,
+            mems=tf.convert_to_tensor(output.mems),
             hidden_states=tf.convert_to_tensor(output.hidden_states)
             if self.config.output_hidden_states
             else None,
@@ -1193,7 +1193,7 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
         return TFTransfoXLSequenceClassifierOutputWithPast(
             loss=None,
             logits=output.logits,
-            mems=output.mems,
+            mems=tf.convert_to_tensor(output.mems),
             hidden_states=tf.convert_to_tensor(output.hidden_states)
             if self.config.output_hidden_states
             else None,
