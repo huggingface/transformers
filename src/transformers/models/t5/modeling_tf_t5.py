@@ -1147,7 +1147,7 @@ class TFT5Model(TFT5PreTrainedModel):
             training=inputs["training"],
         )
 
-        past = (inputs["encoder_outputs"][0], decoder_outputs[1]) if inputs["use_cache"] else None
+        past = (inputs["encoder_outputs"].to_tuple(), decoder_outputs[1]) if inputs["use_cache"] else None
 
         if not inputs["return_dict"]:
             if past is not None:
@@ -1332,7 +1332,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        past = (inputs["encoder_outputs"][0], decoder_outputs[1]) if inputs["use_cache"] else None
+        past = (inputs["encoder_outputs"].to_tuple(), decoder_outputs[1]) if inputs["use_cache"] else None
         if not inputs["return_dict"]:
             if past is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
