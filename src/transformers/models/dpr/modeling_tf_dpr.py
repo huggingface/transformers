@@ -153,9 +153,9 @@ class TFDPREncoderLayer(tf.keras.layers.Layer):
 
         # resolve name conflict with TFBertMainLayer instead of TFBertModel
         self.bert_model = TFBertMainLayer(config, name="bert_model")
-        self.bert_model.config = config
+        self.config = config
 
-        assert self.bert_model.config.hidden_size > 0, "Encoder hidden_size can't be zero"
+        assert self.config.hidden_size > 0, "Encoder hidden_size can't be zero"
         self.projection_dim = config.projection_dim
         if self.projection_dim > 0:
             self.encode_proj = tf.keras.layers.Dense(
@@ -176,7 +176,7 @@ class TFDPREncoderLayer(tf.keras.layers.Layer):
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor, ...]]:
         inputs = input_processing(
             func=self.call,
-            config=self.bert_model.config,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -226,6 +226,7 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
 
     def __init__(self, config: DPRConfig, **kwargs):
         super().__init__(**kwargs)
+        self.config = config
         self.encoder = TFDPREncoderLayer(config, name="encoder")
 
         self.qa_outputs = tf.keras.layers.Dense(
@@ -253,7 +254,7 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
 
         inputs = input_processing(
             func=self.call,
-            config=self.encoder.bert_model.config,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -304,7 +305,7 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
     base_model_prefix = "encoder"
 
     def __init__(self, config: DPRConfig, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(config, **kwargs)
         self.encoder = TFDPRSpanPredictorLayer(config)
 
     def call(
@@ -321,7 +322,7 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
     ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
         inputs = input_processing(
             func=self.call,
-            config=self.encoder.bert_model.config,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -367,7 +368,7 @@ class TFDPREncoder(TFPreTrainedModel):
     ) -> Union[TFDPRReaderOutput, Tuple[tf.Tensor, ...]]:
         inputs = input_processing(
             func=self.call,
-            config=self.encoder.bert_model.config,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -556,7 +557,6 @@ TF_DPR_READER_INPUTS_DOCSTRING = r"""
 class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
     def __init__(self, config: DPRConfig, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
-        self.config = config
         self.ctx_encoder = TFDPREncoderLayer(config, name="ctx_encoder")
 
     def get_input_embeddings(self):
@@ -645,7 +645,6 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
 class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
     def __init__(self, config: DPRConfig, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
-        self.config = config
         self.question_encoder = TFDPREncoderLayer(config, name="question_encoder")
 
     def get_input_embeddings(self):
@@ -733,7 +732,6 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
 class TFDPRReader(TFDPRPretrainedReader):
     def __init__(self, config: DPRConfig, *args, **kwargs):
         super().__init__(config, *args, **kwargs)
-        self.config = config
         self.span_predictor = TFDPRSpanPredictorLayer(config, name="span_predictor")
 
     def get_input_embeddings(self):
