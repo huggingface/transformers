@@ -629,7 +629,7 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
     def serving_output(self, output):
         return TFBaseModelOutputWithPast(
             last_hidden_state=output.last_hidden_state,
-            past_key_values=tf.convert_to_tensor(output.past_key_value)
+            past_key_values=tf.convert_to_tensor(output.past_key_values)
             if self.config.use_cache
             else None,
             hidden_states=tf.convert_to_tensor(output.hidden_states)
@@ -750,7 +750,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         return TFCausalLMOutputWithPast(
             loss=None,
             logits=output.logits,
-            past_key_values=tf.convert_to_tensor(output.past_key_value)
+            past_key_values=tf.convert_to_tensor(output.past_key_values)
             if self.config.use_cache
             else None,
             hidden_states=tf.convert_to_tensor(output.hidden_states)
@@ -913,7 +913,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         return TFGPT2DoubleHeadsModelOutput(
             logits=output.logits,
             mc_logits=output.mc_logits,
-            past_key_values=tf.convert_to_tensor(output.past_key_value)
+            past_key_values=tf.convert_to_tensor(output.past_key_values)
             if self.config.use_cache
             else None,
             hidden_states=tf.convert_to_tensor(output.hidden_states)
@@ -1083,7 +1083,7 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
         return TFSequenceClassifierOutputWithPast(
             loss=None,
             logits=output.logits,
-            past_key_values=tf.convert_to_tensor(output.past_key_value)
+            past_key_values=tf.convert_to_tensor(output.past_key_values)
             if self.config.use_cache
             else None,
             hidden_states=tf.convert_to_tensor(output.hidden_states)
