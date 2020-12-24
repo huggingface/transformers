@@ -245,7 +245,54 @@ class RagTestMixin:
             )
             # doc scores
             self.assertEqual(outputs.doc_scores.shape, (input_ids.shape[0], self.n_docs))
+            
+    def check_model_generate_from_context_input_ids(
+        self, config, input_ids, attention_mask, decoder_input_ids, decoder_attention_mask, **kwargs
+    ):
+        self.assertIsNotNone(config.question_encoder)
+        self.assertIsNotNone(config.generator)
 
+        retriever = self.get_retriever(config)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            self.assertTrue(model.config.is_encoder_decoder)
+
+            question_hidden_states = model.question_encoder(input_ids, attention_mask=attention_mask)[0]
+
+            out = retriever(
+                input_ids,
+                question_hidden_states.cpu().detach().to(torch.float32).numpy(),
+                prefix=config.generator.prefix,
+                return_tensors="pt",
+            )
+
+            context_input_ids, context_attention_mask, retrieved_doc_embeds = (
+                out["context_input_ids"],
+                out["context_attention_mask"],
+                out["retrieved_doc_embeds"],
+            )
+
+            # cast
+            retrieved_doc_embeds = retrieved_doc_embeds.to(question_hidden_states)
+            context_input_ids = context_input_ids.to(input_ids)
+            context_attention_mask = context_attention_mask.to(input_ids)
+
+            # compute doc_scores
+            doc_scores = torch.bmm(question_hidden_states.unsqueeze(1), retrieved_doc_embeds.transpose(1, 2)).squeeze(
+                1
+            )
+
+            outputs = model.generate(
+                context_input_ids=context_input_ids,
+                context_attention_mask=context_attention_mask,
+                doc_scores=doc_scores,
+                do_deduplication=True,
+            )
+
+            self.assertIsNotNone(outputs)
+            
     def check_model_generate(
         self, config, input_ids, attention_mask, decoder_input_ids, decoder_attention_mask, **kwargs
     ):
