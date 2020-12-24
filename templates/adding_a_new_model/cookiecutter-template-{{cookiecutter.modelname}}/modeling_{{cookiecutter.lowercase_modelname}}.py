@@ -455,7 +455,6 @@ class {{cookiecutter.camelcase_modelname}}Layer(nn.Module):
             outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         cross_attn_present_key_value = None
-
         if self.is_decoder and encoder_hidden_states is not None:
             assert hasattr(
                 self, "crossattention"
@@ -526,7 +525,6 @@ class {{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
-
             past_key_value = past_key_values[i] if past_key_values is not None else None
             if getattr(self.config, "gradient_checkpointing", False):
 
@@ -554,6 +552,7 @@ class {{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
                     past_key_value,
                     output_attentions,
                 )
+
             hidden_states = layer_outputs[0]
             if use_cache:
                 next_decoder_cache += (layer_outputs[-1],)
