@@ -239,6 +239,8 @@ class {{cookiecutter.camelcase_modelname}}ModelTester:
         config.is_decoder = True
         config.add_cross_attention = True
         model = {{cookiecutter.camelcase_modelname}}ForCausalLM(config=config)
+        model.to(torch_device)
+        model.eval()
 
         # first forward pass
         outputs = model(
