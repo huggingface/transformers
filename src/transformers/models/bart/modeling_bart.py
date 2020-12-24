@@ -1299,10 +1299,7 @@ class BartForConditionalGeneration(BartPretrainedModel):
     def _reorder_cache(past, beam_idx):
         reordered_past = ()
         for layer_past in past:
-            # cached cross_attention states don't have to be reordered -> they are always the same
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
-            )
+            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
 
 
