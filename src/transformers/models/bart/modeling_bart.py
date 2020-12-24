@@ -254,7 +254,7 @@ class BartAttention(nn.Module):
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
             # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # if uni-direction/al self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
             # all previous decoder key/value_states. Further calls to uni-directional self-attention
             # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
             # if encoder bi-directional self-attention `past_key_value` is always `None`
@@ -1507,8 +1507,63 @@ class BartForQuestionAnswering(BartPretrainedModel):
             encoder_attentions=outputs.encoder_attentions,
         )
 
+class BartDecoderWrapper(BartPretrainedModel):
+    """
+    This is a wrapper class, so that :class:`~transformers.BartForCausalLM` can correctly be loaded from
+    pretrained Bart classes.
+    """
+    def __init__(self,config):
+        super().__init__(config)
+        self.decoder = BartDecoder(config)
+    
+    def forward(self, *args, **kwargs):
+        return self.decoder(*args, **kwargs)
 
 class BartForCausalLM(BartPretrainedModel):
     def __init__(self,config):
         super().__init__(config)
-    
+        config = copy.deepcopy(config)
+        config.is_decoder = True
+        config.is_encoder_decoder = False
+        self.bart = BartDecoderWrapper(config)
+
+        self.padding_idx = config.pad_token_id
+        self.disable_ngram_loss = config.disable_ngram_loss
+        
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.bart.decoder.word_embeddings
+
+    def set_input_embeddings(self, value):
+        self.bart.decoder.word_embeddings = value
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.bart.decoder = decoder
+
+    def get_decoder(self):
+        return self.bart.decoder
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        pass
