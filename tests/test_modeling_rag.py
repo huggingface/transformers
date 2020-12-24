@@ -915,7 +915,7 @@ class RagModelIntegrationTests(unittest.TestCase):
         input_ids = input_dict.input_ids.to(torch_device)
         attention_mask = input_dict.attention_mask.to(torch_device)
 
-        question_hidden_states = rag_sequence.question_encoder(input_ids)[0]
+        question_hidden_states = rag_sequence.question_encoder(input_ids, attention_mask=attention_mask)[0]
         docs_dict = retriever(
             input_ids.cpu().detach().numpy(), question_hidden_states.cpu().detach().numpy(), return_tensors="pt"
         )

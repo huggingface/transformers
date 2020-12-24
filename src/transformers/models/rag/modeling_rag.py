@@ -860,8 +860,8 @@ class RagSequenceForGeneration(RagPreTrainedModel):
                 Score between each retrieved document embeddings (see :obj:`retrieved_doc_embeds`) and
                 :obj:`question_encoder_last_hidden_state`.
 
-                If the model is not initialized with a ``retriever`` or ``input_ids`` is not given,
-                :obj:`doc_scores` has to be provided to the forward pass. :obj:`doc_scores` are returned by
+                If the model is not initialized with a ``retriever`` or ``input_ids`` is not given, :obj:`doc_scores`
+                has to be provided to the forward pass. :obj:`doc_scores` are returned by
                 :meth:`~transformers.RagRetriever.__call__`.
             do_deduplication (:obj:`bool`, `optional`):
                 Whether or not to deduplicate the generations from different context documents for a given input. Has
