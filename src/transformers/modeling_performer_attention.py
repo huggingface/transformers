@@ -200,7 +200,6 @@ class PerformerAttention(nn.Module):
 
     def _finalize_attention_output(self, context, head_mask=None, att_map_to_output=None):
         def unshape(x):
-            """ group heads """
             return x.transpose(1, 2).reshape(x.shape[0], -1, x.shape[1] * x.shape[-1])
 
         # Mask heads if we want to
@@ -238,25 +237,23 @@ class PerformerAttention(nn.Module):
             return torch.randn(batch, num_rows, dim_per_head, device=device)
 
         if not self.random_feature_chain:
-            self.random_feature_chain = _get_orthogonal_feature_chain(batch_size, num_rows, dim_per_head, device)
+            # This option yields SMREG
+            if self.regularize_feature_norms:
+                seed = torch.eye(num_rows, device=device) * dim_per_head ** 0.5
+            else:
+                multiplier = torch.randn(batch, num_rows, dim_per_head, device=device).norm(dim=2)
+                seed = torch.diag(multiplier)   # Automatically orthogonal
 
-        final_tensor = next(self.random_feature_chain)
+            self.random_feature_chain = _get_orthogonal_feature_chain(batch_size, num_rows, dim_per_head, seed, device)
 
-        # This option yields SMREG
-        if self.regularize_feature_norms:
-            final_tensor *= dim_per_head ** 0.5
-        else:
-            # Hack to make the matrix columns have the norm we would expect them to have if they were sampled straight
-            # from a Gaussian, instead of being all norm 1 since they went through QR decomposition
-            multiplier = torch.randn(batch, num_rows, dim_per_head, device=device).norm(dim=2)
-            final_tensor = torch.diag(multiplier) @ final_tensor
+        output_tensor = next(self.random_feature_chain)
 
         # Add an attention head dimension
-        final_tensor.unsqueeze_(1)
-        new_shape = list(final_tensor.shape)
+        output_tensor.unsqueeze_(1)
+        new_shape = list(output_tensor.shape)
         new_shape[0] = batch_size  # This is redundant if use_thick_features == True, but not otherwise
         new_shape[1] = self.num_heads
-        self.random_features = final_tensor.expand(*new_shape).transpose(-2, -1)
+        self.random_features = output_tensor.expand(*new_shape).transpose(-2, -1)
 
     def _redraw_features_if_needed(self, batch, device):
         # We haven't created the projection matrix yet, let's create it
@@ -296,21 +293,21 @@ class PerformerAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
 
-# Not currently used unless dim_per_head is odd
+# Not currently used
 def _get_square_orthogonal_block_qr(batch, size, device=None):
     unstructured_block = torch.randn(batch, size, size, device=device)
     q, r = torch.qr(unstructured_block, some=True)
     return q.transpose(-2, -1)
 
 
-def _get_orthogonal_feature_chain(batch, num_rows, dim_per_head, device=None):
+def _get_orthogonal_feature_chain(batch, num_rows, dim_per_head, seed=None, device=None):
     # The algorithm requires an even number of rows, so round down to the nearest even number
     rows_per_block = dim_per_head - dim_per_head % 2
 
     total_num_blocks = int(math.ceil(num_rows / rows_per_block))
-    extra_rows = total_num_blocks * rows_per_block - num_rows
+    extra_rows = total_num_blocks * rows_per_block - (num_rows + dim_per_head % 2)
 
-    block_chains = [_get_kacs_random_walk_chain(batch, rows_per_block, device) for _ in range(total_num_blocks)]
+    block_chains = [_get_kacs_random_walk_chain(batch, rows_per_block, seed, device) for _ in range(total_num_blocks)]
 
     while True:
         blocks = [next(chain) for chain in block_chains]
@@ -331,10 +328,11 @@ def _batch_randperm(batch, n, dtype=torch.int64, device=None):
 
 # Parallelized version of Kac's random walk, a Markov chain that quickly generates random orthogonal matrices. Samples
 # are autocorrelated with a mixing time of roughly (2 log n), but this should actually be good for training stability.
+# Each sample is generated in O(n^2) time, after 2 log n burn-in steps.
 @torch.no_grad()
-def _get_kacs_random_walk_chain(batch, num_rows, device=None):
-    # Start with identity matrix
-    block = torch.eye(num_rows, device=device)
+def _get_kacs_random_walk_chain(batch, num_rows, seed=None, device=None):
+    # Start with identity matrix if seed == None. If seed is not None, then it's assumed to be orthogonal.
+    block = seed or torch.eye(num_rows, device=device)
     block = block.expand(batch, num_rows, num_rows)
     block.unsqueeze_(2)
 
@@ -359,6 +357,10 @@ def _get_kacs_random_walk_chain(batch, num_rows, device=None):
 
         # Only yield the block after we've completed 2 log(n) burn-in iterations
         if n >= burnin_steps:
+            # Account for accumulated numerical error- the norm tends to drift upward
+            if n % 1000 == 0:
+                block /= block.norm(dim=-1, keepdim=True)
+
             yield block.squeeze(-2)
 
 
