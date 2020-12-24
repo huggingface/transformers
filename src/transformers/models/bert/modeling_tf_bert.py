@@ -936,12 +936,6 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
     def get_lm_head(self):
         return self.mlm.predictions
 
-    def get_output_layer_with_bias(self):
-        warnings.warn(
-            "The method get_output_layer_with_bias is deprecated. Please use `get_lm_head` instead.", FutureWarning
-        )
-        return self.mlm.predictions
-
     def get_prefix_bias_name(self):
         warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
@@ -1066,12 +1060,6 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     def get_lm_head(self):
         return self.mlm.predictions
 
-    def get_output_layer_with_bias(self):
-        warnings.warn(
-            "The method get_output_layer_with_bias is deprecated. Please use `get_lm_head` instead.", FutureWarning
-        )
-        return self.mlm.predictions
-
     def get_prefix_bias_name(self):
         warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
@@ -1177,12 +1165,6 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         self.mlm = TFBertMLMHead(config, self.bert.embeddings, name="mlm___cls")
 
     def get_lm_head(self):
-        return self.mlm.predictions
-
-    def get_output_layer_with_bias(self):
-        warnings.warn(
-            "The method get_output_layer_with_bias is deprecated. Please use `get_lm_head` instead.", FutureWarning
-        )
         return self.mlm.predictions
 
     def get_prefix_bias_name(self):

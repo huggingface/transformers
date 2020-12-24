@@ -531,6 +531,18 @@ def load_tf_weights(model, resolved_archive_file):
 
 
 def init_copy_embeddings(old_embeddings, new_num_tokens):
+    r"""
+    This function aims to reduce the embeddings in case new_num_tokens < old_num_tokens or to pad with -1 in case
+    new_num_tokens > old_num_tokens. A mask is also computed in order to know which weight in the embeddings should be
+    kept or not. Example:
+
+        - if new_num_tokens=5 and old_num_tokens=4 and old_embeddings=[w1,w2,w3,w4]
+
+            -  mask=[True,True,True,True,False] and current_weights=[w1,w2,w3,w4,-1]
+        - if new_num_tokens=4 and old_num_tokens=5 and old_embeddings=[w1,w2,w3,w4,w5]
+
+            - mask=[True,True,True,True] and current_weights=[w1,w2,w3,w4]
+    """
     old_num_tokens, old_embedding_dim = shape_list(old_embeddings)
     size_diff = new_num_tokens - old_num_tokens
 
@@ -716,7 +728,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         warnings.warn(
             "The method get_output_layer_with_bias is deprecated. Please use `get_lm_head` instead.", FutureWarning
         )
-        return None
+        return self.get_lm_head()
 
     def get_prefix_bias_name(self) -> Union[None, str]:
         """
@@ -817,7 +829,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 return None
 
     def _resize_token_embeddings(self, new_num_tokens):
-        # get_input_embeddings and set_input_embeddings need to be implemented in base layer.
         old_embeddings = self._find_weights(self.get_input_embeddings())
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
 

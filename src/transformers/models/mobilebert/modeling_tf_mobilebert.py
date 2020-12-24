@@ -1053,12 +1053,6 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
     def get_lm_head(self):
         return self.predictions.predictions
 
-    def get_output_layer_with_bias(self):
-        warnings.warn(
-            "The method get_output_layer_with_bias is deprecated. Please use `get_lm_head` instead.", FutureWarning
-        )
-        return self.predictions.predictions
-
     def get_prefix_bias_name(self):
         warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.predictions.name + "/" + self.predictions.predictions.name
@@ -1165,12 +1159,6 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
         self.mlm = TFMobileBertMLMHead(config, name="mlm___cls")
 
     def get_lm_head(self):
-        return self.mlm.predictions
-
-    def get_output_layer_with_bias(self):
-        warnings.warn(
-            "The method get_output_layer_with_bias is deprecated. Please use `get_lm_head` instead.", FutureWarning
-        )
         return self.mlm.predictions
 
     def get_prefix_bias_name(self):
