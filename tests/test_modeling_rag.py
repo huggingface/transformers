@@ -245,7 +245,7 @@ class RagTestMixin:
             )
             # doc scores
             self.assertEqual(outputs.doc_scores.shape, (input_ids.shape[0], self.n_docs))
-            
+
     def check_model_generate_from_context_input_ids(
         self, config, input_ids, attention_mask, decoder_input_ids, decoder_attention_mask, **kwargs
     ):
@@ -292,7 +292,7 @@ class RagTestMixin:
             )
 
             self.assertIsNotNone(outputs)
-            
+
     def check_model_generate(
         self, config, input_ids, attention_mask, decoder_input_ids, decoder_attention_mask, **kwargs
     ):
