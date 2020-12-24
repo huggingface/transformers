@@ -3179,7 +3179,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         assert already_has_special_tokens and token_ids_1 is None, (
             "You cannot use ``already_has_special_tokens=False`` with this tokenizer. "
             "Please use a slow (full python) tokenizer to activate this argument."
-            "Or set `return_special_token_mask=True` when calling the encoding method "
+            "Or set `return_special_tokens_mask=True` when calling the encoding method "
             "to get the special tokens mask in any tokenizer. "
         )
 
