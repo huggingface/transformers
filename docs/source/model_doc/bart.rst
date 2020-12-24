@@ -55,8 +55,8 @@ Implementation Notes
 
 - Bart doesn't use :obj:`token_type_ids` for sequence classification. Use :class:`~transformers.BartTokenizer` or
   :meth:`~transformers.BartTokenizer.encode` to get the proper splitting.
-- The forward pass of :class:`~transformers.BartModel` will create the ``decoder_input_ids`` if they are not passed. This is
-  different than some other modeling APIs. A typical use case of this feature is mask filling.
+- The forward pass of :class:`~transformers.BartModel` will create the ``decoder_input_ids`` if they are not passed.
+  This is different than some other modeling APIs. A typical use case of this feature is mask filling.
 - Model predictions are intended to be identical to the original implementation when
   :obj:`force_bos_token_to_be_generated=True`. This only works, however, if the string you pass to
   :func:`fairseq.encode` starts with a space.
