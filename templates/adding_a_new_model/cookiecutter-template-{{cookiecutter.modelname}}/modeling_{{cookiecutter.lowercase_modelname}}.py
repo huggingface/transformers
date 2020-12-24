@@ -160,7 +160,7 @@ class {{cookiecutter.camelcase_modelname}}Embeddings(nn.Module):
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
-        def forward(
+    def forward(
         self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
     ):
         if input_ids is not None:
@@ -769,7 +769,7 @@ class {{cookiecutter.camelcase_modelname}}Model({{cookiecutter.camelcase_modelna
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="{{cookiecutter.checkpoint_identifier}}",
-        output_type=BaseModelOutputWithCrossAttentions,
+        output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
