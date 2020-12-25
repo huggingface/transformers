@@ -243,12 +243,7 @@ class Attention(nn.Module):
         a = self.c_proj(a)
         a = self.resid_dropout(a)
 
-        outputs = (a,)
-
-        outputs += (present,)
-
-        outputs += attn_outputs[1:]
-        return outputs  # a, present, (attentions)
+        return (a, present) + attn_outputs[1:]  # a, present, (attentions)
 
 
 class MLP(nn.Module):
