@@ -14,46 +14,15 @@
 
 import unittest
 
-from transformers import is_torch_available, pipeline
+from transformers import pipeline
 from transformers.models.bart import BartConfig, BartForConditionalGeneration
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.tokenization_utils import TruncationStrategy
 
-from .test_pipelines_common import MonoInputPipelineCommonMixin
+from .test_pipelines_common import DummyTok, MonoInputPipelineCommonMixin
 
 
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
-
-if is_torch_available():
-    import torch
-
-
-class DummyTok:
-    pad_token_id = 0
-
-    def __init__(self, **kwargs):
-        for name, v in kwargs.items():
-            setattr(self, name, v)
-
-    def __call__(self, inputs, **kwargs):
-        if isinstance(inputs, str):
-            input_ids = self.encode(inputs).unsqueeze(0)
-        else:
-            input_ids = torch.nn.utils.rnn.pad_sequence(
-                [self.encode(input_) for input_ in inputs],
-                padding_value=self.pad_token_id,
-            )
-
-        if kwargs.get("truncation", TruncationStrategy.DO_NOT_TRUNCATE) == TruncationStrategy.ONLY_FIRST:
-            input_ids = input_ids[:, : self.model_max_length]
-        attention_mask = torch.zeros_like(input_ids).long() + 1
-        return {"input_ids": input_ids, "attention_mask": attention_mask}
-
-    def encode(self, input_):
-        return torch.LongTensor(list(input_.encode("utf-8")))
-
-    def decode(self, sequence, **kwargs):
-        return "D" * len(sequence)
 
 
 class SimpleSummarizationPipelineTests(unittest.TestCase):

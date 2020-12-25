@@ -2,8 +2,8 @@ import uuid
 from typing import List, Optional, Union
 
 from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
-from ..utils import logging
 from ..tokenization_utils import TruncationStrategy
+from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
@@ -48,12 +48,18 @@ class Conversation:
         conversation.add_user_input("Is it good?")
     """
 
-    def __init__(self, text: str = None, conversation_id: uuid.UUID = None):
+    def __init__(
+        self, text: str = None, conversation_id: uuid.UUID = None, past_user_inputs=None, generated_responses=None
+    ):
         if not conversation_id:
             conversation_id = uuid.uuid4()
         self.uuid: uuid.UUID = conversation_id
+        if past_user_inputs is None:
+            past_user_inputs = past_user_inputs
         self.past_user_inputs: List[str] = []
-        self.generated_responses: List[str] = []
+        if generated_responses is None:
+            generated_responses = []
+        self.generated_responses: List[str] = generated_responses
         self.history: List[int] = []
         self.new_user_input: Optional[str] = text
 

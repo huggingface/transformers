@@ -15,12 +15,61 @@
 import unittest
 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, Conversation, ConversationalPipeline, pipeline
+from transformers.models.gpt2 import GPT2Config, GPT2LMHeadModel
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from .test_pipelines_common import MonoInputPipelineCommonMixin
+from .test_pipelines_common import DummyTok, MonoInputPipelineCommonMixin
 
 
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
+
+
+class SimpleConversationPipelineTests(unittest.TestCase):
+    @require_torch
+    def test_integration_torch_conversation(self):
+        # When
+        config = GPT2Config(
+            vocab_size=257, n_ctx=64, n_embd=64, n_layer=1, n_head=8, eos_token_id=0, bos_token_id=0, pad_token_id=0
+        )
+        model = GPT2LMHeadModel(config)
+        tokenizer = DummyTok()
+        nlp = pipeline(task="conversational", device=DEFAULT_DEVICE_NUM, model=model, tokenizer=tokenizer)
+        conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
+        conversation_2 = Conversation("What's the last book you have read?")
+        # Then
+        self.assertEqual(len(conversation_1.past_user_inputs), 0)
+        self.assertEqual(len(conversation_2.past_user_inputs), 0)
+        # When
+        result = nlp([conversation_1, conversation_2], do_sample=False, max_length=1000)
+        # Then
+        self.assertEqual(result, [conversation_1, conversation_2])
+        self.assertEqual(
+            result,
+            [
+                Conversation(
+                    None,
+                    past_user_inputs=["Going to the movies tonight - any suggestions?"],
+                    generated_responses=["D"],
+                ),
+                Conversation(
+                    None, past_user_inputs=["What's the last book you have read?"], generated_responses=["D"]
+                ),
+            ],
+        )
+
+        # When
+        conversation_2.add_user_input("Why do you recommend it?")
+        result = nlp(conversation_2, do_sample=False, max_length=1000)
+        # Then
+        self.assertEqual(result, conversation_2)
+        self.assertEqual(
+            result,
+            Conversation(
+                None,
+                past_user_inputs=["What's the last book you have read?", "Why do you recommend it?"],
+                generated_responses=["D", "D"],
+            ),
+        )
 
 
 class ConversationalPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
