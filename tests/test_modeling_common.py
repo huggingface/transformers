@@ -326,7 +326,7 @@ class ModelTesterMixin:
                     [
                         self.model_tester.num_attention_heads,
                         decoder_seq_length,
-                        seq_len,
+                        encoder_key_length,
                     ],
                 )
 

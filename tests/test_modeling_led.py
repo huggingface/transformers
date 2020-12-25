@@ -34,6 +34,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         LEDConfig,
         LEDForConditionalGeneration,
         LEDForQuestionAnswering,
@@ -111,7 +112,7 @@ class LEDModelTester:
         # because its local attention only attends to `self.attention_window + 1` locations
         # (assuming no token with global attention, otherwise the last dimension of attentions
         # is x + self.attention_window + 1, where x is the number of tokens with global attention)
-        self.key_length = self.attention_window + 1
+        self.encoder_key_length = self.attention_window + 1
 
         # because of padding `encoder_seq_length`, is different from `seq_length`. Relevant for
         # the `test_attention_outputs` and `test_hidden_states_output` tests
@@ -327,6 +328,78 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         # longformer cannot keep gradients in attentions or hidden states
         return
+
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        seq_length = self.model_tester.seq_length
+        encoder_seq_length = self.model_tester.encoder_seq_length
+        encoder_key_length = self.model_tester.encoder_key_length
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.encoder_attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.encoder_attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+            )
+            out_len = len(outputs)
+
+            correct_outlen = 5
+
+            # loss is at first position
+            if "labels" in inputs_dict:
+                correct_outlen += 1  # loss is added to beginning
+            # Question Answering model returns start_logits and end_logits
+            if model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
+                correct_outlen += 1  # start_logits and end_logits instead of only 1 output
+            if "past_key_values" in outputs:
+                correct_outlen += 1  # past_key_values have been returned
+
+            self.assertEqual(out_len, correct_outlen)
+
+            # decoder attentions
+            decoder_attentions = outputs.decoder_attentions
+            self.assertIsInstance(decoder_attentions, (list, tuple))
+            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(decoder_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, seq_length, seq_length],
+            )
+
+            # cross attentions
+            cross_attentions = outputs.cross_attentions
+            self.assertIsInstance(cross_attentions, (list, tuple))
+            self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(cross_attentions[0].shape[-3:]),
+                [
+                    self.model_tester.num_attention_heads,
+                    seq_length,
+                    seq_length,
+                ],
+            )
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
