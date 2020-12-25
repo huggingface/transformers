@@ -222,8 +222,7 @@ class TrainingArguments:
             training only). This is an experimental feature.
         deepspeed (:obj:`str`, `optional`):
             Use `Deepspeed <https://github.com/microsoft/deepspeed>`__. This is an experimental feature and its API may
-            evolve in the future.
-            The value is the location of its json config file (usually ``ds_config.json``).
+            evolve in the future. The value is the location of its json config file (usually ``ds_config.json``).
         label_smoothing_factor (:obj:`float`, `optional`, defaults to 0.0):
             The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
             labels are changed from 0s and 1s to :obj:`label_smoothing_factor/num_labels` and :obj:`1 -
