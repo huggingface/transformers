@@ -105,6 +105,20 @@ class LEDModelTester:
         self.bos_token_id = bos_token_id
         self.attention_window = attention_window
 
+        # `ModelTesterMixin.test_attention_outputs` is expecting attention tensors to be of size
+        # [num_attention_heads, encoder_seq_length, encoder_key_length], but LongformerSelfAttention
+        # returns attention of shape [num_attention_heads, encoder_seq_length, self.attention_window + 1]
+        # because its local attention only attends to `self.attention_window + 1` locations
+        # (assuming no token with global attention, otherwise the last dimension of attentions
+        # is x + self.attention_window + 1, where x is the number of tokens with global attention)
+        self.key_length = self.attention_window + 1
+
+        # because of padding `encoder_seq_length`, is different from `seq_length`. Relevant for
+        # the `test_attention_outputs` and `test_hidden_states_output` tests
+        self.encoder_seq_length = (
+            self.seq_length + (self.attention_window - self.seq_length % self.attention_window) % self.attention_window
+        )
+
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
@@ -203,6 +217,30 @@ class LEDModelTester:
 
         self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
 
+    def check_global_attention(self, config, inputs_dict):
+        model = LEDModel(config=config).to(torch_device).eval()
+        model.config.output_attentions = True
+        attention_mask = ids_tensor(inputs_dict["input_ids"].shape, vocab_size=2)
+        global_attention_mask = torch.zeros_like(attention_mask)
+
+        # set some tokens to global_attention
+        num_tokens_with_global_attention = 2
+
+        attention_mask[:, 2 : 2 + num_tokens_with_global_attention] = 1
+        global_attention_mask[:, 2 : 2 + num_tokens_with_global_attention] = 1
+        inputs_dict["attention_mask"] = attention_mask
+        inputs_dict["global_attention_mask"] = global_attention_mask
+
+        outputs = model(**inputs_dict)
+        self.parent.assertIsNotNone(outputs.encoder_global_attentions)
+
+        # setting `num_tokens_with_global_attention` to global_attentions yields
+        # makes last dim to be of `num_tokens_with_global_attention`
+        self.parent.assertTrue(
+            outputs.encoder_global_attentions[0].shape,
+            (self.batch_size, self.num_attention_heads, self.encoder_seq_length, num_tokens_with_global_attention),
+        )
+
 
 @require_torch
 class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -241,6 +279,10 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
+
+    def test_global_attention(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        self.model_tester.check_global_attention(*config_and_inputs)
 
     # LEDForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):
@@ -281,6 +323,10 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             model.half()
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+
+    def test_retain_grad_hidden_states_attentions(self):
+        # longformer cannot keep gradients in attentions or hidden states
+        return
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):

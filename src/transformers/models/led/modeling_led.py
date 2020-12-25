@@ -17,7 +17,8 @@
 
 import math
 import random
-from typing import Optional, Tuple
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -26,6 +27,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
+    ModelOutput,
     add_code_sample_docstrings,
     add_end_docstrings,
     add_start_docstrings,
@@ -33,7 +35,6 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_outputs import (
-    BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
@@ -97,8 +98,12 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
 
     inverted_mask = 1.0 - expanded_mask
+    expanded_attention_mask = inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
-    return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
+    # make sure that global_attn_mask is positive
+    expanded_attention_mask = expanded_attention_mask * inverted_mask
+
+    return expanded_attention_mask
 
 
 def LEDLayerNorm(normalized_shape: torch.Size, eps: float = 1e-5, elementwise_affine: bool = True):
@@ -1055,6 +1060,323 @@ class LEDPreTrainedModel(PreTrainedModel):
         return dummy_inputs
 
 
+@dataclass
+# Copied from transformers.models.longformer.modeling_longformer.LongformerBaseModelOutput with Longformer->LEDEncoder
+class LEDBaseModelOutput(ModelOutput):
+    """
+    Base class for Longformer's outputs, with potential hidden states, local and global attentions.
+
+    Args:
+        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, x + attention_window + 1)`, where ``x`` is the number of tokens with global attention
+            mask.
+
+            Local attentions weights after the attention softmax, used to compute the weighted average in the
+            self-attention heads. Those are the attention weights from every token in the sequence to every token with
+            global attention (first ``x`` values) and to every token in the attention window (remaining
+            ``attention_window + 1`` values). Note that the first ``x`` values refer to tokens with fixed positions in
+            the text, but the remaining ``attention_window + 1`` values refer to tokens with relative positions: the
+            attention weight of a token to itself is located at index ``x + attention_window / 2`` and the
+            ``attention_window / 2`` preceding (succeeding) values are the attention weights to the ``attention_window
+            / 2`` preceding (succeeding) tokens. If the attention window contains a token with global attention, the
+            attention weight at the corresponding index is set to 0; the value should be accessed from the first ``x``
+            attention weights. If a token has global attention, the attention weights to all other tokens in
+            :obj:`attentions` is set to 0, the values should be accessed from :obj:`global_attentions`.
+        global_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, x)`, where ``x`` is the number of tokens with global attention mask.
+
+            Global attentions weights after the attention softmax, used to compute the weighted average in the
+            self-attention heads. Those are the attention weights from every token with global attention to every token
+            in the sequence.
+    """
+
+    last_hidden_state: torch.FloatTensor
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+    global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class LEDSeq2SeqModelOutput(ModelOutput):
+    """
+    Base class for model encoder's outputs that also contains : pre-computed hidden states that can speed up sequential
+    decoding.
+
+    Args:
+        last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the decoder of the model.
+
+            If :obj:`past_key_values` is used only the last hidden-state of the sequences of shape :obj:`(batch_size,
+            1, hidden_size)` is output.
+        past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+            List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`, with each tensor of shape :obj:`(2,
+            batch_size, num_heads, sequence_length, embed_size_per_head)`).
+
+            Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
+            used (see :obj:`past_key_values` input) to speed up sequential decoding.
+        decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
+        decoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
+        encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Sequence of hidden-states at the output of the last layer of the encoder of the model.
+        encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
+        encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        encoder_global_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, x)`, where ``x`` is the number of tokens with global attention mask.
+
+            Global attentions weights after the attention softmax, used to compute the weighted average in the
+            self-attention heads. Those are the attention weights from every token with global attention to every token
+            in the sequence.
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    past_key_values: Optional[List[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class LEDSeq2SeqLMOutput(ModelOutput):
+    """
+    Base class for sequence-to-sequence language models outputs.
+
+    Args:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
+            Language modeling loss.
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+            List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`, with each tensor of shape :obj:`(2,
+            batch_size, num_heads, sequence_length, embed_size_per_head)`).
+
+            Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
+            used (see :obj:`past_key_values` input) to speed up sequential decoding.
+        decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
+        decoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
+        encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Sequence of hidden-states at the output of the last layer of the encoder of the model.
+        encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
+        encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        encoder_global_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, x)`, where ``x`` is the number of tokens with global attention mask.
+
+            Global attentions weights after the attention softmax, used to compute the weighted average in the
+            self-attention heads. Those are the attention weights from every token with global attention to every token
+            in the sequence.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    past_key_values: Optional[List[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class LEDSeq2SeqSequenceClassifierOutput(ModelOutput):
+    """
+    Base class for outputs of sequence-to-sequence sentence classification models.
+
+    Args:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`label` is provided):
+            Classification (or regression if config.num_labels==1) loss.
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+            List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`, with each tensor of shape :obj:`(2,
+            batch_size, num_heads, sequence_length, embed_size_per_head)`).
+
+            Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
+            used (see :obj:`past_key_values` input) to speed up sequential decoding.
+        decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
+        decoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
+        encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Sequence of hidden-states at the output of the last layer of the encoder of the model.
+        encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
+        encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        encoder_global_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, x)`, where ``x`` is the number of tokens with global attention mask.
+
+            Global attentions weights after the attention softmax, used to compute the weighted average in the
+            self-attention heads. Those are the attention weights from every token with global attention to every token
+            in the sequence.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    past_key_values: Optional[List[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
+class LEDSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
+    """
+    Base class for outputs of sequence-to-sequence question answering models.
+
+    Args:
+        loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
+            Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
+        start_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
+            Span-start scores (before SoftMax).
+        end_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
+            Span-end scores (before SoftMax).
+        past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+            List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`, with each tensor of shape :obj:`(2,
+            batch_size, num_heads, sequence_length, embed_size_per_head)`).
+
+            Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
+            used (see :obj:`past_key_values` input) to speed up sequential decoding.
+        decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
+        decoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
+        encoder_last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Sequence of hidden-states at the output of the last layer of the encoder of the model.
+        encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
+        encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+
+            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        encoder_global_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, x)`, where ``x`` is the number of tokens with global attention mask.
+
+            Global attentions weights after the attention softmax, used to compute the weighted average in the
+            self-attention heads. Those are the attention weights from every token with global attention to every token
+            in the sequence.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    start_logits: torch.FloatTensor = None
+    end_logits: torch.FloatTensor = None
+    past_key_values: Optional[List[torch.FloatTensor]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
 LED_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
@@ -1363,6 +1685,7 @@ class LEDEncoder(LEDPreTrainedModel):
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
+        all_global_attentions = () if (output_attentions and is_global_attn) else None
 
         for encoder_layer in self.layers:
             if output_hidden_states:
@@ -1383,8 +1706,12 @@ class LEDEncoder(LEDPreTrainedModel):
                 hidden_states = layer_outputs[0]
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-                # TODO(PVP) implement 2nd attn_weights
+                # bzs x seq_len x num_attn_heads x (num_global_attn + attention_window_len + 1) => bzs x num_attn_heads x seq_len x (num_global_attn + attention_window_len + 1)
+                all_attentions = all_attentions + (layer_outputs[1].transpose(1, 2),)
+
+                if is_global_attn:
+                    # bzs x num_attn_heads x num_global_attn x seq_len => bzs x num_attn_heads x seq_len x num_global_attn
+                    all_global_attentions = all_global_attentions + (layer_outputs[2].transpose(2, 3),)
 
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
@@ -1395,9 +1722,14 @@ class LEDEncoder(LEDPreTrainedModel):
             hidden_states = hidden_states[:, :-padding_len]
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+            return tuple(
+                v for v in [hidden_states, encoder_states, all_attentions, all_global_attentions] if v is not None
+            )
+        return LEDBaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=encoder_states,
+            attentions=all_attentions,
+            global_attentions=all_global_attentions,
         )
 
 
@@ -1678,12 +2010,13 @@ class LEDModel(LEDPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=False
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
+        # If the user passed a tuple for encoder_outputs, we wrap it in a LEDBaseModelOutput when return_dict=False
+        elif return_dict and not isinstance(encoder_outputs, LEDBaseModelOutput):
+            encoder_outputs = LEDBaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+                global_attentions=encoder_outputs[3] if len(encoder_outputs) > 3 else None,
             )
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
@@ -1703,7 +2036,7 @@ class LEDModel(LEDPreTrainedModel):
         if not return_dict:
             return decoder_outputs + encoder_outputs
 
-        return Seq2SeqModelOutput(
+        return LEDSeq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
@@ -1712,6 +2045,7 @@ class LEDModel(LEDPreTrainedModel):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
+            encoder_global_attentions=encoder_outputs.global_attentions,
         )
 
 
@@ -1839,7 +2173,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
             output = (lm_logits,) + outputs[1:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
-        return Seq2SeqLMOutput(
+        return LEDSeq2SeqLMOutput(
             loss=masked_lm_loss,
             logits=lm_logits,
             past_key_values=outputs.past_key_values,
@@ -1849,6 +2183,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
+            encoder_global_attentions=outputs.encoder_global_attentions,
         )
 
     def prepare_inputs_for_generation(
@@ -1969,7 +2304,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return Seq2SeqSequenceClassifierOutput(
+        return LEDSeq2SeqSequenceClassifierOutput(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
@@ -1979,6 +2314,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
+            encoder_global_attentions=outputs.encoder_global_attentions,
         )
 
 
@@ -2085,7 +2421,7 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
             ) + outputs[1:]
             return ((total_loss,) + output) if total_loss is not None else output
 
-        return Seq2SeqQuestionAnsweringModelOutput(
+        return LEDSeq2SeqQuestionAnsweringModelOutput(
             loss=total_loss,
             start_logits=start_logits,
             end_logits=end_logits,
@@ -2096,4 +2432,5 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
+            encoder_global_attentions=outputs.encoder_global_attentions,
         )
