@@ -584,7 +584,7 @@ class TokenizerTesterMixin:
 
                 # We want to have sequence 0 and sequence 1 are tagged
                 # respectively with 0 and 1 token_ids
-                # (regardeless of weither the model use token type ids)
+                # (regardless of whether the model use token type ids)
                 # We use this assumption in the QA pipeline among other place
                 output = tokenizer(seq_0, return_token_type_ids=True)
                 self.assertIn(0, output["token_type_ids"])
@@ -600,7 +600,7 @@ class TokenizerTesterMixin:
 
                 # We want to have sequence 0 and sequence 1 are tagged
                 # respectively with 0 and 1 token_ids
-                # (regardeless of weither the model use token type ids)
+                # (regardless of whether the model use token type ids)
                 # We use this assumption in the QA pipeline among other place
                 output = tokenizer(seq_0)
                 self.assertIn(0, output.sequence_ids())

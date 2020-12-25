@@ -34,6 +34,12 @@ contrast to most prior work, we also pretrain Longformer and finetune it on a va
 pretrained Longformer consistently outperforms RoBERTa on long document tasks and sets new state-of-the-art results on
 WikiHop and TriviaQA.*
 
+Tips:
+
+- Since the Longformer is based on RoBERTa, it doesn't have :obj:`token_type_ids`. You don't need to indicate which
+  token belongs to which segment. Just separate your segments with the separation token :obj:`tokenizer.sep_token` (or
+  :obj:`</s>`).
+
 The Authors' code can be found `here <https://github.com/allenai/longformer>`__.
 
 Longformer Self Attention

@@ -354,7 +354,7 @@ def input_processing(func, config, input_ids, **kwargs):
         if isinstance(v, allowed_types) or v is None:
             output[k] = v
         else:
-            raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
+            raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
 
     if isinstance(input_ids, (tuple, list)):
         for i, input in enumerate(input_ids):
@@ -372,7 +372,7 @@ def input_processing(func, config, input_ids, **kwargs):
                 output[parameter_names[i]] = input
             else:
                 raise ValueError(
-                    f"Data of type {type(input)} is not allowed only tf.Tensor is accepted for {parameter_names[i]}."
+                    f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for {parameter_names[i]}."
                 )
     elif isinstance(input_ids, (dict, BatchEncoding)):
         if "inputs" in input_ids:
@@ -399,13 +399,13 @@ def input_processing(func, config, input_ids, **kwargs):
                 )
                 continue
             else:
-                raise ValueError(f"Data of type {type(v)} is not allowed only tf.Tensor is accepted for {k}.")
+                raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
     else:
         if isinstance(input_ids, tf.Tensor) or input_ids is None:
             output[parameter_names[0]] = input_ids
         else:
             raise ValueError(
-                f"Data of type {type(input_ids)} is not allowed only tf.Tensor is accepted for {parameter_names[0]}."
+                f"Data of type {type(input_ids)} is not allowed only {allowed_types} is accepted for {parameter_names[0]}."
             )
 
     for name in parameter_names:
@@ -614,12 +614,31 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
     def get_output_embeddings(self) -> tf.keras.layers.Layer:
         """
-        Returns the model's output embeddings.
+        Returns the model's output embeddings
 
         Returns:
             :obj:`tf.keras.layers.Layer`: A torch module mapping hidden states to vocabulary.
         """
         return None  # Overwrite for models with output embeddings
+
+    def get_output_layer_with_bias(self) -> Union[None, tf.keras.layers.Layer]:
+        """
+        Get the layer that handles a bias attribute in case the model has an LM head with weights tied to the
+        embeddings.
+
+        Return:
+            :obj:`tf.keras.layers.Layer`: The layer that handles the bias, None if not an LM model.
+        """
+        return None
+
+    def get_prefix_bias_name(self) -> Union[None, str]:
+        """
+        Get the concatenated prefix name of the bias from the model name to the parent layer.
+
+        Return:
+            :obj:`str`: The prefix name of the bias.
+        """
+        return None
 
     def resize_token_embeddings(self, new_num_tokens=None) -> tf.Variable:
         """
@@ -662,7 +681,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             # TFSharedEmbeddings
             return embeddings.weight
         else:
-            raise ValueError("word embedding is not defined.")
+            # Here we build the word embeddings weights if not exists.
+            # And then we retry to get the attribute once built.
+            embeddings.build([])
+            if hasattr(embeddings, "word_embeddings"):
+                # TFBertEmbeddings, TFAlbertEmbeddings, TFElectraEmbeddings
+                return embeddings.word_embeddings
+            elif hasattr(embeddings, "weight"):
+                # TFSharedEmbeddings
+                return embeddings.weight
+            else:
+                raise ValueError("word embedding is not defined.")
 
     def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None) -> tf.Variable:
         """
@@ -684,27 +713,86 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             :obj:`new_num_tokens` is :obj:`None`
         """
         word_embeddings = self._get_word_embeddings(old_embeddings)
+        bias_layer = self.get_output_layer_with_bias()
+
         if new_num_tokens is None:
             return word_embeddings
+
         old_num_tokens, old_embedding_dim = word_embeddings.shape
+
         if old_num_tokens == new_num_tokens:
             return word_embeddings
 
         # initialize new embeddings
         # todo: initializer range is not always passed in config.
         init_range = getattr(self.config, "initializer_range", 0.02)
+        name = (
+            self.name
+            + "/"
+            + self.base_model_prefix
+            + "/"
+            + old_embeddings.name
+            + "/"
+            + word_embeddings.name.split(":")[0]
+        )
         new_embeddings = self.add_weight(
-            "weight",
+            name=name,
             shape=[new_num_tokens, old_embedding_dim],
             initializer=get_initializer(init_range),
             dtype=tf.float32,
         )
-        init_weights = new_embeddings.numpy()
+        init_weights = tf.make_ndarray(tf.make_tensor_proto(new_embeddings.value()))
 
         # Copy token embeddings from the previous weights
         num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-        init_weights[:num_tokens_to_copy] = word_embeddings[:num_tokens_to_copy, :]
+        init_weights[:num_tokens_to_copy] = word_embeddings.value()[:num_tokens_to_copy, :]
         new_embeddings.assign(init_weights)
+
+        if bias_layer is not None:
+            if not hasattr(bias_layer, "bias"):
+                bias_layer.build([])
+
+            # Second check in order to be sure the attribute has been properly created
+            if not hasattr(bias_layer, "bias"):
+                raise ValueError("bias is not defined.")
+
+            # initialize bias
+            init_bias = np.zeros((new_num_tokens,))
+            init_bias[:num_tokens_to_copy] = bias_layer.bias.value()[
+                :num_tokens_to_copy
+            ]  # tf.make_ndarray(tf.make_tensor_proto(bias_layer.bias.value()))[:num_tokens_to_copy]
+
+            bias_layer.bias = self.add_weight(
+                shape=(new_num_tokens,),
+                initializer="zeros",
+                trainable=True,
+                name=self.get_prefix_bias_name() + "/bias",
+            )
+
+            bias_layer.bias.assign(init_bias)
+
+        output_embeddings = self.get_output_embeddings()
+
+        if output_embeddings is not None:
+            if self.get_input_embeddings() != output_embeddings:
+                if not hasattr(output_embeddings, "decoder"):
+                    output_embeddings.build([])
+
+                # Second check in order to be sure the attribute has been properly created
+                if not hasattr(output_embeddings, "decoder"):
+                    raise ValueError("decoder is not defined.")
+
+                # initialize decoder
+                init_weights = np.zeros((new_num_tokens, old_embedding_dim))
+                init_weights[:num_tokens_to_copy] = output_embeddings.decoder.value()[:num_tokens_to_copy, :]
+
+                output_embeddings.decoder = self.add_weight(
+                    shape=(new_num_tokens, old_embedding_dim),
+                    initializer="zeros",
+                    trainable=True,
+                    name=self.get_prefix_bias_name() + "/decoder/weight",
+                )
+                output_embeddings.decoder.assign(init_weights)
 
         return new_embeddings
 
@@ -806,6 +894,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (e.g., not try doanloading the model).
+            use_auth_token (:obj:`str` or `bool`, `optional`):
+                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
             revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
@@ -827,6 +918,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                       ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute
                       with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration
                       attribute will be passed to the underlying model's ``__init__`` function.
+
+        .. note::
+
+            Passing :obj:`use_auth_token=True` is required when you want to use a private model.
 
         Examples::
 
@@ -851,6 +946,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
+        use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
         mirror = kwargs.pop("mirror", None)
 
@@ -866,6 +962,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 resume_download=resume_download,
                 proxies=proxies,
                 local_files_only=local_files_only,
+                use_auth_token=use_auth_token,
                 revision=revision,
                 **kwargs,
             )
@@ -908,6 +1005,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                     proxies=proxies,
                     resume_download=resume_download,
                     local_files_only=local_files_only,
+                    use_auth_token=use_auth_token,
                 )
             except EnvironmentError as err:
                 logger.error(err)
@@ -1258,7 +1356,7 @@ def shape_list(tensor: tf.Tensor) -> List[int]:
     dynamic = tf.shape(tensor)
 
     if tensor.shape == tf.TensorShape(None):
-        return dynamic.as_list()
+        return dynamic
 
     static = tensor.shape.as_list()
 
@@ -1276,31 +1374,6 @@ def get_initializer(initializer_range: float = 0.02) -> tf.initializers.Truncate
         :obj:`tf.initializers.TruncatedNormal`: The truncated normal initializer.
     """
     return tf.keras.initializers.TruncatedNormal(stddev=initializer_range)
-
-
-def cast_bool_to_primitive(bool_variable: Union[tf.Tensor, bool], default_tensor_to_true=False) -> bool:
-    """
-    Function arguments can be inserted as boolean tensor and bool variables to cope with Keras serialization we need to
-    cast the bool arguments (like :obj:`output_attentions` for instance) to correct boolean if it is a tensor.
-
-    Args:
-        bool_variable (:obj:`Union[tf.Tensor, bool]`):
-            The variable to convert to a boolean.
-        default_tensor_to_true (:obj:`bool`, `optional`, defaults to `False`):
-            The default value to use in case the tensor has no numpy attribute.
-
-    Returns:
-        :obj:`bool`: The converted value.
-    """
-    # if bool variable is tensor and has numpy value
-    if tf.is_tensor(bool_variable):
-        if hasattr(bool_variable, "numpy"):
-            return bool(bool_variable.numpy())
-        elif default_tensor_to_true:
-            return True
-
-    # else variable is bool
-    return bool_variable
 
 
 class TFWrappedEmbeddings:

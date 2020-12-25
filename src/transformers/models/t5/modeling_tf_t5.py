@@ -32,12 +32,16 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_tf_outputs import TFBaseModelOutput, TFSeq2SeqLMOutput, TFSeq2SeqModelOutput
+from ...modeling_tf_outputs import (
+    TFBaseModelOutput,
+    TFBaseModelOutputWithPast,
+    TFSeq2SeqLMOutput,
+    TFSeq2SeqModelOutput,
+)
 from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
     TFSharedEmbeddings,
-    cast_bool_to_primitive,
     input_processing,
     keras_serializable,
     shape_list,
@@ -311,7 +315,7 @@ class TFT5Attention(tf.keras.layers.Layer):
         )
 
         # to cope with keras serialization
-        if self.is_decoder and cast_bool_to_primitive(use_cache, self.use_cache) is True:
+        if self.is_decoder and use_cache:
             present_key_value_state = (key_states, value_states)
         else:
             present_key_value_state = None
@@ -594,6 +598,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
+        return_dict=None,
         training=False,
         **kwargs,
     ) -> Tuple:
@@ -610,6 +615,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
             training=training,
             kwargs_call=kwargs,
         )
@@ -713,10 +719,9 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
         assert inputs["head_mask"] is None, "Head mask not supported"
         inputs["head_mask"] = [None] * self.num_hidden_layers
-
-        present_key_value_states = ()
-        all_hidden_states = ()
-        all_attentions = ()
+        present_key_value_states = () if inputs["use_cache"] and self.is_decoder else None
+        all_hidden_states = () if inputs["output_hidden_states"] else None
+        all_attentions = () if inputs["output_attentions"] else None
         position_bias = None
         encoder_decoder_position_bias = None
 
@@ -725,7 +730,6 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         for i, (layer_module, past_key_value) in enumerate(zip(self.block, inputs["past_key_values"])):
             if inputs["output_hidden_states"]:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-
             layer_outputs = layer_module(
                 hidden_states,
                 attention_mask=extended_attention_mask,
@@ -739,6 +743,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
                 output_attentions=inputs["output_attentions"],
                 training=inputs["training"],
             )
+
             # layer_outputs is a tuple with:
             # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
             hidden_states, present_key_value_state = layer_outputs[:2]
@@ -747,10 +752,13 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             # layer_outputs = hidden-states, past_key_values, (self-attention weights),
             # (self-attention position bias), (cross-attention position bias), (cross-attention weights),
             position_bias = layer_outputs[2]
+
             if self.is_decoder and inputs["encoder_hidden_states"] is not None:
-                encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
+                encoder_decoder_position_bias = layer_outputs[4 if inputs["output_attentions"] else 3]
+
             # append next layer key value states
-            present_key_value_states = present_key_value_states + (present_key_value_state,)
+            if present_key_value_state is not None and inputs["use_cache"] and self.is_decoder:
+                present_key_value_states = present_key_value_states + (present_key_value_state,)
 
             if inputs["output_attentions"]:
                 all_attentions = all_attentions + (layer_outputs[3],)
@@ -762,15 +770,30 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         if inputs["output_hidden_states"]:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        outputs = (hidden_states,)
-        # need to check if is decoder here as well for special cases when using keras compile
-        if cast_bool_to_primitive(inputs["use_cache"], self.use_cache) is True and self.is_decoder:
-            outputs = outputs + (present_key_value_states,)
-        if inputs["output_hidden_states"]:
-            outputs = outputs + (all_hidden_states,)
-        if inputs["output_attentions"]:
-            outputs = outputs + (all_attentions,)
-        return outputs  # last-layer hidden state, (all hidden states), (all attentions)
+        if not inputs["return_dict"]:
+            outputs = (hidden_states,)
+            # need to check if is decoder here as well for special cases when using keras compile
+            if inputs["use_cache"] and self.is_decoder:
+                outputs = outputs + (present_key_value_states,)
+            if inputs["output_hidden_states"]:
+                outputs = outputs + (all_hidden_states,)
+            if inputs["output_attentions"]:
+                outputs = outputs + (all_attentions,)
+            return outputs  # last-layer hidden state, (all hidden states), (all attentions)
+
+        if self.is_decoder:
+            return TFBaseModelOutputWithPast(
+                last_hidden_state=hidden_states,
+                past_key_values=present_key_value_states,
+                hidden_states=all_hidden_states,
+                attentions=all_attentions,
+            )
+        else:
+            return TFBaseModelOutput(
+                last_hidden_state=hidden_states,
+                hidden_states=all_hidden_states,
+                attentions=all_attentions,
+            )
 
 
 ####################################################
@@ -1102,6 +1125,7 @@ class TFT5Model(TFT5PreTrainedModel):
                 use_cache=False,
                 output_attentions=inputs["output_attentions"],
                 output_hidden_states=inputs["output_hidden_states"],
+                return_dict=inputs["return_dict"],
                 training=inputs["training"],
             )
 
@@ -1119,38 +1143,25 @@ class TFT5Model(TFT5PreTrainedModel):
             use_cache=inputs["use_cache"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
 
-        past = (
-            (inputs["encoder_outputs"], decoder_outputs[1])
-            if cast_bool_to_primitive(inputs["use_cache"], self.config.use_cache)
-            else None
-        )
+        past = (inputs["encoder_outputs"], decoder_outputs[1]) if inputs["use_cache"] else None
+
         if not inputs["return_dict"]:
             if past is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
             return decoder_outputs + inputs["encoder_outputs"]
 
-        # This is long and annoying but if we introduce return_dict at the TFT5MainLayer level (like in PyTorch)
-        # TF refuses to compile anymore.
-        if not cast_bool_to_primitive(inputs["use_cache"], self.config.use_cache):
-            decoder_outputs = decoder_outputs[:1] + (None,) + decoder_outputs[1:]
-        if not cast_bool_to_primitive(inputs["output_hidden_states"], self.config.output_hidden_states):
-            inputs["encoder_outputs"] = inputs["encoder_outputs"][:1] + (None,) + inputs["encoder_outputs"][1:]
-            decoder_outputs = decoder_outputs[:2] + (None,) + decoder_outputs[2:]
-        if not cast_bool_to_primitive(inputs["output_attentions"], self.config.output_attentions):
-            inputs["encoder_outputs"] = inputs["encoder_outputs"] + (None,)
-            decoder_outputs = decoder_outputs + (None,)
-
         return TFSeq2SeqModelOutput(
-            last_hidden_state=decoder_outputs[0],
+            last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=past,
-            decoder_hidden_states=decoder_outputs[2],
-            decoder_attentions=decoder_outputs[3],
-            encoder_last_hidden_state=inputs["encoder_outputs"][0],
-            encoder_hidden_states=inputs["encoder_outputs"][1],
-            encoder_attentions=inputs["encoder_outputs"][2],
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            encoder_last_hidden_state=inputs["encoder_outputs"].last_hidden_state,
+            encoder_hidden_states=inputs["encoder_outputs"].hidden_states,
+            encoder_attentions=inputs["encoder_outputs"].attentions,
         )
 
 
@@ -1280,6 +1291,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
                 head_mask=inputs["head_mask"],
                 output_attentions=inputs["output_attentions"],
                 output_hidden_states=inputs["output_hidden_states"],
+                return_dict=inputs["return_dict"],
                 training=inputs["training"],
             )
 
@@ -1293,14 +1305,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             # get decoder inputs from shifting lm labels to the right
             inputs["decoder_input_ids"] = self._shift_right(inputs["labels"])
 
-        # If decoding with past key value states, only the last tokens
-        # should be given as an input
-        if inputs["past_key_values"] is not None:
-            if inputs["decoder_input_ids"] is not None:
-                inputs["decoder_input_ids"] = inputs["decoder_input_ids"][:, -1:]
-            if inputs["decoder_inputs_embeds"] is not None:
-                inputs["decoder_inputs_embeds"] = inputs["decoder_inputs_embeds"][:, -1:]
-
         # Decode
         decoder_outputs = self.decoder(
             inputs["decoder_input_ids"],
@@ -1313,6 +1317,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             use_cache=inputs["use_cache"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
 
@@ -1327,37 +1332,41 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        past = (
-            (inputs["encoder_outputs"], decoder_outputs[1])
-            if cast_bool_to_primitive(inputs["use_cache"], self.config.use_cache)
-            else None
-        )
+        past = (inputs["encoder_outputs"], decoder_outputs[1]) if inputs["use_cache"] else None
         if not inputs["return_dict"]:
             if past is not None:
                 decoder_outputs = decoder_outputs[:1] + (past,) + decoder_outputs[2:]
             output = (logits,) + decoder_outputs[1:] + inputs["encoder_outputs"]
             return ((loss,) + output) if loss is not None else output
 
-        # This is long and annoying but if we introduce return_dict at the TFT5MainLayer level (like in PyTorch)
-        # TF refuses to compile anymore.
-        if not cast_bool_to_primitive(inputs["use_cache"], self.config.use_cache):
-            decoder_outputs = decoder_outputs[:1] + (None,) + decoder_outputs[1:]
-        if not cast_bool_to_primitive(inputs["output_hidden_states"], self.config.output_hidden_states):
-            inputs["encoder_outputs"] = inputs["encoder_outputs"][:1] + (None,) + inputs["encoder_outputs"][1:]
-            decoder_outputs = decoder_outputs[:2] + (None,) + decoder_outputs[2:]
-        if not cast_bool_to_primitive(inputs["output_attentions"], self.config.output_attentions):
-            inputs["encoder_outputs"] = inputs["encoder_outputs"] + (None,)
-            decoder_outputs = decoder_outputs + (None,)
+        # If the user passed a tuple for encoder_outputs, we wrap it in a TFBaseModelOutput when return_dict=True
+        elif isinstance(inputs["encoder_outputs"], tuple):
+            last_hidden_state = inputs["encoder_outputs"][0]
+            hidden_states = None
+            attentions = None
+            idx = 0
+            if inputs["output_hidden_states"]:
+                idx += 1
+                hidden_states = inputs["encoder_outputs"][idx]
+            if inputs["output_attentions"]:
+                idx += 1
+                attentions = inputs["encoder_outputs"][idx]
+
+            inputs["encoder_outputs"] = TFBaseModelOutput(
+                last_hidden_state=last_hidden_state,
+                hidden_states=hidden_states,
+                attentions=attentions,
+            )
 
         return TFSeq2SeqLMOutput(
             loss=loss,
             logits=logits,
             past_key_values=past,
-            decoder_hidden_states=decoder_outputs[2],
-            decoder_attentions=decoder_outputs[3],
-            encoder_last_hidden_state=inputs["encoder_outputs"][0],
-            encoder_hidden_states=inputs["encoder_outputs"][1],
-            encoder_attentions=inputs["encoder_outputs"][2],
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            encoder_last_hidden_state=inputs["encoder_outputs"].last_hidden_state,
+            encoder_hidden_states=inputs["encoder_outputs"].hidden_states,
+            encoder_attentions=inputs["encoder_outputs"].attentions,
         )
 
     def prepare_inputs_for_generation(self, inputs, past, attention_mask, use_cache, **kwargs):
@@ -1498,19 +1507,15 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
             use_cache=False,
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
 
         if not inputs["return_dict"]:
             return encoder_outputs
 
-        if not cast_bool_to_primitive(inputs["output_hidden_states"], self.config.output_hidden_states):
-            encoder_outputs = encoder_outputs[:1] + (None,) + encoder_outputs[1:]
-        if not cast_bool_to_primitive(inputs["output_attentions"], self.config.output_attentions):
-            encoder_outputs = encoder_outputs + (None,)
-
         return TFBaseModelOutput(
-            last_hidden_state=encoder_outputs[0],
-            hidden_states=encoder_outputs[1],
-            attentions=encoder_outputs[2],
+            last_hidden_state=encoder_outputs.last_hidden_state,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
