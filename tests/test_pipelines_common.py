@@ -18,7 +18,12 @@ from unittest import mock
 from transformers import is_tf_available, is_torch_available, pipeline
 from transformers.pipelines import Pipeline
 from transformers.testing_utils import _run_slow_tests, is_pipeline_test, require_tf, require_torch, slow
+from transformers.tokenization_utils import TruncationStrategy
 from transformers.tokenization_utils_base import to_py_obj
+
+
+if is_torch_available():
+    import torch
 
 
 VALID_INPUTS = ["A simple string", ["list of strings"]]
@@ -242,3 +247,61 @@ class MonoInputPipelineCommonMixin(CustomInputPipelineCommonMixin):
                 self.assertIn(key, result)
 
         self.assertRaises(Exception, nlp, self.invalid_inputs)
+
+
+class DummyTok:
+    pad_token_id = 0
+    eos_token_id = 0
+
+    def __init__(self, **kwargs):
+        for name, v in kwargs.items():
+            setattr(self, name, v)
+
+    def __call__(self, inputs, **kwargs):
+        if kwargs.get("return_tensors", "") == "pt":
+            return self.encode_pt(inputs, **kwargs)
+        else:
+            return self.encode_list(inputs, **kwargs)
+
+    def encode_list(self, inputs, **kwargs):
+        unwrap = False
+        if isinstance(inputs, str):
+            unwrap = True
+            inputs = [inputs]
+
+        assert isinstance(inputs, list)
+        input_ids = [self.encode(input_) for input_ in inputs]
+
+        if unwrap:
+            input_ids = input_ids[0]
+
+        return {"input_ids": input_ids}
+
+    def encode_pt(self, inputs, **kwargs):
+        if isinstance(inputs, str):
+            input_ids = torch.LongTensor(self.encode(inputs)).unsqueeze(0)
+        else:
+            input_ids = self._pad([self.encode(input_) for input_ in inputs])
+        return self.finalize_pt(input_ids, **kwargs)
+
+    def finalize_pt(self, input_ids, **kwargs):
+        if kwargs.get("truncation", TruncationStrategy.DO_NOT_TRUNCATE) == TruncationStrategy.ONLY_FIRST:
+            input_ids = input_ids[:, : self.model_max_length]
+        attention_mask = torch.zeros_like(input_ids).long() + 1
+        return {"input_ids": input_ids, "attention_mask": attention_mask}
+
+    def _pad(self, inputs):
+        return torch.nn.utils.rnn.pad_sequence(
+            [torch.LongTensor(input_) for input_ in inputs],
+            padding_value=self.pad_token_id,
+        ).transpose(1, 0)
+
+    def pad(self, inputs, **kwargs):
+        input_ids = self._pad(inputs["input_ids"])
+        return self.finalize_pt(input_ids, **kwargs)
+
+    def encode(self, input_):
+        return list(input_.encode("utf-8"))
+
+    def decode(self, sequence, **kwargs):
+        return "D" * len(sequence)
