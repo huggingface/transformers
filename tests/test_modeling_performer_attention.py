@@ -16,13 +16,12 @@ class PerformerAttentionTest(unittest.TestCase):
             kernel_type='relu'
         ))
 
-        query = torch.ones(batch_size, length, num_heads, dim)
-        key = torch.ones(batch_size, length, num_heads, dim)
-        value = torch.ones(batch_size, length, num_heads, dim)
-        attention_block_output = attention(query, key, value)
+        query = torch.ones(batch_size, length, dim)
+        key = torch.ones(batch_size, length, dim)
+        value = torch.ones(batch_size, length, dim)
+        attention_block_output = attention(query, key, value)[0]
 
-        self.assertListEqual(attention_block_output.get_shape().as_list(),
-                             [batch_size, length, num_heads, dim])
+        self.assertListEqual(list(attention_block_output.shape), [batch_size, length, dim])
 
     def test_relu_causal_attention_block_output_shape(self):
         batch_size = 1
@@ -33,16 +32,16 @@ class PerformerAttentionTest(unittest.TestCase):
         attention = PerformerAttention(PerformerAttentionConfig(
             d_model=dim,
             num_heads=num_heads,
-            kernel_type='relu'
+            kernel_type='relu',
+            causal=True
         ))
 
-        query = torch.ones(batch_size, length, num_heads, dim)
-        key = torch.ones(batch_size, length, num_heads, dim)
-        value = torch.ones(batch_size, length, num_heads, dim)
-        attention_block_output = attention(query, key, value)
+        query = torch.ones(batch_size, length, dim)
+        key = torch.ones(batch_size, length, dim)
+        value = torch.ones(batch_size, length, dim)
+        attention_block_output = attention(query, key, value)[0]
 
-        self.assertListEqual(attention_block_output.get_shape().as_list(),
-                             [batch_size, length, num_heads, dim])
+        self.assertListEqual(list(attention_block_output.shape), [batch_size, length, dim])
 
     def test_softmax_noncausal_attention_block_output_shape(self):
         batch_size = 1
@@ -58,43 +57,43 @@ class PerformerAttentionTest(unittest.TestCase):
             num_random_features=num_random_features
         ))
 
-        query = torch.ones(batch_size, length, num_heads, dim)
-        key = torch.ones(batch_size, length, num_heads, dim)
-        value = torch.ones(batch_size, length, num_heads, dim)
+        query = torch.ones(batch_size, length, dim)
+        key = torch.ones(batch_size, length, dim)
+        value = torch.ones(batch_size, length, dim)
 
-        attention_block_output = attention(query, key, value)
-        self.assertListEqual(attention_block_output.get_shape().as_list(),
-                             [batch_size, length, num_heads, dim])
+        attention_block_output = attention(query, key, value)[0]
+        self.assertListEqual(list(attention_block_output.shape), [batch_size, length, dim])
 
     def test_softmax_noncausal_attention_block_output(self):
         batch_size = 1
-        length = 2
+        length = 10
         num_heads = 1
-        dim = 8
-        num_random_features = 30000
+        dim = 10
 
         attention = PerformerAttention(PerformerAttentionConfig(
             d_model=dim,
             num_heads=num_heads,
-            kernel_type='relu',
-            num_random_features=num_random_features
+            kernel_type='exp',
+            num_random_features=30000,
+            use_linear_layers=False
         ))
 
-        query = torch.randn(batch_size, length, num_heads, dim)
-        key = torch.randn(batch_size, length, num_heads, dim)
-        value = torch.randn(batch_size, length, num_heads, dim)
+        query = torch.randn(batch_size, length, dim)
+        key = torch.randn(batch_size, length, dim)
+        value = torch.randn(batch_size, length, dim)
 
-        attention_block_output = attention(query, key, value)
+        performer_attention_output = attention(query, key, value)[0]
 
-        query = query * 1.0 / math.sqrt(float(dim))
-        attention_scores = torch.einsum("BXHD,BYHD->BXYH", query, key)
-        attention_scores = torch.nn.functional.softmax(attention_scores, dim=2)
-        exact_attention_block_output = torch.einsum("BXYH,BYHD->BXHD", attention_scores, value)
-        max_error = 2.0
-        error = torch.abs(
-            (exact_attention_block_output - attention_block_output) /
-            exact_attention_block_output)
-        self.assertLess(torch.max(torch.abs(error)), max_error)
+        attention_scores = query @ key.transpose(-2, -1) / math.sqrt(float(dim))
+        attention_scores = torch.nn.functional.softmax(attention_scores, dim=1)
+        softmax_output = attention_scores @ value
+
+        errors = softmax_output - performer_attention_output
+        mse = torch.mean(errors ** 2)
+        bias = torch.mean(errors)
+
+        self.assertLess(mse, 0.1)
+        self.assertLess(torch.abs(bias), 0.025)
 
     def test_fast_attention(self):
         hidden_size = 64
@@ -109,35 +108,5 @@ class PerformerAttentionTest(unittest.TestCase):
 
         length = 2
         x = torch.ones([1, length, hidden_size])
-        y = attention(x, training=True)
-        self.assertEqual(y.shape, (
-            1,
-            length,
-            64,
-        ))
-
-    def test_custom_causal_gradients(self):
-        L = 64
-        B = 128
-        H = 4
-        D = 64
-        M = 128
-        qs = torch.randn(L, B, H, M, requires_grad=True)
-        ks = torch.randn(L, B, H, M, requires_grad=True)
-        vs = torch.randn(L, B, H, D, requires_grad=True)
-        coefs = torch.randn(vs.shape)
-
-        attention = PerformerAttention(PerformerAttentionConfig(
-            d_model=H * D,
-            num_heads=H,
-            num_random_features=M,
-            causal=True
-        ))
-        output = attention.compute_attention_with_projected_queries_and_keys(qs, ks, vs)
-
-        loss = torch.sum(output * coefs)
-        loss.backward()
-
-        self.assertListEqual([L, B, H, M], qs.grad.get_shape().as_list())
-        self.assertListEqual([L, B, H, M], ks.grad.get_shape().as_list())
-        self.assertListEqual([L, B, H, D], vs.grad.get_shape().as_list())
+        y = attention(x, x, x)[0]
+        self.assertEqual(y.shape, (1, length, hidden_size))

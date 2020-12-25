@@ -45,10 +45,8 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         assert self.kernel_type in KERNEL_CALLABLES, "Invalid kernel type"
         self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
-        if self.use_qkv_linear_layers:
-            self.qkv_linear_layers = [tf.keras.layers.Dense(units=self.d_model) for _ in range(3)]
-        
-        self.output_linear = tf.keras.layers.Dense(units=self.d_model)
+        if self.use_linear_layers:
+            self.linear_layers = [tf.keras.layers.Dense(units=self.d_model) for _ in range(4)]
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -82,8 +80,8 @@ class TFPerformerAttention(tf.keras.layers.Layer):
             new_shape = tf.concat((x.shape[:-1], tf.constant([self.num_heads, dim_per_head])), axis=0)
             return tf.transpose(tf.reshape(x, new_shape), perm=[0, 2, 1, 3])
 
-        if self.use_qkv_linear_layers:
-            q, k, v = (linear(x) for linear, x in zip(self.qkv_linear_layers, (q, k, v)))
+        if self.use_linear_layers:
+            q, k, v = (linear(x) for linear, x in zip(self.linear_layers, (q, k, v)))
         
         # (bs, num_heads, q_length, dim_per_head)
         q, k, v = (shape(x) for x in (q, k, v))
@@ -193,7 +191,8 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         new_last_dim = x.shape[-2] * x.shape[-1]
         context = tf.reshape(x, list(x.shape[:-2]) + [new_last_dim])  # (bs, q_length, dim)
 
-        context = self.output_linear(context)  # (bs, q_length, dim)
+        if self.use_linear_layers:
+            context = self.linear_layers[-1](context)  # (bs, q_length, dim)
 
         if att_map_to_output:
             return context, att_map_to_output

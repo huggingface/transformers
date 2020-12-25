@@ -49,7 +49,7 @@ class PerformerAttentionConfig:
             distribution. Orthogonal features result in outputs that more closely approximate softmax attention, but at
             the cost of doing QR decomposition on the CPU every time the features are redrawn. Best combined with a
             reasonably large value of :obj:`feature_redraw_interval` (1-5k).
-        use_qkv_linear_layers (:obj:`bool`, `optional`, defaults to True):
+        use_linear_layers (:obj:`bool`, `optional`, defaults to True):
             Whether to transform the Q, K, and V inputs with a Linear layer before applying attention. Setting this
             to False may be useful if you want to use PerformerAttention as one component of a more complex
             attention mechanism.
@@ -83,7 +83,7 @@ class PerformerAttentionConfig:
     kernel_epsilon: float = 1e-4
     normalize_output: bool = True
     normalization_stabilizer: float = 1e-6
-    use_qkv_linear_layers: bool = True
+    use_linear_layers: bool = True
 
     num_random_features: Optional[int] = None
     use_thick_features: bool = False

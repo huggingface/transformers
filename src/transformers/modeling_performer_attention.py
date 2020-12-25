@@ -53,8 +53,8 @@ class PerformerAttention(nn.Module):
         assert self.kernel_type in KERNEL_CALLABLES, "Invalid kernel type"
         self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
-        if self.use_qkv_linear_layers:
-            self.qkv_linear_layers = [nn.Linear(self.d_model, self.d_model) for _ in range(3)]
+        if self.use_linear_layers:
+            self.linear_layers = [nn.Linear(self.d_model, self.d_model) for _ in range(3)]
 
         self.output_linear = nn.Linear(in_features=self.d_model, out_features=self.d_model)
         self.pruned_heads = set()
@@ -103,8 +103,8 @@ class PerformerAttention(nn.Module):
         if self.use_recurrent_decoding:
             assert q_length == 1, "When use_recurrent_decoding == True, we only input and output one token at a time."
 
-        if self.use_qkv_linear_layers:
-            q, k, v = (linear(x) for linear, x in zip(self.qkv_linear_layers, (q, k, v)))
+        if self.use_linear_layers:
+            q, k, v = (linear(x) for linear, x in zip(self.linear_layers, (q, k, v)))
 
         # Add the head dimension: (bs, num_heads, q_length, dim_per_head)
         q, k, v = (x.view(bs, -1, self.num_heads, dim_per_head).transpose(1, 2) for x in (q, k, v))
@@ -212,7 +212,9 @@ class PerformerAttention(nn.Module):
             context *= head_mask
 
         context = unshape(context)  # (bs, q_length, dim)
-        context = self.output_linear(context)  # (bs, q_length, dim)
+
+        if self.use_linear_layers:
+            context = self.linear_layers[-1](context)  # (bs, q_length, dim)
 
         if att_map_to_output:
             return context, att_map_to_output
@@ -304,10 +306,9 @@ class PerformerAttention(nn.Module):
         heads, index = find_pruneable_heads_and_indices(heads, self.num_heads, attention_head_size, self.pruned_heads)
 
         # Prune linear layers
-        if self.use_qkv_linear_layers:
-            self.qkv_linear_layers = [prune_linear_layer(linear, index) for linear in self.qkv_linear_layers]
+        if self.use_linear_layers:
+            self.linear_layers = [prune_linear_layer(linear, index) for linear in self.linear_layers]
 
-        self.output_linear = prune_linear_layer(self.output_linear, index, dim=1)
         # Update hyper params
         self.num_heads = self.num_heads - len(heads)
         self.d_model = attention_head_size * self.num_heads
