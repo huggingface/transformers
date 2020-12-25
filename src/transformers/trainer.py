@@ -18,6 +18,8 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 
 import collections
 import inspect
+import io
+import json
 import math
 import os
 import re
@@ -384,15 +386,42 @@ class Trainer:
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
     def _init_deepspeed(self, model):
-
         # for clarity extract what args are being passed to deepspeed
-        ds_args = {k: getattr(self.args, k, None) for k in ["deepspeed", "deepspeed_config", "local_rank"]}
+        # XXX: we shouldn't need to pass deepspeed_config anymore, since we handle it ourselves, but
+        # currently ds won't work without this argument present in args
+        ds_args = {k: getattr(self.args, k, None) for k in ["deepspeed_config", "local_rank"]}
 
+        with io.open(self.args.deepspeed_config, "r", encoding="utf-8") as f:
+            config = json.load(f)
+
+        # The following code injects some of trainer's cl args into the DS config
+
+        # First to ensure that there is no mismatch between cl args values and presets in the config
+        # file, ask to not set "train_batch_size", "train_micro_batch_size_per_gpu",
+        # "gradient_accumulation_steps" in ds config file
+        bs_keys = ["train_batch_size", "train_micro_batch_size_per_gpu"]
+        if len([x for x in bs_keys if x in config.keys()]):
+            raise ValueError(
+                f"Do not include {bs_keys} entries in the ds config file, as they will be set via --per_device_train_batch_size or its default"
+            )
+        if "gradient_accumulation_steps" in config.keys():
+            raise ValueError(
+                "Do not include gradient_accumulation_steps entries in the ds config file, as they will be set via --gradient_accumulation_steps or its default"
+            )
+
+        # DeepSpeed does:
+        #   train_batch_size = n_gpus * train_micro_batch_size_per_gpu * gradient_accumulation_steps
+        # therefore we just need to set:
+        config["train_micro_batch_size_per_gpu"] = self.args.per_device_train_batch_size
+        config["gradient_accumulation_steps"] = self.args.gradient_accumulation_steps
+
+        # init that takes some config via `args`, and the bulk of it via `config_params`
         model_parameters = filter(lambda p: p.requires_grad, model.parameters())
         model, optimizer, _, lr_scheduler = deepspeed.initialize(
             args=SimpleNamespace(**ds_args),  # expects an obj
             model=model,
             model_parameters=model_parameters,
+            config_params=config,
         )
 
         return model, optimizer, lr_scheduler

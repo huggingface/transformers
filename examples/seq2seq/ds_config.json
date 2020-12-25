@@ -1,5 +1,4 @@
 {
-    "train_batch_size": 100,
     "steps_per_print": 2000,
 
     "fp16": {
