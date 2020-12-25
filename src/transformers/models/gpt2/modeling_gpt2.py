@@ -16,6 +16,7 @@
 """PyTorch OpenAI GPT-2 model."""
 
 import os
+import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -714,6 +715,13 @@ class GPT2Model(GPT2PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if getattr(self.config, "gradient_checkpointing", False):
+
+                if use_cache:
+                    use_cache = False
+                    warnings.warn(
+                        "Setting `use_cache=False`...When training use_cache should not be enabled.",
+                        FutureWarning,
+                    )
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
