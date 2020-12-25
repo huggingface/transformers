@@ -166,6 +166,12 @@ if is_deepspeed_available():
 
 logger = logging.get_logger(__name__)
 
+def _model_unwrap(model: nn.Module) -> nn.Module:
+    # since there could be multiple levels of wrapping, unwrap recursively
+    if hasattr(model, 'module'): 
+        return _model_unwrap(model.module)
+    else:
+        return model
 
 class Trainer:
     """
@@ -273,6 +279,8 @@ class Trainer:
             self.model_wrapped = model
         else:
             self.model = model
+            # later can use self.model is self.wrapped_mode to check if it's wrapped or not
+            #self.model_wrapped = model
             self.model_wrapped = None
 
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
@@ -709,7 +717,7 @@ class Trainer:
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(model_path)
 
-        model = self.model_wrapped if self.model_wrapped else self.model
+        model = self.model_wrapped
 
         # Mixed precision training with apex (torch < 1.6)
         if self.use_apex:
@@ -975,12 +983,10 @@ class Trainer:
             self.control = self.callback_handler.on_save(self.args, self.state, self.control)
 
     def _save_checkpoint(self, model, trial, metrics=None):
-        # In all cases (even distributed/parallel), self.model is always a reference
-        # to the model we want to save.
-        if hasattr(model, "module"):
-            assert model.module is self.model, f"Module {model.module} should be a reference to self.model"
-        else:
-            assert model is self.model, f"Model {model} should be a reference to self.model"
+        # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
+        # want to save.
+        assert _model_unwrap(model) is self.model, "internal model should be a reference to self.model"
+
         # Save model checkpoint
         checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
 
@@ -1671,30 +1677,7 @@ class Trainer:
         Returns:
             :obj:`int`: The number of floating-point operations.
         """
-
-        model = self._actual_model(self.model)
-
-        if hasattr(model, "floating_point_ops"):
-            return model.floating_point_ops(inputs)
-
+        if hasattr(self.model, "floating_point_ops"):
+            return self.model.floating_point_ops(inputs)
         else:
             return 0
-
-    @staticmethod
-    def _actual_model(
-        model: Union[torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel, torch.nn.modules.Module]
-    ) -> torch.nn.modules.Module:
-        """
-
-        Args:
-            model: (:obj:`Union[torch.nn.DataParallel, torch.nn.parallel.DistributedDataParallel, torch.nn.modules.Module]`):
-                Model object used during training
-
-        Returns:
-            :obj:`torch.nn.modules.Module`: unwrapped module
-        """
-        if isinstance(model, torch.nn.DataParallel) or isinstance(model, torch.nn.parallel.DistributedDataParallel):
-            model = model.module
-        else:
-            model = model
-        return model
