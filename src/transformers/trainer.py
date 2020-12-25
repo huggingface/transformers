@@ -166,12 +166,14 @@ if is_deepspeed_available():
 
 logger = logging.get_logger(__name__)
 
+
 def _model_unwrap(model: nn.Module) -> nn.Module:
     # since there could be multiple levels of wrapping, unwrap recursively
-    if hasattr(model, 'module'): 
+    if hasattr(model, "module"):
         return _model_unwrap(model.module)
     else:
         return model
+
 
 class Trainer:
     """
@@ -279,9 +281,8 @@ class Trainer:
             self.model_wrapped = model
         else:
             self.model = model
-            # later can use self.model is self.wrapped_mode to check if it's wrapped or not
-            #self.model_wrapped = model
-            self.model_wrapped = None
+            # later can use `self.model is self.model_wrapped`` to check if it's wrapped or not
+            self.model_wrapped = model
 
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
@@ -745,7 +746,7 @@ class Trainer:
             # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
 
         # for the rest of this function ``model`` is the outside model, whether it was wrapped or not
-        if model != self.model:
+        if model is not self.model:
             self.model_wrapped = model
 
         # important: at this point:
