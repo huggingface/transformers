@@ -270,10 +270,10 @@ class Trainer:
 
         if args.deepspeed:
             self.model = model.module
-            self.wrapped_model = model
+            self.model_wrapped = model
         else:
             self.model = model
-            self.wrapped_model = None
+            self.model_wrapped = None
 
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
@@ -709,7 +709,7 @@ class Trainer:
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(model_path)
 
-        model = self.wrapped_model if self.wrapped_model else self.model
+        model = self.model_wrapped if self.model_wrapped else self.model
 
         # Mixed precision training with apex (torch < 1.6)
         if self.use_apex:
@@ -738,11 +738,11 @@ class Trainer:
 
         # for the rest of this function ``model`` is the outside model, whether it was wrapped or not
         if model != self.model:
-            self.wrapped_model = model
+            self.model_wrapped = model
 
         # important: at this point:
         # self.model         is the Transformers Model
-        # self.wrapped_model is DDP(Transformers Model), DDP(Deepspeed(Transformers Model)), etc.
+        # self.model_wrapped is DDP(Transformers Model), DDP(Deepspeed(Transformers Model)), etc.
 
         # Train!
         if is_torch_tpu_available():
@@ -1214,8 +1214,8 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         elif self.args.deepspeed:
-            # calling on DS engine (wrapped_model == DDP(Deepspeed(PretrainedModule)))
-            self.wrapped_model.module.backward(loss)
+            # calling on DS engine (model_wrapped == DDP(Deepspeed(PretrainedModule)))
+            self.model_wrapped.module.backward(loss)
         else:
             loss.backward()
 
