@@ -112,7 +112,7 @@ class DistilBertConfig(PretrainedConfig):
         dropout=0.1,
         attention_type='softmax',
         attention_dropout=0.1,
-        performer_attention_config: Optional[Union[dict, PerformerAttentionConfig]] = None,
+        performer_attention_config: Optional[PerformerAttentionConfig] = None,
         activation="gelu",
         initializer_range=0.02,
         qa_dropout=0.1,
@@ -136,9 +136,6 @@ class DistilBertConfig(PretrainedConfig):
         self.performer_attention_config = performer_attention_config
         self.qa_dropout = qa_dropout
         self.seq_classif_dropout = seq_classif_dropout
-        
-        if isinstance(self.performer_attention_config, dict):
-            self.performer_attention_config = PerformerAttentionConfig(**self.performer_attention_config)
 
     @property
     def hidden_size(self):

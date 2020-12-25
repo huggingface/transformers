@@ -138,7 +138,7 @@ class BertConfig(PretrainedConfig):
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         attention_type='softmax',
-        performer_attention_config: Optional[Union[dict, PerformerAttentionConfig]] = None,
+        performer_attention_config: Optional[PerformerAttentionConfig] = None,
         max_position_embeddings=512,
         type_vocab_size=2,
         initializer_range=0.02,
@@ -168,9 +168,6 @@ class BertConfig(PretrainedConfig):
         self.gradient_checkpointing = gradient_checkpointing
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
-        
-        if isinstance(self.performer_attention_config, dict):
-            self.performer_attention_config = PerformerAttentionConfig(**self.performer_attention_config)
     
     def to_dict(self):
         output = super().to_dict()
