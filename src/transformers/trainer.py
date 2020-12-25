@@ -263,18 +263,7 @@ class Trainer:
             model = self.call_model_init()
 
         if args.deepspeed:
-            # for clarity extract what args are being passed to deepspeed
-            ds_args = {k: getattr(args, k, None) for k in ["deepspeed", "deepspeed_config", "local_rank"]}
-            model_parameters = filter(lambda p: p.requires_grad, model.parameters())
-            model, optimizer, training_dataloader, lr_scheduler = deepspeed.initialize(
-                args=SimpleNamespace(**ds_args),  # expects an obj
-                model=model,
-                model_parameters=model_parameters,
-                # optimizer=optimizer,
-                # lr_scheduler=lr_scheduler,
-                # training_data=trainset,
-            )
-
+            model, optimizer, lr_scheduler = self._init_deepspeed(model)
             self.optimizer = optimizer
             self.lr_scheduler = lr_scheduler
         else:
@@ -284,13 +273,12 @@ class Trainer:
         if model is not None and not self.args.model_parallel:
             model = model.to(args.device)
 
+        self.model_wrapped = model
+        # later can use `self.model is self.model_wrapped`` to check if it's wrapped or not
         if args.deepspeed:
             self.model = model.module
-            self.model_wrapped = model
         else:
             self.model = model
-            # later can use `self.model is self.model_wrapped`` to check if it's wrapped or not
-            self.model_wrapped = model
 
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
@@ -394,6 +382,20 @@ class Trainer:
         )
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
+
+    def _init_deepspeed(self, model):
+
+        # for clarity extract what args are being passed to deepspeed
+        ds_args = {k: getattr(self.args, k, None) for k in ["deepspeed", "deepspeed_config", "local_rank"]}
+
+        model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+        model, optimizer, _, lr_scheduler = deepspeed.initialize(
+            args=SimpleNamespace(**ds_args),  # expects an obj
+            model=model,
+            model_parameters=model_parameters,
+        )
+
+        return model, optimizer, lr_scheduler
 
     def add_callback(self, callback):
         """
