@@ -291,9 +291,11 @@ DeepSpeed works with the PyTorch Trainer but not TF Trainer.
 
 Notes to check:
 
-g-karthik: While DeepSpeed has a pip installable PyPI package, IIRC it is highly recommended that it be installed from source.
+g-karthik: While DeepSpeed has a pip installable PyPI package, IIRC it is highly recommended that it be installed from
+source.
 
-g-karthik: in order to use certain features in DeepSpeed such as 1-bit Adam, there are certain special installations to be done that do not come with the PyPI package.
+g-karthik: in order to use certain features in DeepSpeed such as 1-bit Adam, there are certain special installations to
+be done that do not come with the PyPI package.
 
 
 
