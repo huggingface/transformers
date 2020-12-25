@@ -182,7 +182,7 @@ class TestFinetuneTrainer(TestCasePlus):
             args.extend(extra_args_str.split())
 
         if deepspeed:
-            ds_args = f"--deepspeed --deepspeed_config {self.test_file_dir_str}/ds_config.json".split()
+            ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config.json".split()
             distributed_args = f"""
                 {self.test_file_dir}/finetune_trainer.py
             """.split()

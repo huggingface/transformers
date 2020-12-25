@@ -281,8 +281,8 @@ class Trainer:
         if not self.args.model_parallel:
             model = model.to(args.device)
 
+        # later use `self.model is self.model_wrapped` to check if it's wrapped or not
         self.model_wrapped = model
-        # later can use `self.model is self.model_wrapped`` to check if it's wrapped or not
         if args.deepspeed:
             self.model = model.module
         else:
@@ -395,9 +395,9 @@ class Trainer:
         # for clarity extract what args are being passed to deepspeed
         # XXX: we shouldn't need to pass deepspeed_config anymore, since we handle it ourselves, but
         # currently ds won't work without this argument present in args
-        ds_args = {k: getattr(self.args, k, None) for k in ["deepspeed_config", "local_rank"]}
+        ds_args = dict(local_rank=self.args.local_rank, deepspeed_config=self.args.deepspeed)
 
-        with io.open(self.args.deepspeed_config, "r", encoding="utf-8") as f:
+        with io.open(self.args.deepspeed, "r", encoding="utf-8") as f:
             config = json.load(f)
 
         # The following code injects some of trainer's cl args into the DS config
