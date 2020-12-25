@@ -31,7 +31,7 @@ class PerformerAttention(nn.Module):
 
         # kwargs take precedence over the default values that might be stored in the config object
         for k, v in kwargs.items():
-            assert hasattr(config, k), "'{k}' is an invalid config parameter"
+            assert hasattr(config, k), f"'{k}' is an invalid config parameter"
             setattr(config, k, v)
 
         self.__dict__.update(config.__dict__)
@@ -41,6 +41,11 @@ class PerformerAttention(nn.Module):
 
         self.dropout = nn.Dropout(p=self.attention_dropout)
         self.calls_since_last_redraw = 0
+
+        if not self.orthogonal_feature_algorithm:
+            self.orthogonal_feature_algorithm = 'kacs'
+        else:
+            assert self.orthogonal_feature_algorithm in ('kacs', 'qr'), "Invalid orthogonal feature algorithm"
 
         self.random_feature_chain = None
         self.random_features = None
@@ -233,13 +238,27 @@ class PerformerAttention(nn.Module):
         num_rows = self.num_random_features or round(dim_per_head * math.log(dim_per_head))
         batch = batch_size if self.use_thick_features else 1
 
+        # Just return a random Gaussian matrix
         if not self.use_orthogonal_features:
             return torch.randn(batch, num_rows, dim_per_head, device=device)
 
-        if not self.random_feature_chain:
-            self.random_feature_chain = _get_orthogonal_feature_chain(batch_size, num_rows, dim_per_head, device)
+        # Use a Kac's random walk Markov chain to speed up successive redraws
+        if self.orthogonal_feature_algorithm == 'kacs':
+            if not self.random_feature_chain:
+                self.random_feature_chain = _get_orthogonal_feature_chain(batch, num_rows, dim_per_head, device)
 
-        output_tensor = next(self.random_feature_chain)
+            output_tensor = next(self.random_feature_chain)
+
+        # Do QR decomposition on random Gaussian blocks
+        else:
+            total_num_blocks = int(math.ceil(num_rows / dim_per_head))
+            extra_rows = total_num_blocks * dim_per_head - num_rows
+
+            blocks = [_get_square_orthogonal_block_qr(batch, dim_per_head, device) for _ in range(total_num_blocks)]
+            if extra_rows > 0:
+                blocks[-1] = blocks[-1][:, extra_rows:]
+
+            output_tensor = torch.cat(blocks, dim=1)
 
         # This option yields SMREG
         if self.regularize_feature_norms:

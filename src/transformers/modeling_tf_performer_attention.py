@@ -34,6 +34,7 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(rate=self.attention_dropout)
         self.calls_since_last_redraw = 0
 
+        assert self.orthogonal_feature_algorithm in (None, 'qr'), "QR is the only supported algorithm on TensorFlow"
         self.random_features = None
 
         # Recurrent state

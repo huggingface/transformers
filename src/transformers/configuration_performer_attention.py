@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional
 
+
 @dataclass
 class PerformerAttentionConfig:
     r"""
@@ -30,6 +31,12 @@ class PerformerAttentionConfig:
         num_random_features (:obj:`int`, `optional`, defaults to None):
             The dimensionality of the random feature vectors to use. When None, the dimensionality is set to
             D * log(D), where D is the dimensionality of each attention head.
+        orthogonal_feature_algorithm (:obj:`str`, `optional`, defaults to None):
+            The algorithm to use for generating random orthogonal features. Possible values are 'kacs', which uses a
+            Kac's random walk Markov chain; 'qr', which performs QR decomposition on a random Gaussian matrix at each
+            redraw; and None, which is equivalent to 'kacs' on PyTorch and 'qr' on TensorFlow, since the Kac's random
+            walk algorithm is not supported on TensorFlow. Kac's is generally faster than QR, but successive samples
+            are correlated with each other.
         use_recurrent_decoding (:obj:`bool`, `optional`, defaults to False):
             Whether to use recurrent autoregressive decoding, as described in the 'Transformers are RNNs' paper. If
             True, the PerformerAttention object will expect input tensors with a sequence length dimension of exactly 1,
@@ -80,8 +87,10 @@ class PerformerAttentionConfig:
 
     num_random_features: Optional[int] = None
     use_thick_features: bool = False
-    use_orthogonal_features: bool = True
     regularize_feature_norms: bool = True
+
+    use_orthogonal_features: bool = True
+    orthogonal_feature_algorithm: Optional[str] = None
     
     feature_redraw_interval: int = 1
     redraw_stochastically: bool = False
