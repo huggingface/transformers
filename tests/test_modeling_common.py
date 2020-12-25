@@ -233,6 +233,7 @@ class ModelTesterMixin:
             return
 
         config.gradient_checkpointing = True
+        config.use_cache = False
         config.return_dict = True
 
         for model_class in self.all_model_classes:
