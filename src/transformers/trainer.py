@@ -253,7 +253,7 @@ class Trainer:
         if args is None:
             output_dir = "tmp_trainer"
             logger.info(f"No `TrainingArguments` passed, using `output_dir={output_dir}`.")
-            args = TrainingArguments(output_dir="tmp_trainer")
+            args = TrainingArguments(output_dir=output_dir)
         self.args = args
         # Seed must be set before instantiating the model when using model
         set_seed(self.args.seed)
