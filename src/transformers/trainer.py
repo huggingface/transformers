@@ -251,18 +251,24 @@ class Trainer:
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
     ):
         if args is None:
-            logger.info("No `TrainingArguments` passed, using the current path as `output_dir`.")
-            args = TrainingArguments("tmp_trainer")
+            output_dir = "tmp_trainer"
+            logger.info(f"No `TrainingArguments` passed, using `output_dir={output_dir}`.")
+            args = TrainingArguments(output_dir="tmp_trainer")
         self.args = args
         # Seed must be set before instantiating the model when using model
         set_seed(self.args.seed)
-        assert (
-            model is not None or model_init is not None
-        ), "You must provide a model to use `Trainer`, either by using the `model` argument or the `model_init` argument."
-        self.model_init = model_init
         self.hp_name = None
-        if model is None and model_init is not None:
-            model = self.call_model_init()
+
+        if model is None:
+            if model_init is not None:
+                self.model_init = model_init
+                model = self.call_model_init()
+            else:
+                raise RuntimeError("`Trainer` requires either a `model` or `model_init` argument")
+        else:
+            if model_init is not None:
+                raise RuntimeError("`Trainer` requires either a `model` or `model_init` argument, but not both")
+            self.model_init = None
 
         if args.deepspeed:
             model, optimizer, lr_scheduler = self._init_deepspeed(model)
@@ -272,7 +278,7 @@ class Trainer:
             self.optimizer, self.lr_scheduler = optimizers
 
         # Model parallel
-        if model is not None and not self.args.model_parallel:
+        if not self.args.model_parallel:
             model = model.to(args.device)
 
         self.model_wrapped = model
@@ -713,12 +719,15 @@ class Trainer:
         # Model re-init
         if self.model_init is not None:
             # Seed must be set before instantiating the model when using model_init.
+            # XXX: move this and the same inside __init__ to call_model_init?
             set_seed(self.args.seed)
 
             model = self.call_model_init(trial)
-
             if not self.args.model_parallel:
-                self.model = model.to(self.args.device)
+                model = model.to(self.args.device)
+
+            self.model = model
+            self.model_wrapped = model
 
             # Reinitializes optimizer and scheduler
             self.optimizer, self.lr_scheduler = None, None
