@@ -50,6 +50,26 @@ LEDTokenizerFast
         create_token_type_ids_from_sequences, save_vocabulary
 
 
+LED specific outputs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.models.led.modeling_led.LEDBaseModelOutput
+    :members: 
+
+.. autoclass:: transformers.models.led.modeling_led.LEDSeq2SeqModelOutput
+    :members: 
+
+.. autoclass:: transformers.models.led.modeling_led.LEDSeq2SeqLMOutput
+    :members: 
+
+.. autoclass:: transformers.models.led.modeling_led.LEDSeq2SeqSequenceClassifierOutput
+    :members: 
+
+.. autoclass:: transformers.models.led.modeling_led.LEDSeq2SeqQuestionAnsweringModelOutput
+    :members: 
+
+
+
 LEDModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

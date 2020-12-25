@@ -212,8 +212,8 @@ class LEDEncoderSelfAttention(nn.Module):
         output_attentions=False,
     ):
         """
-         LEDEncoderSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`. Padding to
-         `attention_window` happens in LongformerModel.forward to avoid redoing the padding on each layer.
+        LEDEncoderSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`. Padding to
+        `attention_window` happens in LEDEncoderModel.forward to avoid redoing the padding on each layer.
 
         The `attention_mask` is changed in `BertModel.forward` from 0, 1, 2 to -ve: no attention
 
@@ -436,7 +436,7 @@ class LEDEncoderSelfAttention(nn.Module):
     def _sliding_chunks_query_key_matmul(self, query: torch.Tensor, key: torch.Tensor, window_overlap: int):
         """
         Matrix multiplication of query and key tensors using with a sliding window attention pattern. This
-        implementation splits the input into overlapping chunks of size 2w (e.g. 512 for pretrained Longformer) with an
+        implementation splits the input into overlapping chunks of size 2w (e.g. 512 for pretrained LEDEncoder) with an
         overlap of size window_overlap
         """
         batch_size, seq_len, num_heads, head_dim = query.size()
@@ -1068,7 +1068,7 @@ class LEDPreTrainedModel(PreTrainedModel):
 # Copied from transformers.models.longformer.modeling_longformer.LongformerBaseModelOutput with Longformer->LEDEncoder
 class LEDBaseModelOutput(ModelOutput):
     """
-    Base class for Longformer's outputs, with potential hidden states, local and global attentions.
+    Base class for LEDEncoder's outputs, with potential hidden states, local and global attentions.
 
     Args:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
