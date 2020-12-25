@@ -225,6 +225,14 @@ class Trainer:
             containing the optimizer and the scheduler to use. Will default to an instance of
             :class:`~transformers.AdamW` on your model and a scheduler given by
             :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
+
+    Important accessors: ``self.model`` - always points to a PretrainedModule subclass (i.e. inner `transformers`
+    model)
+
+        ``self.model_wrapped`` - always points to the most external model in case one or more other modules wrap the
+        original model. For example, under ``DeepSpeed``, the inner model is wrapped in ``DeepSpeed`` and then again in
+        ``DistributedDataParallel``. If the inner model hasn't been wrapped, then ``self.model_wrapped`` is the same as
+        ``self.model``.
     """
 
     def __init__(
