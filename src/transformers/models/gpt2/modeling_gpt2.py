@@ -16,7 +16,6 @@
 """PyTorch OpenAI GPT-2 model."""
 
 import os
-import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
@@ -721,17 +720,10 @@ class GPT2Model(GPT2PreTrainedModel):
 
             if getattr(self.config, "gradient_checkpointing", False):
 
-                if use_cache:
-                    use_cache = False
-                    warnings.warn(
-                        "Setting `use_cache=False`...When training use_cache should not be enabled.",
-                        FutureWarning,
-                    )
-
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # checkpointing only works with tuple returns, not with lists
-                        return tuple(output for output in module(*inputs, output_attentions))
+                        return tuple(output for output in module(*inputs, use_cache, output_attentions))
 
                     return custom_forward
 
