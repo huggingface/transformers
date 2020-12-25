@@ -941,8 +941,7 @@ class LEDDecoderLayer(nn.Module):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = True,
+        output_attentions: Optional[torch.Tensor] = False,
     ):
         """
         Args:
@@ -1003,15 +1002,12 @@ class LEDDecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights, cross_attn_weights)
-
-        if use_cache:
-            outputs += (present_key_value,)
-
-        return outputs
+        return (
+            hidden_states,
+            self_attn_weights,
+#            present_key_value,
+#            cross_attn_weights,
+        )
 
 
 class LEDClassificationHead(nn.Module):
@@ -1924,26 +1920,22 @@ class LEDDecoder(LEDPreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            if getattr(self.config, "gradient_checkpointing", False):
-                if use_cache:
-                    raise ValueError(
-                        "When using `gradient_checkpointing, make sure that `use_cache=False` and `config.use_cache=False`."
-                    )
-
+            if getattr(self.config, 'gradient_checkpointing', False) and not use_cache:
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         # None for past_key_value
-                        return module(*inputs, output_attentions, use_cache)
+#                        return module(*inputs, None, output_attentions)
+                        return module(*inputs)
 
                     return custom_forward
 
+                import ipdb; ipdb.set_trace()
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(decoder_layer),
                     hidden_states,
                     combined_attention_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    None,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -1953,17 +1945,16 @@ class LEDDecoder(LEDPreTrainedModel):
                     encoder_attention_mask=encoder_attention_mask,
                     past_key_value=past_key_value,
                     output_attentions=output_attentions,
-                    use_cache=use_cache,
                 )
 
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
+                next_decoder_cache += (layer_outputs[2],)
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
-                all_cross_attentions += (layer_outputs[2],)
+                all_cross_attentions += (layer_outputs[3],)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
