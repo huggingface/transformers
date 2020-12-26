@@ -1066,7 +1066,7 @@ class LEDPreTrainedModel(PreTrainedModel):
 
 @dataclass
 # Copied from transformers.models.longformer.modeling_longformer.LongformerBaseModelOutput with Longformer->LEDEncoder
-class LEDBaseModelOutput(ModelOutput):
+class LEDEncoderBaseModelOutput(ModelOutput):
     """
     Base class for LEDEncoder's outputs, with potential hidden states, local and global attentions.
 
@@ -1746,7 +1746,7 @@ class LEDEncoder(LEDPreTrainedModel):
             return tuple(
                 v for v in [hidden_states, encoder_states, all_attentions, all_global_attentions] if v is not None
             )
-        return LEDBaseModelOutput(
+        return LEDEncoderBaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=encoder_states,
             attentions=all_attentions,
@@ -2056,9 +2056,9 @@ class LEDModel(LEDPreTrainedModel):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a LEDBaseModelOutput when return_dict=False
-        elif return_dict and not isinstance(encoder_outputs, LEDBaseModelOutput):
-            encoder_outputs = LEDBaseModelOutput(
+        # If the user passed a tuple for encoder_outputs, we wrap it in a LEDEncoderBaseModelOutput when return_dict=False
+        elif return_dict and not isinstance(encoder_outputs, LEDEncoderBaseModelOutput):
+            encoder_outputs = LEDEncoderBaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
