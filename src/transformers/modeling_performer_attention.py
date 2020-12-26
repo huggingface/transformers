@@ -44,6 +44,7 @@ class PerformerAttention(nn.Module):
 
         assert self.num_heads and self.d_model, "Num_heads and d_model must be non-None"
         assert self.d_model % self.num_heads == 0, "Num_heads must divide d_model evenly"
+        assert self.d_model > self.num_heads, "Number of dimensions per head must be greater than 1"
 
         self.dropout = nn.Dropout(p=self.attention_dropout)
         self.calls_since_last_redraw = 0
@@ -251,32 +252,34 @@ class PerformerAttention(nn.Module):
         if not self.use_orthogonal_features:
             output_tensor = torch.randn(batch, num_rows, dim_per_head, device=device)
 
-        # Use a Kac's random walk Markov chain to speed up successive redraws
-        elif self.orthogonal_feature_algorithm == OrthogonalFeatureAlgorithm.kacs:
-            if not self.random_feature_chain:
-                self.random_feature_chain = _get_orthogonal_feature_chain(batch, num_rows, dim_per_head, device)
-
-            output_tensor = next(self.random_feature_chain)
-
-        # Do QR decomposition on random Gaussian blocks
+        # Return an orthogonal matrix
         else:
-            total_num_blocks = int(math.ceil(num_rows / dim_per_head))
-            extra_rows = total_num_blocks * dim_per_head - num_rows
+            # Use a Kac's random walk Markov chain to speed up successive redraws
+            if self.orthogonal_feature_algorithm == OrthogonalFeatureAlgorithm.kacs:
+                if not self.random_feature_chain:
+                    self.random_feature_chain = _get_orthogonal_feature_chain(batch, num_rows, dim_per_head, device)
 
-            blocks = [_get_square_orthogonal_block_qr(batch, dim_per_head, device) for _ in range(total_num_blocks)]
-            if extra_rows > 0:
-                blocks[-1] = blocks[-1][:, extra_rows:]
+                output_tensor = next(self.random_feature_chain)
 
-            output_tensor = torch.cat(blocks, dim=1)
+            # Do QR decomposition on random Gaussian blocks
+            else:
+                total_num_blocks = int(math.ceil(num_rows / dim_per_head))
+                extra_rows = total_num_blocks * dim_per_head - num_rows
 
-        # This option yields SMREG
-        if self.regularize_feature_norms:
-            output_tensor *= dim_per_head ** 0.5
-        else:
-            # Hack to make the matrix columns have the norm we would expect them to have if they were sampled straight
-            # from a Gaussian, instead of being all norm 1
-            multiplier = torch.randn(batch, num_rows, dim_per_head, device=device).norm(dim=-1)
-            output_tensor = torch.diag_embed(multiplier) @ output_tensor
+                blocks = [_get_square_orthogonal_block_qr(batch, dim_per_head, device) for _ in range(total_num_blocks)]
+                if extra_rows > 0:
+                    blocks[-1] = blocks[-1][:, extra_rows:]
+
+                output_tensor = torch.cat(blocks, dim=1)
+
+            # This option yields SMREG
+            if self.regularize_feature_norms:
+                output_tensor *= dim_per_head ** 0.5
+            else:
+                # Hack to make the matrix columns have the norm we would expect them to have if they were sampled
+                # straight from a Gaussian, instead of being all norm 1
+                multiplier = torch.randn(batch, num_rows, dim_per_head, device=device).norm(dim=-1)
+                output_tensor = torch.diag_embed(multiplier) @ output_tensor
 
         # Add an attention head dimension
         output_tensor.unsqueeze_(1)

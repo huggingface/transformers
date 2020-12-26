@@ -1,4 +1,3 @@
-from typing import Optional, Union
 import logging
 import math
 import random
@@ -7,10 +6,10 @@ import tensorflow as tf
 from .configuration_performer_attention import *
 
 KERNEL_CALLABLES = {
-    'cosh': lambda x, h: tf.concat((tf.exp(h + x), tf.exp(h - x)), axis=-1),
-    'exp': lambda x, h: tf.exp(h + x),  # Default
-    'elu': lambda x: tf.nn.elu(x) + 1,
-    'relu': tf.nn.relu
+    PerformerKernel.cosh: lambda x, h: tf.concat((tf.exp(h + x), tf.exp(h - x)), axis=-1),
+    PerformerKernel.exp: lambda x, h: tf.exp(h + x),  # Default
+    PerformerKernel.elu: lambda x: tf.nn.elu(x) + 1,
+    PerformerKernel.relu: tf.nn.relu
 }
 
 
@@ -35,7 +34,8 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         self.__dict__.update(config.__dict__)
 
         assert self.num_heads and self.d_model, "Num_heads and d_model must be non-None"
-        assert self.d_model % self.num_heads == 0
+        assert self.d_model % self.num_heads == 0, "Num_heads must divide d_model evenly"
+        assert self.d_model > self.num_heads, "Number of dimensions per head must be greater than 1"
         
         self.dropout = tf.keras.layers.Dropout(rate=self.attention_dropout)
         self.calls_since_last_redraw = 0
@@ -213,33 +213,25 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         batch = batch_size if self.use_thick_features else 1
         
         if not self.use_orthogonal_features:
-            return tf.random.normal((batch, num_rows, dim_per_head))
-        
-        def get_square_block(size):
-            with tf.device('/CPU:0'):
-                unstructured_block = tf.random.normal((batch, size, size))
-                orthog, r = tf.linalg.qr(unstructured_block)
-
-            return tf.linalg.matrix_transpose(orthog)
-
-        num_full_blocks = num_rows // dim_per_head
-        block_list = [get_square_block(dim_per_head) for _ in range(num_full_blocks)]
-        
-        remaining_rows = num_rows - num_full_blocks * dim_per_head
-        if remaining_rows > 0:
-            q = get_square_block(dim_per_head)
-            block_list.append(q[:remaining_rows])
-        
-        final_tensor = tf.concat(block_list, axis=1)
-        
-        # This option yields SMREG
-        if self.regularize_feature_norms:
-            final_tensor *= dim_per_head ** 0.5
+            final_tensor = tf.random.normal((batch, num_rows, dim_per_head))
         else:
-            # Hack to make the matrix columns have the norm we would expect them to have if they were sampled straight
-            # from a Gaussian, instead of being all norm 1 since they went through QR decomposition
-            multiplier = tf.norm(tf.random.normal((batch, num_rows, dim_per_head)), axis = 1)
-            final_tensor = tf.linalg.diag(multiplier) @ final_tensor
+            total_num_blocks = int(math.ceil(num_rows / dim_per_head))
+            extra_rows = total_num_blocks * dim_per_head - num_rows
+
+            blocks = [_get_orthogonal_block(batch, dim_per_head) for _ in range(total_num_blocks)]
+            if extra_rows > 0:
+                blocks[-1] = blocks[-1][:, extra_rows:]
+
+            final_tensor = tf.concat(blocks, axis=1)
+        
+            # This option yields SMREG
+            if self.regularize_feature_norms:
+                final_tensor *= dim_per_head ** 0.5
+            else:
+                # Hack to make the matrix columns have the norm we would expect them to have if they were sampled
+                # straight from a Gaussian, instead of being all norm 1 since they went through QR decomposition
+                multiplier = tf.norm(tf.random.normal((batch, num_rows, dim_per_head)), axis=-1)
+                final_tensor = tf.linalg.diag(multiplier) @ final_tensor
 
         final_tensor = tf.expand_dims(final_tensor, axis=1)     # Add an attention head dimension
         final_tensor = tf.linalg.matrix_transpose(final_tensor)
@@ -264,6 +256,14 @@ class TFPerformerAttention(tf.keras.layers.Layer):
             # Keep track of how many forward passes we do before we redraw again
             else:
                 self.calls_since_last_redraw += 1
+
+
+def _get_orthogonal_block(batch, size):
+    with tf.device('/CPU:0'):
+        unstructured_block = tf.random.normal((batch, size, size))
+        orthog, r = tf.linalg.qr(unstructured_block)
+
+    return tf.linalg.matrix_transpose(orthog)
 
 
 def _headwise_causal_numerator(q_prime, k_prime_t, v):
