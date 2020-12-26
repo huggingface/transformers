@@ -318,9 +318,9 @@ class AlbertAttention(nn.Module):
             seq_length = hidden_states.size()[1]
             position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
             position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
-            distance = position_ids_l - position_ids_r
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings).clip(-self.max_position_embeddings,
-                                                                                                         self.max_position_embeddings)
+            distance = (position_ids_l - position_ids_r).clip(-self.max_position_embeddings,
+                                                              self.max_position_embeddings)
+            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings)
             positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
 
             if self.position_embedding_type == "relative_key":
