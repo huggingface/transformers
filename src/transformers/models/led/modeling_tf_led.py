@@ -16,23 +16,20 @@
 
 
 import random
-from typing import Dict, Optional, Tuple, Union
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple, Union
 
 import tensorflow as tf
 
 from ...activations_tf import ACT2FN
 from ...file_utils import (
+    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_tf_outputs import (
-    TFBaseModelOutput,
-    TFBaseModelOutputWithPast,
-    TFSeq2SeqLMOutput,
-    TFSeq2SeqModelOutput,
-)
+from ...modeling_tf_outputs import TFBaseModelOutputWithPast
 
 # Public API
 from ...modeling_tf_utils import (
@@ -1185,6 +1182,185 @@ class TFLEDPreTrainedModel(TFPreTrainedModel):
         return dummy_inputs
 
 
+@dataclass
+# Copied from transformers.models.longformer.modeling_tf_longformer.TFLongformerBaseModelOutput with TFLongformer->TFLEDEncoder
+class TFLEDEncoderBaseModelOutput(ModelOutput):
+    """
+    Base class for Longformer's outputs, with potential hidden states, local and global attentions.
+
+    Args:
+        last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length, x +
+            attention_window + 1)`, where ``x`` is the number of tokens with global attention mask.
+
+            Local attentions weights after the attention softmax, used to compute the weighted average in the
+            self-attention heads. Those are the attention weights from every token in the sequence to every token with
+            global attention (first ``x`` values) and to every token in the attention window (remaining
+            ``attention_window + 1`` values). Note that the first ``x`` values refer to tokens with fixed positions in
+            the text, but the remaining ``attention_window + 1`` values refer to tokens with relative positions: the
+            attention weight of a token to itself is located at index ``x + attention_window / 2`` and the
+            ``attention_window / 2`` preceding (succeeding) values are the attention weights to the ``attention_window
+            / 2`` preceding (succeeding) tokens. If the attention window contains a token with global attention, the
+            attention weight at the corresponding index is set to 0; the value should be accessed from the first ``x``
+            attention weights. If a token has global attention, the attention weights to all other tokens in
+            :obj:`attentions` is set to 0, the values should be accessed from :obj:`global_attentions`.
+        global_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length, x)`,
+            where ``x`` is the number of tokens with global attention mask.
+
+            Global attentions weights after the attention softmax, used to compute the weighted average in the
+            self-attention heads. Those are the attention weights from every token with global attention to every token
+            in the sequence.
+    """
+
+    last_hidden_state: tf.Tensor = None
+    hidden_states: Optional[Tuple[tf.Tensor]] = None
+    attentions: Optional[Tuple[tf.Tensor]] = None
+    global_attentions: Optional[Tuple[tf.Tensor]] = None
+
+
+@dataclass
+class TFLEDSeq2SeqModelOutput(ModelOutput):
+    """
+    Base class for model encoder's outputs that also contains : pre-computed hidden states that can speed up sequential
+    decoding.
+
+    Args:
+        last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the decoder of the model.
+
+            If :obj:`past_key_values` is used only the last hidden-state of the sequences of shape :obj:`(batch_size,
+            1, hidden_size)` is output.
+        past_key_values (:obj:`List[tf.Tensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+            List of :obj:`tf.Tensor` of length :obj:`config.n_layers`, with each tensor of shape :obj:`(2, batch_size,
+            num_heads, sequence_length, embed_size_per_head)`).
+
+            Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
+            used (see :obj:`past_key_values` input) to speed up sequential decoding.
+        decoder_hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
+        decoder_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        cross_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
+        encoder_last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Sequence of hidden-states at the output of the last layer of the encoder of the model.
+        encoder_hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
+        encoder_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        encoder_global_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length, x)`,
+            where ``x`` is the number of tokens with global attention mask.
+
+            Global attentions weights after the attention softmax, used to compute the weighted average in the
+            self-attention heads. Those are the attention weights from every token with global attention to every token
+            in the sequence.
+    """
+
+    last_hidden_state: tf.Tensor = None
+    past_key_values: Optional[List[tf.Tensor]] = None
+    decoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
+    decoder_attentions: Optional[Tuple[tf.Tensor]] = None
+    cross_attentions: Optional[Tuple[tf.Tensor]] = None
+    encoder_last_hidden_state: Optional[tf.Tensor] = None
+    encoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
+    encoder_attentions: Optional[Tuple[tf.Tensor]] = None
+    encoder_global_attentions: Optional[Tuple[tf.Tensor]] = None
+
+
+@dataclass
+class TFLEDSeq2SeqLMOutput(ModelOutput):
+    """
+    Base class for sequence-to-sequence language models outputs.
+
+    Args:
+        loss (:obj:`tf.Tensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
+            Language modeling loss.
+        logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        past_key_values (:obj:`List[tf.Tensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+            List of :obj:`tf.Tensor` of length :obj:`config.n_layers`, with each tensor of shape :obj:`(2, batch_size,
+            num_heads, sequence_length, embed_size_per_head)`).
+
+            Contains pre-computed hidden-states (key and values in the attention blocks) of the decoder that can be
+            used (see :obj:`past_key_values` input) to speed up sequential decoding.
+        decoder_hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
+        decoder_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        cross_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
+        encoder_last_hidden_state (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Sequence of hidden-states at the output of the last layer of the encoder of the model.
+        encoder_hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape :obj:`(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
+        encoder_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        encoder_global_attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length, x)`,
+            where ``x`` is the number of tokens with global attention mask.
+
+            Global attentions weights after the attention softmax, used to compute the weighted average in the
+            self-attention heads. Those are the attention weights from every token with global attention to every token
+            in the sequence.
+    """
+
+    loss: Optional[tf.Tensor] = None
+    logits: tf.Tensor = None
+    past_key_values: Optional[List[tf.Tensor]] = None
+    decoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
+    decoder_attentions: Optional[Tuple[tf.Tensor]] = None
+    cross_attentions: Optional[Tuple[tf.Tensor]] = None
+    encoder_last_hidden_state: Optional[tf.Tensor] = None
+    encoder_hidden_states: Optional[Tuple[tf.Tensor]] = None
+    encoder_attentions: Optional[Tuple[tf.Tensor]] = None
+    encoder_global_attentions: Optional[Tuple[tf.Tensor]] = None
+
+
 LED_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
@@ -1413,13 +1589,14 @@ class TFLEDEncoder(tf.keras.layers.Layer):
 
         encoder_states = () if inputs["output_hidden_states"] else None
         all_attentions = () if inputs["output_attentions"] else None
-        all_global_attentions = () if inputs["output_attentions"] and inputs["is_global_attn"] else None
+        all_global_attentions = () if inputs["output_attentions"] and is_global_attn else None
 
         # encoder layers
         for encoder_layer in self.layers:
 
             if inputs["output_hidden_states"]:
-                encoder_states = encoder_states + (hidden_states,)
+                hidden_states_to_add = hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
+                encoder_states = encoder_states + (hidden_states_to_add,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if inputs["training"] and (dropout_probability < self.layerdrop):  # skip the layer
@@ -1439,9 +1616,9 @@ class TFLEDEncoder(tf.keras.layers.Layer):
                 # bzs x seq_len x num_attn_heads x (num_global_attn + attention_window_len + 1) => bzs x num_attn_heads x seq_len x (num_global_attn + attention_window_len + 1)
                 all_attentions = all_attentions + (tf.transpose(layer_outputs[1], (0, 2, 1, 3)),)
 
-                if inputs["is_global_attn"]:
+                if is_global_attn:
                     # bzs x num_attn_heads x num_global_attn x seq_len => bzs x num_attn_heads x seq_len x num_global_attn
-                    all_global_attentions = all_global_attentions + (tf.transpose(layer_outputs[2], (0, 1, 3, 2)))
+                    all_global_attentions = all_global_attentions + (tf.transpose(layer_outputs[2], (0, 1, 3, 2)),)
 
         # undo padding
         if padding_len > 0:
@@ -1453,8 +1630,11 @@ class TFLEDEncoder(tf.keras.layers.Layer):
 
         if not inputs["return_dict"]:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return TFBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+        return TFLEDEncoderBaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=encoder_states,
+            attentions=all_attentions,
+            global_attentions=all_global_attentions,
         )
 
     def _pad_to_window_size(
@@ -1747,17 +1927,17 @@ class TFLEDModel(TFLEDPreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="allenai/led-base-16384",
-        output_type=TFSeq2SeqModelOutput,
+        output_type=TFLEDSeq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
         input_ids=None,
         attention_mask=None,
-        global_attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
-        encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
+        encoder_outputs: Optional[Union[Tuple, TFLEDEncoderBaseModelOutput]] = None,
+        global_attention_mask=None,
         past_key_values=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
@@ -1773,10 +1953,10 @@ class TFLEDModel(TFLEDPreTrainedModel):
             config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
-            global_attention_mask=global_attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
+            global_attention_mask=global_attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
@@ -1808,14 +1988,14 @@ class TFLEDModel(TFLEDPreTrainedModel):
                 return_dict=inputs["return_dict"],
                 training=inputs["training"],
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a TFBaseModelOutput when return_dict=True
-        elif inputs["return_dict"] and not isinstance(inputs["encoder_outputs"], TFBaseModelOutput):
-            inputs["encoder_outputs"] = TFBaseModelOutput(
+        # If the user passed a tuple for encoder_outputs, we wrap it in a TFLEDEncoderBaseModelOutput when return_dict=True
+        elif inputs["return_dict"] and not isinstance(inputs["encoder_outputs"], TFLEDEncoderBaseModelOutput):
+            inputs["encoder_outputs"] = TFLEDEncoderBaseModelOutput(
                 last_hidden_state=inputs["encoder_outputs"][0],
                 hidden_states=inputs["encoder_outputs"][1] if len(inputs["encoder_outputs"]) > 1 else None,
                 attentions=inputs["encoder_outputs"][2] if len(inputs["encoder_outputs"]) > 2 else None,
             )
-        # If the user passed a TFBaseModelOutput for encoder_outputs, we wrap it in a tuple when return_dict=False
+        # If the user passed a TFLEDEncoderBaseModelOutput for encoder_outputs, we wrap it in a tuple when return_dict=False
         elif not inputs["return_dict"] and not isinstance(inputs["encoder_outputs"], tuple):
             inputs["encoder_outputs"] = inputs["encoder_outputs"].to_tuple()
 
@@ -1836,7 +2016,7 @@ class TFLEDModel(TFLEDPreTrainedModel):
         if not inputs["return_dict"]:
             return decoder_outputs + inputs["encoder_outputs"]
 
-        return TFSeq2SeqModelOutput(
+        return TFLEDSeq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
@@ -1844,6 +2024,7 @@ class TFLEDModel(TFLEDPreTrainedModel):
             encoder_last_hidden_state=inputs["encoder_outputs"].last_hidden_state,
             encoder_hidden_states=inputs["encoder_outputs"].hidden_states,
             encoder_attentions=inputs["encoder_outputs"].attentions,
+            encoder_global_attentions=inputs["encoder_outputs"].global_attentions,
         )
 
     def get_input_embeddings(self):
@@ -1896,15 +2077,15 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             self.final_logits_bias.assign(init_bias)
 
     @add_start_docstrings_to_model_forward(LED_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=TFLEDSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids=None,
         attention_mask=None,
-        global_attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
-        encoder_outputs: Optional[TFBaseModelOutput] = None,
+        encoder_outputs: Optional[TFLEDEncoderBaseModelOutput] = None,
+        global_attention_mask=None,
         past_key_values=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
@@ -1937,10 +2118,10 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
-            global_attention_mask=global_attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
+            global_attention_mask=global_attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
@@ -1964,8 +2145,9 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             decoder_input_ids=inputs["decoder_input_ids"],
-            encoder_outputs=inputs["encoder_outputs"],
             decoder_attention_mask=inputs["decoder_attention_mask"],
+            encoder_outputs=inputs["encoder_outputs"],
+            global_attention_mask=inputs["global_attention_mask"],
             past_key_values=inputs["past_key_values"],
             inputs_embeds=inputs["inputs_embeds"],
             decoder_inputs_embeds=inputs["decoder_inputs_embeds"],
@@ -1982,7 +2164,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         if not inputs["return_dict"]:
             output = (lm_logits,) + outputs[1:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
-        return TFSeq2SeqLMOutput(
+        return TFLEDSeq2SeqLMOutput(
             loss=masked_lm_loss,
             logits=lm_logits,
             past_key_values=outputs.past_key_values,  # index 1 of d outputs
@@ -1991,13 +2173,14 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             encoder_last_hidden_state=outputs.last_hidden_state,  # index 0 of encoder outputs
             encoder_hidden_states=outputs.encoder_hidden_states,  # 1 of e out
             encoder_attentions=outputs.encoder_attentions,  # 2 of e out
+            encoder_global_attentions=outputs.encoder_global_attentions,
         )
 
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs) -> Dict:
         assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
         if len(past) == 1:
             assert isinstance(past[0], tf.Tensor), f"`past[0]` has to be of type `tf.Tensor`, but is {type(past[0])}"
-            encoder_outputs = TFBaseModelOutput(last_hidden_state=past[0])
+            encoder_outputs = TFLEDEncoderBaseModelOutput(last_hidden_state=past[0])
             past_key_values = None
         else:
             assert (
@@ -2008,17 +2191,18 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
                 assert isinstance(
                     encoder_outputs[0], tf.Tensor
                 ), f"`encoder_outputs[0]` has to be of type `tf.Tensor`, but is {type(encoder_outputs[0])}"
-                encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs[0])
+                encoder_outputs = TFLEDEncoderBaseModelOutput(last_hidden_state=encoder_outputs[0])
             elif isinstance(encoder_outputs, tf.Tensor):
-                encoder_outputs = TFBaseModelOutput(last_hidden_state=encoder_outputs)
+                encoder_outputs = TFLEDEncoderBaseModelOutput(last_hidden_state=encoder_outputs)
             assert (
                 past_key_values
             ), f"decoder cached states must be truthy. got {past_key_values} from the 2nd element of past"
             decoder_input_ids = decoder_input_ids[:, -1:]
 
         assert isinstance(
-            encoder_outputs, TFBaseModelOutput
-        ), f"encoder_outputs should be a TFBaseModelOutput, Instead got {type(encoder_outputs)}."
+            encoder_outputs,
+            TFLEDEncoderBaseModelOutput,
+        ), f"encoder_outputs should be a TFLEDEncoderBaseModelOutput, Instead got {type(encoder_outputs)}."
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,

@@ -78,6 +78,16 @@ LED specific outputs
 .. autoclass:: transformers.models.led.modeling_led.LEDSeq2SeqQuestionAnsweringModelOutput
     :members: 
 
+.. autoclass:: transformers.models.led.modeling_tf_led.TFLEDBaseModelOutput
+    :members: 
+
+.. autoclass:: transformers.models.led.modeling_tf_led.TFLEDSeq2SeqModelOutput
+    :members: 
+
+.. autoclass:: transformers.models.led.modeling_tf_led.TFLEDSeq2SeqLMOutput
+    :members: 
+
+
 
 
 LEDModel

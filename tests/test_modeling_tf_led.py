@@ -53,6 +53,7 @@ class TFLEDModelTester:
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
+        attention_window=4,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -71,6 +72,19 @@ class TFLEDModelTester:
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
+        self.attention_window = attention_window
+
+        # `ModelTesterMixin.test_attention_outputs` is expecting attention tensors to be of size
+        # [num_attention_heads, encoder_seq_length, encoder_key_length], but TFLongformerSelfAttention
+        # returns attention of shape [num_attention_heads, encoder_seq_length, self.attention_window + 1]
+        # because its local attention only attends to `self.attention_window` and one before and one after
+        self.key_length = self.attention_window + 1
+
+        # because of padding `encoder_seq_length`, is different from `seq_length`. Relevant for
+        # the `test_attention_outputs` and `test_hidden_states_output` tests
+        self.encoder_seq_length = (
+            self.seq_length + (self.attention_window - self.seq_length % self.attention_window) % self.attention_window
+        )
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
@@ -95,6 +109,7 @@ class TFLEDModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.pad_token_id,
+            attention_window=self.attention_window,
             **self.config_updates,
         )
         inputs_dict = prepare_led_inputs_dict(config, input_ids, decoder_input_ids)
@@ -149,8 +164,8 @@ def prepare_led_inputs_dict(
         decoder_attention_mask = tf.cast(tf.math.not_equal(decoder_input_ids, config.pad_token_id), tf.int8)
     return {
         "input_ids": input_ids,
-        "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
+        "decoder_input_ids": decoder_input_ids,
         "decoder_attention_mask": decoder_attention_mask,
     }
 
@@ -183,6 +198,91 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
             assert x is None
             name = model.get_prefix_bias_name()
             assert name is None
+
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict["global_attention_mask"] = tf.zeros_like(inputs_dict["attention_mask"])
+        num_global_attn_indices = 2
+        inputs_dict["global_attention_mask"] = tf.where(
+            tf.range(self.model_tester.seq_length)[None, :] < num_global_attn_indices,
+            1,
+            inputs_dict["global_attention_mask"],
+        )
+
+        config.return_dict = True
+        seq_length = self.model_tester.seq_length
+        encoder_seq_length = self.model_tester.encoder_seq_length
+
+        def check_decoder_attentions_output(outputs):
+            decoder_attentions = outputs.decoder_attentions
+            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(decoder_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, seq_length, seq_length],
+            )
+
+        def check_encoder_attentions_output(outputs):
+            attentions = [t.numpy() for t in outputs.encoder_attentions]
+            global_attentions = [t.numpy() for t in outputs.encoder_global_attentions]
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            self.assertEqual(len(global_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, seq_length],
+            )
+            self.assertListEqual(
+                list(global_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, num_global_attn_indices],
+            )
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["use_cache"] = False
+            config.output_hidden_states = False
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+            out_len = len(outputs)
+            self.assertEqual(config.output_hidden_states, False)
+            check_encoder_attentions_output(outputs)
+
+            if self.is_encoder_decoder:
+                model = model_class(config)
+                outputs = model(self._prepare_for_class(inputs_dict, model_class))
+                self.assertEqual(config.output_hidden_states, False)
+                check_decoder_attentions_output(outputs)
+
+            # Check that output attentions can also be changed via the config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+            self.assertEqual(config.output_hidden_states, False)
+            check_encoder_attentions_output(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            config.output_hidden_states = True
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+
+            self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
+            self.assertEqual(model.config.output_hidden_states, True)
+            check_encoder_attentions_output(outputs)
+
+    @slow
+    def test_saved_model_with_attentions_output(self):
+        # longformer has special attentions which are not
+        # compatible in graph mode
+        pass
+
+    @slow
+    def test_saved_model_with_hidden_states_output(self):
+        # TODO(JPLU, PVP) this test should pass!!! PVP:
+        # IMO there is a problem with the signature check.
+        # Test passes for TFLEDModel, but not for TFLEDForConditionalGeneration
+        # IMO the reason is that the tensor variable name cannot be changed
+        # from decoder_input_ids -> input_ids, which poses a BIG restrictions
+        pass
 
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
