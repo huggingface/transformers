@@ -211,8 +211,7 @@ TOLERANCE = 1e-4
 @require_tf
 class TFLEDModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head(self):
-        model = TFLEDModel.from_pretrained("/home/patrick/hugging_face/add_longformer/led-base-16384")
-        #        model = TFLEDModel.from_pretrained("allenai/led-base-16384")
+        model = TFLEDForConditionalGeneration.from_pretrained("allenai/led-base-16384").model
 
         # change to intended input here
         input_ids = _long_tensor([512 * [0, 31414, 232, 328, 740, 1140, 12695, 69]])
@@ -225,13 +224,10 @@ class TFLEDModelIntegrationTest(unittest.TestCase):
         expected_slice = tf.convert_to_tensor(
             [[2.3050, 2.8279, 0.6531], [-1.8457, -0.1455, -3.5661], [-1.0186, 0.4586, -2.2043]],
         )
-        self.assertTrue(tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE)
 
     def test_inference_with_head(self):
-        model = TFLEDForConditionalGeneration.from_pretrained(
-            "/home/patrick/hugging_face/add_longformer/led-base-16384"
-        )
-        #        model = TFLEDForConditionalGeneration.from_pretrained("allenai/led-base-16384")
+        model = TFLEDForConditionalGeneration.from_pretrained("allenai/led-base-16384")
 
         # change to intended input here
         input_ids = _long_tensor([512 * [0, 31414, 232, 328, 740, 1140, 12695, 69]])
@@ -244,4 +240,4 @@ class TFLEDModelIntegrationTest(unittest.TestCase):
         expected_slice = tf.convert_to_tensor(
             [[33.6507, 6.4572, 16.8089], [5.8739, -2.4238, 11.2902], [-3.2139, -4.3149, 4.2783]],
         )
-        self.assertTrue(tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE)

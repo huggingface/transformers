@@ -1696,6 +1696,7 @@ class LEDEncoder(LEDPreTrainedModel):
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
+
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None, None)
             else:
@@ -1725,9 +1726,6 @@ class LEDEncoder(LEDPreTrainedModel):
                     )
                 hidden_states = layer_outputs[0]
 
-            import ipdb
-
-            ipdb.set_trace()
             if output_attentions:
                 # bzs x seq_len x num_attn_heads x (num_global_attn + attention_window_len + 1) => bzs x num_attn_heads x seq_len x (num_global_attn + attention_window_len + 1)
                 all_attentions = all_attentions + (layer_outputs[1].transpose(1, 2),)

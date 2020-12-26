@@ -1047,6 +1047,7 @@ class TFLEDEncoderLayer(tf.keras.layers.Layer):
             training=training,
         )
 
+        hidden_states = layer_outputs[0]
         tf.debugging.assert_equal(
             shape_list(hidden_states),
             shape_list(residual),
@@ -1366,15 +1367,11 @@ class TFLEDEncoder(tf.keras.layers.Layer):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif inputs["input_ids"] is not None:
             input_shape = shape_list(inputs["input_ids"])
+            inputs["inputs_embeds"] = self.embed_tokens(inputs["input_ids"])
         elif inputs["inputs_embeds"] is not None:
             input_shape = shape_list(inputs["inputs_embeds"])[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        if inputs["inputs_embeds"] is None:
-            inputs["inputs_embeds"] = self.embed_tokens(inputs["input_ids"])
-        else:
-            inputs["inputs_embeds"] = inputs["inputs_embeds"]
 
         if inputs["attention_mask"] is None:
             inputs["attention_mask"] = tf.fill(input_shape, 1)
@@ -1438,10 +1435,6 @@ class TFLEDEncoder(tf.keras.layers.Layer):
 
             hidden_states = layer_outputs[0]
 
-            if hidden_states.shape[0] == 1:
-                import ipdb
-
-                ipdb.set_trace()
             if inputs["output_attentions"]:
                 # bzs x seq_len x num_attn_heads x (num_global_attn + attention_window_len + 1) => bzs x num_attn_heads x seq_len x (num_global_attn + attention_window_len + 1)
                 all_attentions = all_attentions + (tf.transpose(layer_outputs[1], (0, 2, 1, 3)),)
