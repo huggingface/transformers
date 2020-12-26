@@ -63,7 +63,7 @@ LEDTokenizerFast
 LED specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.models.led.modeling_led.LEDBaseModelOutput
+.. autoclass:: transformers.models.led.modeling_led.LEDEncoderBaseModelOutput
     :members: 
 
 .. autoclass:: transformers.models.led.modeling_led.LEDSeq2SeqModelOutput
@@ -78,7 +78,7 @@ LED specific outputs
 .. autoclass:: transformers.models.led.modeling_led.LEDSeq2SeqQuestionAnsweringModelOutput
     :members: 
 
-.. autoclass:: transformers.models.led.modeling_tf_led.TFLEDBaseModelOutput
+.. autoclass:: transformers.models.led.modeling_tf_led.TFLEDEncoderBaseModelOutput
     :members: 
 
 .. autoclass:: transformers.models.led.modeling_tf_led.TFLEDSeq2SeqModelOutput

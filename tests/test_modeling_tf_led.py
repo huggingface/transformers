@@ -113,6 +113,11 @@ class TFLEDModelTester:
             **self.config_updates,
         )
         inputs_dict = prepare_led_inputs_dict(config, input_ids, decoder_input_ids)
+        global_attention_mask = tf.concat(
+            [tf.zeros_like(input_ids)[:, :-1], tf.ones_like(input_ids)[:, -1:]],
+            axis=-1,
+        )
+        inputs_dict["global_attention_mask"] = global_attention_mask
         return config, inputs_dict
 
     def check_decoder_model_past_large_inputs(self, config, inputs_dict):
