@@ -1,11 +1,10 @@
-from typing import Optional
+from typing import Optional, Union
 import logging
 import math
 import random
 import tensorflow as tf
 
-
-from .configuration_performer_attention import PerformerAttentionConfig
+from .configuration_performer_attention import *
 
 KERNEL_CALLABLES = {
     'cosh': lambda x, h: tf.concat((tf.exp(h + x), tf.exp(h - x)), axis=-1),
@@ -15,15 +14,22 @@ KERNEL_CALLABLES = {
 }
 
 
+def resolve_enum(enum_class, value):
+    return enum_class[value] if isinstance(value, str) else value
+
+
 class TFPerformerAttention(tf.keras.layers.Layer):
-    def __init__(self, config: Optional[PerformerAttentionConfig] = None, **kwargs):
+    def __init__(self, config: Optional[Union[dict, PerformerAttentionConfig]] = None, **kwargs):
         super().__init__()
 
-        config = config or PerformerAttentionConfig()
+        if isinstance(config, dict):
+            config = PerformerAttentionConfig(**config)
+        else:
+            config = config or PerformerAttentionConfig()
 
         # kwargs take precedence over the default values that might be stored in the config object
         for k, v in kwargs.items():
-            assert hasattr(config, k), "'{k}' is an invalid config parameter"
+            assert hasattr(config, k), f"'{k}' is an invalid config parameter"
             setattr(config, k, v)
 
         self.__dict__.update(config.__dict__)
@@ -34,7 +40,9 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(rate=self.attention_dropout)
         self.calls_since_last_redraw = 0
 
-        assert self.orthogonal_feature_algorithm in (None, 'qr'), "QR is the only supported algorithm on TensorFlow"
+        self.orthogonal_feature_algorithm = resolve_enum(OrthogonalFeatureAlgorithm, self.orthogonal_feature_algorithm)
+        assert self.orthogonal_feature_algorithm != OrthogonalFeatureAlgorithm.kacs,\
+            "Kac's random walk is not supported in TensorFlow"
         self.random_features = None
 
         # Recurrent state
@@ -42,7 +50,7 @@ class TFPerformerAttention(tf.keras.layers.Layer):
             self.s = None
             self.z = None
 
-        assert self.kernel_type in KERNEL_CALLABLES, "Invalid kernel type"
+        self.kernel_type = resolve_enum(PerformerKernel, self.kernel_type)
         self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
         if self.use_linear_layers:
@@ -106,7 +114,7 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         projected_k = k @ self.random_features
         
         # Special logic for kernels that attempt to approximate softmax
-        if self.kernel_type in ('cosh', 'exp'):
+        if self.kernel_type in (PerformerKernel.cosh, PerformerKernel.exp):
             # The h(x) function is defined in Lemma 1 in Choromanski et al. pg. 4 as exp(-||x||**2 / 2). For numerical
             # stability we leverage the fact that exp(x)*exp(y) = exp(x + y) here and delay computing the exp().
             h_of_q = -tf.math.reduce_sum(q ** 2, axis=-1, keepdims=True) / 2

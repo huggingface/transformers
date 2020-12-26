@@ -1,33 +1,39 @@
 from itertools import count
 from torch import nn
-from typing import Optional
 import logging
 import math
 import random
 import torch
 import torch.nn.functional as F
 
-from .configuration_performer_attention import PerformerAttentionConfig
+from .configuration_performer_attention import *
 from .modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer
 )
 
 KERNEL_CALLABLES = {
-    'cosh': lambda x, h: torch.cat((torch.exp(h + x), torch.exp(h - x)), dim=-1),
-    'exp': lambda x, h: torch.exp(h + x),  # Default
-    'elu': lambda x: F.elu(x) + 1,
-    'relu': F.relu
+    PerformerKernel.cosh: lambda x, h: torch.cat((torch.exp(h + x), torch.exp(h - x)), dim=-1),
+    PerformerKernel.exp: lambda x, h: torch.exp(h + x),  # Default
+    PerformerKernel.elu: lambda x: F.elu(x) + 1,
+    PerformerKernel.relu: F.relu
 }
+
+
+def resolve_enum(enum_class, value):
+    return enum_class[value] if isinstance(value, str) else value
 
 
 class PerformerAttention(nn.Module):
     causal_numerator_fn = None  # Either refers to _headwise_causal_numerator or the fast_transformers CUDA kernel
 
-    def __init__(self, config: Optional[PerformerAttentionConfig] = None, **kwargs):
+    def __init__(self, config: Optional[Union[dict, PerformerAttentionConfig]] = None, **kwargs):
         super().__init__()
 
-        config = config or PerformerAttentionConfig()
+        if isinstance(config, dict):
+            config = PerformerAttentionConfig(**config)
+        else:
+            config = config or PerformerAttentionConfig()
 
         # kwargs take precedence over the default values that might be stored in the config object
         for k, v in kwargs.items():
@@ -42,15 +48,14 @@ class PerformerAttention(nn.Module):
         self.dropout = nn.Dropout(p=self.attention_dropout)
         self.calls_since_last_redraw = 0
 
-        if not self.orthogonal_feature_algorithm:
-            self.orthogonal_feature_algorithm = 'kacs'
-        else:
-            assert self.orthogonal_feature_algorithm in ('kacs', 'qr'), "Invalid orthogonal feature algorithm"
+        self.orthogonal_feature_algorithm = resolve_enum(OrthogonalFeatureAlgorithm, self.orthogonal_feature_algorithm)
+        if self.orthogonal_feature_algorithm == OrthogonalFeatureAlgorithm.auto:
+            self.orthogonal_feature_algorithm = OrthogonalFeatureAlgorithm.kacs
 
         self.random_feature_chain = None
         self.random_features = None
 
-        assert self.kernel_type in KERNEL_CALLABLES, "Invalid kernel type"
+        self.kernel_type = resolve_enum(PerformerKernel, self.kernel_type)
         self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
         if self.use_linear_layers:
@@ -83,6 +88,8 @@ class PerformerAttention(nn.Module):
             if self.use_recurrent_decoding:
                 self.s = None   # Numerator
                 self.z = None   # Denominator
+        else:
+            assert not self.use_recurrent_decoding
 
     def forward(self, q, k, v, mask=None, head_mask=None, output_attentions=False):
         """
@@ -125,7 +132,7 @@ class PerformerAttention(nn.Module):
         projected_k = k @ self.random_features
 
         # Special logic for kernels that attempt to approximate softmax
-        if self.kernel_type in ('cosh', 'exp'):
+        if self.kernel_type in (PerformerKernel.cosh, PerformerKernel.exp):
             # The h(x) function is defined in Lemma 1 in Choromanski et al. pg. 4 as exp(-||x||**2 / 2). For numerical
             # stability we leverage the fact that exp(x)*exp(y) = exp(x + y) here and delay computing the exp().
             h_of_q = -torch.sum(q ** 2, dim=-1, keepdim=True) / 2
@@ -242,10 +249,10 @@ class PerformerAttention(nn.Module):
 
         # Just return a random Gaussian matrix
         if not self.use_orthogonal_features:
-            return torch.randn(batch, num_rows, dim_per_head, device=device)
+            output_tensor = torch.randn(batch, num_rows, dim_per_head, device=device)
 
         # Use a Kac's random walk Markov chain to speed up successive redraws
-        if self.orthogonal_feature_algorithm == 'kacs':
+        elif self.orthogonal_feature_algorithm == OrthogonalFeatureAlgorithm.kacs:
             if not self.random_feature_chain:
                 self.random_feature_chain = _get_orthogonal_feature_chain(batch, num_rows, dim_per_head, device)
 
@@ -323,18 +330,18 @@ def _get_square_orthogonal_block_qr(batch, size, device=None):
 
 
 def _get_orthogonal_feature_chain(batch, num_rows, dim_per_head, device=None):
-    # The algorithm requires an even number of rows, so round down to the nearest even number
-    rows_per_block = dim_per_head - dim_per_head % 2
+    # The algorithm requires an even number of rows, so round up to the nearest even number
+    rows_per_block = dim_per_head + dim_per_head % 2
 
     total_num_blocks = int(math.ceil(num_rows / rows_per_block))
-    extra_rows = total_num_blocks * rows_per_block - (num_rows + dim_per_head % 2)
+    extra_rows = total_num_blocks * rows_per_block - num_rows
 
     block_chains = [_get_kacs_random_walk_chain(batch, rows_per_block, device) for _ in range(total_num_blocks)]
 
     while True:
-        blocks = [next(chain) for chain in block_chains]
+        blocks = [next(chain)[:, :, :dim_per_head] for chain in block_chains]
         if extra_rows > 0:
-            blocks[-1] = blocks[-1][:, extra_rows:]
+            blocks[-1] = blocks[-1][:, extra_rows:, :dim_per_head]
 
         yield torch.cat(blocks, dim=1)
 

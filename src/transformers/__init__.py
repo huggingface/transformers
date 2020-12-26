@@ -291,6 +291,9 @@ from .trainer_utils import EvalPrediction, EvaluationStrategy, SchedulerType, se
 from .training_args import TrainingArguments
 from .training_args_seq2seq import Seq2SeqTrainingArguments
 from .training_args_tf import TFTrainingArguments
+
+# Performer attention is shared across models
+from .configuration_performer_attention import PerformerAttentionConfig, PerformerKernel, OrthogonalFeatureAlgorithm
 from .utils import logging
 
 
@@ -685,12 +688,8 @@ if is_torch_available():
         get_polynomial_decay_schedule_with_warmup,
         get_scheduler,
     )
-    
-    # Performer attention is shared across models
-    from .modeling_performer_attention import (
-        PerformerAttention,
-        PerformerAttentionConfig
-    )
+
+    from .modeling_performer_attention import PerformerAttention
 
     # Trainer
     from .trainer import Trainer

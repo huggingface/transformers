@@ -16,7 +16,7 @@
 """ BERT model configuration """
 
 from ...configuration_performer_attention import PerformerAttentionConfig
-from typing import Union, Optional
+from typing import Any, Dict, Union, Optional
 
 from copy import deepcopy
 from ...configuration_utils import PretrainedConfig
@@ -175,6 +175,6 @@ class BertConfig(PretrainedConfig):
         # Correct for the fact that PretrainedConfig doesn't call .__dict__ recursively on non-JSON primitives
         performer_config = output['performer_attention_config']
         if performer_config is not None:
-            output['performer_attention_config'] = deepcopy(performer_config.__dict__)
+            output['performer_attention_config'] = deepcopy(performer_config.to_dict())
 
         return output

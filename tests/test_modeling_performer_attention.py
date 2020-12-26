@@ -1,68 +1,42 @@
 import math
+import random
 import torch
 import unittest
-from transformers import PerformerAttention, PerformerAttentionConfig
+from dataclasses import fields
+from itertools import product
+from transformers import PerformerAttention, PerformerAttentionConfig, PerformerKernel, OrthogonalFeatureAlgorithm
+
 
 class PerformerAttentionTest(unittest.TestCase):
-    def test_relu_noncausal_attention_block_output(self):
-        batch_size = 1
-        length = 10
-        num_heads = 1
-        dim = 4
+    def test_output_shape(self):
+        param_names = ['kernel_type', 'orthogonal_feature_algorithm']
+        legal_values = [PerformerKernel, OrthogonalFeatureAlgorithm]    # Enum classes are iterable
 
-        attention = PerformerAttention(PerformerAttentionConfig(
-            d_model=dim,
-            num_heads=num_heads,
-            kernel_type='relu'
-        ))
+        # Get all boolean config options
+        for x in fields(PerformerAttentionConfig):
+            if x.type == bool:
+                legal_values.append((False, True))
+                param_names.append(x.name)
 
-        query = torch.ones(batch_size, length, dim)
-        key = torch.ones(batch_size, length, dim)
-        value = torch.ones(batch_size, length, dim)
-        attention_block_output = attention(query, key, value)[0]
+        # Exhaustive grid search of possible config options
+        for values in product(*legal_values):
+            kwargs = dict(zip(param_names, values))
 
-        self.assertListEqual(list(attention_block_output.shape), [batch_size, length, dim])
+            d_model = random.randint(2, 10)
+            batch_size = random.randint(1, 4)
+            length = 1 if kwargs.get('use_recurrent_decoding') else random.randint(1, 10)
 
-    def test_relu_causal_attention_block_output_shape(self):
-        batch_size = 1
-        length = 10
-        num_heads = 1
-        dim = 4
+            try:
+                attention = PerformerAttention(PerformerAttentionConfig(d_model=d_model, num_heads=1, **kwargs))
+            except AssertionError:
+                # Skip illegal kwargs combinations
+                continue
 
-        attention = PerformerAttention(PerformerAttentionConfig(
-            d_model=dim,
-            num_heads=num_heads,
-            kernel_type='relu',
-            causal=True
-        ))
+            with self.subTest(msg=repr(kwargs)):
+                q, k, v = [torch.randn(batch_size, length, d_model) for _ in range(3)]
+                output = attention(q, k, v)[0]
 
-        query = torch.ones(batch_size, length, dim)
-        key = torch.ones(batch_size, length, dim)
-        value = torch.ones(batch_size, length, dim)
-        attention_block_output = attention(query, key, value)[0]
-
-        self.assertListEqual(list(attention_block_output.shape), [batch_size, length, dim])
-
-    def test_softmax_noncausal_attention_block_output_shape(self):
-        batch_size = 1
-        length = 10
-        num_heads = 1
-        dim = 4
-        num_random_features = 350
-
-        attention = PerformerAttention(PerformerAttentionConfig(
-            d_model=dim,
-            num_heads=num_heads,
-            kernel_type='exp',
-            num_random_features=num_random_features
-        ))
-
-        query = torch.ones(batch_size, length, dim)
-        key = torch.ones(batch_size, length, dim)
-        value = torch.ones(batch_size, length, dim)
-
-        attention_block_output = attention(query, key, value)[0]
-        self.assertListEqual(list(attention_block_output.shape), [batch_size, length, dim])
+                self.assertListEqual(list(output.shape), [batch_size, length, d_model])
 
     def test_softmax_noncausal_attention_block_output(self):
         batch_size = 1
@@ -94,19 +68,3 @@ class PerformerAttentionTest(unittest.TestCase):
 
         self.assertLess(mse, 0.1)
         self.assertLess(torch.abs(bias), 0.025)
-
-    def test_fast_attention(self):
-        hidden_size = 64
-        num_heads = 4
-        dropout = 0.5
-
-        attention = PerformerAttention(PerformerAttentionConfig(
-            d_model=hidden_size,
-            num_heads=num_heads,
-            attention_dropout=dropout
-        ))
-
-        length = 2
-        x = torch.ones([1, length, hidden_size])
-        y = attention(x, x, x)[0]
-        self.assertEqual(y.shape, (1, length, hidden_size))

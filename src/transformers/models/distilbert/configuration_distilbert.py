@@ -155,6 +155,6 @@ class DistilBertConfig(PretrainedConfig):
         # Correct for the fact that PretrainedConfig doesn't call .__dict__ recursively on non-JSON primitives
         performer_config = output['performer_attention_config']
         if performer_config is not None:
-            output['performer_attention_config'] = copy.deepcopy(performer_config.__dict__)
+            output['performer_attention_config'] = copy.deepcopy(performer_config.to_dict())
         
         return output

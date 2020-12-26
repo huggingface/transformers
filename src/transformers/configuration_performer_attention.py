@@ -1,5 +1,10 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
+from enum import Enum
+
+
+PerformerKernel = Enum('PerformerKernel', ['cosh', 'exp', 'elu', 'relu'])
+OrthogonalFeatureAlgorithm = Enum('OrthogonalFeatureAlgorithm', ['auto', 'kacs', 'qr'])
 
 
 @dataclass
@@ -14,7 +19,7 @@ class PerformerAttentionConfig:
         causal (:obj:`bool`, `optional`, defaults to False):
             Whether to apply causal attention, where positions are prevented from attending to positions to ahead
             of themselves in the sequence, using the prefix-sum method.
-        kernel_type (:obj:`str`,  `optional`, defaults to :obj:`'exp'`):
+        kernel_type (:obj:`Enum(PerformerKernel)`, `optional`, defaults to :obj:`'exp'`):
             The type of kernel function to use for comparing the queries and keys. Possible options are :obj:`'exp'`,
             :obj:`'cosh'`, and :obj:`'relu'`. The :obj:`'cosh'` option approximates softmax attention with a smaller
             variance than :obj:`'exp'`, but at the cost of using twice as many random features. :obj:`'relu'` may result
@@ -31,10 +36,10 @@ class PerformerAttentionConfig:
         num_random_features (:obj:`int`, `optional`, defaults to None):
             The dimensionality of the random feature vectors to use. When None, the dimensionality is set to
             D * log(D), where D is the dimensionality of each attention head.
-        orthogonal_feature_algorithm (:obj:`str`, `optional`, defaults to None):
+        orthogonal_feature_algorithm (:obj:`Enum(OrthogonalFeatureAlgorithm)`, defaults to 'auto'):
             The algorithm to use for generating random orthogonal features. Possible values are 'kacs', which uses a
             Kac's random walk Markov chain; 'qr', which performs QR decomposition on a random Gaussian matrix at each
-            redraw; and None, which is equivalent to 'kacs' on PyTorch and 'qr' on TensorFlow, since the Kac's random
+            redraw; and 'auto', which is equivalent to 'kacs' on PyTorch and 'qr' on TensorFlow, since the Kac's random
             walk algorithm is not supported on TensorFlow. Kac's is generally faster than QR, but successive samples
             are correlated with each other.
         use_recurrent_decoding (:obj:`bool`, `optional`, defaults to False):
@@ -73,13 +78,13 @@ class PerformerAttentionConfig:
         num_heads (:obj:`int`, `optional`):
             Number of attention heads.
     """
-    
+
     attention_dropout: float = 0.1
-    kernel_type: str = 'exp'
+    kernel_type: Union[str, PerformerKernel] = PerformerKernel.exp
 
     causal: bool = False
     use_recurrent_decoding: bool = False
-    
+
     kernel_epsilon: float = 1e-4
     normalize_output: bool = True
     normalization_stabilizer: float = 1e-6
@@ -90,13 +95,17 @@ class PerformerAttentionConfig:
     regularize_feature_norms: bool = True
 
     use_orthogonal_features: bool = True
-    orthogonal_feature_algorithm: Optional[str] = None
-    
+    orthogonal_feature_algorithm: Union[str, OrthogonalFeatureAlgorithm] = OrthogonalFeatureAlgorithm.auto
+
     feature_redraw_interval: int = 1
     redraw_stochastically: bool = False
     redraw_verbose: bool = False
-    
+
     # Optional here so the user doesn't have to set redundant parameters, but must be set by model before config is
     # passed to PerformerAttention.__init__()
     d_model: Optional[int] = None
     num_heads: Optional[int] = None
+
+    # Make enums JSON serializable
+    def to_dict(self):
+        return {k: v.value if isinstance(v, Enum) else v for k, v in self.__dict__.items()}
