@@ -173,3 +173,7 @@ class LEDConfig(PretrainedConfig):
     @property
     def attention_probs_dropout_prob(self) -> float:
         return self.attention_dropout
+
+    @property
+    def initializer_range(self) -> float:
+        return self.init_std

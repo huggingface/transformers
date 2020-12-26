@@ -16,8 +16,8 @@
 
 import unittest
 
-from transformers import LEDConfig, LEDTokenizer, is_tf_available
-from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers import LEDConfig, is_tf_available
+from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -208,75 +208,40 @@ TOLERANCE = 1e-4
 
 
 @slow
-@require_sentencepiece
-@require_tokenizers
 @require_tf
 class TFLEDModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head(self):
-        model = TFLEDModel.from_pretrained("allenai/led-base-16384")
+        model = TFLEDModel.from_pretrained("/home/patrick/hugging_face/add_longformer/led-base-16384")
+        #        model = TFLEDModel.from_pretrained("allenai/led-base-16384")
+
         # change to intended input here
-        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        input_ids = _long_tensor([512 * [0, 31414, 232, 328, 740, 1140, 12695, 69]])
+        decoder_input_ids = _long_tensor([128 * [0, 31414, 232, 328, 740, 1140, 12695, 69]])
         inputs_dict = prepare_led_inputs_dict(model.config, input_ids, decoder_input_ids)
         output = model(**inputs_dict)[0]
-        expected_shape = (1, 11, 1024)
+        expected_shape = (1, 1024, 768)
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
-        expected_slice = tf.Tensor(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],
+        expected_slice = tf.convert_to_tensor(
+            [[2.3050, 2.8279, 0.6531], [-1.8457, -0.1455, -3.5661], [-1.0186, 0.4586, -2.2043]],
         )
         self.assertTrue(tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_with_head(self):
-        model = TFLEDForConditionalGeneration.from_pretrained("allenai/led-base-16384")
+        model = TFLEDForConditionalGeneration.from_pretrained(
+            "/home/patrick/hugging_face/add_longformer/led-base-16384"
+        )
+        #        model = TFLEDForConditionalGeneration.from_pretrained("allenai/led-base-16384")
+
         # change to intended input here
-        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        input_ids = _long_tensor([512 * [0, 31414, 232, 328, 740, 1140, 12695, 69]])
+        decoder_input_ids = _long_tensor([128 * [0, 31414, 232, 328, 740, 1140, 12695, 69]])
         inputs_dict = prepare_led_inputs_dict(model.config, input_ids, decoder_input_ids)
         output = model(**inputs_dict)[0]
-        expected_shape = (1, 11, 1024)
+        expected_shape = (1, 1024, model.config.vocab_size)
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
-        expected_slice = tf.Tensor(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],
+        expected_slice = tf.convert_to_tensor(
+            [[33.6507, 6.4572, 16.8089], [5.8739, -2.4238, 11.2902], [-3.2139, -4.3149, 4.2783]],
         )
         self.assertTrue(tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE))
-
-    def test_seq_to_seq_generation(self):
-        hf = TFLEDForConditionalGeneration.from_pretrained("allenai/led-base-16384")
-        tok = LEDTokenizer.from_pretrained("allenai/led-base-16384")
-
-        batch_input = [
-            # string 1,
-            # string 2,
-            # string 3,
-            # string 4,
-        ]
-
-        # The below article tests that we don't add any hypotheses outside of the top n_beams
-        dct = tok.batch_encode_plus(
-            batch_input,
-            max_length=512,
-            padding="max_length",
-            truncation_strategy="only_first",
-            truncation=True,
-            return_tensors="tf",
-        )
-
-        hypotheses_batch = hf.generate(
-            input_ids=dct["input_ids"],
-            attention_mask=dct["attention_mask"],
-            num_beams=2,
-        )
-
-        EXPECTED = [
-            # here expected 1,
-            # here expected 2,
-            # here expected 3,
-            # here expected 4,
-        ]
-
-        generated = tok.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )
-        assert generated == EXPECTED

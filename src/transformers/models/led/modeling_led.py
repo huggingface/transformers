@@ -135,38 +135,6 @@ class LEDLearnedPositionalEmbedding(nn.Embedding):
         return super().forward(positions)
 
 
-class LEDEncoderAttention(nn.Module):
-    def __init__(self, config, layer_id):
-        super().__init__()
-        self.longformer_self_attn = LEDEncoderSelfAttention(config, layer_id=layer_id)
-        self.output = nn.Linear(config.d_model, config.d_model)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        is_index_masked: Optional[torch.Tensor] = None,
-        is_index_global_attn: Optional[torch.Tensor] = None,
-        is_global_attn: Optional[bool] = None,
-        output_attentions: bool = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        """Input shape: Batch x Time x Channel"""
-
-        self_outputs = self.longformer_self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            is_index_masked=is_index_masked,
-            is_index_global_attn=is_index_global_attn,
-            is_global_attn=is_global_attn,
-            output_attentions=output_attentions,
-        )
-
-        attn_output = self.output(self_outputs[0])
-        outputs = (attn_output,) + self_outputs[1:]
-
-        return outputs
-
-
 # Copied from transformers.models.longformer.modeling_longformer.LongformerSelfAttention with Longformer->LEDEncoder
 class LEDEncoderSelfAttention(nn.Module):
     def __init__(self, config, layer_id):
@@ -717,7 +685,39 @@ class LEDEncoderSelfAttention(nn.Module):
         return global_attn_output, global_attn_probs
 
 
-class LEDAttention(nn.Module):
+class LEDEncoderAttention(nn.Module):
+    def __init__(self, config, layer_id):
+        super().__init__()
+        self.longformer_self_attn = LEDEncoderSelfAttention(config, layer_id=layer_id)
+        self.output = nn.Linear(config.d_model, config.d_model)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        is_index_masked: Optional[torch.Tensor] = None,
+        is_index_global_attn: Optional[torch.Tensor] = None,
+        is_global_attn: Optional[bool] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+
+        self_outputs = self.longformer_self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            is_index_masked=is_index_masked,
+            is_index_global_attn=is_index_global_attn,
+            is_global_attn=is_global_attn,
+            output_attentions=output_attentions,
+        )
+
+        attn_output = self.output(self_outputs[0])
+        outputs = (attn_output,) + self_outputs[1:]
+
+        return outputs
+
+
+class LEDDecoderAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -912,7 +912,7 @@ class LEDDecoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = LEDAttention(
+        self.self_attn = LEDDecoderAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -923,7 +923,7 @@ class LEDDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = LEDLayerNorm(self.embed_dim)
-        self.encoder_attn = LEDAttention(
+        self.encoder_attn = LEDDecoderAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -1725,6 +1725,9 @@ class LEDEncoder(LEDPreTrainedModel):
                     )
                 hidden_states = layer_outputs[0]
 
+            import ipdb
+
+            ipdb.set_trace()
             if output_attentions:
                 # bzs x seq_len x num_attn_heads x (num_global_attn + attention_window_len + 1) => bzs x num_attn_heads x seq_len x (num_global_attn + attention_window_len + 1)
                 all_attentions = all_attentions + (layer_outputs[1].transpose(1, 2),)
