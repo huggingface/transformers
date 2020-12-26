@@ -60,9 +60,8 @@ class PerformerAttention(nn.Module):
         self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
         if self.use_linear_layers:
-            self.linear_layers = [nn.Linear(self.d_model, self.d_model) for _ in range(3)]
+            self.linear_layers = nn.ModuleList([nn.Linear(self.d_model, self.d_model) for _ in range(4)])
 
-        self.output_linear = nn.Linear(in_features=self.d_model, out_features=self.d_model)
         self.pruned_heads = set()
 
         if self.causal:

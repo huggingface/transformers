@@ -8,6 +8,7 @@ from transformers import (
     PerformerAttentionConfig, PerformerKernel, OrthogonalFeatureAlgorithm,
     is_torch_available, is_tf_available
 )
+from typing import Iterator, Tuple
 
 if is_torch_available():
     import torch
@@ -18,23 +19,73 @@ if is_tf_available():
 
 
 class PerformerAttentionTest(unittest.TestCase):
-    @unittest.skipIf(not is_torch_available(), reason="PyTorch not available")
+    @unittest.skipIf(not is_torch_available(), "PyTorch not available")
     def test_output_shape_pytorch(self):
         self._test_output_shape_for_library('pt')
 
-    @unittest.skipIf(not is_tf_available(), reason="TensorFlow not available")
+    @unittest.skipIf(not is_tf_available(), "TensorFlow not available")
     def test_output_shape_tensorflow(self):
         self._test_output_shape_for_library('tf')
 
-    @unittest.skipIf(not is_torch_available(), reason="PyTorch not available")
+    @unittest.skipIf(not is_torch_available(), "PyTorch not available")
     def test_softmax_noncausal_attention_output_pytorch(self):
         self._test_softmax_noncausal_attention_output_for_library('pt')
 
-    @unittest.skipIf(not is_tf_available(), reason="TensorFlow not available")
+    @unittest.skipIf(not is_tf_available(), "TensorFlow not available")
     def test_softmax_noncausal_attention_output_tensorflow(self):
         self._test_softmax_noncausal_attention_output_for_library('tf')
 
-    def _test_output_shape_for_library(self, library: str = 'pt'):
+    @unittest.skipUnless(is_torch_available() and is_tf_available(), "Both PyTorch and TensorFlow must be available")
+    @torch.no_grad()
+    def test_pytorch_tensorflow_parity(self):
+        for config, batch, seq_len in self._iterate_config_options():
+            # This option leads to random test failures due to the TFPerformerAttention object randomly redrawing
+            # features right after we set its features to be equal to those of the PyTorch object, so we just skip it
+            if config.redraw_stochastically:
+                continue
+
+            try:
+                pt_attention = PerformerAttention(config)
+            except AssertionError:
+                continue
+
+            try:
+                tf_attention = TFPerformerAttention(config)
+            except AssertionError:
+                continue
+
+            # Copy the weights from the PyTorch object to the TensorFlow one
+            for name, param in pt_attention.named_parameters():
+                pt_value = param.data.numpy()
+
+                # Get the corresponding param (tf.Variable) in the TensorFlow object
+                obj = tf_attention
+                for key in name.split('.'):
+                    if key.isnumeric():
+                        obj = obj[int(key)]
+                    elif key == "weight":
+                        # Note that we have to transpose the weights when converting to TF to get the same output
+                        obj.kernel_initializer = tf.constant_initializer(pt_value.T)
+                    elif key == "bias":
+                        obj.bias_initializer = tf.constant_initializer(pt_value)
+                    else:
+                        obj = getattr(obj, key)
+
+            # Test that the two modules produce the same output, within numerical error
+            with self.subTest(**config.to_dict()):
+                q, k, v = [torch.randn(batch, seq_len, config.d_model) for _ in range(3)]
+                tf_q, tf_k, tf_v = [tf.constant(x.numpy()) for x in (q, k, v)]
+                pt_output = pt_attention(q, k, v)[0]
+
+                tf_attention.random_features = tf.constant(pt_attention.random_features.numpy())
+                tf_output = tf_attention(tf_q, tf_k, tf_v)[0]
+
+                self.assertTrue(np.allclose(pt_output.numpy(), tf_output.numpy(), atol=2e-4))
+                self.assertListEqual(list(pt_output.shape), [batch, seq_len, config.d_model])
+
+    # Exhaustive grid search of possible config options (and a random search of batch sizes and seq lengths)
+    @staticmethod
+    def _iterate_config_options() -> Iterator[Tuple[PerformerAttentionConfig, int, int]]:
         param_names = ['kernel_type', 'orthogonal_feature_algorithm']
         legal_values = [PerformerKernel, OrthogonalFeatureAlgorithm]  # Enum classes are iterable
 
@@ -44,15 +95,19 @@ class PerformerAttentionTest(unittest.TestCase):
                 legal_values.append((False, True))
                 param_names.append(x.name)
 
-        # Exhaustive grid search of possible config options
         for values in product(*legal_values):
             kwargs = dict(zip(param_names, values))
 
             d_model = random.randint(2, 10)
             batch_size = random.randint(1, 4)
-            num_heads = random.choice([i for i in range(1, d_model) if not d_model % i])    # Factors of d_model
+            num_heads = random.choice([i for i in range(1, d_model) if not d_model % i])  # Factors of d_model
             length = 1 if kwargs.get('use_recurrent_decoding') else random.randint(1, 10)
-            config = PerformerAttentionConfig(d_model=d_model, num_heads=num_heads, **kwargs)
+            yield PerformerAttentionConfig(d_model=d_model, num_heads=num_heads, **kwargs), batch_size, length
+
+    @torch.no_grad()
+    def _test_output_shape_for_library(self, library: str = 'pt'):
+        for config, batch_size, length in self._iterate_config_options():
+            d_model = config.d_model
 
             # PyTorch specific stuff
             if library == 'pt':
@@ -70,7 +125,7 @@ class PerformerAttentionTest(unittest.TestCase):
                 # Skip illegal kwargs combinations
                 pass
             else:
-                with self.subTest(**kwargs):
+                with self.subTest(**config.to_dict()):
                     q, k, v = [rand_tensor_func() for _ in range(3)]
                     output = attention(q, k, v)[0]
 
@@ -111,7 +166,7 @@ class PerformerAttentionTest(unittest.TestCase):
 
         softmax_output = (attention_scores @ v).numpy()
 
-        errors = softmax_output - performer_attention_output
+        errors = softmax_output - performer_attention_output.numpy()
         mse = np.mean(errors ** 2)
         bias = np.mean(errors)
 

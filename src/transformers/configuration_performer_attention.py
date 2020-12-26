@@ -97,7 +97,7 @@ class PerformerAttentionConfig:
     use_orthogonal_features: bool = True
     orthogonal_feature_algorithm: Union[str, OrthogonalFeatureAlgorithm] = OrthogonalFeatureAlgorithm.auto
 
-    feature_redraw_interval: int = 1
+    feature_redraw_interval: int = 100
     redraw_stochastically: bool = False
     redraw_verbose: bool = False
 
@@ -108,4 +108,4 @@ class PerformerAttentionConfig:
 
     # Make enums JSON serializable
     def to_dict(self):
-        return {k: v.value if isinstance(v, Enum) else v for k, v in self.__dict__.items()}
+        return {k: v.name if isinstance(v, Enum) else v for k, v in self.__dict__.items()}
