@@ -831,7 +831,6 @@ class T5Stack(T5PreTrainedModel):
         # Model parallel
         if self.model_parallel:
             torch.cuda.set_device(self.first_device)
-            self.embed_tokens = self.embed_tokens.to(self.first_device)
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -949,9 +948,10 @@ class T5Stack(T5PreTrainedModel):
 
             # Model Parallel: If it's the last layer for that device, put things on the next device
             if self.model_parallel:
-                for k, v in self.device_map.items():
-                    if i == v[-1] and "cuda:" + str(k) != self.last_device:
-                        hidden_states = hidden_states.to("cuda:" + str(k + 1))
+                devices = list(self.device_map.keys())
+                for e, d in enumerate(devices):
+                    if i == self.device_map[d][-1] and f"cuda:{d}" != self.last_device:
+                        hidden_states = hidden_states.to(f"cuda:{devices[e+1]}")
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
