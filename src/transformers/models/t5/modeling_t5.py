@@ -785,17 +785,15 @@ class T5Stack(T5PreTrainedModel):
         )
         assert_device_map(self.device_map, len(self.block))
         self.model_parallel = True
-        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
-        self.last_device = "cuda:" + str(max(self.device_map.keys()))
+        self.first_device = "cpu" if "cpu" in self.device_map.keys() else f"cuda:{ list(self.device_map.keys())[0] }"
+        self.last_device = f"cuda:{ list(self.device_map.keys())[-1] }"
         # Load onto devices
         for k, v in self.device_map.items():
             for layer in v:
                 cuda_device = "cuda:" + str(k)
                 self.block[layer] = self.block[layer].to(cuda_device)
 
-        # Set embed_tokens to first layer
         self.embed_tokens = self.embed_tokens.to(self.first_device)
-        # Set final layer norm to last device
         self.final_layer_norm = self.final_layer_norm.to(self.last_device)
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
