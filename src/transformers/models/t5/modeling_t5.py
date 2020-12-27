@@ -901,9 +901,7 @@ class T5Stack(T5PreTrainedModel):
             # Model parallel
             if self.model_parallel:
                 torch.cuda.set_device(hidden_states.device)
-                # Ensure that attention_mask is always on the same device as hidden_states
-                if attention_mask is not None:
-                    attention_mask = attention_mask.to(hidden_states.device)
+                # Ensure that the layer_module args are on the same device as hidden_states
                 if position_bias is not None:
                     position_bias = position_bias.to(hidden_states.device)
                 if encoder_hidden_states is not None:
@@ -912,6 +910,9 @@ class T5Stack(T5PreTrainedModel):
                     encoder_extended_attention_mask = encoder_extended_attention_mask.to(hidden_states.device)
                 if encoder_decoder_position_bias is not None:
                     encoder_decoder_position_bias = encoder_decoder_position_bias.to(hidden_states.device)
+                if all_hidden_states is not None:
+                    all_hidden_states = all_hidden_states.to(hidden_states.device)
+
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
