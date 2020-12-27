@@ -73,8 +73,8 @@ class PerformerAttentionTest(unittest.TestCase):
 
             # Test that the two modules produce the same output, within numerical error
             with self.subTest(**config.to_dict()):
-                q, k, v = [torch.randn(batch, seq_len, config.d_model) for _ in range(3)]
-                tf_q, tf_k, tf_v = [tf.constant(x.numpy()) for x in (q, k, v)]
+                q, k, v = (torch.randn(batch, seq_len, config.d_model) for _ in range(3))
+                tf_q, tf_k, tf_v = (tf.constant(x.numpy()) for x in (q, k, v))
                 pt_output = pt_attention(q, k, v)[0]
 
                 tf_attention.random_features = tf.constant(pt_attention.random_features.numpy())

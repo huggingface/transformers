@@ -128,8 +128,17 @@ class PerformerAttention(nn.Module):
         q_prime, k_prime = self.get_projected_queries_and_keys(query, key)
         return self.compute_attention_with_projected_queries_and_keys(q_prime, k_prime, value, mask, head_mask)
 
-    # Turns Q into Q', K into K'
     def get_projected_queries_and_keys(self, q, k):
+        """
+        Turns Q into Q' and K into K' by multiplying them by the random feature tensor.
+        Parameters:
+            q: torch.tensor(bs, seq_length, dim)
+            k: torch.tensor(bs, seq_length, dim)
+
+        Returns:
+            q_prime: torch.tensor(bs, seq_length, num_features)
+            k_prime: torch.tensor(bs, seq_length, num_features)
+        """
         # Instead of dividing the product QK^T by sqrt(d), we divide Q and K by the 4th root of d.
         q = q / (self.d_model ** 0.25)
         k = k / (self.d_model ** 0.25)
@@ -170,6 +179,17 @@ class PerformerAttention(nn.Module):
             return (self.kernel_fn(x) + self.kernel_epsilon for x in (projected_q, projected_k))
 
     def compute_attention_with_projected_queries_and_keys(self, q_prime, k_prime, v, mask=None, head_mask=None):
+        """
+        Computes the attention output given Q' and K' from the above get_projected_queries_and_keys method.
+        Parameters:
+            q_prime: torch.tensor(bs, seq_length, num_features)
+            k_prime: torch.tensor(bs, seq_length, num_features)
+            v: torch.tensor(bs, seq_length, dim)
+            mask: torch.tensor(bs, seq_length)
+
+        Returns:
+            V': torch.tensor(bs, seq_length, dim)
+        """
         # Apply the padding mask to K'. Also applying it to Q' would be redundant.
         if mask is not None:
             k_prime *= mask.unsqueeze(1).unsqueeze(-1).expand_as(k_prime)
@@ -235,6 +255,9 @@ class PerformerAttention(nn.Module):
             return context,
 
     def redraw_features_now(self):
+        """
+        Immediately redraws the random features.
+        """
         device = self.random_features.device
         batch = self.random_features.shape[0]
         self._get_feature_matrix(batch, device)
@@ -245,6 +268,9 @@ class PerformerAttention(nn.Module):
         self.calls_since_last_redraw = 1
 
     def reset_recurrent_state(self):
+        """
+        Resets the recurrent state kept by the model when use_recurrent_decoding == True
+        """
         self.s = None
         self.z = None
 
