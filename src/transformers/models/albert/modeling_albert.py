@@ -40,6 +40,10 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
+from ...modeling_performer_attention import (
+    PerformerAttention,
+    PerformerAttentionConfig
+)
 from ...modeling_utils import (
     PreTrainedModel,
     apply_chunking_to_forward,
@@ -369,11 +373,32 @@ class AlbertLayer(nn.Module):
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         self.full_layer_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = AlbertAttention(config)
         self.ffn = nn.Linear(config.hidden_size, config.intermediate_size)
         self.ffn_output = nn.Linear(config.intermediate_size, config.hidden_size)
         self.activation = ACT2FN[config.hidden_act]
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+        if config.attention_type == 'performer':
+            assert config.position_embedding_type == "absolute",\
+                "Relative positional embeddings are not currently supported with Performer attention"
+
+            performer_config = config.performer_attention_config or PerformerAttentionConfig()
+            performer_config.attention_dropout = config.attention_probs_dropout_prob
+            performer_config.d_model = config.hidden_size
+            performer_config.num_heads = config.num_attention_heads
+
+            performer_attn = PerformerAttention(performer_config)
+            layer_norm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
+
+            def attention_and_layer_norm(query, key, value, head_mask=None, output_attentions=False):
+                x = performer_attn(query, key, value, head_mask, output_attentions)
+                return layer_norm(x)
+
+            self.attention = attention_and_layer_norm
+        elif config.attention_type == 'softmax':
+            self.attention = AlbertAttention(config)
+        else:
+            raise ValueError(f"Invalid attention type {self.attention_type}")
 
     def forward(
         self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False
