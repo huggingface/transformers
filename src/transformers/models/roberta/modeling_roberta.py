@@ -369,19 +369,7 @@ class RobertaLayer(nn.Module):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        
-        att_type = config.attention_type
-        if att_type == 'softmax':
-            self.attention = RobertaAttention(config)
-        elif att_type == 'performer':
-            performer_config = config.performer_attention_config or PerformerAttentionConfig()
-            performer_config.attention_dropout = config.attention_probs_dropout_prob
-            performer_config.d_model = config.hidden_size
-            performer_config.num_heads = config.num_attention_heads
-            
-            self.attention = PerformerAttention(performer_config)
-        else:
-            raise ValueError(f"Roberta: Invalid attention_type {att_type}")
+        self.attention = RobertaAttention(config)
         
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
