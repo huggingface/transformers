@@ -44,6 +44,7 @@ from ...modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
+from ...performer_attention_utils import init_performer_attention_bertlike
 from ...utils import logging
 from .configuration_roberta import RobertaConfig
 
@@ -284,9 +285,9 @@ class RobertaSelfOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Roberta
 class RobertaAttention(nn.Module):
+    @init_performer_attention_bertlike(RobertaSelfAttention)
     def __init__(self, config):
         super().__init__()
-        self.self = RobertaSelfAttention(config)
         self.output = RobertaSelfOutput(config)
         self.pruned_heads = set()
 

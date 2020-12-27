@@ -35,6 +35,7 @@ from ...modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
+from ...performer_attention_utils import init_performer_attention_bertlike
 from ...utils import logging
 from .configuration_layoutlm import LayoutLMConfig
 
@@ -270,9 +271,9 @@ class LayoutLMSelfOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->LayoutLM
 class LayoutLMAttention(nn.Module):
+    @init_performer_attention_bertlike(LayoutLMSelfAttention)
     def __init__(self, config):
         super().__init__()
-        self.self = LayoutLMSelfAttention(config)
         self.output = LayoutLMSelfOutput(config)
         self.pruned_heads = set()
 
@@ -349,7 +350,6 @@ class LayoutLMOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->LayoutLM
 class LayoutLMLayer(nn.Module):
     def __init__(self, config):
         super().__init__()

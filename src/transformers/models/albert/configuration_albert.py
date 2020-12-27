@@ -16,9 +16,7 @@
 """ ALBERT model configuration """
 
 from ...configuration_utils import PretrainedConfig
-from ...configuration_performer_attention import PerformerAttentionConfig
-from typing import Union, Optional
-import copy
+from ...performer_attention_utils import supports_performer_attention
 
 
 ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -33,6 +31,7 @@ ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
+@supports_performer_attention
 class AlbertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.AlbertModel` or a
@@ -124,8 +123,6 @@ class AlbertConfig(PretrainedConfig):
         hidden_act="gelu_new",
         hidden_dropout_prob=0,
         attention_probs_dropout_prob=0,
-        attention_type='softmax',
-        performer_attention_config: Optional[Union[dict, PerformerAttentionConfig]] = None,
         max_position_embeddings=512,
         type_vocab_size=2,
         initializer_range=0.02,
@@ -149,7 +146,6 @@ class AlbertConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.intermediate_size = intermediate_size
         self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_type = attention_type
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
@@ -157,18 +153,3 @@ class AlbertConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.classifier_dropout_prob = classifier_dropout_prob
         self.position_embedding_type = position_embedding_type
-
-        if isinstance(performer_attention_config, dict):
-            self.performer_attention_config = PerformerAttentionConfig(**performer_attention_config)
-        else:
-            self.performer_attention_config = performer_attention_config
-
-    def to_dict(self):
-        output = super().to_dict()
-
-        # Correct for the fact that PretrainedConfig doesn't call .__dict__ recursively on non-JSON primitives
-        performer_config = output['performer_attention_config']
-        if performer_config is not None:
-            output['performer_attention_config'] = copy.deepcopy(performer_config.to_dict())
-
-        return output

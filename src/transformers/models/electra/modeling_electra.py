@@ -47,6 +47,7 @@ from ...modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
+from ...performer_attention_utils import init_performer_attention_bertlike
 from ...utils import logging
 from .configuration_electra import ElectraConfig
 
@@ -152,7 +153,6 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_
 
 class ElectraEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
-
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.embedding_size, padding_idx=config.pad_token_id)
@@ -341,9 +341,9 @@ class ElectraSelfOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Electra
 class ElectraAttention(nn.Module):
+    @init_performer_attention_bertlike(ElectraSelfAttention)
     def __init__(self, config):
         super().__init__()
-        self.self = ElectraSelfAttention(config)
         self.output = ElectraSelfOutput(config)
         self.pruned_heads = set()
 

@@ -16,6 +16,7 @@
 """ ELECTRA model configuration """
 
 from ...configuration_utils import PretrainedConfig
+from ...performer_attention_utils import supports_performer_attention
 from ...utils import logging
 
 
@@ -31,6 +32,7 @@ ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
+@supports_performer_attention
 class ElectraConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.ElectraModel` or a

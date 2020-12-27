@@ -41,6 +41,7 @@ from ...modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
+from ...performer_attention_utils import init_performer_attention_bertlike
 from ...utils import logging
 from .configuration_tapas import TapasConfig
 
@@ -441,9 +442,9 @@ class TapasSelfOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Tapas
 class TapasAttention(nn.Module):
+    @init_performer_attention_bertlike(TapasSelfAttention)
     def __init__(self, config):
         super().__init__()
-        self.self = TapasSelfAttention(config)
         self.output = TapasSelfOutput(config)
         self.pruned_heads = set()
 

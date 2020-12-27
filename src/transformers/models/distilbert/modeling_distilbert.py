@@ -33,10 +33,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_performer_attention import (
-    PerformerAttention,
-    PerformerAttentionConfig
-)
+from ...performer_attention_utils import init_performer_attention
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -229,26 +226,13 @@ class FFN(nn.Module):
 
 
 class TransformerBlock(nn.Module):
+    @init_performer_attention(softmax_attention_class=MultiHeadSelfAttention,
+                              linear_layer_names=('q_lin', 'k_lin', 'v_lin', 'out_lin'),
+                              d_model='dim', num_heads='n_heads')
     def __init__(self, config):
         super().__init__()
 
         assert config.dim % config.n_heads == 0
-        
-        att_type = config.attention_type
-        if att_type == 'softmax':
-            self.attention = MultiHeadSelfAttention(config)
-        
-        # Use FAVOR+ attention, from the "Rethinking Attention with Performers" paper
-        elif att_type == 'performer':
-            performer_config = config.performer_attention_config or PerformerAttentionConfig()
-            performer_config.attention_dropout = config.attention_dropout
-            performer_config.d_model = config.dim
-            performer_config.num_heads = config.n_heads
-            
-            self.attention = PerformerAttention(performer_config)
-        else:
-            raise ValueError(f"DistilBert: Invalid attention_type {att_type}")
-        
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
 
         self.ffn = FFN(config)

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Sequence, Optional, Union
 from enum import Enum
 
 
@@ -88,7 +88,12 @@ class PerformerAttentionConfig:
     kernel_epsilon: float = 1e-4
     normalize_output: bool = True
     normalization_stabilizer: float = 1e-6
+
+    # The linear_layer_names parameter is needed to allow the PerformerAttention object to imitate the naming
+    # convention of arbitrary attention modules, and therefore load weights from pretrained models. It can either have
+    # 3 or 4 elements; if it has 3, then no output linear layer is used.
     use_linear_layers: bool = True
+    linear_layer_names: Sequence[str] = ('q_linear', 'k_linear', 'v_linear', 'out_linear')
 
     num_random_features: Optional[int] = None
     use_thick_features: bool = False

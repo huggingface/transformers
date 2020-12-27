@@ -61,10 +61,8 @@ class PerformerAttention(nn.Module):
         self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
         if self.use_linear_layers:
-            self.q_lin = nn.Linear(self.d_model, self.d_model)
-            self.k_lin = nn.Linear(self.d_model, self.d_model)
-            self.v_lin = nn.Linear(self.d_model, self.d_model)
-            self.out_lin = nn.Linear(self.d_model, self.d_model)
+            for name in self.linear_layer_names:
+                setattr(self, name, nn.Linear(self.d_model, self.d_model))
 
         self.pruned_heads = set()
 
@@ -115,9 +113,7 @@ class PerformerAttention(nn.Module):
             assert q_length == 1, "When use_recurrent_decoding == True, we only input and output one token at a time."
 
         if self.use_linear_layers:
-            query = self.q_lin(query)
-            key = self.k_lin(key)
-            value = self.v_lin(value)
+            query, key, value = (getattr(self, name)(x) for name, x in zip(self.linear_layer_names, (query, key, value)))
 
         # Add the head dimension: (bs, num_heads, q_length, dim_per_head)
         query, key, value = (x.view(bs, -1, self.num_heads, dim_per_head).transpose(1, 2) for x in (query, key, value))
@@ -246,8 +242,8 @@ class PerformerAttention(nn.Module):
 
         context = unshape(context)  # (bs, q_length, dim)
 
-        if self.use_linear_layers:
-            context = self.out_lin(context)  # (bs, q_length, dim)
+        if self.use_linear_layers and len(self.linear_layer_names) > 3:
+            context = getattr(self, self.linear_layer_names[3])(context)  # (bs, q_length, dim)
 
         if att_map_to_output:
             return context, att_map_to_output
@@ -348,10 +344,8 @@ class PerformerAttention(nn.Module):
 
         # Prune linear layers
         if self.use_linear_layers:
-            self.q_lin = prune_linear_layer(self.q_lin, index)
-            self.k_lin = prune_linear_layer(self.k_lin, index)
-            self.v_lin = prune_linear_layer(self.v_lin, index)
-            self.out_lin = prune_linear_layer(self.out_lin, index)
+            for name in self.linear_layer_names:
+                setattr(self, name, prune_linear_layer(getattr(self, name), index))
 
         # Update hyper params
         self.num_heads -= len(heads)

@@ -24,6 +24,7 @@ Hyperparameters are taken from run_task_main.py and hparam_utils.py of the origi
 
 
 from ...configuration_utils import PretrainedConfig
+from ...performer_attention_utils import supports_performer_attention
 
 
 TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -34,6 +35,7 @@ TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
+@supports_performer_attention
 class TapasConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.TapasModel`. It is used to
