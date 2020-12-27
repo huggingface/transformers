@@ -54,7 +54,10 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
         if self.use_linear_layers:
-            self.linear_layers = [tf.keras.layers.Dense(units=self.d_model) for _ in range(4)]
+            self.q_lin = tf.keras.layers.Dense(units=self.d_model)
+            self.k_lin = tf.keras.layers.Dense(units=self.d_model)
+            self.v_lin = tf.keras.layers.Dense(units=self.d_model)
+            self.out_lin = tf.keras.layers.Dense(units=self.d_model)
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -68,19 +71,19 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         
         self.calls_since_last_redraw = 0
 
-    def call(self, q, k, v, mask=None, head_mask=None, output_attentions=False):
+    def call(self, query, key, value, mask=None, head_mask=None, output_attentions=False):
         """
         Parameters:
-            q: torch.tensor(bs, seq_length, dim)
-            k: torch.tensor(bs, seq_length, dim)
-            v: torch.tensor(bs, seq_length, dim)
+            query: torch.tensor(bs, seq_length, dim)
+            key: torch.tensor(bs, seq_length, dim)
+            value: torch.tensor(bs, seq_length, dim)
             mask: torch.tensor(bs, seq_length)
 
         Returns:
             weights: tf.tensor(bs, num_heads, seq_length, seq_length) Attention weights context: tf.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
-        bs, q_length, dim = q.shape
+        bs, q_length, dim = query.shape
         dim_per_head = self.d_model // self.num_heads
 
         def shape(x):
@@ -89,10 +92,12 @@ class TFPerformerAttention(tf.keras.layers.Layer):
             return tf.transpose(tf.reshape(x, new_shape), perm=[0, 2, 1, 3])
 
         if self.use_linear_layers:
-            q, k, v = (linear(x) for linear, x in zip(self.linear_layers, (q, k, v)))
+            query = self.q_lin(query)
+            key = self.k_lin(key)
+            value = self.v_lin(value)
         
         # (bs, num_heads, q_length, dim_per_head)
-        q, k, v = (shape(x) for x in (q, k, v))
+        query, key, value = (shape(x) for x in (query, key, value))
 
         assert not output_attentions, "Can't output attention maps when using Performer attention."
         if self.use_recurrent_decoding:
@@ -101,8 +106,8 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         self._redraw_features_if_needed(bs)
         
         # Get the transformed values of Q and K
-        q_prime, k_prime = self.get_projected_queries_and_keys(q, k)
-        return self.compute_attention_with_projected_queries_and_keys(q_prime, k_prime, v, mask, head_mask)
+        q_prime, k_prime = self.get_projected_queries_and_keys(query, key)
+        return self.compute_attention_with_projected_queries_and_keys(q_prime, k_prime, value, mask, head_mask)
     
     # Turns Q into Q', K into K'
     def get_projected_queries_and_keys(self, q, k):
@@ -200,7 +205,7 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         context = tf.reshape(x, list(x.shape[:-2]) + [new_last_dim])  # (bs, q_length, dim)
 
         if self.use_linear_layers:
-            context = self.linear_layers[-1](context)  # (bs, q_length, dim)
+            context = self.out_lin(context)  # (bs, q_length, dim)
 
         if att_map_to_output:
             return context, att_map_to_output
