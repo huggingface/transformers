@@ -16,7 +16,7 @@
 """ BERT model configuration """
 
 from ...configuration_performer_attention import PerformerAttentionConfig
-from typing import Any, Dict, Union, Optional
+from typing import Union, Optional
 
 from copy import deepcopy
 from ...configuration_utils import PretrainedConfig

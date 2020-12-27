@@ -3,7 +3,8 @@ import math
 import random
 import tensorflow as tf
 
-from .configuration_performer_attention import *
+from .configuration_performer_attention import PerformerAttentionConfig, PerformerKernel, OrthogonalFeatureAlgorithm
+from typing import Optional, Union
 
 KERNEL_CALLABLES = {
     PerformerKernel.cosh: lambda x, h: tf.concat((tf.exp(h + x), tf.exp(h - x)), axis=-1),

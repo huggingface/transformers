@@ -112,12 +112,16 @@ class PerformerAttentionTest(unittest.TestCase):
             # PyTorch specific stuff
             if library == 'pt':
                 attn_class = PerformerAttention
-                rand_tensor_func = lambda: torch.randn(batch_size, length, d_model)
+
+                def rand_tensor_func():
+                    return torch.randn(batch_size, length, d_model)
 
             # TensorFlow specific stuff
             else:
                 attn_class = TFPerformerAttention
-                rand_tensor_func = lambda: tf.random.normal((batch_size, length, d_model))
+
+                def rand_tensor_func():
+                    return tf.random.normal((batch_size, length, d_model))
 
             try:
                 attention = attn_class(config)
