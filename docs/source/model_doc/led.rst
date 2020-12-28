@@ -35,7 +35,24 @@ dataset.*
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- :class:`~transformers.LEDForConditionalGeneration` is an extension of
+  :class:`~transformers.BartForConditionalGeneration` exchanging the traditional *self-attention* layer with
+  *Longformer*'s *chunked self-attention* layer. :class:`~transformers.LEDTokenizer` is an alias of
+  :class:`~transformers.BartTokenizer`.
+- LED works very well on long-range *sequence-to-sequence* tasks where the ``input_ids`` largely exceed a length of
+  1024 tokens.
+- LED pads the ``input_ids`` to be a multiple of ``config.attention_window`` if required. Therefore a small speed-up is
+  gained, when :class:`~transformers.LEDTokenizer` is used with the ``pad_to_multiple_of`` argument.
+- LED makes use of *global attention* by means of the ``global_attention_mask`` (see
+  :class:`~transformers.LongformerModel`). For summarization, it is advised to put *global attention* only on the first
+  ``<s>`` token. For question answering, it is advised to put *global attention* on all tokens of the question.
+- To fine-tune LED on all 16384, it is necessary to enable *gradient checkpointing* by setting
+  ``config.gradient_checkpointing = True``.
+- A notebook showing how to evaluate LED, can be accessed `here
+  <https://colab.research.google.com/drive/12INTTR6n64TzS4RrXZxMSXfrOd9Xzamo?usp=sharing>`__.
+- A notebook showing how to fine-tune LED, can be accessed `here
+  <https://colab.research.google.com/drive/12LjJazBl7Gam0XBPy_y0CTOJZeZ34c2v?usp=sharing>`__.
+
 
 LEDConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
