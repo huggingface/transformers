@@ -202,7 +202,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
-class TranslationPipeline(Pipeline):
+class TranslationPipeline(Text2TextGenerationPipeline):
     """
     Translates from one language to another.
 
@@ -218,7 +218,7 @@ class TranslationPipeline(Pipeline):
         en_fr_translator("How old are you?")
     """
 
-    return_name = "translated"
+    return_name = "translation"
 
     def check_inputs(self, input_length: int, min_length: int, max_length: int):
         if input_length > 0.9 * max_length:
