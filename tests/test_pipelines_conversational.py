@@ -52,7 +52,7 @@ class SimpleConversationPipelineTests(unittest.TestCase):
         self.assertEqual(len(conversation_1.past_user_inputs), 0)
         self.assertEqual(len(conversation_2.past_user_inputs), 0)
         # When
-        result = nlp([conversation_1, conversation_2], do_sample=False)
+        result = nlp([conversation_1, conversation_2], max_length=48)
         # Then
         self.assertEqual(result, [conversation_1, conversation_2])
         self.assertEqual(
@@ -71,7 +71,7 @@ class SimpleConversationPipelineTests(unittest.TestCase):
 
         # When
         conversation_2.add_user_input("Why do you recommend it?")
-        result = nlp(conversation_2, do_sample=False)
+        result = nlp(conversation_2, max_length=49)
         # Then
         self.assertEqual(result, conversation_2)
         self.assertEqual(
@@ -90,9 +90,9 @@ class SimpleConversationPipelineTests(unittest.TestCase):
             past_user_inputs=["What's the last book you have read?"],
             generated_responses=["b"],
         )
-        _ = nlp(conversation)
-        self.assertEquals(conversation._index, 1)
-        self.assertEquals(
+        _ = nlp(conversation, max_length=26)
+        self.assertEqual(conversation._index, 1)
+        self.assertEqual(
             conversation._history,
             [
                 87,
