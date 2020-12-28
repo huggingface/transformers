@@ -49,6 +49,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     shape_list,
 )
+from ...performer_attention_utils import init_performer_attention_bertlike_tf
 from ...utils import logging
 from .configuration_electra import ElectraConfig
 
@@ -171,10 +172,9 @@ class TFElectraSelfOutput(tf.keras.layers.Layer):
 
 # Copied from from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->Electra
 class TFElectraAttention(tf.keras.layers.Layer):
+    @init_performer_attention_bertlike_tf(TFElectraSelfAttention)
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-
-        self.self_attention = TFElectraSelfAttention(config, name="self")
         self.dense_output = TFElectraSelfOutput(config, name="output")
 
     def prune_heads(self, heads):

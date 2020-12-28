@@ -16,7 +16,6 @@
 """ ALBERT model configuration """
 
 from ...configuration_utils import PretrainedConfig
-from ...performer_attention_utils import supports_performer_attention
 
 
 ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -31,7 +30,6 @@ ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-@supports_performer_attention
 class AlbertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.AlbertModel` or a

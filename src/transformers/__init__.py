@@ -294,6 +294,7 @@ from .training_args_tf import TFTrainingArguments
 
 # Performer attention is shared across models
 from .configuration_performer_attention import PerformerAttentionConfig, PerformerKernel, OrthogonalFeatureAlgorithm
+from .performer_attention_utils import performer_supporting_models_and_configs
 from .utils import logging
 
 

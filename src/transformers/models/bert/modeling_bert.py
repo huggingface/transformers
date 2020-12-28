@@ -350,7 +350,7 @@ class BertSelfOutput(nn.Module):
 
 
 class BertAttention(nn.Module):
-    @init_performer_attention_bertlike(BertSelfAttention)
+    @init_performer_attention_bertlike(BertSelfAttention)   # Sets self.attention attribute appropriately
     def __init__(self, config):
         super().__init__()
         self.output = BertSelfOutput(config)
@@ -430,9 +430,9 @@ class BertOutput(nn.Module):
 class BertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = BertAttention(config)
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
+        self.attention = BertAttention(config)
         
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention

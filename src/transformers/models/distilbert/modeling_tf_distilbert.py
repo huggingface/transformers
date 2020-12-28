@@ -46,6 +46,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     shape_list,
 )
+from ...performer_attention_utils import init_performer_attention
 from ...utils import logging
 from .configuration_distilbert import DistilBertConfig
 
@@ -279,6 +280,9 @@ class TFFFN(tf.keras.layers.Layer):
 
 
 class TFTransformerBlock(tf.keras.layers.Layer):
+    @init_performer_attention(softmax_attention_class=TFMultiHeadSelfAttention,
+                              linear_layer_names=('q_lin', 'k_lin', 'v_lin', 'out_lin'),
+                              d_model='dim', num_heads='n_heads')
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -293,7 +297,6 @@ class TFTransformerBlock(tf.keras.layers.Layer):
             config.dim % config.n_heads == 0
         ), f"Hidden size {config.dim} not dividable by number of heads {config.n_heads}"
 
-        self.attention = TFMultiHeadSelfAttention(config, name="attention")
         self.sa_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="sa_layer_norm")
 
         self.ffn = TFFFN(config, name="ffn")

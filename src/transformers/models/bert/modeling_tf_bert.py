@@ -54,6 +54,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     shape_list,
 )
+from ...performer_attention_utils import init_performer_attention_bertlike_tf
 from ...utils import logging
 from .configuration_bert import BertConfig
 
@@ -339,10 +340,9 @@ class TFBertSelfOutput(tf.keras.layers.Layer):
 
 
 class TFBertAttention(tf.keras.layers.Layer):
+    @init_performer_attention_bertlike_tf(TFBertSelfAttention)
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-
-        self.self_attention = TFBertSelfAttention(config, name="self")
         self.dense_output = TFBertSelfOutput(config, name="output")
 
     def prune_heads(self, heads):

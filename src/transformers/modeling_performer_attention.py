@@ -113,7 +113,8 @@ class PerformerAttention(nn.Module):
             assert q_length == 1, "When use_recurrent_decoding == True, we only input and output one token at a time."
 
         if self.use_linear_layers:
-            query, key, value = (getattr(self, name)(x) for name, x in zip(self.linear_layer_names, (query, key, value)))
+            query, key, value = (getattr(self, name)(x) for name, x in
+                                 zip(self.linear_layer_names, (query, key, value)))
 
         # Add the head dimension: (bs, num_heads, q_length, dim_per_head)
         query, key, value = (x.view(bs, -1, self.num_heads, dim_per_head).transpose(1, 2) for x in (query, key, value))

@@ -20,7 +20,7 @@ def resolve_enum(enum_class, value):
 
 class TFPerformerAttention(tf.keras.layers.Layer):
     def __init__(self, config: Optional[Union[dict, PerformerAttentionConfig]] = None, **kwargs):
-        super().__init__()
+        super().__init__(name=kwargs.pop('name', None), dtype=kwargs.pop('dtype', None))
 
         if isinstance(config, dict):
             config = PerformerAttentionConfig(**config)
@@ -55,10 +55,8 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
         if self.use_linear_layers:
-            self.q_lin = tf.keras.layers.Dense(units=self.d_model)
-            self.k_lin = tf.keras.layers.Dense(units=self.d_model)
-            self.v_lin = tf.keras.layers.Dense(units=self.d_model)
-            self.out_lin = tf.keras.layers.Dense(units=self.d_model)
+            for name in self.linear_layer_names:
+                setattr(self, name, tf.keras.layers.Dense(units=self.d_model))
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -103,9 +101,8 @@ class TFPerformerAttention(tf.keras.layers.Layer):
             return tf.transpose(tf.reshape(x, new_shape), perm=[0, 2, 1, 3])
 
         if self.use_linear_layers:
-            query = self.q_lin(query)
-            key = self.k_lin(key)
-            value = self.v_lin(value)
+            query, key, value = (getattr(self, name)(x) for name, x in
+                                 zip(self.linear_layer_names, (query, key, value)))
         
         # (bs, num_heads, q_length, dim_per_head)
         query, key, value = (shape(x) for x in (query, key, value))
@@ -235,8 +232,8 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         new_last_dim = x.shape[-2] * x.shape[-1]
         context = tf.reshape(x, list(x.shape[:-2]) + [new_last_dim])  # (bs, q_length, dim)
 
-        if self.use_linear_layers:
-            context = self.out_lin(context)  # (bs, q_length, dim)
+        if self.use_linear_layers and len(self.linear_layer_names) > 3:
+            context = getattr(self, self.linear_layer_names[3])(context)  # (bs, q_length, dim)
 
         if att_map_to_output:
             return context, att_map_to_output

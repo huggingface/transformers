@@ -1,11 +1,13 @@
+import json
 import math
 import numpy as np
 import random
 import unittest
 from dataclasses import fields
 from itertools import product
+from transformers.testing_utils import parse_flag_from_env
 from transformers import (
-    PerformerAttentionConfig, PerformerKernel, OrthogonalFeatureAlgorithm,
+    PerformerAttentionConfig, PerformerKernel, OrthogonalFeatureAlgorithm, performer_supporting_models_and_configs,
     is_torch_available, is_tf_available
 )
 from typing import Iterator, Tuple
@@ -18,7 +20,32 @@ if is_tf_available():
     from transformers import TFPerformerAttention
 
 
+_run_nondeterministic_tests = parse_flag_from_env("RUN_NONDETERMINISTIC_TESTS", default=False)
+
+
 class PerformerAttentionTest(unittest.TestCase):
+    # Check that setting attention_type='performer' actually makes the model use (TF)PerformerAttention
+    def test_performer_models(self):
+        def _model_is_tf(model_cls):
+            return is_tf_available() and issubclass(model_cls, tf.keras.layers.Layer)
+
+        for model_class, model_config in performer_supporting_models_and_configs():
+            try:
+                model = model_class(model_config(attention_type='performer'))
+
+            # The TapasModel requires the torch-scatter library, and we shouldn't fail this test just because
+            # the user doesn't have that library installed
+            except ImportError:
+                pass
+            else:
+                with self.subTest(model=model_class):
+                    self.assertIsNotNone(model)
+
+                    # It turns out that it's very non-trivial to do this type of recursive iteration of sublayers in
+                    # TensorFlow, so we just don't bother to do the check for those models
+                    if not _model_is_tf(model_class):
+                        self.assertTrue(any((isinstance(module, PerformerAttention) for module in model.modules())))
+
     @unittest.skipIf(not is_torch_available(), "PyTorch not available")
     def test_output_shape_pytorch(self):
         self._test_output_shape_for_library('pt')
@@ -27,11 +54,11 @@ class PerformerAttentionTest(unittest.TestCase):
     def test_output_shape_tensorflow(self):
         self._test_output_shape_for_library('tf')
 
-    @unittest.skipIf(not is_torch_available(), "PyTorch not available")
+    @unittest.skipUnless(_run_nondeterministic_tests, "This can fail randomly if we draw an 'unlucky' set of features.")
     def test_softmax_noncausal_attention_output_pytorch(self):
         self._test_softmax_noncausal_attention_output_for_library('pt')
 
-    @unittest.skipIf(not is_tf_available(), "TensorFlow not available")
+    @unittest.skipUnless(_run_nondeterministic_tests, "This can fail randomly if we draw an 'unlucky' set of features.")
     def test_softmax_noncausal_attention_output_tensorflow(self):
         self._test_softmax_noncausal_attention_output_for_library('tf')
 
