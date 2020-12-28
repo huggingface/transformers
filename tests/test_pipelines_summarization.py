@@ -51,7 +51,7 @@ class SimpleSummarizationPipelineTests(unittest.TestCase):
 
         output = nlp("This is a test", truncation=TruncationStrategy.ONLY_FIRST)
 
-        self.assertEqual(output, [{"summary_text": "DDDD"}])
+        self.assertEqual(output, [{"summary_text": "abcd"}])
 
 
 class SummarizationPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):

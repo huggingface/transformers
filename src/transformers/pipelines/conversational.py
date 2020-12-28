@@ -53,15 +53,28 @@ class Conversation:
     ):
         if not conversation_id:
             conversation_id = uuid.uuid4()
-        self.uuid: uuid.UUID = conversation_id
         if past_user_inputs is None:
-            past_user_inputs = past_user_inputs
-        self.past_user_inputs: List[str] = []
+            past_user_inputs = []
         if generated_responses is None:
             generated_responses = []
+
+        self.uuid: uuid.UUID = conversation_id
+        self.past_user_inputs: List[str] = past_user_inputs
         self.generated_responses: List[str] = generated_responses
-        self.history: List[int] = []
         self.new_user_input: Optional[str] = text
+        self._index: int = 0
+        self._history: List[int] = []
+
+    def __eq__(self, other):
+        if not isinstance(other, Conversation):
+            return False
+        if self.uuid == other.uuid:
+            return True
+        return (
+            self.new_user_input == other.new_user_input
+            and self.past_user_inputs == other.past_user_inputs
+            and self.generated_responses == other.generated_responses
+        )
 
     def add_user_input(self, text: str, overwrite: bool = False):
         """
@@ -106,16 +119,6 @@ class Conversation:
             response (:obj:`str`): The model generated response.
         """
         self.generated_responses.append(response)
-
-    def set_history(self, history: List[int]):
-        """
-        Updates the value of the history of the conversation. The history is represented by a list of :obj:`token_ids`.
-        The history is used by the model to generate responses based on the previous conversation turns.
-
-        Args:
-            history (:obj:`List[int]`): History of tokens provided and generated for this conversation.
-        """
-        self.history = history
 
     def __repr__(self):
         """
@@ -180,6 +183,21 @@ class ConversationalPipeline(Pipeline):
 
         self.min_length_for_response = min_length_for_response
 
+    def _get_history(self, conversation):
+        # history = conversation._history[:]
+        # index = conversation._index
+        history = []
+        index = 0
+        for i, (past_user_input, generated_response) in enumerate(
+            zip(conversation.past_user_inputs[index:], conversation.generated_responses[index:])
+        ):
+            for el in (past_user_input, generated_response):
+                new_history = self._parse_and_tokenize([el])[0]
+                history.extend(new_history)
+            conversation._index = i + index + 1
+        conversation._history = history
+        return history[:]
+
     def __call__(
         self,
         conversations: Union[Conversation, List[Conversation]],
@@ -207,7 +225,7 @@ class ConversationalPipeline(Pipeline):
             conversations = [conversations]
         # Input validation
         if isinstance(conversations, list):
-            for conversation in conversations:
+            for i, conversation in enumerate(conversations):
                 assert isinstance(
                     conversation, Conversation
                 ), "DialoguePipeline expects a Conversation or list of Conversations as an input"
@@ -227,7 +245,7 @@ class ConversationalPipeline(Pipeline):
         with self.device_placement():
 
             inputs = self._parse_and_tokenize([conversation.new_user_input for conversation in conversations])
-            histories = [conversation.history for conversation in conversations]
+            histories = [self._get_history(conversation) for conversation in conversations]
             max_length = generate_kwargs.get("max_length", self.model.config.max_length)
             inputs = self._concat_inputs_history(inputs, histories, max_length)
 
@@ -273,7 +291,6 @@ class ConversationalPipeline(Pipeline):
                         clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                     )
                 )
-                conversation.set_history(history[conversation_index])
                 output.append(conversation)
             if len(output) == 1:
                 return output[0]

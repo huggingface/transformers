@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from string import ascii_lowercase
 from typing import List, Optional
 from unittest import mock
 
@@ -256,6 +257,7 @@ class DummyTok:
     def __init__(self, **kwargs):
         for name, v in kwargs.items():
             setattr(self, name, v)
+        self.index = 0
 
     def __call__(self, inputs, **kwargs):
         if kwargs.get("return_tensors", "") == "pt":
@@ -304,4 +306,9 @@ class DummyTok:
         return list(input_.encode("utf-8"))
 
     def decode(self, sequence, **kwargs):
-        return "D" * len(sequence)
+        string = ""
+        for i in range(len(sequence)):
+            string += ascii_lowercase[self.index]
+            self.index += 1
+            self.index %= len(ascii_lowercase)
+        return string

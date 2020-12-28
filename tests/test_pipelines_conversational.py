@@ -25,22 +25,34 @@ DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 
 
 class SimpleConversationPipelineTests(unittest.TestCase):
-    @require_torch
-    def test_integration_torch_conversation(self):
+    def get_pipeline(self):
         # When
         config = GPT2Config(
-            vocab_size=257, n_ctx=64, n_embd=64, n_layer=1, n_head=8, eos_token_id=0, bos_token_id=0, pad_token_id=0
+            vocab_size=257,
+            n_ctx=64,
+            max_length=64,
+            n_embd=64,
+            n_layer=1,
+            n_head=8,
+            eos_token_id=0,
+            bos_token_id=0,
+            pad_token_id=0,
         )
         model = GPT2LMHeadModel(config)
         tokenizer = DummyTok()
         nlp = pipeline(task="conversational", device=DEFAULT_DEVICE_NUM, model=model, tokenizer=tokenizer)
+        return nlp
+
+    @require_torch
+    def test_integration_torch_conversation(self):
+        nlp = self.get_pipeline()
         conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
         conversation_2 = Conversation("What's the last book you have read?")
         # Then
         self.assertEqual(len(conversation_1.past_user_inputs), 0)
         self.assertEqual(len(conversation_2.past_user_inputs), 0)
         # When
-        result = nlp([conversation_1, conversation_2], do_sample=False, max_length=1000)
+        result = nlp([conversation_1, conversation_2], do_sample=False)
         # Then
         self.assertEqual(result, [conversation_1, conversation_2])
         self.assertEqual(
@@ -49,17 +61,17 @@ class SimpleConversationPipelineTests(unittest.TestCase):
                 Conversation(
                     None,
                     past_user_inputs=["Going to the movies tonight - any suggestions?"],
-                    generated_responses=["D"],
+                    generated_responses=["a"],
                 ),
                 Conversation(
-                    None, past_user_inputs=["What's the last book you have read?"], generated_responses=["D"]
+                    None, past_user_inputs=["What's the last book you have read?"], generated_responses=["b"]
                 ),
             ],
         )
 
         # When
         conversation_2.add_user_input("Why do you recommend it?")
-        result = nlp(conversation_2, do_sample=False, max_length=1000)
+        result = nlp(conversation_2, do_sample=False)
         # Then
         self.assertEqual(result, conversation_2)
         self.assertEqual(
@@ -67,8 +79,61 @@ class SimpleConversationPipelineTests(unittest.TestCase):
             Conversation(
                 None,
                 past_user_inputs=["What's the last book you have read?", "Why do you recommend it?"],
-                generated_responses=["D", "D"],
+                generated_responses=["b", "c"],
             ),
+        )
+
+    def test_history_cache(self):
+        nlp = self.get_pipeline()
+        conversation = Conversation(
+            "Why do you recommend it?",
+            past_user_inputs=["What's the last book you have read?"],
+            generated_responses=["b"],
+        )
+        _ = nlp(conversation)
+        self.assertEquals(conversation._index, 1)
+        self.assertEquals(
+            conversation._history,
+            [
+                87,
+                104,
+                97,
+                116,
+                39,
+                115,
+                32,
+                116,
+                104,
+                101,
+                32,
+                108,
+                97,
+                115,
+                116,
+                32,
+                98,
+                111,
+                111,
+                107,
+                32,
+                121,
+                111,
+                117,
+                32,
+                104,
+                97,
+                118,
+                101,
+                32,
+                114,
+                101,
+                97,
+                100,
+                63,
+                0,
+                98,
+                0,
+            ],
         )
 
 
