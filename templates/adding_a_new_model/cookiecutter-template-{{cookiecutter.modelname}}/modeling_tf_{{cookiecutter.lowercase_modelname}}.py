@@ -20,6 +20,7 @@
 import tensorflow as tf
 
 from transformers.modeling_tf_outputs import TFCausalLMOutput
+
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
@@ -37,14 +38,14 @@ from ...modeling_tf_outputs import (
     TFTokenClassifierOutput,
 )
 from ...modeling_tf_utils import (
+    TFCausalLanguageModelingLoss,
     TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
-    TFTokenClassificationLoss,
-    TFCausalLanguageModelingLoss,
     TFSequenceSummary,
+    TFTokenClassificationLoss,
     get_initializer,
     input_processing,
     keras_serializable,
@@ -503,7 +504,7 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.shape[0]
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """Prunes heads of the model.
@@ -1109,7 +1110,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
         Returns:
             tf.Tensor with dummy inputs
         """
-        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
+        return {"input_ids": tf.convert_to_tensor(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
@@ -1404,7 +1405,7 @@ from typing import Dict, Optional, Tuple, Union
 
 import tensorflow as tf
 
-from ...activations_tf import ACT2FN
+from ...activations_tf import get_tf_activation
 from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -1640,7 +1641,7 @@ class TF{{cookiecutter.camelcase_modelname}}EncoderLayer(tf.keras.layers.Layer):
         )
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_fn = get_tf_activation(config.activation_function)
         self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
         self.fc1 = tf.keras.layers.Dense(config.encoder_ffn_dim, name="fc1")
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
@@ -1689,7 +1690,7 @@ class TF{{cookiecutter.camelcase_modelname}}DecoderLayer(tf.keras.layers.Layer):
             is_decoder=True,
         )
         self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_fn = get_tf_activation(config.activation_function)
         self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
 
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
@@ -1782,8 +1783,8 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
     @property
     def dummy_inputs(self):
         pad_token = 1
-        input_ids = tf.cast(tf.constant(DUMMY_INPUTS), tf.int32)
-        decoder_input_ids = tf.cast(tf.constant(DUMMY_INPUTS), tf.int32)
+        input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
+        decoder_input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
         dummy_inputs = {
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": tf.math.not_equal(input_ids, pad_token),
@@ -2134,7 +2135,7 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         past_key_values_length = (
-            inputs["past_key_values"][0][0].shape[2] if inputs["past_key_values"] is not None else 0
+            shape_list(inputs["past_key_values"][0][0])[2] if inputs["past_key_values"] is not None else 0
         )
 
         # embed positions
@@ -2390,7 +2391,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
         # {{cookiecutter.uppercase_modelname}} is a special case where the bias has two dimensions
         # and not named just `bias`
         if new_num_tokens is not None:
-            num_tokens_to_copy = min(self.final_logits_bias.shape[0], new_num_tokens)
+            num_tokens_to_copy = min(shape_list(self.final_logits_bias)[0], new_num_tokens)
             init_bias = tf.zeros((new_num_tokens,))
             init_bias[:num_tokens_to_copy] = self.final_logits_bias.value()[:num_tokens_to_copy]
             self.final_logits_bias = self.add_weight(

@@ -25,6 +25,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
+from ...activations import ACT2FN
 from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -48,7 +49,6 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
-from ...activations import ACT2FN
 from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Config
 
 
@@ -1809,7 +1809,13 @@ class {{cookiecutter.camelcase_modelname}}EncoderLayer(nn.Module):
         if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-        return hidden_states, attn_weights
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
 
 
 class {{cookiecutter.camelcase_modelname}}DecoderLayer(nn.Module):
@@ -1846,7 +1852,8 @@ class {{cookiecutter.camelcase_modelname}}DecoderLayer(nn.Module):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        output_attentions: Optional[torch.Tensor] = False,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = True,
     ):
         """
         Args:
@@ -1907,12 +1914,15 @@ class {{cookiecutter.camelcase_modelname}}DecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
-        return (
-            hidden_states,
-            self_attn_weights,
-            present_key_value,
-            cross_attn_weights,
-        )
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (self_attn_weights, cross_attn_weights)
+
+        if use_cache:
+            outputs += (present_key_value,)
+
+        return outputs
 
 
 # Copied from transformers.models.bart.modeling_bart.BartClassificationHead with Bart->{{cookiecutter.camelcase_modelname}}
@@ -2178,12 +2188,28 @@ class {{cookiecutter.camelcase_modelname}}Encoder({{cookiecutter.camelcase_model
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
-                attn = None
+                layer_outputs = (None, None)
             else:
-                hidden_states, attn = encoder_layer(hidden_states, attention_mask, output_attentions=output_attentions)
+                if getattr(self.config, "gradient_checkpointing", False):
+
+                    def create_custom_forward(module):
+                        def custom_forward(*inputs):
+                            return module(*inputs, output_attentions)
+
+                        return custom_forward
+
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(encoder_layer),
+                        hidden_states,
+                        attention_mask,
+                    )
+                else:
+                    layer_outputs = encoder_layer(hidden_states, attention_mask, output_attentions=output_attentions)
+
+                hidden_states = layer_outputs[0]
 
             if output_attentions:
-                all_attentions = all_attentions + (attn,)
+                all_attentions = all_attentions + (layer_outputs[1],)
 
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
@@ -2355,21 +2381,46 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            hidden_states, layer_self_attn, present_key_value, layer_cross_attn = decoder_layer(
-                hidden_states,
-                attention_mask=combined_attention_mask,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
-                past_key_value=past_key_value,
-                output_attentions=output_attentions,
-            )
+            if getattr(self.config, "gradient_checkpointing", False):
+                if use_cache:
+                    raise ValueError(
+                        "When using `gradient_checkpointing, make sure that `use_cache=False` and `config.use_cache=False`."
+                    )
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        # None for past_key_value
+                        return module(*inputs, output_attentions, use_cache)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(decoder_layer),
+                    hidden_states,
+                    combined_attention_mask,
+                    encoder_hidden_states,
+                    encoder_attention_mask,
+                    None,
+                )
+            else:
+
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=combined_attention_mask,
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                    past_key_value=past_key_value,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
+                )
+            hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache += (present_key_value,)
+                next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
 
             if output_attentions:
-                all_self_attns += (layer_self_attn,)
-                all_cross_attentions += (layer_cross_attn,)
+                all_self_attns += (layer_outputs[1],)
+                all_cross_attentions += (layer_outputs[2],)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
