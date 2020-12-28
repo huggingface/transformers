@@ -39,8 +39,8 @@ Let's see of this looks on an example:
     inputs = tokenizer("Hello, my dog is cute and ", return_tensors="pt")
     sequences = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
 
-The ``sequences`` object is a :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput`, as we can see in the
-documentation of that class below, it means it has a ``sequences`` an optional ``scores``, an optional
+The ``sequences`` object is a :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput`, as we can see in
+the documentation of that class below, it means it has a ``sequences`` an optional ``scores``, an optional
 ``hidden_states`` and an optional ``attentions`` attribute. Here we have the ``scores`` since we passed along
 ``output_scores=True``, but we don't have ``hidden_states`` and ``attentions`` because we didn't pass
 ``output_hidden_states=True`` or ``output_attentions=True``.

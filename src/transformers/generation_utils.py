@@ -714,15 +714,15 @@ class GenerationMixin:
             :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput`,
             :class:`~transformers.generation_utils.SampleDecoderOnlyOutput`,
             :obj:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput`,
-            :class:`~transformers.generation_utils.BeamSampleDecoderOnlyOutput` according to generate parameter settings if ``return_dict_in_generate=True`` is
-            passed or else :obj:`torch.LongTensor`.
+            :class:`~transformers.generation_utils.BeamSampleDecoderOnlyOutput` according to generate parameter
+            settings if ``return_dict_in_generate=True`` is passed or else :obj:`torch.LongTensor`.
 
             If model is an Encoder-Decoder model (``model.config.is_encoder_decoder=True``), either one of
             :class:`~transformers.generation_utils.GreedySearchEncoderDecoderOutput`,
             :class:`~transformers.generation_utils.SampleEncoderDecoderOutput`,
             :obj:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput`,
-            :class:`~transformers.generation_utils.BeamSampleEncoderDecoderOutput` according to generate parameter settings if ``return_dict_in_generate=True``
-            is passed or else :obj:`torch.LongTensor`.
+            :class:`~transformers.generation_utils.BeamSampleEncoderDecoderOutput` according to generate parameter
+            settings if ``return_dict_in_generate=True`` is passed or else :obj:`torch.LongTensor`.
 
         Examples::
             >>> from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM
