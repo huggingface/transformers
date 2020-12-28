@@ -359,6 +359,7 @@ class ConversationalPipeline(Pipeline):
                     if cutoff_eos_index == 0 or cutoff_eos_index == len(new_input) - 1:
                         break
                     else:
+                        logger.warning("Cutting history off because it's too long for underlying model")
                         new_input = new_input[cutoff_eos_index + 1 :]
             outputs.append(new_input)
         padded_outputs = self.tokenizer.pad(
