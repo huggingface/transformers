@@ -39,29 +39,29 @@ Let's see of this looks on an example:
     inputs = tokenizer("Hello, my dog is cute and ", return_tensors="pt")
     sequences = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
 
-The ``outputs`` object is a :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput`, as we can see in the
+The ``sequences`` object is a :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput`, as we can see in the
 documentation of that class below, it means it has a ``sequences`` an optional ``scores``, an optional
 ``hidden_states`` and an optional ``attentions`` attribute. Here we have the ``scores`` since we passed along
 ``output_scores=True``, but we don't have ``hidden_states`` and ``attentions`` because we didn't pass
 ``output_hidden_states=True`` or ``output_attentions=True``.
 
 You can access each attribute as you would usually do, and if that attribute has not been returned by the model, you
-will get ``None``. Here for instance ``outputs.scores`` are all the generated prediction scores of the language
-modeling head, and ``outputs.attentions`` is ``None``.
+will get ``None``. Here for instance ``sequences.scores`` are all the generated prediction scores of the language
+modeling head, and ``sequences.attentions`` is ``None``.
 
-When considering our ``outputs`` object as tuple, it only considers the attributes that don't have ``None`` values.
+When considering our ``sequences`` object as tuple, it only considers the attributes that don't have ``None`` values.
 Here for instance, it has two elements, ``loss`` then ``logits``, so
 
 .. code-block::
 
-    outputs[:2]
+    sequences[:2]
 
-will return the tuple ``(outputs.sequences, outputs.scores)`` for instance.
+will return the tuple ``(sequences.sequences, sequences.scores)`` for instance.
 
-When considering our ``outputs`` object as dictionary, it only considers the attributes that don't have ``None``
+When considering our ``sequences`` object as dictionary, it only considers the attributes that don't have ``None``
 values. Here for instance, it has two keys that are ``sequences`` and ``scores``.
 
-We document here all generation outputs.
+We document here all generation sequences.
 
 
 GreedySearchOutput

@@ -45,9 +45,8 @@ class GreedySearchDecoderOnlyOutput(ModelOutput):
     """
     Base class for outputs of encoder-decoder generation models using greedy search.
 
-
     Args:
-        sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
@@ -73,9 +72,8 @@ class GreedySearchEncoderDecoderOutput(ModelOutput):
     """
     Base class for outputs of encoder-decoder generation models using greedy search.
 
-
     Args:
-        sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
@@ -109,9 +107,8 @@ class SampleDecoderOnlyOutput(ModelOutput):
     """
     Base class for outputs of encoder-decoder generation models using sampling.
 
-
     Args:
-        sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
+        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
@@ -139,9 +136,8 @@ class SampleEncoderDecoderOutput(ModelOutput):
     """
     Base class for outputs of encoder-decoder generation models using sampling.
 
-
     Args:
-        sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
+        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
@@ -177,12 +173,11 @@ class BeamSearchDecoderOnlyOutput(ModelOutput):
     """
     Base class for outputs of encoder-decoder generation models using beam search.
 
-
     Args:
-        sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
+        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
-        sequences_scores (:obj:`torch.FloatTensor` of shape :ob:`(batch_size * num_return_sequences)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+        sequences_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequences)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Final beam scores of the generated ``sequences``.
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
@@ -211,12 +206,11 @@ class BeamSearchEncoderDecoderOutput(ModelOutput):
     """
     Base class for outputs of encoder-decoder generation models using beam search.
 
-
     Args:
-        sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
+        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
-        sequences_scores (:obj:`torch.FloatTensor` of shape :ob:`(batch_size * num_return_sequences)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+        sequences_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequences)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Final beam scores of the generated ``sequences``.
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
@@ -254,12 +248,11 @@ class BeamSampleDecoderOnlyOutput(ModelOutput):
     """
     Base class for outputs of encoder-decoder generation models using beam sample.
 
-
     Args:
-        sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
+        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
-        sequences_scores (:obj:`torch.FloatTensor` of shape :ob:`(batch_size * num_return_sequence)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+        sequences_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequence)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Final beam scores of the generated ``sequences``.
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
@@ -287,12 +280,11 @@ class BeamSampleEncoderDecoderOutput(ModelOutput):
     """
     Base class for outputs of encoder-decoder generation models using beam sample.
 
-
     Args:
-        sequences (:obj: `torch.LongTensor` of shape :obj:`(batch_size * num_beams, sequence_length)`):
+        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_beams, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
-        sequences_scores (:obj:`torch.FloatTensor` of shape :ob:`(batch_size * num_return_sequence)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+        sequences_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequence)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Final beam scores of the generated ``sequences``.
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
@@ -718,21 +710,21 @@ class GenerationMixin:
 
 
         Return:
-            Either :obj:`GreedySearchOutput`, :obj:`SampleOutput`, :obj:`BeamSearchOutput`, :obj:`BeamSampleOutput`, or
-            :obj:`torch.LongTensor`: :obj:`GreedySearchOutput`if the generate method is `greedy_search` and
-            ``return_dict_in_generate=True`` is passed or ``config.return_dict_in_generate=True``;:obj:`SampleOutput`
-            if the generate method is `sample` and ``return_dict_in_generate=True`` is passed or
-            ``config.return_dict_in_generate=True``; :obj:`BeamSearchOutput`if the generate method is `beam_search` and
-            ``return_dict_in_generate=True`` is passed or
-            ``config.return_dict_in_generate=True``;:obj:`BeamSampleOutput`if the generate method is `beam_sample` and
-            ``return_dict_in_generate=True`` is passed or ``config.return_dict_in_generate=True``;
-            :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)` containing
-            just the generated sentence otherwise. The second dimension (sequence_length) is either equal to
-            :obj:`max_length` or shorter if all batches finished early due to the :obj:`eos_token_id`
+            If model is `not` an Encoder-Decoder model (``model.config.is_encoder_decoder=False``), either one of
+            :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput`,
+            :class:`~transformers.generation_utils.SampleDecoderOnlyOutput`,
+            :obj:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput`,
+            :class:`~transformers.generation_utils.BeamSampleDecoderOnlyOutput` according to generate parameter settings if ``return_dict_in_generate=True`` is
+            passed or else :obj:`torch.LongTensor`.
 
+            If model is an Encoder-Decoder model (``model.config.is_encoder_decoder=True``), either one of
+            :class:`~transformers.generation_utils.GreedySearchEncoderDecoderOutput`,
+            :class:`~transformers.generation_utils.SampleEncoderDecoderOutput`,
+            :obj:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput`,
+            :class:`~transformers.generation_utils.BeamSampleEncoderDecoderOutput` according to generate parameter settings if ``return_dict_in_generate=True``
+            is passed or else :obj:`torch.LongTensor`.
 
         Examples::
-
             >>> from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM
 
             >>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
@@ -1068,8 +1060,11 @@ class GenerationMixin:
 
 
         Return:
-            Either a :obj:`torch.LongTensor` object (default behaviour) or a :obj:`GreedySearchOutput` if
-            :obj:`return_dict_in_generate` is set to True
+            Either a :obj:`torch.LongTensor` object (default behaviour) or a
+            :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput` if
+            ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
+            :class:`~transformers.generation_utils.GreedySearchEncoderDecoderOutput` if
+            ``model.config.is_encoder_decoder=True``.
 
 
         Examples::
@@ -1263,9 +1258,11 @@ class GenerationMixin:
 
 
         Return:
-            Either :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`
-            containing the generated sequences (default behaviour) or :obj:`SampleOutput`if
-            :obj:`return_dict_in_generate` is set to True.
+            Either a :obj:`torch.LongTensor` object (default behaviour) or a
+            :class:`~transformers.generation_utils.SampleDecoderOnlyOutput` if
+            ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
+            :class:`~transformers.generation_utils.SampleEncoderDecoderOutput` if
+            ``model.config.is_encoder_decoder=True``.
 
 
         Examples::
@@ -1469,9 +1466,11 @@ class GenerationMixin:
 
 
         Return:
-            Either :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`
-            containing the generated sequences (default behaviour) or :obj:`BeamSearchOutput`if
-            :obj:`return_dict_in_generate` is set to True.
+            Either a :obj:`torch.LongTensor` object (default behaviour) or a
+            :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput` if
+            ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
+            :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput` if
+            ``model.config.is_encoder_decoder=True``.
 
 
         Examples::
@@ -1718,9 +1717,11 @@ class GenerationMixin:
 
 
         Return:
-            Either :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`
-            containing the generated sequences (default behaviour) or :obj:`BeamSampleOutput`if
-            :obj:`return_dict_in_generate` is set to True.
+            :obj:`return_dict_in_generate` is set to True. Either a :obj:`torch.LongTensor` object (default behaviour)
+            or a :class:`~transformers.generation_utils.BeamSampleDecoderOnlyOutput` if
+            ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
+            :class:`~transformers.generation_utils.BeamSampleEncoderDecoderOutput` if
+            ``model.config.is_encoder_decoder=True``.
 
 
         Examples::
@@ -1969,9 +1970,11 @@ class GenerationMixin:
 
 
         Return:
-            Either :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`
-            containing the generated sequences (default behaviour) or :obj:`BeamSearchOutput`if
-            :obj:`return_dict_in_generate` is set to True.
+            Either a :obj:`torch.LongTensor` object (default behaviour) or a
+            :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput` if
+            ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
+            :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput` if
+            ``model.config.is_encoder_decoder=True``.
 
 
         Examples::
