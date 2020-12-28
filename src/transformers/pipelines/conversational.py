@@ -34,6 +34,14 @@ class Conversation:
         conversation_id (:obj:`uuid.UUID`, `optional`):
             Unique identifier for the conversation. If not provided, a random UUID4 id will be assigned to the
             conversation.
+        past_user_inputs (:obj:`List[str]`, `optional`):
+            Eventual past history of the conversation of the user. You don't need to pass it manually if you use the
+            pipeline interactively but if you want to recreate history you need to set both `past_user_inputs` and
+            `generated_responses` with equal length strings
+        generated_responses (:obj:`List[str]`, `optional`):
+            Eventual past history of the conversation of the model. You don't need to pass it manually if you use the
+            pipeline interactively but if you want to recreate history you need to set both `past_user_inputs` and
+            `generated_responses` with equal length strings
 
     Usage::
 
@@ -184,6 +192,16 @@ class ConversationalPipeline(Pipeline):
         self.min_length_for_response = min_length_for_response
 
     def _get_history(self, conversation):
+        """
+        Private function (subject to change) that simply tokenizes and concatenates past inputs. Also saves that
+        tokenization into the conversation state.
+
+        Args:
+            conversation (:class:`~transformers.Conversation`)
+
+        Returns:
+            :obj:`List[int]`: The list of tokens for the past input of that conversation.
+        """
         # history = conversation._history[:]
         # index = conversation._index
         history = []
