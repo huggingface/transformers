@@ -1110,7 +1110,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
         Returns:
             tf.Tensor with dummy inputs
         """
-        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
+        return {"input_ids": tf.convert_to_tensor(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
@@ -1783,8 +1783,8 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
     @property
     def dummy_inputs(self):
         pad_token = 1
-        input_ids = tf.cast(tf.constant(DUMMY_INPUTS), tf.int32)
-        decoder_input_ids = tf.cast(tf.constant(DUMMY_INPUTS), tf.int32)
+        input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
+        decoder_input_ids = tf.cast(tf.convert_to_tensor(DUMMY_INPUTS), tf.int32)
         dummy_inputs = {
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": tf.math.not_equal(input_ids, pad_token),
