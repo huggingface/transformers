@@ -61,11 +61,10 @@ class PerformerAttentionConfig:
         regularize_feature_norms (:obj:`bool`, `optional`, defaults to False):
             Whether to ensure that the random feature vectors have a norm of sqrt(`d`), where `d` is the dimensionality
             of each attention head.
-        feature_redraw_interval (:obj:`int`, `optional`, defaults to 1000):
+        feature_redraw_interval (:obj:`int`, `optional`, defaults to 100):
             The number of forward passes after which the random feature matrix should be redrawn. If None, then the
-            feature matrix is never redrawn. It is recommended to set this property to some value on the order of 1-5k
-            while training in order to get the best model performance. When combined with :obj:`redraw_stochastically`,
-            this parameter determines the expected value of the redraw interval, rather than the interval itself.
+            feature matrix is never redrawn. When combined with :obj:`redraw_stochastically`, this parameter determines
+            the expected value of the redraw interval, rather than the interval itself.
         redraw_stochastically (:obj:`bool`, `optional`, defaults to False):
             If true, PerformerAttention will redraw its random features each forward pass with a probability equal to
             (1 / :obj:`feature_redraw_interval`), instead of deterministically redrawing once every N passes. This could
@@ -102,7 +101,7 @@ class PerformerAttentionConfig:
     use_orthogonal_features: bool = True
     orthogonal_feature_algorithm: Union[str, OrthogonalFeatureAlgorithm] = OrthogonalFeatureAlgorithm.auto
 
-    feature_redraw_interval: int = 100
+    feature_redraw_interval: Optional[int] = 100
     redraw_stochastically: bool = False
     redraw_verbose: bool = False
 

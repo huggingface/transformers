@@ -60,7 +60,12 @@ class PerformerAttention(nn.Module):
         # otherwise, lazily create it on the first forward pass
         self.random_features = None
         if not self.use_thick_features:
-            self._generate_feature_matrix(batch_size=1)
+            self._generate_feature_matrix(batch_size=1, device=None)
+
+            # This is needed because apparently DistilBertModel deepcopies its layers on initialization for some
+            # reason, which weirdly involves pickling them, and generators can't be pickled. So we'll just burn in
+            # another Markov chain on the first redraw if needed.
+            self.random_feature_chain = None
 
         self.kernel_type = resolve_enum(PerformerKernel, self.kernel_type)
         self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
