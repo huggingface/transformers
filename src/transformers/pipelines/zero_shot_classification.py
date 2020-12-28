@@ -3,8 +3,8 @@ from typing import List, Union
 import numpy as np
 
 from ..file_utils import add_end_docstrings
-from ..utils import logging
 from ..tokenization_utils import TruncationStrategy
+from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
 
 

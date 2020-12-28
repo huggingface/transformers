@@ -44,8 +44,7 @@ class Text2TextGenerationPipeline(Pipeline):
 
     def check_inputs(self, input_length: int, min_length: int, max_length: int):
         """
-        Checks wether there might be something wrong with given input with
-        regard to the model.
+        Checks wether there might be something wrong with given input with regard to the model.
         """
         return True
 
@@ -185,8 +184,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
 
     def check_inputs(self, input_length: int, min_length: int, max_length: int) -> bool:
         """
-        Checks wether there might be something wrong with given input with
-        regard to the model.
+        Checks wether there might be something wrong with given input with regard to the model.
         """
         if input_length < min_length // 2:
             logger.warning(
