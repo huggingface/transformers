@@ -1809,7 +1809,13 @@ class {{cookiecutter.camelcase_modelname}}EncoderLayer(nn.Module):
         if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-        return hidden_states, attn_weights
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
 
 
 class {{cookiecutter.camelcase_modelname}}DecoderLayer(nn.Module):
@@ -2407,6 +2413,7 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                 )
+            hidden_states = layer_outputs[0]
 
             if use_cache:
                 next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
