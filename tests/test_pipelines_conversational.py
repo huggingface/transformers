@@ -92,6 +92,7 @@ class SimpleConversationPipelineTests(unittest.TestCase):
             ),
         )
 
+    @require_torch
     def test_history_cache(self):
         nlp = self.get_pipeline()
         conversation = Conversation(
