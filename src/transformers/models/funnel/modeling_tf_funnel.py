@@ -257,7 +257,7 @@ class TFFunnelAttentionStructure:
                 # For block_index = 0 we only need the second one and leave the first one as None.
 
                 # First type
-                position_embeds_pooling = None
+                position_embeds_pooling = tf.fill([1], value=-1.0)
 
                 if block_index != 0:
                     pooled_pos = self.stride_pool_pos(pos, block_index)
@@ -281,9 +281,6 @@ class TFFunnelAttentionStructure:
                 rel_pos = tf.cast(rel_pos, dtype=zero_offset.dtype)
                 rel_pos = rel_pos + zero_offset
                 position_embeds_no_pooling = tf.gather(pos_embed, rel_pos, axis=0)
-
-                if position_embeds_pooling is None:
-                    position_embeds_pooling = tf.fill(shape_list(position_embeds_no_pooling), value=-1.0)
 
                 position_embeds_list.append([position_embeds_no_pooling, position_embeds_pooling])
             return position_embeds_list
