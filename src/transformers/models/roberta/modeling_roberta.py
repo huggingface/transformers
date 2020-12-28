@@ -285,7 +285,7 @@ class RobertaSelfOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Roberta
 class RobertaAttention(nn.Module):
-    @init_performer_attention_bertlike(RobertaSelfAttention)
+    @init_performer_attention_bertlike(RobertaSelfAttention)    # Initializes .self appropriately
     def __init__(self, config):
         super().__init__()
         self.output = RobertaSelfOutput(config)

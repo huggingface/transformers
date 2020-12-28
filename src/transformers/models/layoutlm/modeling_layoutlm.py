@@ -271,7 +271,7 @@ class LayoutLMSelfOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->LayoutLM
 class LayoutLMAttention(nn.Module):
-    @init_performer_attention_bertlike(LayoutLMSelfAttention)
+    @init_performer_attention_bertlike(LayoutLMSelfAttention)    # Initializes .self appropriately
     def __init__(self, config):
         super().__init__()
         self.output = LayoutLMSelfOutput(config)

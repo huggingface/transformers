@@ -44,7 +44,12 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         self.orthogonal_feature_algorithm = resolve_enum(OrthogonalFeatureAlgorithm, self.orthogonal_feature_algorithm)
         assert self.orthogonal_feature_algorithm != OrthogonalFeatureAlgorithm.kacs,\
             "Kac's random walk is not supported in TensorFlow"
+
+        # Create the feature matrix up front if we don't need to know what the batch dimension is;
+        # otherwise, lazily create it on the first forward pass
         self.random_features = None
+        if not self.use_thick_features:
+            self._generate_feature_matrix(batch_size=1)
 
         # Recurrent state
         if self.use_recurrent_decoding:

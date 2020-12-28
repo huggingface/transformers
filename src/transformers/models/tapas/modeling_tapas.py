@@ -442,7 +442,7 @@ class TapasSelfOutput(nn.Module):
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Tapas
 class TapasAttention(nn.Module):
-    @init_performer_attention_bertlike(TapasSelfAttention)
+    @init_performer_attention_bertlike(TapasSelfAttention)    # Initializes .self appropriately
     def __init__(self, config):
         super().__init__()
         self.output = TapasSelfOutput(config)

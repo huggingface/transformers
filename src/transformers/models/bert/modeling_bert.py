@@ -350,7 +350,7 @@ class BertSelfOutput(nn.Module):
 
 
 class BertAttention(nn.Module):
-    @init_performer_attention_bertlike(BertSelfAttention)   # Sets self.attention attribute appropriately
+    @init_performer_attention_bertlike(BertSelfAttention)   # Sets .self attribute appropriately
     def __init__(self, config):
         super().__init__()
         self.output = BertSelfOutput(config)

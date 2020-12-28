@@ -55,7 +55,12 @@ class PerformerAttention(nn.Module):
             self.orthogonal_feature_algorithm = OrthogonalFeatureAlgorithm.kacs
 
         self.random_feature_chain = None
+
+        # Create the feature matrix up front if we don't need to know what the batch dimension is;
+        # otherwise, lazily create it on the first forward pass
         self.random_features = None
+        if not self.use_thick_features:
+            self._generate_feature_matrix(batch_size=1)
 
         self.kernel_type = resolve_enum(PerformerKernel, self.kernel_type)
         self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
@@ -257,7 +262,7 @@ class PerformerAttention(nn.Module):
         """
         device = self.random_features.device
         batch = self.random_features.shape[0]
-        self._get_feature_matrix(batch, device)
+        self._generate_feature_matrix(batch, device)
 
         if self.training and self.redraw_verbose:
             logging.getLogger().info("PerformerAttention: Just redrew random features.")
@@ -271,7 +276,7 @@ class PerformerAttention(nn.Module):
         self.s = None
         self.z = None
 
-    def _get_feature_matrix(self, batch_size, device):
+    def _generate_feature_matrix(self, batch_size, device):
         dim_per_head = self.d_model // self.num_heads
         num_rows = self.num_random_features or round(dim_per_head * math.log(dim_per_head))
         batch = batch_size if self.use_thick_features else 1
@@ -314,12 +319,17 @@ class PerformerAttention(nn.Module):
         new_shape = list(output_tensor.shape)
         new_shape[0] = batch_size  # This is redundant if use_thick_features == True, but not otherwise
         new_shape[1] = self.num_heads
-        self.random_features = output_tensor.expand(*new_shape).transpose(-2, -1)
+        output_tensor = output_tensor.expand(*new_shape).transpose(-2, -1)
+
+        if self.random_features is None:
+            self.random_features = torch.nn.Parameter(output_tensor, requires_grad=False)
+        else:
+            self.random_features.data = output_tensor
 
     def _redraw_features_if_needed(self, batch, device):
         # We haven't created the projection matrix yet, let's create it
         if self.random_features is None or batch != self.random_features.shape[0]:
-            self._get_feature_matrix(batch, device)
+            self._generate_feature_matrix(batch, device)
 
         elif self.feature_redraw_interval is not None:
             if self.redraw_stochastically:
