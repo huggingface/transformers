@@ -20,6 +20,90 @@ This page lists all the utility functions used by :meth:`~transformers.Pretraine
 
 Most of those are only useful if you are studying the code of the generate methods in the library.
 
+Generate Outputs
+-----------------------------------------------------------------------------------------------------------------------
+
+The output of :meth:`~transformers.PretrainedModel.generate` is an instance of a subclass of
+:class:`~transformers.file_utils.ModelOutput`. This output is a data structures containing all the information returned
+by :meth:`~transformers.PretrainedModel.generate`, but that can also be used as tuples or dictionaries.
+
+Let's see of this looks on an example:
+
+.. code-block::
+
+    from transformers import GPT2Tokenizer, GPT2LMHeadModel
+
+    tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+    model = GPT2LMHeadModel.from_pretrained('gpt2')
+
+    inputs = tokenizer("Hello, my dog is cute and ", return_tensors="pt")
+    sequences = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
+
+The ``outputs`` object is a :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput`, as we can see in the
+documentation of that class below, it means it has a ``sequences`` an optional ``scores``, an optional
+``hidden_states`` and an optional ``attentions`` attribute. Here we have the ``scores`` since we passed along
+``output_scores=True``, but we don't have ``hidden_states`` and ``attentions`` because we didn't pass
+``output_hidden_states=True`` or ``output_attentions=True``.
+
+You can access each attribute as you would usually do, and if that attribute has not been returned by the model, you
+will get ``None``. Here for instance ``outputs.scores`` are all the generated prediction scores of the language
+modeling head, and ``outputs.attentions`` is ``None``.
+
+When considering our ``outputs`` object as tuple, it only considers the attributes that don't have ``None`` values.
+Here for instance, it has two elements, ``loss`` then ``logits``, so
+
+.. code-block::
+
+    outputs[:2]
+
+will return the tuple ``(outputs.sequences, outputs.scores)`` for instance.
+
+When considering our ``outputs`` object as dictionary, it only considers the attributes that don't have ``None``
+values. Here for instance, it has two keys that are ``sequences`` and ``scores``.
+
+We document here all generation outputs.
+
+
+GreedySearchOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.generation_utils.GreedySearchDecoderOnlyOutput
+    :members:
+
+.. autoclass:: transformers.generation_utils.GreedySearchEncoderDecoderOutput
+    :members:
+
+
+SampleOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.generation_utils.SampleDecoderOnlyOutput
+    :members:
+
+.. autoclass:: transformers.generation_utils.SampleEncoderDecoderOutput
+    :members:
+
+
+BeamSearchOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.generation_utils.BeamSearchDecoderOnlyOutput
+    :members:
+
+.. autoclass:: transformers.generation_utils.BeamSearchEncoderDecoderOutput
+    :members:
+
+
+BeamSampleOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.generation_utils.BeamSampleDecoderOnlyOutput
+    :members:
+
+.. autoclass:: transformers.generation_utils.BeamSampleEncoderDecoderOutput
+    :members:
+
+
 LogitsProcessor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
