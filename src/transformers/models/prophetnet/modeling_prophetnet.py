@@ -1703,6 +1703,9 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
     def get_input_embeddings(self):
         return self.prophetnet.word_embeddings
 
@@ -1883,7 +1886,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
-        self.decoder = ProphetNetDecoder(config)
+        self.prophetnet = ProphetNetDecoderWrapper(config)
 
         self.padding_idx = config.pad_token_id
         self.disable_ngram_loss = config.disable_ngram_loss
@@ -1893,13 +1896,22 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         self.init_weights()
 
     def get_input_embeddings(self):
-        return self.decoder.word_embeddings
+        return self.prophetnet.decoder.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.decoder.word_embeddings = value
+        self.prophetnet.decoder.word_embeddings = value
 
     def get_output_embeddings(self):
         return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def set_decoder(self, decoder):
+        self.prophetnet.decoder = decoder
+
+    def get_decoder(self):
+        return self.prophetnet.decoder
 
     @add_start_docstrings_to_model_forward(PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ProphetNetDecoderLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1950,7 +1962,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
-            >>> model = ProphetNetForCausalLM.from_pretrained('patrickvonplaten/prophetnet-decoder-clm-large-uncased')
+            >>> model = ProphetNetForCausalLM.from_pretrained('microsoft/prophetnet-large-uncased')
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -1963,7 +1975,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
 
             >>> tokenizer_enc = BertTokenizer.from_pretrained('bert-large-uncased')
             >>> tokenizer_dec = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
-            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-large-uncased", "patrickvonplaten/prophetnet-decoder-clm-large-uncased")
+            >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-large-uncased", "microsoft/prophetnet-large-uncased")
 
             >>> ARTICLE = (
             ... "the us state department said wednesday it had received no "
@@ -1979,7 +1991,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.decoder(
+        outputs = self.prophetnet.decoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
@@ -2080,8 +2092,16 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
             reordered_past.append(layer_past_new)
         return reordered_past
 
-    def set_decoder(self, decoder):
-        self.decoder = decoder
 
-    def get_decoder(self):
-        return self.decoder
+class ProphetNetDecoderWrapper(ProphetNetPreTrainedModel):
+    """
+    This is a wrapper class, so that :class:`~transformers.ProphetNetForCausalLM` can correctly be loaded from
+    pretrained prophetnet classes.
+    """
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.decoder = ProphetNetDecoder(config)
+
+    def forward(self, *args, **kwargs):
+        return self.decoder(*args, **kwargs)

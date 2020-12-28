@@ -686,8 +686,10 @@ class TFMobileBertMLMHead(tf.keras.layers.Layer):
 class TFMobileBertMainLayer(tf.keras.layers.Layer):
     config_class = MobileBertConfig
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config, add_pooling_layer=True, **kwargs):
         super().__init__(**kwargs)
+
+        self.config = config
         self.num_hidden_layers = config.num_hidden_layers
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
@@ -695,10 +697,14 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
 
         self.embeddings = TFMobileBertEmbeddings(config, name="embeddings")
         self.encoder = TFMobileBertEncoder(config, name="encoder")
-        self.pooler = TFMobileBertPooler(config, name="pooler")
+        self.pooler = TFMobileBertPooler(config, name="pooler") if add_pooling_layer else None
 
     def get_input_embeddings(self):
         return self.embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.word_embeddings = value
+        self.embeddings.vocab_size = value.shape[0]
 
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError
@@ -726,6 +732,7 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -738,13 +745,6 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
             training=training,
             kwargs_call=kwargs,
         )
-        output_attentions = (
-            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        )
-        output_hidden_states = (
-            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
-        )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -798,16 +798,16 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
             embedding_output,
             extended_attention_mask,
             inputs["head_mask"],
-            output_attentions,
-            output_hidden_states,
-            return_dict,
+            inputs["output_attentions"],
+            inputs["output_hidden_states"],
+            inputs["return_dict"],
             training=inputs["training"],
         )
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
+        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return (
                 sequence_output,
                 pooled_output,
@@ -984,6 +984,7 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1027,7 +1028,13 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
         self.seq_relationship = TFMobileBertOnlyNSPHead(2, name="seq_relationship___cls")
 
     def get_output_embeddings(self):
-        return self.mobilebert.embeddings
+        return self.predictions.predictions
+
+    def get_output_layer_with_bias(self):
+        return self.predictions.predictions
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.predictions.name + "/" + self.predictions.predictions.name
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFMobileBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -1062,6 +1069,7 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1074,7 +1082,6 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1084,7 +1091,7 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
 
@@ -1092,7 +1099,7 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
         prediction_scores = self.predictions(sequence_output)
         seq_relationship_score = self.seq_relationship(pooled_output)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return (prediction_scores, seq_relationship_score) + outputs[2:]
 
         return TFMobileBertForPreTrainingOutput(
@@ -1105,17 +1112,28 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
 
 @add_start_docstrings("""MobileBert Model with a `language modeling` head on top. """, MOBILEBERT_START_DOCSTRING)
 class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModelingLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [
+        r"pooler",
+        r"seq_relationship___cls",
+        r"predictions___cls",
+        r"cls.seq_relationship",
+    ]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
+        self.mobilebert = TFMobileBertMainLayer(config, add_pooling_layer=False, name="mobilebert")
         self.mlm = TFMobileBertMLMHead(config, name="mlm___cls")
 
     def get_output_embeddings(self):
-        return self.mobilebert.embeddings
+        return self.mlm.predictions
+
+    def get_output_layer_with_bias(self):
+        return self.mlm.predictions
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1147,6 +1165,7 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1160,7 +1179,6 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1170,16 +1188,15 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
         sequence_output = outputs[0]
         prediction_scores = self.mlm(sequence_output, training=inputs["training"])
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], prediction_scores)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (prediction_scores,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1206,6 +1223,9 @@ class TFMobileBertOnlyNSPHead(tf.keras.layers.Layer):
     MOBILEBERT_START_DOCSTRING,
 )
 class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextSentencePredictionLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"predictions___cls", r"cls.predictions"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1248,6 +1268,7 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1261,7 +1282,6 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1271,10 +1291,9 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
         pooled_output = outputs[1]
         seq_relationship_scores = self.cls(pooled_output)
 
@@ -1284,7 +1303,7 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
             else self.compute_loss(labels=inputs["next_sentence_label"], logits=seq_relationship_scores)
         )
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (seq_relationship_scores,) + outputs[2:]
             return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
 
@@ -1304,6 +1323,15 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
     MOBILEBERT_START_DOCSTRING,
 )
 class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSequenceClassificationLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [
+        r"predictions___cls",
+        r"seq_relationship___cls",
+        r"cls.predictions",
+        r"cls.seq_relationship",
+    ]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -1344,6 +1372,7 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1357,7 +1386,6 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1367,18 +1395,17 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
         pooled_output = outputs[1]
 
-        pooled_output = self.dropout(pooled_output, training=training)
+        pooled_output = self.dropout(pooled_output, training=inputs["training"])
         logits = self.classifier(pooled_output)
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1398,14 +1425,20 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
     MOBILEBERT_START_DOCSTRING,
 )
 class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAnsweringLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [
+        r"pooler",
+        r"predictions___cls",
+        r"seq_relationship___cls",
+        r"cls.predictions",
+        r"cls.seq_relationship",
+    ]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
+        self.mobilebert = TFMobileBertMainLayer(config, add_pooling_layer=False, name="mobilebert")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
@@ -1445,6 +1478,7 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1459,7 +1493,6 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1469,10 +1502,9 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
         sequence_output = outputs[0]
 
         logits = self.qa_outputs(sequence_output)
@@ -1486,7 +1518,7 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
             labels["end_position"] = inputs["end_positions"]
             loss = self.compute_loss(labels, (start_logits, end_logits))
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (start_logits, end_logits) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1507,6 +1539,15 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
     MOBILEBERT_START_DOCSTRING,
 )
 class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoiceLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [
+        r"predictions___cls",
+        r"seq_relationship___cls",
+        r"cls.predictions",
+        r"cls.seq_relationship",
+    ]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1558,6 +1599,7 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1571,7 +1613,6 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
 
         if inputs["input_ids"] is not None:
             num_choices = shape_list(inputs["input_ids"])[1]
@@ -1604,17 +1645,17 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
             flat_inputs_embeds,
             inputs["output_attentions"],
             inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         pooled_output = outputs[1]
-        pooled_output = self.dropout(pooled_output, training=training)
+        pooled_output = self.dropout(pooled_output, training=inputs["training"])
         logits = self.classifier(pooled_output)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], reshaped_logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1634,14 +1675,21 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
     MOBILEBERT_START_DOCSTRING,
 )
 class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenClassificationLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [
+        r"pooler",
+        r"predictions___cls",
+        r"seq_relationship___cls",
+        r"cls.predictions",
+        r"cls.seq_relationship",
+    ]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
+        self.mobilebert = TFMobileBertMainLayer(config, add_pooling_layer=False, name="mobilebert")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
@@ -1676,6 +1724,7 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1689,7 +1738,6 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.mobilebert.return_dict
         outputs = self.mobilebert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1702,15 +1750,14 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
             return_dict=return_dict,
             training=inputs["training"],
         )
-
         sequence_output = outputs[0]
 
-        sequence_output = self.dropout(sequence_output, training=training)
+        sequence_output = self.dropout(sequence_output, training=inputs["training"])
         logits = self.classifier(sequence_output)
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 

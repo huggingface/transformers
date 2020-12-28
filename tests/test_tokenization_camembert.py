@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Google T5 Authors and HuggingFace Inc. team.
+# Copyright 2018 HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.

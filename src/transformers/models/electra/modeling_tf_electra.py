@@ -69,59 +69,59 @@ TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->Electra
 class TFElectraSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number "
+                f"of attention heads ({config.num_attention_heads})"
             )
 
         self.num_attention_heads = config.num_attention_heads
-        assert config.hidden_size % config.num_attention_heads == 0
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.query = tf.keras.layers.Dense(
-            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
+        self.query = tf.keras.layers.experimental.EinsumDense(
+            equation="abc,cde->abde",
+            output_shape=(None, config.num_attention_heads, self.attention_head_size),
+            bias_axes="de",
+            kernel_initializer=get_initializer(initializer_range=config.initializer_range),
+            name="query",
         )
-        self.key = tf.keras.layers.Dense(
-            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
+        self.key = tf.keras.layers.experimental.EinsumDense(
+            equation="abc,cde->abde",
+            output_shape=(None, config.num_attention_heads, self.attention_head_size),
+            bias_axes="de",
+            kernel_initializer=get_initializer(initializer_range=config.initializer_range),
+            name="key",
         )
-        self.value = tf.keras.layers.Dense(
-            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
+        self.value = tf.keras.layers.experimental.EinsumDense(
+            equation="abc,cde->abde",
+            output_shape=(None, config.num_attention_heads, self.attention_head_size),
+            bias_axes="de",
+            kernel_initializer=get_initializer(initializer_range=config.initializer_range),
+            name="value",
         )
-        self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x, batch_size):
-        x = tf.reshape(x, (batch_size, -1, self.num_attention_heads, self.attention_head_size))
+    def call(self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False, training=False):
+        query_layer = self.query(inputs=hidden_states)
+        key_layer = self.key(inputs=hidden_states)
+        value_layer = self.value(inputs=hidden_states)
 
-        return tf.transpose(x, perm=[0, 2, 1, 3])
-
-    def call(self, hidden_states, attention_mask, head_mask, output_attentions, training=False):
-        batch_size = shape_list(hidden_states)[0]
-        mixed_query_layer = self.query(hidden_states)
-        mixed_key_layer = self.key(hidden_states)
-        mixed_value_layer = self.value(hidden_states)
-        query_layer = self.transpose_for_scores(mixed_query_layer, batch_size)
-        key_layer = self.transpose_for_scores(mixed_key_layer, batch_size)
-        value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = tf.matmul(
-            query_layer, key_layer, transpose_b=True
-        )  # (batch size, num_heads, seq_len_q, seq_len_k)
-        dk = tf.cast(shape_list(key_layer)[-1], attention_scores.dtype)  # scale attention_scores
-        attention_scores = attention_scores / tf.math.sqrt(dk)
+        # Take the dot product between "query" and "key" to get the raw
+        # attention scores.
+        dk = tf.cast(x=self.attention_head_size, dtype=query_layer.dtype)
+        query_layer = tf.multiply(x=query_layer, y=tf.math.rsqrt(x=dk))
+        attention_scores = tf.einsum("aecd,abcd->acbe", key_layer, query_layer)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
+            # Apply the attention mask is (precomputed for all layers in TFElectraModel call() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = tf.nn.softmax(attention_scores, axis=-1)
+        attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -129,33 +129,42 @@ class TFElectraSelfAttention(tf.keras.layers.Layer):
 
         # Mask heads if we want to
         if head_mask is not None:
-            attention_probs = attention_probs * head_mask
+            attention_scores = attention_scores * head_mask
 
-        context_layer = tf.matmul(attention_probs, value_layer)
-        context_layer = tf.transpose(context_layer, perm=[0, 2, 1, 3])
-        context_layer = tf.reshape(
-            context_layer, (batch_size, -1, self.all_head_size)
-        )  # (batch_size, seq_len_q, all_head_size)
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        attention_output = tf.einsum("acbe,aecd->abcd", attention_probs, value_layer)
+        outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
 
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->Electra
 class TFElectraSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
-            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        if config.hidden_size % config.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number "
+                f"of attention heads ({config.num_attention_heads})"
+            )
+
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.dense = tf.keras.layers.experimental.EinsumDense(
+            equation="abcd,cde->abe",
+            output_shape=(None, self.all_head_size),
+            bias_axes="e",
+            kernel_initializer=get_initializer(initializer_range=config.initializer_range),
+            name="dense",
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def call(self, hidden_states, input_tensor, training=False):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states, training=training)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = self.dense(inputs=hidden_states)
+        hidden_states = self.dropout(inputs=hidden_states, training=training)
+        hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
 
@@ -186,18 +195,22 @@ class TFElectraIntermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
-            config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        self.dense = tf.keras.layers.experimental.EinsumDense(
+            equation="abc,cd->abd",
+            output_shape=(None, config.intermediate_size),
+            bias_axes="d",
+            kernel_initializer=get_initializer(initializer_range=config.initializer_range),
+            name="dense",
         )
 
         if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = get_tf_activation(config.hidden_act)
+            self.intermediate_act_fn = get_tf_activation(activation_string=config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
 
     def call(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
+        hidden_states = self.dense(inputs=hidden_states)
+        hidden_states = self.intermediate_act_fn(inputs=hidden_states)
 
         return hidden_states
 
@@ -207,16 +220,20 @@ class TFElectraOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.Dense(
-            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        self.dense = tf.keras.layers.experimental.EinsumDense(
+            equation="abc,cd->abd",
+            bias_axes="d",
+            output_shape=(None, config.hidden_size),
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="dense",
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def call(self, hidden_states, input_tensor, training=False):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states, training=training)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states = self.dense(inputs=hidden_states)
+        hidden_states = self.dropout(inputs=hidden_states, training=training)
+        hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
 
@@ -468,6 +485,9 @@ class TFElectraPreTrainedModel(TFPreTrainedModel):
 
     config_class = ElectraConfig
     base_model_prefix = "electra"
+    # When the model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"generator_lm_head.weight"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
 
 
 @keras_serializable
@@ -477,6 +497,7 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
+        self.config = config
         self.embeddings = TFElectraEmbeddings(config, name="embeddings")
 
         if config.embedding_size != config.hidden_size:
@@ -547,6 +568,7 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -559,15 +581,6 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
             training=training,
             kwargs_call=kwargs,
         )
-        output_attentions = (
-            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.config.output_attentions
-        )
-        output_hidden_states = (
-            inputs["output_hidden_states"]
-            if inputs["output_hidden_states"] is not None
-            else self.config.output_hidden_states
-        )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.config.use_return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -603,9 +616,9 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
             hidden_states,
             extended_attention_mask,
             inputs["head_mask"],
-            output_attentions,
-            output_hidden_states,
-            return_dict,
+            inputs["output_attentions"],
+            inputs["output_hidden_states"],
+            inputs["return_dict"],
             training=inputs["training"],
         )
 
@@ -759,6 +772,7 @@ class TFElectraModel(TFElectraPreTrainedModel):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -835,6 +849,7 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -847,9 +862,6 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = (
-            inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
-        )
         discriminator_hidden_states = self.electra(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -859,13 +871,13 @@ class TFElectraForPreTraining(TFElectraPreTrainedModel):
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
         logits = self.discriminator_predictions(discriminator_sequence_output)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return (logits,) + discriminator_hidden_states[1:]
 
         return TFElectraForPreTrainingOutput(
@@ -887,7 +899,7 @@ class TFElectraMaskedLMHead(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
-    def call(self, hidden_states):
+    def call(self, hidden_states, training=False):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
         hidden_states = hidden_states + self.bias
 
@@ -919,7 +931,13 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
         self.generator_lm_head = TFElectraMaskedLMHead(config, self.electra.embeddings, name="generator_lm_head")
 
     def get_output_embeddings(self):
+        return self.electra.embeddings
+
+    def get_output_layer_with_bias(self):
         return self.generator_lm_head
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.generator_lm_head.name
 
     @add_start_docstrings_to_model_forward(ELECTRA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -951,6 +969,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -964,9 +983,6 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = (
-            inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
-        )
         generator_hidden_states = self.electra(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -976,7 +992,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         generator_sequence_output = generator_hidden_states[0]
@@ -984,7 +1000,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
         prediction_scores = self.generator_lm_head(prediction_scores, training=inputs["training"])
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], prediction_scores)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (prediction_scores,) + generator_hidden_states[1:]
 
             return ((loss,) + output) if loss is not None else output
@@ -1066,6 +1082,7 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1079,9 +1096,6 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = (
-            inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
-        )
         outputs = self.electra(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1091,13 +1105,13 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         logits = self.classifier(outputs[0])
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[1:]
 
             return ((loss,) + output) if loss is not None else output
@@ -1169,6 +1183,7 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1181,9 +1196,6 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
             labels=labels,
             training=training,
             kwargs_call=kwargs,
-        )
-        return_dict = (
-            inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
         )
 
         if inputs["input_ids"] is not None:
@@ -1217,7 +1229,7 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
             flat_inputs_embeds,
             inputs["output_attentions"],
             inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         logits = self.sequence_summary(outputs[0])
@@ -1225,7 +1237,7 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
         reshaped_logits = tf.reshape(logits, (-1, num_choices))
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], reshaped_logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (reshaped_logits,) + outputs[1:]
 
             return ((loss,) + output) if loss is not None else output
@@ -1285,6 +1297,7 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1298,9 +1311,6 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = (
-            inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
-        )
         discriminator_hidden_states = self.electra(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1310,7 +1320,7 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
@@ -1318,7 +1328,7 @@ class TFElectraForTokenClassification(TFElectraPreTrainedModel, TFTokenClassific
         logits = self.classifier(discriminator_sequence_output)
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + discriminator_hidden_states[1:]
 
             return ((loss,) + output) if loss is not None else output
@@ -1383,6 +1393,7 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1397,9 +1408,6 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = (
-            inputs["return_dict"] if inputs["return_dict"] is not None else self.electra.config.use_return_dict
-        )
         discriminator_hidden_states = self.electra(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1409,7 +1417,7 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
@@ -1424,7 +1432,7 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
             labels["end_position"] = inputs["end_positions"]
             loss = self.compute_loss(labels, (start_logits, end_logits))
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (
                 start_logits,
                 end_logits,

@@ -1,0 +1,4 @@
+datasets >= 1.1.3
+faiss-cpu
+streamlit
+elasticsearch

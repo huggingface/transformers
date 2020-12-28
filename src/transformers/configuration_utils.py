@@ -95,6 +95,12 @@ class PretrainedConfig(object):
           sentences are finished per batch or not.
         - **num_beams** (:obj:`int`, `optional`, defaults to 1) -- Number of beams for beam search that will be used by
           default in the :obj:`generate` method of the model. 1 means no beam search.
+        - **num_beam_groups** (:obj:`int`, `optional`, defaults to 1) -- Number of groups to divide :obj:`num_beams`
+          into in order to ensure diversity among different groups of beams that will be used by default in the
+          :obj:`generate` method of the model. 1 means no group beam search.
+        - **diversity_penalty** (:obj:`float`, `optional`, defaults to 0.0) -- Value to control diversity for group
+          beam search. that will be used by default in the :obj:`generate` method of the model. 0 means no diversity
+          penalty. The higher the penalty, the more diverse are the outputs.
         - **temperature** (:obj:`float`, `optional`, defaults to 1) -- The value used to module the next token
           probabilities that will be used by default in the :obj:`generate` method of the model. Must be strictly
           positive.
@@ -185,6 +191,8 @@ class PretrainedConfig(object):
         self.do_sample = kwargs.pop("do_sample", False)
         self.early_stopping = kwargs.pop("early_stopping", False)
         self.num_beams = kwargs.pop("num_beams", 1)
+        self.num_beam_groups = kwargs.pop("num_beam_groups", 1)
+        self.diversity_penalty = kwargs.pop("diversity_penalty", 0.0)
         self.temperature = kwargs.pop("temperature", 1.0)
         self.top_k = kwargs.pop("top_k", 50)
         self.top_p = kwargs.pop("top_p", 1.0)
@@ -309,6 +317,9 @@ class PretrainedConfig(object):
             proxies (:obj:`Dict[str, str]`, `optional`):
                 A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+            use_auth_token (:obj:`str` or `bool`, `optional`):
+                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
             revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
@@ -323,6 +334,10 @@ class PretrainedConfig(object):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
                 by the ``return_unused_kwargs`` keyword parameter.
+
+        .. note::
+
+            Passing :obj:`use_auth_token=True` is required when you want to use a private model.
 
         Returns:
             :class:`PretrainedConfig`: The configuration object instantiated from this pretrained model.
@@ -365,6 +380,7 @@ class PretrainedConfig(object):
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
+        use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
 
@@ -387,6 +403,7 @@ class PretrainedConfig(object):
                 proxies=proxies,
                 resume_download=resume_download,
                 local_files_only=local_files_only,
+                use_auth_token=use_auth_token,
             )
             # Load config dict
             config_dict = cls._dict_from_json_file(resolved_config_file)

@@ -128,7 +128,7 @@ class TFLxmertForPreTrainingOutput(ModelOutput):
 
     """
 
-    loss: [tf.Tensor] = None
+    loss: Optional[tf.Tensor] = None
     prediction_logits: Optional[tf.Tensor] = None
     cross_relationship_score: Optional[tf.Tensor] = None
     question_answering_score: Optional[tf.Tensor] = None
@@ -687,6 +687,8 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
+        self.config = config
         self.num_l_layers = config.l_layers
         self.num_x_layers = config.x_layers
         self.num_r_layers = config.r_layers
@@ -729,6 +731,7 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             visual_feats=visual_feats,
             visual_pos=visual_pos,
@@ -742,13 +745,6 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
             training=training,
             kwargs_call=kwargs,
         )
-        output_attentions = (
-            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        )
-        output_hidden_states = (
-            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
-        )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -758,7 +754,6 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
             input_shape = shape_list(inputs["inputs_embeds"])[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
-
         if inputs["visual_pos"] is None or inputs["visual_feats"] is None:
             raise ValueError("visual_feats and visual_pos cannot be `None` in LXMERT's `call` method.")
 
@@ -804,7 +799,7 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
             inputs["visual_feats"],
             inputs["visual_pos"],
             extended_visual_attention_mask,
-            output_attentions=output_attentions,
+            output_attentions=inputs["output_attentions"],
             training=inputs["training"],
         )
         visual_encoder_outputs, lang_encoder_outputs = encoder_outputs[:2]
@@ -812,7 +807,7 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
         language_hidden_states = lang_encoder_outputs[0]
 
         all_attentions = ()
-        if output_attentions:
+        if inputs["output_attentions"]:
             language_attentions = lang_encoder_outputs[1]
             vision_attentions = visual_encoder_outputs[1]
             cross_encoder_attentions = encoder_outputs[2]
@@ -822,24 +817,24 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
                 cross_encoder_attentions,
             )
 
-        hidden_states = (language_hidden_states, vision_hidden_states) if output_hidden_states else ()
+        hidden_states = (language_hidden_states, vision_hidden_states) if inputs["output_hidden_states"] else ()
 
         visual_output = vision_hidden_states[-1]
         lang_output = language_hidden_states[-1]
         pooled_output = self.pooler(lang_output)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return (lang_output, visual_output, pooled_output) + hidden_states + all_attentions
 
         return TFLxmertModelOutput(
             pooled_output=pooled_output,
             language_output=lang_output,
             vision_output=visual_output,
-            language_hidden_states=language_hidden_states if output_hidden_states else None,
-            vision_hidden_states=vision_hidden_states if output_hidden_states else None,
-            language_attentions=language_attentions if output_attentions else None,
-            vision_attentions=vision_attentions if output_attentions else None,
-            cross_encoder_attentions=cross_encoder_attentions if output_attentions else None,
+            language_hidden_states=language_hidden_states if inputs["output_hidden_states"] else None,
+            vision_hidden_states=vision_hidden_states if inputs["output_hidden_states"] else None,
+            language_attentions=language_attentions if inputs["output_attentions"] else None,
+            vision_attentions=vision_attentions if inputs["output_attentions"] else None,
+            cross_encoder_attentions=cross_encoder_attentions if inputs["output_attentions"] else None,
         )
 
 
@@ -989,6 +984,7 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             visual_feats=visual_feats,
             visual_pos=visual_pos,
@@ -1261,6 +1257,15 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             **({"obj_labels": obj_labels} if self.config.task_obj_predict else {}),
         }
 
+    def get_output_embeddings(self):
+        return self.lxmert.embeddings
+
+    def get_output_layer_with_bias(self):
+        return self.cls.predictions
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.cls.name + "/" + self.cls.predictions.name
+
     @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFLxmertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def call(
@@ -1304,6 +1309,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             visual_feats=visual_feats,
             visual_pos=visual_pos,
@@ -1321,7 +1327,6 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.lxmert.return_dict
         lxmert_output = self.lxmert(
             input_ids=inputs["input_ids"],
             visual_feats=inputs["visual_feats"],
@@ -1407,7 +1412,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             losses += (answer_loss,)
         # return total_loss, tf.stack(losses)[tf.new_axis, ...], answer_score.detach()
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (
                 lang_prediction_scores,
                 cross_relationship_score,

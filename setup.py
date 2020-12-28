@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Simple check list from AllenNLP repo: https://github.com/allenai/allennlp/blob/master/setup.py
 
@@ -83,7 +97,7 @@ _deps = [
     "fastapi",
     "filelock",
     "flake8>=3.8.3",
-    "flax==0.2.2",
+    "flax>=0.2.2",
     "fugashi>=1.0",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -113,8 +127,8 @@ _deps = [
     "sphinx-rtd-theme==0.4.3",  # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
     "sphinx==3.2.1",
     "starlette",
-    "tensorflow-cpu>=2.0",
-    "tensorflow>=2.0",
+    "tensorflow-cpu>=2.3",
+    "tensorflow>=2.3",
     "timeout-decorator",
     "tokenizers==0.9.4",
     "torch>=1.0",
@@ -161,7 +175,7 @@ class DepsTableUpdateCommand(Command):
             "deps = {",
             entries,
             "}",
-            ""
+            "",
         ]
         target = "src/transformers/dependency_versions_table.py"
         print(f"updating {target}")
@@ -218,19 +232,19 @@ extras["dev"] = (
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
     deps["dataclasses"] + ";python_version<'3.7'",  # dataclasses for Python versions that don't have it
-    deps["filelock"],   # filesystem locks, e.g., to prevent parallel downloads
+    deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
     deps["numpy"],
     deps["packaging"],  # utilities from PyPA to e.g., compare versions
-    deps["regex"],      # for OpenAI GPT
-    deps["requests"],   # for downloading models over HTTPS
-    deps["sacremoses"], # for XLM
+    deps["regex"],  # for OpenAI GPT
+    deps["requests"],  # for downloading models over HTTPS
+    deps["sacremoses"],  # for XLM
     deps["tokenizers"],
-    deps["tqdm"],       # progress bars in model download and training scripts
+    deps["tqdm"],  # progress bars in model download and training scripts
 ]
 
 setup(
     name="transformers",
-    version="4.0.0-rc-1",
+    version="4.2.0.dev0", # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",

@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Glossary
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -214,7 +226,7 @@ Contrary to RNNs that have the position of each token embedded within them, tran
 each token. Therefore, the position IDs (``position_ids``) are used by the model to identify each token's position in
 the list of tokens.
 
-They are an optional parameter. If no ``position_ids`` is passed to the model, the IDs are automatically created as
+They are an optional parameter. If no ``position_ids`` are passed to the model, the IDs are automatically created as
 absolute positional embeddings.
 
 Absolute positional embeddings are selected in the range ``[0, config.max_position_embeddings - 1]``. Some models use

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -331,11 +331,30 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFBertModel.from_pretrained("jplu/tiny-tf-bert-random")
         self.assertIsNotNone(model)
 
+    def test_model_common_attributes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        list_lm_models = [TFBertForMaskedLM, TFBertForPreTraining, TFBertLMHeadModel]
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+
+            if model_class in list_lm_models:
+                x = model.get_output_layer_with_bias()
+                assert isinstance(x, tf.keras.layers.Layer)
+                name = model.get_prefix_bias_name()
+                assert isinstance(name, str)
+            else:
+                x = model.get_output_layer_with_bias()
+                assert x is None
+                name = model.get_prefix_bias_name()
+                assert x is None
+
     def test_custom_load_tf_weights(self):
         model, output_loading_info = TFBertForTokenClassification.from_pretrained(
             "jplu/tiny-tf-bert-random", output_loading_info=True
         )
-        self.assertEqual(sorted(output_loading_info["unexpected_keys"]), ["mlm___cls", "nsp___cls"])
+        self.assertEqual(sorted(output_loading_info["unexpected_keys"]), [])
         for layer in output_loading_info["missing_keys"]:
             self.assertTrue(layer.split("_")[0] in ["dropout", "classifier"])
 

@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import itertools
 import json
 import linecache
@@ -420,7 +434,8 @@ def use_task_specific_params(model, task):
 
     if task_specific_params is not None:
         pars = task_specific_params.get(task, {})
-        logger.info(f"using task specific params for {task}: {pars}")
+        logger.info(f"setting model.config to task specific params for {task}:\n {pars}")
+        logger.info("note: command line args may override some of these")
         model.config.update(pars)
 
 
@@ -448,7 +463,7 @@ def save_git_info(folder_path: str) -> None:
 
 def save_json(content, path, indent=4, **json_dump_kwargs):
     with open(path, "w") as f:
-        json.dump(content, f, indent=indent, **json_dump_kwargs)
+        json.dump(content, f, indent=indent, sort_keys=True, **json_dump_kwargs)
 
 
 def load_json(path):

@@ -467,6 +467,7 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
         self.decoder_bias = self.add_weight(
             shape=(self.vocab_size,), initializer="zeros", trainable=True, name="decoder/bias"
         )
+
         super().build(input_shape)
 
     def call(self, hidden_states):
@@ -481,20 +482,22 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
 class TFAlbertMainLayer(tf.keras.layers.Layer):
     config_class = AlbertConfig
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config, add_pooling_layer=True, **kwargs):
         super().__init__(**kwargs)
         self.num_hidden_layers = config.num_hidden_layers
-        self.output_attentions = config.output_attentions
-        self.output_hidden_states = config.output_hidden_states
-        self.return_dict = config.use_return_dict
+        self.config = config
 
         self.embeddings = TFAlbertEmbeddings(config, name="embeddings")
         self.encoder = TFAlbertTransformer(config, name="encoder")
-        self.pooler = tf.keras.layers.Dense(
-            config.hidden_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            activation="tanh",
-            name="pooler",
+        self.pooler = (
+            tf.keras.layers.Dense(
+                config.hidden_size,
+                kernel_initializer=get_initializer(config.initializer_range),
+                activation="tanh",
+                name="pooler",
+            )
+            if add_pooling_layer
+            else None
         )
 
     def get_input_embeddings(self):
@@ -530,6 +533,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -542,14 +546,6 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
             training=training,
             kwargs_call=kwargs,
         )
-
-        output_attentions = (
-            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        )
-        output_hidden_states = (
-            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
-        )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -603,16 +599,16 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
             embedding_output,
             extended_attention_mask,
             inputs["head_mask"],
-            output_attentions,
-            output_hidden_states,
-            return_dict,
+            inputs["output_attentions"],
+            inputs["output_hidden_states"],
+            inputs["return_dict"],
             training=inputs["training"],
         )
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output[:, 0])
+        pooled_output = self.pooler(sequence_output[:, 0]) if self.pooler is not None else None
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return (
                 sequence_output,
                 pooled_output,
@@ -778,6 +774,7 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -815,6 +812,9 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
     ALBERT_START_DOCSTRING,
 )
 class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"predictions.decoder.weight"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -825,6 +825,32 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.albert.embeddings
+
+    def resize_token_embeddings(self, new_num_tokens):
+        super().resize_token_embeddings(new_num_tokens=new_num_tokens)
+
+        # ALBERT is a special case where there are two bias to update
+        # even though self.bias is not used anywhere and is here
+        # just to make the loading weights from a PT model happy
+        if new_num_tokens is not None:
+            num_tokens_to_copy = min(self.predictions.bias.shape[0], new_num_tokens)
+            self.predictions.vocab_size = num_tokens_to_copy
+            init_bias = tf.zeros((new_num_tokens,))
+            init_bias[:num_tokens_to_copy] = self.predictions.bias.value()[:num_tokens_to_copy]
+            name = self.name + "/" + self.predictions.name + "/bias"
+            self.predictions.bias = self.add_weight(
+                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
+            )
+            self.predictions.bias.assign(init_bias)
+
+            init_decoder_bias = tf.zeros((new_num_tokens,))
+            init_decoder_bias[:num_tokens_to_copy] = self.predictions.decoder_bias.value()[:num_tokens_to_copy]
+            name = self.name + "/" + self.predictions.name + "/decoder_bias"
+            self.predictions.decoder_bias = self.add_weight(
+                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
+            )
+
+            self.predictions.decoder_bias.assign(init_decoder_bias)
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFAlbertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -862,6 +888,7 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
 
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -875,7 +902,6 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
             kwargs_call=kwargs,
         )
 
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.albert.return_dict
         outputs = self.albert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -892,7 +918,7 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
         prediction_scores = self.predictions(sequence_output)
         sop_scores = self.sop_classifier(pooled_output, training=inputs["training"])
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return (prediction_scores, sop_scores) + outputs[2:]
 
         return TFAlbertForPreTrainingOutput(
@@ -922,17 +948,43 @@ class TFAlbertSOPHead(tf.keras.layers.Layer):
 
 @add_start_docstrings("""Albert Model with a `language modeling` head on top. """, ALBERT_START_DOCSTRING)
 class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"predictions.decoder.weight"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.albert = TFAlbertMainLayer(config, name="albert")
+        self.albert = TFAlbertMainLayer(config, add_pooling_layer=False, name="albert")
         self.predictions = TFAlbertMLMHead(config, self.albert.embeddings, name="predictions")
 
     def get_output_embeddings(self):
         return self.albert.embeddings
+
+    def resize_token_embeddings(self, new_num_tokens):
+        super().resize_token_embeddings(new_num_tokens=new_num_tokens)
+
+        # ALBERT is a special case where there are two bias to update
+        # even though self.bias is not used anywhere and is here
+        # just to make the loading weights from a PT model happy
+        if new_num_tokens is not None:
+            num_tokens_to_copy = min(self.predictions.bias.shape[0], new_num_tokens)
+            self.predictions.vocab_size = num_tokens_to_copy
+            init_bias = tf.zeros((new_num_tokens,))
+            init_bias[:num_tokens_to_copy] = self.predictions.bias.value()[:num_tokens_to_copy]
+            name = self.name + "/" + self.predictions.name + "/bias"
+            self.predictions.bias = self.add_weight(
+                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
+            )
+            self.predictions.bias.assign(init_bias)
+
+            init_decoder_bias = tf.zeros((new_num_tokens,))
+            init_decoder_bias[:num_tokens_to_copy] = self.predictions.decoder_bias.value()[:num_tokens_to_copy]
+            name = self.name + "/" + self.predictions.name + "/decoder_bias"
+            self.predictions.decoder_bias = self.add_weight(
+                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
+            )
+
+            self.predictions.decoder_bias.assign(init_decoder_bias)
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -964,6 +1016,7 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -977,8 +1030,6 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
             training=training,
             kwargs_call=kwargs,
         )
-
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.albert.return_dict
         outputs = self.albert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -995,8 +1046,9 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
         prediction_scores = self.predictions(sequence_output, training=inputs["training"])
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], prediction_scores)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (prediction_scores,) + outputs[2:]
+
             return ((loss,) + output) if loss is not None else output
 
         return TFMaskedLMOutput(
@@ -1015,6 +1067,10 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
     ALBERT_START_DOCSTRING,
 )
 class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClassificationLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"predictions"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
@@ -1055,6 +1111,7 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1068,7 +1125,6 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.albert.return_dict
         outputs = self.albert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1086,8 +1142,9 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
         logits = self.classifier(pooled_output)
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
+
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
@@ -1106,14 +1163,15 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
     ALBERT_START_DOCSTRING,
 )
 class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificationLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"predictions"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.albert = TFAlbertMainLayer(config, name="albert")
+        self.albert = TFAlbertMainLayer(config, add_pooling_layer=False, name="albert")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
@@ -1148,6 +1206,7 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1161,7 +1220,6 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.albert.return_dict
         outputs = self.albert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1179,8 +1237,9 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
         logits = self.classifier(sequence_output)
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
+
             return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
@@ -1199,14 +1258,14 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
     ALBERT_START_DOCSTRING,
 )
 class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"predictions"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.albert = TFAlbertMainLayer(config, name="albert")
+        self.albert = TFAlbertMainLayer(config, add_pooling_layer=False, name="albert")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
@@ -1246,6 +1305,7 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1260,7 +1320,6 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.albert.return_dict
         outputs = self.albert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1285,8 +1344,9 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
             labels["end_position"] = inputs["end_positions"]
             loss = self.compute_loss(labels, (start_logits, end_logits))
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (start_logits, end_logits) + outputs[2:]
+
             return ((loss,) + output) if loss is not None else output
 
         return TFQuestionAnsweringModelOutput(
@@ -1306,6 +1366,10 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
     ALBERT_START_DOCSTRING,
 )
 class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"predictions"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1355,6 +1419,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1368,7 +1433,6 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.albert.return_dict
 
         if inputs["input_ids"] is not None:
             num_choices = shape_list(inputs["input_ids"])[1]
@@ -1400,7 +1464,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
             flat_inputs_embeds,
             inputs["output_attentions"],
             inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
 
@@ -1412,7 +1476,7 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], reshaped_logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 

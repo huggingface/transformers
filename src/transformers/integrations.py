@@ -1,7 +1,23 @@
-# Integrations with other Python libraries
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+Integrations with other Python libraries.
+"""
 import math
 import os
 
+from .trainer_utils import EvaluationStrategy
 from .utils import logging
 
 
@@ -47,8 +63,16 @@ try:
     import ray  # noqa: F401
 
     _has_ray = True
+    try:
+        # Ray Tune has additional dependencies.
+        from ray import tune  # noqa: F401
+
+        _has_ray_tune = True
+    except (ImportError):
+        _has_ray_tune = False
 except (ImportError):
     _has_ray = False
+    _has_ray_tune = False
 
 try:
     from torch.utils.tensorboard import SummaryWriter  # noqa: F401
@@ -75,6 +99,13 @@ try:
     _has_mlflow = True
 except ImportError:
     _has_mlflow = False
+
+try:
+    import fairscale  # noqa: F401
+
+    _has_fairscale = True
+except ImportError:
+    _has_fairscale = False
 
 # No transformer imports above this point
 
@@ -104,6 +135,10 @@ def is_ray_available():
     return _has_ray
 
 
+def is_ray_tune_available():
+    return _has_ray_tune
+
+
 def is_azureml_available():
     return _has_azureml
 
@@ -112,11 +147,15 @@ def is_mlflow_available():
     return _has_mlflow
 
 
+def is_fairscale_available():
+    return _has_fairscale
+
+
 def hp_params(trial):
     if is_optuna_available():
         if isinstance(trial, optuna.Trial):
             return trial.params
-    if is_ray_available():
+    if is_ray_tune_available():
         if isinstance(trial, dict):
             return trial
 
@@ -126,7 +165,7 @@ def hp_params(trial):
 def default_hp_search_backend():
     if is_optuna_available():
         return "optuna"
-    elif is_ray_available():
+    elif is_ray_tune_available():
         return "ray"
 
 
@@ -212,13 +251,13 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         # Check for `do_eval` and `eval_during_training` for schedulers that require intermediate reporting.
         if isinstance(
             kwargs["scheduler"], (ASHAScheduler, MedianStoppingRule, HyperBandForBOHB, PopulationBasedTraining)
-        ) and (not trainer.args.do_eval or not trainer.args.evaluate_during_training):
+        ) and (not trainer.args.do_eval or trainer.args.evaluation_strategy == EvaluationStrategy.NO):
             raise RuntimeError(
                 "You are using {cls} as a scheduler but you haven't enabled evaluation during training. "
                 "This means your trials will not report intermediate results to Ray Tune, and "
                 "can thus not be stopped early or used to exploit other trials parameters. "
                 "If this is what you want, do not use {cls}. If you would like to use {cls}, "
-                "make sure you pass `do_eval=True` and `evaluate_during_training=True` in the "
+                "make sure you pass `do_eval=True` and `evaluation_strategy='steps'` in the "
                 "Trainer `args`.".format(cls=type(kwargs["scheduler"]).__name__)
             )
 
