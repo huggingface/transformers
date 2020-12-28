@@ -21,7 +21,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import tensorflow as tf
 
-from ...activations_tf import ACT2FN
+from ...activations_tf import get_tf_activation
 from ...file_utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -218,7 +218,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         )
 
         # normalize query
-        query_vectors /= tf.math.sqrt(tf.constant(self.head_dim, dtype=tf.dtypes.float32))
+        query_vectors /= tf.math.sqrt(tf.convert_to_tensor(self.head_dim, dtype=tf.dtypes.float32))
         query_vectors = tf.reshape(query_vectors, (batch_size, seq_len, self.num_heads, self.head_dim))
         key_vectors = tf.reshape(key_vectors, (batch_size, seq_len, self.num_heads, self.head_dim))
 
@@ -367,7 +367,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         chunked_attention_scores = tf.einsum("bcxd,bcyd->bcxy", chunked_query, chunked_key)  # multiply
 
         # convert diagonals into columns
-        paddings = tf.constant([[0, 0], [0, 0], [0, 1], [0, 0]], dtype=tf.dtypes.int32)
+        paddings = tf.convert_to_tensor([[0, 0], [0, 0], [0, 1], [0, 0]], dtype=tf.dtypes.int32)
         diagonal_chunked_attention_scores = self._pad_and_transpose_last_two_dims(chunked_attention_scores, paddings)
 
         # allocate space for the overall attention matrix where the chunks are combined. The last dimension
@@ -450,7 +450,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         )
 
         # pad to full matrix
-        padding = tf.constant(
+        padding = tf.convert_to_tensor(
             [[0, shape_list(input_tensor)[1] - window_overlap], [0, shape_list(input_tensor)[3] - window_overlap - 1]]
         )
 
@@ -515,7 +515,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         )
 
         # pad seq_len with w at the beginning of the sequence and another window overlap at the end
-        paddings = tf.constant([[0, 0], [window_overlap, window_overlap], [0, 0]], dtype=tf.dtypes.int32)
+        paddings = tf.convert_to_tensor([[0, 0], [window_overlap, window_overlap], [0, 0]], dtype=tf.dtypes.int32)
         padded_value = tf.pad(value, paddings, constant_values=-1)
 
         # chunk padded_value into chunks of size 3 window overlap and an overlap of size window overlap
@@ -575,7 +575,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
                0.0000,  0.0000,  0.0000, 2.0514, -1.1600,  0.5372,  0.2629 ]
         """
         total_num_heads, num_chunks, window_overlap, hidden_dim = shape_list(chunked_hidden_states)
-        paddings = tf.constant([[0, 0], [0, 0], [0, 0], [0, window_overlap + 1]])
+        paddings = tf.convert_to_tensor([[0, 0], [0, 0], [0, 0], [0, window_overlap + 1]])
         chunked_hidden_states = tf.pad(
             chunked_hidden_states, paddings
         )  # total_num_heads x num_chunks x window_overlap x (hidden_dim+window_overlap+1). Padding value is not important because it'll be overwritten
@@ -771,7 +771,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         global_value_vectors = self.value_global(hidden_states)
 
         # normalize
-        global_query_vectors_only_global /= tf.math.sqrt(tf.constant(self.head_dim, dtype=tf.dtypes.float32))
+        global_query_vectors_only_global /= tf.math.sqrt(tf.convert_to_tensor(self.head_dim, dtype=tf.dtypes.float32))
         global_query_vectors_only_global = self.reshape_and_transpose(global_query_vectors_only_global, batch_size)
         global_key_vectors = self.reshape_and_transpose(global_key_vectors, batch_size)
         global_value_vectors = self.reshape_and_transpose(global_value_vectors, batch_size)
@@ -1017,7 +1017,7 @@ class TFLEDEncoderLayer(tf.keras.layers.Layer):
         self.self_attn = TFLEDEncoderAttention(config, layer_id, name="self_attn")
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_fn = get_tf_activation(config.activation_function)
         self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
         self.fc1 = tf.keras.layers.Dense(config.encoder_ffn_dim, name="fc1")
         self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
@@ -1077,7 +1077,7 @@ class TFLEDDecoderLayer(tf.keras.layers.Layer):
             is_decoder=True,
         )
         self.dropout = tf.keras.layers.Dropout(config.dropout)
-        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_fn = get_tf_activation(config.activation_function)
         self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
 
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
@@ -1169,10 +1169,10 @@ class TFLEDPreTrainedModel(TFPreTrainedModel):
 
     @property
     def dummy_inputs(self):
-        input_ids = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0]])
+        input_ids = tf.convert_to_tensor([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0]])
         # make sure global layers are initialized
-        attention_mask = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0]])
-        global_attention_mask = tf.constant([[0, 0, 0, 0, 1], [0, 0, 1, 0, 0]])
+        attention_mask = tf.convert_to_tensor([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0]])
+        global_attention_mask = tf.convert_to_tensor([[0, 0, 0, 0, 1], [0, 0, 1, 0, 0]])
         dummy_inputs = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
@@ -1663,7 +1663,7 @@ class TFLEDEncoder(tf.keras.layers.Layer):
                 )
             )
 
-            paddings = tf.constant([[0, 0], [0, padding_len]])
+            paddings = tf.convert_to_tensor([[0, 0], [0, padding_len]])
 
             if input_ids is not None:
                 input_ids = tf.pad(input_ids, paddings, constant_values=pad_token_id)
@@ -1805,7 +1805,7 @@ class TFLEDDecoder(tf.keras.layers.Layer):
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
         past_key_values_length = (
-            inputs["past_key_values"][0][0].shape[2] if inputs["past_key_values"] is not None else 0
+            shape_list(inputs["past_key_values"][0][0])[2] if inputs["past_key_values"] is not None else 0
         )
 
         # embed positions
@@ -2065,7 +2065,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         # LED is a special case where the bias has two dimensions
         # and not named just `bias`
         if new_num_tokens is not None:
-            num_tokens_to_copy = min(self.final_logits_bias.shape[0], new_num_tokens)
+            num_tokens_to_copy = min(shape_list(self.final_logits_bias), new_num_tokens)
             init_bias = tf.zeros((new_num_tokens,))
             init_bias[:num_tokens_to_copy] = self.final_logits_bias.value()[:num_tokens_to_copy]
             self.final_logits_bias = self.add_weight(
