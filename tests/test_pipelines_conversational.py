@@ -14,12 +14,21 @@
 
 import unittest
 
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, Conversation, ConversationalPipeline, pipeline
-from transformers.models.gpt2 import GPT2Config, GPT2LMHeadModel
+from transformers import (
+    AutoModelForSeq2SeqLM,
+    AutoTokenizer,
+    Conversation,
+    ConversationalPipeline,
+    is_torch_available,
+    pipeline,
+)
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_pipelines_common import DummyTok, MonoInputPipelineCommonMixin
 
+
+if is_torch_available():
+    from transformers.models.gpt2 import GPT2Config, GPT2LMHeadModel
 
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 
