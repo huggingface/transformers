@@ -15,11 +15,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from ...file_utils import is_tf_available, is_tokenizers_available, is_torch_available
-from .configuration_bart import BartConfig
+from ...file_utils import is_torch_available, is_tokenizers_available
+from .configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig
 from .tokenization_bart import BartTokenizer
-
 
 if is_tokenizers_available():
     from .tokenization_bart_fast import BartTokenizerFast
@@ -31,9 +29,7 @@ if is_torch_available():
         BartForQuestionAnswering,
         BartForSequenceClassification,
         BartModel,
-        BartPretrainedModel,
-        PretrainedBartModel,
+        BartPreTrainedModel,
     )
 
-if is_tf_available():
-    from .modeling_tf_bart import TFBartForConditionalGeneration, TFBartModel, TFBartPretrainedModel
+
