@@ -1893,6 +1893,8 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
         self.layerdrop = config.encoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
+        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+
 
         self.embed_tokens = embed_tokens
         self.embed_positions = TF{{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(
@@ -1969,7 +1971,7 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs["inputs_embeds"] is None:
-            inputs_embeds = self.embed_tokens(inputs["input_ids"])
+            inputs_embeds = self.embed_tokens(inputs["input_ids"]) * self.embed_scale
         else:
             inputs_embeds = inputs["inputs_embeds"]
 
@@ -2038,6 +2040,7 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
             self.padding_idx,
             name="embed_positions",
         )
+        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.layers = [TF{{cookiecutter.camelcase_modelname}}DecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
@@ -2142,7 +2145,7 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
         positions = self.embed_positions(input_shape, past_key_values_length)
 
         if inputs["inputs_embeds"] is None:
-            inputs["inputs_embeds"] = self.embed_tokens(inputs["input_ids"])
+            inputs["inputs_embeds"] = self.embed_tokens(inputs["input_ids"]) * self.embed_scale
 
         hidden_states = inputs["inputs_embeds"]
 
