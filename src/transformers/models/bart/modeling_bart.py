@@ -15,7 +15,9 @@
 """ PyTorch BART model. """
 
 
+import math
 import random
+import warnings
 from typing import Optional, Tuple
 
 import torch
@@ -86,9 +88,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-def _expand_mask(
-    mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None
-):
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -115,13 +115,16 @@ def BartLayerNorm(normalized_shape: torch.Size, eps: float = 1e-5, elementwise_a
 
 class BartLearnedPositionalEmbedding(nn.Embedding):
     """
-    This module learns positional embeddings up to a fixed maximum size. 
+    This module learns positional embeddings up to a fixed maximum size.
     """
 
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int):
         assert padding_idx is not None, "`padding_idx` should not be None, but of type int"
         num_embeddings
-        super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
+        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # and adjust num_embeddings appropriately. Other models dont have this hack
+        self.offset = 2
+        super().__init__(num_embeddings + self.offset, embedding_dim, padding_idx=padding_idx)
 
     def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
@@ -129,7 +132,7 @@ class BartLearnedPositionalEmbedding(nn.Embedding):
         positions = torch.arange(
             past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
         )
-        return super().forward(positions)
+        return super().forward(positions + self.offset)
 
 
 class BartAttention(nn.Module):
@@ -451,7 +454,7 @@ class BartClassificationHead(nn.Module):
         return hidden_states
 
 
-class BartPreTrainedModel(PreTrainedModel):
+class BartPretrainedModel(PreTrainedModel):
     config_class = BartConfig
     base_model_prefix = "model"
 
@@ -477,6 +480,14 @@ class BartPreTrainedModel(PreTrainedModel):
         return dummy_inputs
 
 
+class PretrainedBartModel(BartPretrainedModel):
+    def __init_subclass__(self):
+        warnings.warn(
+            "The class `PretrainedBartModel` has been depreciated, please use `BartPretrainedModel` instead.",
+            FutureWarning,
+        )
+
+
 BART_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
@@ -488,10 +499,9 @@ BART_START_DOCSTRING = r"""
 
     Parameters:
         config (:class:`~transformers.BartConfig`):
-            Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
 BART_GENERATION_EXAMPLE = r"""
@@ -575,7 +585,7 @@ BART_INPUTS_DOCSTRING = r"""
 """
 
 
-class BartEncoder(BartPreTrainedModel):
+class BartEncoder(BartPretrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
     :class:`BartEncoderLayer`.
@@ -723,7 +733,7 @@ class BartEncoder(BartPreTrainedModel):
         )
 
 
-class BartDecoder(BartPreTrainedModel):
+class BartDecoder(BartPretrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`BartDecoderLayer`
 
@@ -949,7 +959,7 @@ class BartDecoder(BartPreTrainedModel):
     "The bare BART Model outputting raw hidden-states without any specific head on top.",
     BART_START_DOCSTRING,
 )
-class BartModel(BartPreTrainedModel):
+class BartModel(BartPretrainedModel):
     def __init__(self, config: BartConfig):
         super().__init__(config)
 
@@ -997,6 +1007,14 @@ class BartModel(BartPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+
+        # different to other models, Bart automatically creates decoder_input_ids from
+        # input_ids if no decoder_input_ids are provided
+        if decoder_input_ids is None and decoder_inputs_embeds is None:
+            decoder_input_ids = shift_tokens_right(
+                input_ids, self.config.pad_token_id, self.config.decoder_start_token_id
+            )
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1053,7 +1071,7 @@ class BartModel(BartPreTrainedModel):
 @add_start_docstrings(
     "The BART Model with a language modeling head. Can be used for summarization.", BART_START_DOCSTRING
 )
-class BartForConditionalGeneration(BartPreTrainedModel):
+class BartForConditionalGeneration(BartPretrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
         r"final_logits_bias",
@@ -1143,7 +1161,9 @@ class BartForConditionalGeneration(BartPreTrainedModel):
 
         if labels is not None:
             if decoder_input_ids is None:
-                decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
+                decoder_input_ids = shift_tokens_right(
+                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                )
 
         outputs = self.model(
             input_ids,
@@ -1198,6 +1218,18 @@ class BartForConditionalGeneration(BartPreTrainedModel):
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
+    def adjust_logits_during_generation(self, logits, cur_len, max_length):
+        if cur_len == 1 and self.config.force_bos_token_to_be_generated:
+            self._force_token_id_to_be_generated(logits, self.config.bos_token_id)
+        elif cur_len == max_length - 1 and self.config.eos_token_id is not None:
+            self._force_token_id_to_be_generated(logits, self.config.eos_token_id)
+        return logits
+
+    @staticmethod
+    def _force_token_id_to_be_generated(scores, token_id) -> None:
+        """force one of token_ids to be generated by setting prob of all other tokens to 0 (logprob=-float("inf"))"""
+        scores[:, [x for x in range(scores.shape[1]) if x != token_id]] = -float("inf")
+
     @staticmethod
     def _reorder_cache(past, beam_idx):
         reordered_past = ()
@@ -1213,7 +1245,7 @@ class BartForConditionalGeneration(BartPreTrainedModel):
     """,
     BART_START_DOCSTRING,
 )
-class BartForSequenceClassification(BartPreTrainedModel):
+class BartForSequenceClassification(BartPretrainedModel):
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = BartModel(config)
@@ -1315,7 +1347,7 @@ class BartForSequenceClassification(BartPreTrainedModel):
     """,
     BART_START_DOCSTRING,
 )
-class BartForQuestionAnswering(BartPreTrainedModel):
+class BartForQuestionAnswering(BartPretrainedModel):
     def __init__(self, config):
         super().__init__(config)
 

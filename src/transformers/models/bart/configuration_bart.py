@@ -28,14 +28,13 @@ BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class BartConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.BartModel`.
-    It is used to instantiate an BART model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the BART `facebook/bart-large <https://huggingface.co/facebook/bart-large>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.BartModel`. It is used to
+    instantiate an BART model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the BART `facebook/bart-large
+    <https://huggingface.co/facebook/bart-large>`__ architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
 
     Args:
@@ -81,6 +80,9 @@ class BartConfig(PretrainedConfig):
             https://arxiv.org/abs/1909.11556>`__ for more details.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        num_labels: (:obj:`int`, `optional`, defaults to 3):
+            The number of labels to use in :class:`~transformers.BartForSequenceClassification`.
+
         Example::
 
         >>> from transformers import BartModel, BartConfig
@@ -120,18 +122,21 @@ class BartConfig(PretrainedConfig):
         classifier_dropout=0.0,
         scale_embedding=False,
         gradient_checkpointing=False,
+        force_bos_token_to_be_generated=False,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        num_labels=3,
         **kwargs
     ):
         super().__init__(
+            num_labels=num_labels,
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
-            **kwargs
+            **kwargs,
         )
 
         self.vocab_size = vocab_size
@@ -155,8 +160,8 @@ class BartConfig(PretrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.force_bos_token_to_be_generated = force_bos_token_to_be_generated  # only relevant for CNN
 
-        
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads
