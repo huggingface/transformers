@@ -228,6 +228,7 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+
         {% endif -%}
 
     {% if cookiecutter.is_encoder_decoder_model == "False" %}
