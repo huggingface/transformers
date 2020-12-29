@@ -1774,6 +1774,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
             position_ids = tf.pad(position_ids, paddings, constant_values=pad_token_id)
 
         if inputs_embeds is not None:
+
             def pad_embeddings():
                 input_ids_padding = tf.fill((batch_size, padding_len), self.pad_token_id)
                 inputs_embeds_padding = self.embeddings(input_ids_padding)
