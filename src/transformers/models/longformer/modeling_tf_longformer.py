@@ -1774,9 +1774,12 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
             position_ids = tf.pad(position_ids, paddings, constant_values=pad_token_id)
 
         if inputs_embeds is not None:
-            input_ids_padding = tf.fill((batch_size, padding_len), self.pad_token_id)
-            inputs_embeds_padding = self.embeddings(input_ids_padding)
-            inputs_embeds = tf.concat([inputs_embeds, inputs_embeds_padding], axis=-2)
+            def pad_embeddings():
+                input_ids_padding = tf.fill((batch_size, padding_len), self.pad_token_id)
+                inputs_embeds_padding = self.embeddings(input_ids_padding)
+                return tf.concat([inputs_embeds, inputs_embeds_padding], axis=-2)
+
+            inputs_embeds = tf.cond(padding_len > 0, pad_embeddings, lambda: inputs_embeds)
 
         attention_mask = tf.pad(attention_mask, paddings, constant_values=False)  # no attention on the padding tokens
         token_type_ids = tf.pad(token_type_ids, paddings, constant_values=0)  # pad with token_type_id = 0
