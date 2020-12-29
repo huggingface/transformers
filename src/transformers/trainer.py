@@ -241,6 +241,14 @@ class Trainer:
         if model is None and model_init is not None:
             model = self.call_model_init()
 
+        if self.args.model_parallel:
+            # XXX: ideally this register should be maintained elsewhere so that the trainer could just do
+            # if model.model_parallel_is_supported()
+            mp_supported = ["gpt2", "t5"]
+            assert (
+                model.config.model_type in mp_supported
+            ), f"{model.config.model_type} implementation currently doesn't support model parallelism, therefore --model_parallel cl arg cannot be used"
+
         # Model parallel
         if model is not None and not self.args.model_parallel:
             model = model.to(args.device)
