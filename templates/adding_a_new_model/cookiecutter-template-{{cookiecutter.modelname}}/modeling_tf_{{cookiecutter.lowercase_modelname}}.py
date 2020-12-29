@@ -1400,6 +1400,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering(TF{{cookiecutte
         )
 
 {% else %}
+import math
 import random
 from typing import Dict, Optional, Tuple, Union
 
