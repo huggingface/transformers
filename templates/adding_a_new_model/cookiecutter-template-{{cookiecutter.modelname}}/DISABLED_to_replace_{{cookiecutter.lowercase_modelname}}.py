@@ -30,9 +30,9 @@
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
     from .models.{{cookiecutter.lowercase_modelname}} import (
-        {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
-        {{cookiecutter.camelcase_modelname}}ForMaskedLM,
+        load_tf_weights_in_{{cookiecutter.lowercase_modelname}},
         {{cookiecutter.camelcase_modelname}}ForCausalLM,
+        {{cookiecutter.camelcase_modelname}}ForMaskedLM,
         {{cookiecutter.camelcase_modelname}}ForMultipleChoice,
         {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
         {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
@@ -40,15 +40,15 @@
         {{cookiecutter.camelcase_modelname}}Layer,
         {{cookiecutter.camelcase_modelname}}Model,
         {{cookiecutter.camelcase_modelname}}PreTrainedModel,
-        load_tf_weights_in_{{cookiecutter.lowercase_modelname}},
+        {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 {% else %}
     from .models.{{cookiecutter.lowercase_modelname}} import (
-        {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
         {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
         {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
         {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
         {{cookiecutter.camelcase_modelname}}Model,
+        {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
 {% endif -%}
 # End.
@@ -58,8 +58,8 @@
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
     from .models.{{cookiecutter.lowercase_modelname}} import (
         TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
         TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
+        TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
         TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
         TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
         TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
@@ -77,14 +77,20 @@
 {% endif -%}
 # End.
 
-# Below: "if is_tokenizers_available():"
-# Replace with:
+low: "if is_tokenizers_available():"
+    place with:
     from .models.{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}TokenizerFast
 # End.
 
 # Below: "from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig"
 # Replace with:
-from .models.{{cookiecutter.lowercase_modelname}} import {{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP, {{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}Tokenizer
+from .models.{{cookiecutter.lowercase_modelname}} import (
+    {{cookiecutter.camelcase_modelname}}Config,
+    {{cookiecutter.camelcase_modelname}}Tokenizer,
+    {{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP,
+)
+
+
 # End.
 
 
@@ -102,7 +108,12 @@ from .models.{{cookiecutter.lowercase_modelname}} import {{cookiecutter.uppercas
 
 # Below: "from ..albert.configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig",
 # Replace with:
-from ..{{cookiecutter.lowercase_modelname}}.configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP, {{cookiecutter.camelcase_modelname}}Config
+from ..{{cookiecutter.lowercase_modelname}}.configuration_{{cookiecutter.lowercase_modelname}} import (
+    {{cookiecutter.camelcase_modelname}}Config,
+    {{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP,
+)
+
+
 # End.
 
 # Below: "# Add full (and cased) model names here"
@@ -122,14 +133,16 @@ from ..{{cookiecutter.lowercase_modelname}}.configuration_{{cookiecutter.lowerca
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
 from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_modelname}} import (
-    {{cookiecutter.camelcase_modelname}}ForMaskedLM,
     {{cookiecutter.camelcase_modelname}}ForCausalLM,
+    {{cookiecutter.camelcase_modelname}}ForMaskedLM,
     {{cookiecutter.camelcase_modelname}}ForMultipleChoice,
     {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
     {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
     {{cookiecutter.camelcase_modelname}}ForTokenClassification,
     {{cookiecutter.camelcase_modelname}}Model,
 )
+
+
 {% else -%}
 from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_modelname}} import (
     {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
@@ -137,6 +150,8 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_mo
     {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
     {{cookiecutter.camelcase_modelname}}Model,
 )
+
+
 {% endif -%}
 # End.
 
@@ -214,19 +229,23 @@ from ..{{cookiecutter.lowercase_modelname}}.modeling_{{cookiecutter.lowercase_mo
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" -%}
 from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase_modelname}} import (
-    TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
     TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
+    TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
     TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
     TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
     TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
     TF{{cookiecutter.camelcase_modelname}}ForTokenClassification,
     TF{{cookiecutter.camelcase_modelname}}Model,
 )
+
+
 {% else -%}
 from ..{{cookiecutter.lowercase_modelname}}.modeling_tf_{{cookiecutter.lowercase_modelname}} import (
     TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
     TF{{cookiecutter.camelcase_modelname}}Model,
 )
+
+
 {% endif -%}
 # End.
 
