@@ -10,13 +10,13 @@
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
     specific language governing permissions and limitations under the License.
 
-MBART
+PEGASUS
 -----------------------------------------------------------------------------------------------------------------------
 
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The MBART model was proposed in `<INSERT PAPER NAME HERE>
+The PEGASUS model was proposed in `<INSERT PAPER NAME HERE>
 <<INSERT PAPER LINK HERE>>`__  by <INSERT AUTHORS HERE>. <INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
@@ -27,54 +27,54 @@ Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-MBartConfig
+PegasusConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.MBartConfig
+.. autoclass:: transformers.PegasusConfig
     :members:
 
 
-MBartTokenizer
+PegasusTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.MBartTokenizer
+.. autoclass:: transformers.PegasusTokenizer
     :members: build_inputs_with_special_tokens, get_special_tokens_mask,
         create_token_type_ids_from_sequences, save_vocabulary
 
 
-MBartTokenizerFast
+PegasusTokenizerFast
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.MBartTokenizerFast
+.. autoclass:: transformers.PegasusTokenizerFast
     :members: build_inputs_with_special_tokens, get_special_tokens_mask,
         create_token_type_ids_from_sequences, save_vocabulary
 
 
-MBartModel
+PegasusModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.MBartModel
+.. autoclass:: transformers.PegasusModel
     :members: forward
 
 
-MBartForConditionalGeneration
+PegasusForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.MBartForConditionalGeneration
+.. autoclass:: transformers.PegasusForConditionalGeneration
     :members: forward
 
 
-MBartForSequenceClassification
+PegasusForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.MBartForSequenceClassification
+.. autoclass:: transformers.PegasusForSequenceClassification
     :members: forward
 
 
-MBartForQuestionAnswering
+PegasusForQuestionAnswering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.MBartForQuestionAnswering
+.. autoclass:: transformers.PegasusForQuestionAnswering
     :members: forward
 
 

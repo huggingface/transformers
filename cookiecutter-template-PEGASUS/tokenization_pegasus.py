@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright The Facebook AI Research Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright Google and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,43 +12,40 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for MBART."""
+"""Tokenization classes for PEGASUS."""
 from ...utils import logging
-from ..bert.tokenization_bert import BertTokenizer
+from ..bart.tokenization_bart import BartTokenizer
 
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
-
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/mbart-large-cc25": "https://huggingface.co/facebook/mbart-large-cc25/resolve/main/vocab.txt",
-    }
+        "google/pegasus-large": "https://huggingface.co/google/pegasus-large/resolve/main/vocab.json",
+    },
+    "merges_file": {
+        "google/pegasus-large": "https://huggingface.co/google/pegasus-large/resolve/main/merges.txt",
+    },
+    "tokenizer_file": {
+        "google/pegasus-large": "https://huggingface.co/google/pegasus-large/resolve/main/tokenizer.json",
+    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/mbart-large-cc25": 512,
+    "google/pegasus-large": 1024,
 }
 
 
-PRETRAINED_INIT_CONFIGURATION = {
-    "facebook/mbart-large-cc25": {"do_lower_case": False},
-}
+class PegasusTokenizer(BartTokenizer):
+    """
+    Construct a PEGASUS tokenizer.
 
-
-class MBartTokenizer(BertTokenizer):
-    r"""
-    Construct a MBART tokenizer.
-
-    :class:`~transformers.MBartTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
+    :class:`~transformers.PegasusTokenizer` is identical to :class:`~transformers.BartTokenizer` and runs end-to-end
     tokenization: punctuation splitting and wordpiece.
 
-    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
+    Refer to superclass :class:`~transformers.BartTokenizer` for usage examples and documentation concerning
     parameters.
     """
 
-    vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION

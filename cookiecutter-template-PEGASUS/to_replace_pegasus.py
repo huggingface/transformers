@@ -29,33 +29,33 @@
 # Below: "if is_torch_available():" if generating PyTorch
 # Replace with:
 
-    from .models.mbart import (
-        MBART_PRETRAINED_MODEL_ARCHIVE_LIST,
-        MBartForConditionalGeneration,
-        MBartForQuestionAnswering,
-        MBartForSequenceClassification,
-        MBartModel,
+    from .models.pegasus import (
+        PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST,
+        PegasusForConditionalGeneration,
+        PegasusForQuestionAnswering,
+        PegasusForSequenceClassification,
+        PegasusModel,
     )
 # End.
 
 # Below: "if is_tf_available():" if generating TensorFlow
 # Replace with:
 
-    from .models.mbart import (
-        TFMBartForConditionalGeneration,
-        TFMBartModel,
-        TFMBartPreTrainedModel,
+    from .models.pegasus import (
+        TFPegasusForConditionalGeneration,
+        TFPegasusModel,
+        TFPegasusPreTrainedModel,
     )
 # End.
 
 # Below: "if is_tokenizers_available():"
 # Replace with:
-    from .models.mbart import MBartTokenizerFast
+    from .models.pegasus import PegasusTokenizerFast
 # End.
 
 # Below: "from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig"
 # Replace with:
-from .models.mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig, MBartTokenizer
+from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
 # End.
 
 
@@ -63,22 +63,22 @@ from .models.mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig, MBar
 # To replace in: "src/transformers/models/auto/configuration_auto.py"
 # Below: "# Add configs here"
 # Replace with:
-        ("mbart", MBartConfig),
+        ("pegasus", PegasusConfig),
 # End.
 
 # Below: "# Add archive maps here"
 # Replace with:
-        MBART_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP,
 # End.
 
 # Below: "from ..albert.configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig",
 # Replace with:
-from ..mbart.configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig
+from ..pegasus.configuration_pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig
 # End.
 
 # Below: "# Add full (and cased) model names here"
 # Replace with:
-        ("mbart", "MBart"),
+        ("pegasus", "Pegasus"),
 # End.
 
 
@@ -86,28 +86,28 @@ from ..mbart.configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBa
 # To replace in: "src/transformers/models/auto/modeling_auto.py" if generating PyTorch
 # Below: "from .configuration_auto import ("
 # Replace with:
-    MBartConfig,
+    PegasusConfig,
 # End.
 
 # Below: "# Add modeling imports here"
 # Replace with:
-from ..mbart.modeling_mbart import (
-    MBartForConditionalGeneration,
-    MBartForQuestionAnswering,
-    MBartForSequenceClassification,
-    MBartModel,
+from ..pegasus.modeling_pegasus import (
+    PegasusForConditionalGeneration,
+    PegasusForQuestionAnswering,
+    PegasusForSequenceClassification,
+    PegasusModel,
 )
 # End.
 
 # Below: "# Base model mapping"
 # Replace with:
-        (MBartConfig, MBartModel),
+        (PegasusConfig, PegasusModel),
 # End.
 
 # Below: "# Model with LM heads mapping"
 # Replace with:
 
-        (MBartConfig, MBartForConditionalGeneration),
+        (PegasusConfig, PegasusForConditionalGeneration),
 # End.
 
 # Below: "# Model for Causal LM mapping"
@@ -120,12 +120,12 @@ from ..mbart.modeling_mbart import (
 
 # Below: "# Model for Sequence Classification mapping"
 # Replace with:
-        (MBartConfig, MBartForSequenceClassification),
+        (PegasusConfig, PegasusForSequenceClassification),
 # End.
 
 # Below: "# Model for Question Answering mapping"
 # Replace with:
-        (MBartConfig, MBartForQuestionAnswering),
+        (PegasusConfig, PegasusForQuestionAnswering),
 # End.
 
 # Below: "# Model for Token Classification mapping"
@@ -139,32 +139,32 @@ from ..mbart.modeling_mbart import (
 # Below: "# Model for Seq2Seq Causal LM mapping"
 # Replace with:
 
-        (MBartConfig, MBartForConditionalGeneration),
+        (PegasusConfig, PegasusForConditionalGeneration),
 # End.
 
 # To replace in: "src/transformers/models/auto/modeling_tf_auto.py" if generating TensorFlow
 # Below: "from .configuration_auto import ("
 # Replace with:
-    MBartConfig,
+    PegasusConfig,
 # End.
 
 # Below: "# Add modeling imports here"
 # Replace with:
-from ..mbart.modeling_tf_mbart import (
-    TFMBartForConditionalGeneration,
-    TFMBartModel,
+from ..pegasus.modeling_tf_pegasus import (
+    TFPegasusForConditionalGeneration,
+    TFPegasusModel,
 )
 # End.
 
 # Below: "# Base model mapping"
 # Replace with:
-        (MBartConfig, TFMBartModel),
+        (PegasusConfig, TFPegasusModel),
 # End.
 
 # Below: "# Model with LM heads mapping"
 # Replace with:
 
-        (MBartConfig, TFMBartForConditionalGeneration),
+        (PegasusConfig, TFPegasusForConditionalGeneration),
 # End.
 
 # Below: "# Model for Causal LM mapping"
@@ -194,19 +194,19 @@ from ..mbart.modeling_tf_mbart import (
 # Below: "# Model for Seq2Seq Causal LM mapping"
 # Replace with:
 
-        (MBartConfig, TFMBartForConditionalGeneration),
+        (PegasusConfig, TFPegasusForConditionalGeneration),
 # End.
 
 # To replace in: "utils/check_repo.py" if generating PyTorch
 
 # Below: "models to ignore for model xxx mapping"
 # Replace with:
-"MBartEncoder",
-    "MBartDecoder",
+"PegasusEncoder",
+    "PegasusDecoder",
 # End.
 
 # Below: "models to ignore for not tested"
 # Replace with:
-"MBartEncoder",  # Building part of bigger (tested) model.
-    "MBartDecoder",  # Building part of bigger (tested) model.
+"PegasusEncoder",  # Building part of bigger (tested) model.
+    "PegasusDecoder",  # Building part of bigger (tested) model.
 # End.
