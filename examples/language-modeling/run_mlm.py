@@ -379,14 +379,15 @@ def main():
         train_result = trainer.train(model_path=model_path)
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
-        output_train_file = os.path.join(training_args.output_dir, "train_results.txt")
         if trainer.is_world_process_zero():
-            with open(output_train_file, "w") as writer:
-                logger.info("***** Train results *****")
-                for key, value in sorted(train_result.metrics.items()):
-                    logger.info(f"  {key} = {value}")
-                    writer.write(f"{key} = {value}\n")
-
+            if hasattr(train_result, "metrics"):
+                output_train_file = os.path.join(training_args.output_dir, "train_results.txt")
+                with open(output_train_file, "w") as writer:
+                    logger.info("***** Train results *****")
+                    for key, value in sorted(train_result.metrics.items()):
+                        logger.info(f"  {key} = {value}")
+                        writer.write(f"{key} = {value}\n")
+                        
             # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
             trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
 
