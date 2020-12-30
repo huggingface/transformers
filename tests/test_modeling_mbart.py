@@ -364,7 +364,6 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
         expected = {"scale_embedding": True, "output_past": True}
         for name in mbart_models:
             config = MBartConfig.from_pretrained(name)
-            self.assertTrue(config.is_valid_mbart())
             for k, v in expected.items():
                 try:
                     self.assertEqual(v, getattr(config, k))
