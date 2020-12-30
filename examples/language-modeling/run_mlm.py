@@ -389,7 +389,9 @@ def main():
                         writer.write(f"{key} = {value}\n")
                         
             # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
-            trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
+            trainer.state.save_to_json(
+                os.path.join(training_args.output_dir, "trainer_state.json")
+            )
 
     # Evaluation
     results = {}
