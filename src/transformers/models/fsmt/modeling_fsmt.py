@@ -265,14 +265,12 @@ FSMT_INPUTS_DOCSTRING = r"""
 
 
 have_fused_layer_norm = False
-if torch.cuda.is_available():
-    try:
-        from apex.normalization import FusedLayerNorm
+try:
+    from apex.normalization import FusedLayerNorm
 
-        have_fused_layer_norm = True
-    except ImportError:
-        pass
-
+    have_fused_layer_norm = True
+except ImportError:
+    pass
 LayerNorm = FusedLayerNorm if have_fused_layer_norm else torch.nn.LayerNorm
 
 
