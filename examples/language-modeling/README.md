@@ -30,6 +30,15 @@ need extra processing on your datasets.
 The following examples, will run on a datasets hosted on our [hub](https://huggingface.co/datasets) or with your own
 text files for training and validation. We give examples of both below.
 
+### Datasets
+
+The main dataset used in the examples below is:
+
+```bash
+wget https://s3.amazonaws.com/research.metamind.io/wikitext/wikitext-2-raw-v1.zip
+unzip wikitext-2-raw-v1.zip
+```
+
 ### GPT-2/GPT and causal language modeling
 
 The following example fine-tunes GPT-2 on WikiText-2. We're using the raw WikiText-2 (no tokens were replaced before
