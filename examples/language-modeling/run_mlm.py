@@ -381,19 +381,15 @@ def main():
 
         if trainer.is_world_process_zero():
             if hasattr(train_result, "metrics"):
-                output_train_file = os.path.join(
-                    training_args.output_dir, "train_results.txt"
-                )
+                output_train_file = os.path.join(training_args.output_dir, "train_results.txt")
                 with open(output_train_file, "w") as writer:
                     logger.info("***** Train results *****")
                     for key, value in sorted(train_result.metrics.items()):
                         logger.info(f"  {key} = {value}")
                         writer.write(f"{key} = {value}\n")
-                        
+
             # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
-            trainer.state.save_to_json(
-                os.path.join(training_args.output_dir, "trainer_state.json")
-            )
+            trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
 
     # Evaluation
     results = {}
