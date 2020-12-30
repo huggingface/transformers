@@ -15,7 +15,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...file_utils import is_torch_available, is_tokenizers_available
+from ...file_utils import is_torch_available, is_tokenizers_available, is_tf_available
 from .configuration_pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig
 from .tokenization_pegasus import PegasusTokenizer
 
@@ -32,4 +32,5 @@ if is_torch_available():
         PegasusPreTrainedModel,
     )
 
-
+if is_tf_available():
+    from .modeling_tf_pegasus import TFPegasusForConditionalGeneration
