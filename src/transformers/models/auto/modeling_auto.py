@@ -111,7 +111,12 @@ from ..longformer.modeling_longformer import (
 )
 from ..lxmert.modeling_lxmert import LxmertForPreTraining, LxmertForQuestionAnswering, LxmertModel
 from ..marian.modeling_marian import MarianMTModel
-from ..mbart.modeling_mbart import MBartForConditionalGeneration, MBartModel
+from ..mbart.modeling_mbart import (
+    MBartForConditionalGeneration,
+    MBartForQuestionAnswering,
+    MBartForSequenceClassification,
+    MBartModel,
+)
 from ..mobilebert.modeling_mobilebert import (
     MobileBertForMaskedLM,
     MobileBertForMultipleChoice,
@@ -428,6 +433,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (AlbertConfig, AlbertForSequenceClassification),
         (CamembertConfig, CamembertForSequenceClassification),
         (XLMRobertaConfig, XLMRobertaForSequenceClassification),
+        (MBartConfig, MBartForSequenceClassification),
         (BartConfig, BartForSequenceClassification),
         (LongformerConfig, LongformerForSequenceClassification),
         (RobertaConfig, RobertaForSequenceClassification),
@@ -457,6 +463,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (AlbertConfig, AlbertForQuestionAnswering),
         (CamembertConfig, CamembertForQuestionAnswering),
         (BartConfig, BartForQuestionAnswering),
+        (MBartConfig, MBartForQuestionAnswering),
         (LongformerConfig, LongformerForQuestionAnswering),
         (XLMRobertaConfig, XLMRobertaForQuestionAnswering),
         (RobertaConfig, RobertaForQuestionAnswering),

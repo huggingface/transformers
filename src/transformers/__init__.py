@@ -527,7 +527,12 @@ if is_torch_available():
         LxmertXLayer,
     )
     from .models.marian import MarianMTModel
-    from .models.mbart import MBartForConditionalGeneration, MBartModel
+    from .models.mbart import (
+        MBartForConditionalGeneration,
+        MBartForQuestionAnswering,
+        MBartForSequenceClassification,
+        MBartModel,
+    )
     from .models.mmbt import MMBTForClassification, MMBTModel, ModalEmbeddings
     from .models.mobilebert import (
         MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
