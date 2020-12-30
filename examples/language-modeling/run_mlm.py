@@ -381,7 +381,9 @@ def main():
 
         if trainer.is_world_process_zero():
             if hasattr(train_result, "metrics"):
-                output_train_file = os.path.join(training_args.output_dir, "train_results.txt")
+                output_train_file = os.path.join(
+                    training_args.output_dir, "train_results.txt"
+                )
                 with open(output_train_file, "w") as writer:
                     logger.info("***** Train results *****")
                     for key, value in sorted(train_result.metrics.items()):
