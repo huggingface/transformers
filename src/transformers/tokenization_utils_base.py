@@ -12,10 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Base classes common to both the slow and the fast tokenization classes:
-    PreTrainedTokenizerBase (host all the user fronting encoding methodes)
-    Special token mixing (host the special tokens logic) and
-    BatchEncoding (wrap the dictionnary of output with special method for the Fast tokenizers)
+"""
+Base classes common to both the slow and the fast tokenization classes: PreTrainedTokenizerBase (host all the user
+fronting encoding methods) Special token mixing (host the special tokens logic) and BatchEncoding (wrap the dictionary
+of output with special method for the Fast tokenizers)
 """
 
 import copy
@@ -23,20 +23,22 @@ import json
 import os
 import warnings
 from collections import OrderedDict, UserDict
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
 
-from tokenizers import AddedToken
-from tokenizers import Encoding as EncodingFast
+import requests
 
 from .file_utils import (
     add_end_docstrings,
     cached_path,
     hf_bucket_url,
+    is_flax_available,
     is_remote_url,
     is_tf_available,
+    is_tokenizers_available,
     is_torch_available,
     torch_required,
 )
@@ -45,8 +47,48 @@ from .utils import logging
 
 if is_tf_available():
     import tensorflow as tf
+
 if is_torch_available():
     import torch
+
+if is_flax_available():
+    import jax.numpy as jnp
+
+
+def _is_numpy(x):
+    return isinstance(x, np.ndarray)
+
+
+def _is_jax(x):
+    return isinstance(x, jnp.ndarray)
+
+
+if is_tokenizers_available():
+    from tokenizers import AddedToken
+    from tokenizers import Encoding as EncodingFast
+else:
+
+    @dataclass(frozen=True, eq=True)
+    class AddedToken:
+        """
+        AddedToken represents a token to be added to a Tokenizer An AddedToken can have special options defining the
+        way it should behave.
+        """
+
+        content: str = field(default_factory=str)
+        single_word: bool = False
+        lstrip: bool = False
+        rstrip: bool = False
+        normalized: bool = True
+
+        def __getstate__(self):
+            return self.__dict__
+
+    @dataclass
+    class EncodingFast:
+        """ This is dummy class because without the `tokenizers` library we don't have these objects anyway """
+
+        pass
 
 
 logger = logging.get_logger(__name__)
@@ -87,8 +129,8 @@ class ExplicitEnum(Enum):
 
 class TruncationStrategy(ExplicitEnum):
     """
-    Possible values for the ``truncation`` argument in :meth:`PreTrainedTokenizerBase.__call__`.
-    Useful for tab-completion in an IDE.
+    Possible values for the ``truncation`` argument in :meth:`PreTrainedTokenizerBase.__call__`. Useful for
+    tab-completion in an IDE.
     """
 
     ONLY_FIRST = "only_first"
@@ -99,8 +141,8 @@ class TruncationStrategy(ExplicitEnum):
 
 class PaddingStrategy(ExplicitEnum):
     """
-    Possible values for the ``padding`` argument in :meth:`PreTrainedTokenizerBase.__call__`.
-    Useful for tab-completion in an IDE.
+    Possible values for the ``padding`` argument in :meth:`PreTrainedTokenizerBase.__call__`. Useful for tab-completion
+    in an IDE.
     """
 
     LONGEST = "longest"
@@ -110,13 +152,14 @@ class PaddingStrategy(ExplicitEnum):
 
 class TensorType(ExplicitEnum):
     """
-    Possible values for the ``return_tensors`` argument in :meth:`PreTrainedTokenizerBase.__call__`.
-    Useful for tab-completion in an IDE.
+    Possible values for the ``return_tensors`` argument in :meth:`PreTrainedTokenizerBase.__call__`. Useful for
+    tab-completion in an IDE.
     """
 
     PYTORCH = "pt"
     TENSORFLOW = "tf"
     NUMPY = "np"
+    JAX = "jax"
 
 
 class CharSpan(NamedTuple):
@@ -145,10 +188,28 @@ class TokenSpan(NamedTuple):
     end: int
 
 
+def to_py_obj(obj):
+    """
+    Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a python list.
+    """
+    if isinstance(obj, (dict, BatchEncoding)):
+        return {k: to_py_obj(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [to_py_obj(o) for o in obj]
+    elif is_tf_available() and isinstance(obj, tf.Tensor):
+        return obj.numpy().tolist()
+    elif is_torch_available() and isinstance(obj, torch.Tensor):
+        return obj.detach().cpu().tolist()
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    else:
+        return obj
+
+
 class BatchEncoding(UserDict):
     """
-    Holds the output of the :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.encode_plus`
-    and :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.batch_encode` methods (tokens,
+    Holds the output of the :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.encode_plus` and
+    :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.batch_encode` methods (tokens,
     attention_masks, etc).
 
     This class is derived from a python dictionary and can be used as a dictionary. In addition, this class exposes
@@ -159,14 +220,17 @@ class BatchEncoding(UserDict):
             Dictionary of lists/arrays/tensors returned by the encode/batch_encode methods ('input_ids',
             'attention_mask', etc.).
         encoding (:obj:`tokenizers.Encoding` or :obj:`Sequence[tokenizers.Encoding]`, `optional`):
-            If the tokenizer is a fast tokenizer which outputs additional informations like mapping from word/character
-            space to token space the :obj:`tokenizers.Encoding` instance or list of instance (for batches) hold these
-            informations.
+            If the tokenizer is a fast tokenizer which outputs additional information like mapping from word/character
+            space to token space the :obj:`tokenizers.Encoding` instance or list of instance (for batches) hold this
+            information.
         tensor_type (:obj:`Union[None, str, TensorType]`, `optional`):
             You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
             initialization.
         prepend_batch_axis (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to add a batch axis when converting to tensors (see :obj:`tensor_type` above).
+        n_sequences (:obj:`Optional[int]`, `optional`):
+            You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
+            initialization.
     """
 
     def __init__(
@@ -175,6 +239,7 @@ class BatchEncoding(UserDict):
         encoding: Optional[Union[EncodingFast, Sequence[EncodingFast]]] = None,
         tensor_type: Union[None, str, TensorType] = None,
         prepend_batch_axis: bool = False,
+        n_sequences: Optional[int] = None,
     ):
         super().__init__(data)
 
@@ -183,7 +248,21 @@ class BatchEncoding(UserDict):
 
         self._encodings = encoding
 
+        if n_sequences is None and encoding is not None and len(encoding):
+            n_sequences = encoding[0].n_sequences
+
+        self._n_sequences = n_sequences
+
         self.convert_to_tensors(tensor_type=tensor_type, prepend_batch_axis=prepend_batch_axis)
+
+    @property
+    def n_sequences(self) -> Optional[int]:
+        """
+        :obj:`Optional[int]`: The number of sequences used to generate each sample from the batch encoded in this
+        :class:`~transformers.BatchEncoding`. Currently can be one of :obj:`None` (unknown), :obj:`1` (a single
+        sentence) or :obj:`2` (a pair of sentences)
+        """
+        return self._n_sequences
 
     @property
     def is_fast(self) -> bool:
@@ -195,8 +274,8 @@ class BatchEncoding(UserDict):
 
     def __getitem__(self, item: Union[int, str]) -> Union[Any, EncodingFast]:
         """
-        If the key is a string, returns the value of the dict associated to :obj:`key` ('input_ids',
-        'attention_mask', etc.).
+        If the key is a string, returns the value of the dict associated to :obj:`key` ('input_ids', 'attention_mask',
+        etc.).
 
         If the key is an integer, get the :obj:`tokenizers.Encoding` for batch item with index :obj:`key`.
         """
@@ -242,15 +321,15 @@ class BatchEncoding(UserDict):
     @property
     def encodings(self) -> Optional[List[EncodingFast]]:
         """
-        :obj:`Optional[List[tokenizers.Encoding]]`: The list all encodings from the tokenization process.
-        Returns :obj:`None` if the input was tokenized through Python (i.e., not a fast) tokenizer.
+        :obj:`Optional[List[tokenizers.Encoding]]`: The list all encodings from the tokenization process. Returns
+        :obj:`None` if the input was tokenized through Python (i.e., not a fast) tokenizer.
         """
         return self._encodings
 
     def tokens(self, batch_index: int = 0) -> List[str]:
         """
-        Return the list of tokens (sub-parts of the input strings after word/subword splitting and before converstion
-        to integer indices) at a given batch index (only works for the output of a fast tokenizer).
+        Return the list of tokens (sub-parts of the input strings after word/subword splitting and before conversion to
+        integer indices) at a given batch index (only works for the output of a fast tokenizer).
 
         Args:
             batch_index (:obj:`int`, `optional`, defaults to 0): The index to access in the batch.
@@ -261,6 +340,27 @@ class BatchEncoding(UserDict):
         if not self._encodings:
             raise ValueError("tokens() is not available when using Python-based tokenizers")
         return self._encodings[batch_index].tokens
+
+    def sequence_ids(self, batch_index: int = 0) -> List[Optional[int]]:
+        """
+        Return a list mapping the tokens to the id of their original sentences:
+
+            - :obj:`None` for special tokens added around or between sequences,
+            - :obj:`0` for tokens corresponding to words in the first sequence,
+            - :obj:`1` for tokens corresponding to words in the second sequence when a pair of sequences was jointly
+              encoded.
+
+        Args:
+            batch_index (:obj:`int`, `optional`, defaults to 0): The index to access in the batch.
+
+        Returns:
+            :obj:`List[Optional[int]]`: A list indicating the sequence id corresponding to each token. Special tokens
+            added by the tokenizer are mapped to :obj:`None` and other tokens are mapped to the index of their
+            corresponding sequence.
+        """
+        if not self._encodings:
+            raise ValueError("sequence_ids() is not available when using Python-based tokenizers")
+        return self._encodings[batch_index].sequence_ids
 
     def words(self, batch_index: int = 0) -> List[Optional[int]]:
         """
@@ -276,29 +376,88 @@ class BatchEncoding(UserDict):
         """
         if not self._encodings:
             raise ValueError("words() is not available when using Python-based tokenizers")
-        return self._encodings[batch_index].words
+        warnings.warn(
+            "`BatchEncoding.words()` property is deprecated and should be replaced with the identical, "
+            "but more self-explanatory `BatchEncoding.word_ids()` property.",
+            FutureWarning,
+        )
+        return self.word_ids(batch_index)
+
+    def word_ids(self, batch_index: int = 0) -> List[Optional[int]]:
+        """
+        Return a list mapping the tokens to their actual word in the initial sentence for a fast tokenizer.
+
+        Args:
+            batch_index (:obj:`int`, `optional`, defaults to 0): The index to access in the batch.
+
+        Returns:
+            :obj:`List[Optional[int]]`: A list indicating the word corresponding to each token. Special tokens added by
+            the tokenizer are mapped to :obj:`None` and other tokens are mapped to the index of their corresponding
+            word (several tokens will be mapped to the same word index if they are parts of that word).
+        """
+        if not self._encodings:
+            raise ValueError("word_ids() is not available when using Python-based tokenizers")
+        return self._encodings[batch_index].word_ids
+
+    def token_to_sequence(self, batch_or_token_index: int, token_index: Optional[int] = None) -> int:
+        """
+        Get the index of the sequence represented by the given token. In the general use case, this method returns
+        :obj:`0` for a single sequence or the first sequence of a pair, and :obj:`1` for the second sequence of a pair
+
+        Can be called as:
+
+        - ``self.token_to_sequence(token_index)`` if batch size is 1
+        - ``self.token_to_sequence(batch_index, token_index)`` if batch size is greater than 1
+
+        This method is particularly suited when the input sequences are provided as pre-tokenized sequences (i.e.,
+        words are defined by the user). In this case it allows to easily associate encoded tokens with provided
+        tokenized words.
+
+        Args:
+            batch_or_token_index (:obj:`int`):
+                Index of the sequence in the batch. If the batch only comprises one sequence, this can be the index of
+                the token in the sequence.
+            token_index (:obj:`int`, `optional`):
+                If a batch index is provided in `batch_or_token_index`, this can be the index of the token in the
+                sequence.
+
+        Returns:
+            :obj:`int`: Index of the word in the input sequence.
+        """
+
+        if not self._encodings:
+            raise ValueError("token_to_sequence() is not available when using Python based tokenizers")
+        if token_index is not None:
+            batch_index = batch_or_token_index
+        else:
+            batch_index = 0
+            token_index = batch_or_token_index
+        if batch_index < 0:
+            batch_index = self._batch_size + batch_index
+        if token_index < 0:
+            token_index = self._seq_len + token_index
+        return self._encodings[batch_index].token_to_sequence(token_index)
 
     def token_to_word(self, batch_or_token_index: int, token_index: Optional[int] = None) -> int:
         """
-        Get the index of the word corresponding (i.e. comprising) to an encoded token
-        in a sequence of the batch.
+        Get the index of the word corresponding (i.e. comprising) to an encoded token in a sequence of the batch.
 
         Can be called as:
 
         - ``self.token_to_word(token_index)`` if batch size is 1
         - ``self.token_to_word(batch_index, token_index)`` if batch size is greater than 1
 
-        This method is particularly suited when the input sequences are provided as
-        pre-tokenized sequences (i.e., words are defined by the user). In this case it allows
-        to easily associate encoded tokens with provided tokenized words.
+        This method is particularly suited when the input sequences are provided as pre-tokenized sequences (i.e.,
+        words are defined by the user). In this case it allows to easily associate encoded tokens with provided
+        tokenized words.
 
         Args:
             batch_or_token_index (:obj:`int`):
-                Index of the sequence in the batch. If the batch only comprise one sequence,
-                this can be the index of the token in the sequence.
+                Index of the sequence in the batch. If the batch only comprise one sequence, this can be the index of
+                the token in the sequence.
             token_index (:obj:`int`, `optional`):
-                If a batch index is provided in `batch_or_token_index`, this can be the index
-                of the token in the sequence.
+                If a batch index is provided in `batch_or_token_index`, this can be the index of the token in the
+                sequence.
 
         Returns:
             :obj:`int`: Index of the word in the input sequence.
@@ -317,9 +476,11 @@ class BatchEncoding(UserDict):
             token_index = self._seq_len + token_index
         return self._encodings[batch_index].token_to_word(token_index)
 
-    def word_to_tokens(self, batch_or_word_index: int, word_index: Optional[int] = None) -> TokenSpan:
+    def word_to_tokens(
+        self, batch_or_word_index: int, word_index: Optional[int] = None, sequence_index: int = 0
+    ) -> Optional[TokenSpan]:
         """
-        Get the encoded token span corresponding to a word in the sequence of the batch.
+        Get the encoded token span corresponding to a word in a sequence of the batch.
 
         Token spans are returned as a :class:`~transformers.tokenization_utils_base.TokenSpan` with:
 
@@ -328,24 +489,28 @@ class BatchEncoding(UserDict):
 
         Can be called as:
 
-        - ``self.word_to_tokens(word_index)`` if batch size is 1
-        - ``self.word_to_tokens(batch_index, word_index)`` if batch size is greater or equal to 1
+        - ``self.word_to_tokens(word_index, sequence_index: int = 0)`` if batch size is 1
+        - ``self.word_to_tokens(batch_index, word_index, sequence_index: int = 0)`` if batch size is greater or equal
+          to 1
 
-        This method is particularly suited when the input sequences are provided as
-        pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
-        to easily associate encoded tokens with provided tokenized words.
+        This method is particularly suited when the input sequences are provided as pre-tokenized sequences (i.e. words
+        are defined by the user). In this case it allows to easily associate encoded tokens with provided tokenized
+        words.
 
         Args:
             batch_or_word_index (:obj:`int`):
-                Index of the sequence in the batch. If the batch only comprises one sequence,
-                this can be the index of the word in the sequence.
+                Index of the sequence in the batch. If the batch only comprises one sequence, this can be the index of
+                the word in the sequence.
             word_index (:obj:`int`, `optional`):
-                If a batch index is provided in `batch_or_token_index`, this can be the index
-                of the word in the sequence.
+                If a batch index is provided in `batch_or_token_index`, this can be the index of the word in the
+                sequence.
+            sequence_index (:obj:`int`, `optional`, defaults to 0):
+                If pair of sequences are encoded in the batch this can be used to specify which sequence in the pair (0
+                or 1) the provided word index belongs to.
 
         Returns:
-            :class:`~transformers.tokenization_utils_base.TokenSpan`
-            Span of tokens in the encoded sequence.
+            Optional :class:`~transformers.tokenization_utils_base.TokenSpan` Span of tokens in the encoded sequence.
+            Returns :obj:`None` if no tokens correspond to the word.
         """
 
         if not self._encodings:
@@ -359,7 +524,8 @@ class BatchEncoding(UserDict):
             batch_index = self._batch_size + batch_index
         if word_index < 0:
             word_index = self._seq_len + word_index
-        return TokenSpan(*(self._encodings[batch_index].word_to_tokens(word_index)))
+        span = self._encodings[batch_index].word_to_tokens(word_index, sequence_index)
+        return TokenSpan(*span) if span is not None else None
 
     def token_to_chars(self, batch_or_token_index: int, token_index: Optional[int] = None) -> CharSpan:
         """
@@ -378,15 +544,14 @@ class BatchEncoding(UserDict):
 
         Args:
             batch_or_token_index (:obj:`int`):
-                Index of the sequence in the batch. If the batch only comprise one sequence,
-                this can be the index of the token in the sequence.
+                Index of the sequence in the batch. If the batch only comprise one sequence, this can be the index of
+                the token in the sequence.
             token_index (:obj:`int`, `optional`):
-                If a batch index is provided in `batch_or_token_index`, this can be the index
-                of the token or tokens in the sequence.
+                If a batch index is provided in `batch_or_token_index`, this can be the index of the token or tokens in
+                the sequence.
 
         Returns:
-            :class:`~transformers.tokenization_utils_base.CharSpan`:
-            Span of characters in the original string.
+            :class:`~transformers.tokenization_utils_base.CharSpan`: Span of characters in the original string.
         """
 
         if not self._encodings:
@@ -398,27 +563,32 @@ class BatchEncoding(UserDict):
             token_index = batch_or_token_index
         return CharSpan(*(self._encodings[batch_index].token_to_chars(token_index)))
 
-    def char_to_token(self, batch_or_char_index: int, char_index: Optional[int] = None) -> int:
+    def char_to_token(
+        self, batch_or_char_index: int, char_index: Optional[int] = None, sequence_index: int = 0
+    ) -> int:
         """
-        Get the index of the token in the encoded output comprising a character
-        in the original string for a sequence of the batch.
+        Get the index of the token in the encoded output comprising a character in the original string for a sequence
+        of the batch.
 
         Can be called as:
 
         - ``self.char_to_token(char_index)`` if batch size is 1
         - ``self.char_to_token(batch_index, char_index)`` if batch size is greater or equal to 1
 
-        This method is particularly suited when the input sequences are provided as
-        pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
-        to easily associate encoded tokens with provided tokenized words.
+        This method is particularly suited when the input sequences are provided as pre-tokenized sequences (i.e. words
+        are defined by the user). In this case it allows to easily associate encoded tokens with provided tokenized
+        words.
 
         Args:
             batch_or_char_index (:obj:`int`):
-                Index of the sequence in the batch. If the batch only comprise one sequence,
-                this can be the index of the word in the sequence
+                Index of the sequence in the batch. If the batch only comprise one sequence, this can be the index of
+                the word in the sequence
             char_index (:obj:`int`, `optional`):
-                If a batch index is provided in `batch_or_token_index`, this can be the index
-                of the word in the sequence.
+                If a batch index is provided in `batch_or_token_index`, this can be the index of the word in the
+                sequence.
+            sequence_index (:obj:`int`, `optional`, defaults to 0):
+                If pair of sequences are encoded in the batch this can be used to specify which sequence in the pair (0
+                or 1) the provided character index belongs to.
 
 
         Returns:
@@ -432,12 +602,13 @@ class BatchEncoding(UserDict):
         else:
             batch_index = 0
             char_index = batch_or_char_index
-        return self._encodings[batch_index].char_to_token(char_index)
+        return self._encodings[batch_index].char_to_token(char_index, sequence_index)
 
-    def word_to_chars(self, batch_or_word_index: int, word_index: Optional[int] = None) -> CharSpan:
+    def word_to_chars(
+        self, batch_or_word_index: int, word_index: Optional[int] = None, sequence_index: int = 0
+    ) -> CharSpan:
         """
-        Get the character span in the original string corresponding to given word in a sequence
-        of the batch.
+        Get the character span in the original string corresponding to given word in a sequence of the batch.
 
         Character spans are returned as a CharSpan NamedTuple with:
 
@@ -451,19 +622,22 @@ class BatchEncoding(UserDict):
 
         Args:
             batch_or_word_index (:obj:`int`):
-                Index of the sequence in the batch. If the batch only comprise one sequence,
-                this can be the index of the word in the sequence
+                Index of the sequence in the batch. If the batch only comprise one sequence, this can be the index of
+                the word in the sequence
             word_index (:obj:`int`, `optional`):
-                If a batch index is provided in `batch_or_token_index`, this can be the index
-                of the word in the sequence.
+                If a batch index is provided in `batch_or_token_index`, this can be the index of the word in the
+                sequence.
+            sequence_index (:obj:`int`, `optional`, defaults to 0):
+                If pair of sequences are encoded in the batch this can be used to specify which sequence in the pair (0
+                or 1) the provided word index belongs to.
 
         Returns:
-            :obj:`CharSpan` or :obj:`List[CharSpan]`:
-                Span(s) of the associated character or characters in the string.
-                CharSpan are NamedTuple with:
+            :obj:`CharSpan` or :obj:`List[CharSpan]`: Span(s) of the associated character or characters in the string.
+            CharSpan are NamedTuple with:
 
                 - start: index of the first character associated to the token in the original string
-                - end: index of the character following the last character associated to the token in the original string
+                - end: index of the character following the last character associated to the token in the original
+                  string
         """
 
         if not self._encodings:
@@ -473,34 +647,36 @@ class BatchEncoding(UserDict):
         else:
             batch_index = 0
             word_index = batch_or_word_index
-        return CharSpan(*(self._encodings[batch_index].word_to_chars(word_index)))
+        return CharSpan(*(self._encodings[batch_index].word_to_chars(word_index, sequence_index)))
 
-    def char_to_word(self, batch_or_char_index: int, char_index: Optional[int] = None) -> int:
+    def char_to_word(self, batch_or_char_index: int, char_index: Optional[int] = None, sequence_index: int = 0) -> int:
         """
-        Get the word in the original string corresponding to a character in the original string of
-        a sequence of the batch.
+        Get the word in the original string corresponding to a character in the original string of a sequence of the
+        batch.
 
         Can be called as:
 
         - ``self.char_to_word(char_index)`` if batch size is 1
         - ``self.char_to_word(batch_index, char_index)`` if batch size is greater than 1
 
-        This method is particularly suited when the input sequences are provided as
-        pre-tokenized sequences (i.e. words are defined by the user). In this case it allows
-        to easily associate encoded tokens with provided tokenized words.
+        This method is particularly suited when the input sequences are provided as pre-tokenized sequences (i.e. words
+        are defined by the user). In this case it allows to easily associate encoded tokens with provided tokenized
+        words.
 
         Args:
             batch_or_char_index (:obj:`int`):
-                Index of the sequence in the batch. If the batch only comprise one sequence,
-                this can be the index of the character in the orginal string.
+                Index of the sequence in the batch. If the batch only comprise one sequence, this can be the index of
+                the character in the original string.
             char_index (:obj:`int`, `optional`):
-                If a batch index is provided in `batch_or_token_index`, this can be the index
-                of the character in the orginal string.
+                If a batch index is provided in `batch_or_token_index`, this can be the index of the character in the
+                original string.
+            sequence_index (:obj:`int`, `optional`, defaults to 0):
+                If pair of sequences are encoded in the batch this can be used to specify which sequence in the pair (0
+                or 1) the provided character index belongs to.
 
 
         Returns:
-            :obj:`int` or :obj:`List[int]`:
-                Index or indices of the associated encoded token(s).
+            :obj:`int` or :obj:`List[int]`: Index or indices of the associated encoded token(s).
         """
 
         if not self._encodings:
@@ -510,7 +686,7 @@ class BatchEncoding(UserDict):
         else:
             batch_index = 0
             char_index = batch_or_char_index
-        return self._encodings[batch_index].char_to_word(char_index)
+        return self._encodings[batch_index].char_to_word(char_index, sequence_index)
 
     def convert_to_tensors(
         self, tensor_type: Optional[Union[str, TensorType]] = None, prepend_batch_axis: bool = False
@@ -533,18 +709,31 @@ class BatchEncoding(UserDict):
             tensor_type = TensorType(tensor_type)
 
         # Get a function reference for the correct framework
-        if tensor_type == TensorType.TENSORFLOW and is_tf_available():
-            as_tensor = tf.constant
-        elif tensor_type == TensorType.PYTORCH and is_torch_available():
-            as_tensor = torch.tensor
-        elif tensor_type == TensorType.NUMPY:
-            as_tensor = np.asarray
-        else:
-            raise ImportError(
-                "Unable to convert output to tensors format {}, PyTorch or TensorFlow is not available.".format(
-                    tensor_type
+        if tensor_type == TensorType.TENSORFLOW:
+            if not is_tf_available():
+                raise ImportError(
+                    "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
                 )
-            )
+            as_tensor = tf.constant
+            is_tensor = tf.is_tensor
+        elif tensor_type == TensorType.PYTORCH:
+            if not is_torch_available():
+                raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
+            as_tensor = torch.tensor
+            is_tensor = torch.is_tensor
+        elif tensor_type == TensorType.JAX:
+            if not is_flax_available():
+                raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
+            as_tensor = jnp.array
+            is_tensor = _is_jax
+        else:
+            as_tensor = np.asarray
+            is_tensor = _is_numpy
+        # (mfuntowicz: This code is unreachable)
+        # else:
+        #     raise ImportError(
+        #         "Unable to convert output to tensors format {}".format(tensor_type)
+        #     )
 
         # Do the tensor conversion in batch
         for key, value in self.items():
@@ -552,16 +741,17 @@ class BatchEncoding(UserDict):
                 if prepend_batch_axis:
                     value = [value]
 
-                tensor = as_tensor(value)
+                if not is_tensor(value):
+                    tensor = as_tensor(value)
 
-                # Removing this for now in favor of controling the shape with `prepend_batch_axis`
-                # # at-least2d
-                # if tensor.ndim > 2:
-                #     tensor = tensor.squeeze(0)
-                # elif tensor.ndim < 2:
-                #     tensor = tensor[None, :]
+                    # Removing this for now in favor of controlling the shape with `prepend_batch_axis`
+                    # # at-least2d
+                    # if tensor.ndim > 2:
+                    #     tensor = tensor.squeeze(0)
+                    # elif tensor.ndim < 2:
+                    #     tensor = tensor[None, :]
 
-                self[key] = tensor
+                    self[key] = tensor
             except:  # noqa E722
                 if key == "overflowing_tokens":
                     raise ValueError(
@@ -576,7 +766,7 @@ class BatchEncoding(UserDict):
         return self
 
     @torch_required
-    def to(self, device: str) -> "BatchEncoding":
+    def to(self, device: Union[str, "torch.device"]) -> "BatchEncoding":
         """
         Send all values to device by calling :obj:`v.to(device)` (PyTorch only).
 
@@ -584,18 +774,27 @@ class BatchEncoding(UserDict):
             device (:obj:`str` or :obj:`torch.device`): The device to put the tensors on.
 
         Returns:
-            :class:`~transformers.BatchEncoding`:
-            The same instance of :class:`~transformers.BatchEncoding` after modification.
+            :class:`~transformers.BatchEncoding`: The same instance of :class:`~transformers.BatchEncoding` after
+            modification.
         """
-        self.data = {k: v.to(device) for k, v in self.data.items()}
+
+        # This check catches things like APEX blindly calling "to" on all inputs to a module
+        # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
+        # into a HalfTensor
+        if isinstance(device, str) or isinstance(device, torch.device) or isinstance(device, int):
+            self.data = {k: v.to(device=device) for k, v in self.data.items()}
+        else:
+            logger.warning(
+                f"Attempting to cast a BatchEncoding to another type, {str(device)}. This is not supported."
+            )
         return self
 
 
 class SpecialTokensMixin:
     """
-    A mixin derived by :class:`~transformers.PreTrainedTokenizer` and :class:`~transformers.PreTrainedTokenizerFast`
-    to handle specific behaviors related to special tokens. In particular, this class hold the attributes which can be
-    used to directly access these special tokens in a model-independant manner and allow to set and update the special
+    A mixin derived by :class:`~transformers.PreTrainedTokenizer` and :class:`~transformers.PreTrainedTokenizerFast` to
+    handle specific behaviors related to special tokens. In particular, this class hold the attributes which can be
+    used to directly access these special tokens in a model-independent manner and allow to set and update the special
     tokens.
 
     Args:
@@ -643,9 +842,11 @@ class SpecialTokensMixin:
         self.verbose = verbose
 
         # We directly set the hidden value to allow initialization with special tokens
-        # which are not yet in the vocabulary. Necesssary for serialization/de-serialization
-        # TODO clean this up at some point (probably by sitching to fast tokenizers)
+        # which are not yet in the vocabulary. Necessary for serialization/de-serialization
+        # TODO clean this up at some point (probably by switching to fast tokenizers)
         for key, value in kwargs.items():
+            if value is None:
+                continue
             if key in self.SPECIAL_TOKENS_ATTRIBUTES:
                 if key == "additional_special_tokens":
                     assert isinstance(value, (list, tuple)), f"Value {value} is not a list or tuple"
@@ -666,7 +867,7 @@ class SpecialTokensMixin:
         Add the missing ones to the vocabulary if needed.
 
         Return:
-            :obj:`int`: The number of tokens added in the vocaulary during the operation.
+            :obj:`int`: The number of tokens added in the vocabulary during the operation.
         """
         return self.add_tokens(self.all_special_tokens_extended, special_tokens=True)
 
@@ -750,7 +951,7 @@ class SpecialTokensMixin:
                 string token to let you personalize its behavior: whether this token should only match against a single
                 word, whether this token should strip all potential whitespaces on the left side, whether this token
                 should strip all potential whitespaces on the right side, etc.
-            special_token (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Can be used to specify if the token is a special token. This mostly change the normalization behavior
                 (special tokens like CLS or [MASK] are usually not lower-cased for instance).
 
@@ -777,6 +978,9 @@ class SpecialTokensMixin:
             new_tokens = [new_tokens]
 
         return self._add_tokens(new_tokens, special_tokens=special_tokens)
+
+    def _add_tokens(self, new_tokens: Union[List[str], List[AddedToken]], special_tokens: bool = False) -> int:
+        raise NotImplementedError
 
     @property
     def bos_token(self) -> str:
@@ -811,8 +1015,8 @@ class SpecialTokensMixin:
     @property
     def sep_token(self) -> str:
         """
-        :obj:`str`: Separation token, to separate context and query in an input sequence.
-        Log an error if used while not having been set.
+        :obj:`str`: Separation token, to separate context and query in an input sequence. Log an error if used while
+        not having been set.
         """
         if self._sep_token is None and self.verbose:
             logger.error("Using sep_token, but it is not set yet.")
@@ -832,8 +1036,8 @@ class SpecialTokensMixin:
     @property
     def cls_token(self) -> str:
         """
-        :obj:`str`: Classification token, to extract a summary of an input sequence leveraging self-attention along
-        the full depth of the model. Log an error if used while not having been set.
+        :obj:`str`: Classification token, to extract a summary of an input sequence leveraging self-attention along the
+        full depth of the model. Log an error if used while not having been set.
         """
         if self._cls_token is None and self.verbose:
             logger.error("Using cls_token, but it is not set yet.")
@@ -976,16 +1180,48 @@ class SpecialTokensMixin:
     @property
     def additional_special_tokens_ids(self) -> List[int]:
         """
-        :obj:`List[int]`: Ids of all the additional special tokens in the vocabulary.
-        Log an error if used while not having been set.
+        :obj:`List[int]`: Ids of all the additional special tokens in the vocabulary. Log an error if used while not
+        having been set.
         """
         return self.convert_tokens_to_ids(self.additional_special_tokens)
+
+    @bos_token_id.setter
+    def bos_token_id(self, value):
+        self._bos_token = self.convert_tokens_to_ids(value)
+
+    @eos_token_id.setter
+    def eos_token_id(self, value):
+        self._eos_token = self.convert_tokens_to_ids(value)
+
+    @unk_token_id.setter
+    def unk_token_id(self, value):
+        self._unk_token = self.convert_tokens_to_ids(value)
+
+    @sep_token_id.setter
+    def sep_token_id(self, value):
+        self._sep_token = self.convert_tokens_to_ids(value)
+
+    @pad_token_id.setter
+    def pad_token_id(self, value):
+        self._pad_token = self.convert_tokens_to_ids(value)
+
+    @cls_token_id.setter
+    def cls_token_id(self, value):
+        self._cls_token = self.convert_tokens_to_ids(value)
+
+    @mask_token_id.setter
+    def mask_token_id(self, value):
+        self._mask_token = self.convert_tokens_to_ids(value)
+
+    @additional_special_tokens_ids.setter
+    def additional_special_tokens_ids(self, values):
+        self._additional_special_tokens = [self.convert_tokens_to_ids(value) for value in values]
 
     @property
     def special_tokens_map(self) -> Dict[str, Union[str, List[str]]]:
         """
-        :obj:`Dict[str, Union[str, List[str]]]`: A dictionary mapping special token class attributes
-        (:obj:`cls_token`, :obj:`unk_token`, etc.) to their values (:obj:`'<unk>'`, :obj:`'<cls>'`, etc.).
+        :obj:`Dict[str, Union[str, List[str]]]`: A dictionary mapping special token class attributes (:obj:`cls_token`,
+        :obj:`unk_token`, etc.) to their values (:obj:`'<unk>'`, :obj:`'<cls>'`, etc.).
 
         Convert potential tokens of :obj:`tokenizers.AddedToken` type to string.
         """
@@ -1088,7 +1324,7 @@ ENCODE_KWARGS_DOCSTRING = r"""
                 :obj:`return_overflowing_tokens=True` will contain some tokens from the end of the truncated sequence
                 returned to provide some overlap between truncated and overflowing sequences. The value of this
                 argument defines the number of overlapping tokens.
-            is_pretokenized (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            is_split_into_words (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not the input is already pre-tokenized (e.g., split into words), in which case the tokenizer
                 will skip the pre-tokenization step. This is useful for NER or token classification.
             pad_to_multiple_of (:obj:`int`, `optional`):
@@ -1104,8 +1340,8 @@ ENCODE_KWARGS_DOCSTRING = r"""
 
 ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             return_token_type_ids (:obj:`bool`, `optional`):
-                Whether to return token type IDs. If left to the default, will return the token type IDs according
-                to the specific tokenizer's default, defined by the :obj:`return_outputs` attribute.
+                Whether to return token type IDs. If left to the default, will return the token type IDs according to
+                the specific tokenizer's default, defined by the :obj:`return_outputs` attribute.
 
                 `What are token type IDs? <../glossary.html#token-type-ids>`__
             return_attention_mask (:obj:`bool`, `optional`):
@@ -1116,7 +1352,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             return_overflowing_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to return overflowing token sequences.
             return_special_tokens_mask (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Wheter or not to return special tokens mask information.
+                Whether or not to return special tokens mask information.
             return_offsets_mapping (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to return :obj:`(char_start, char_end)` for each token.
 
@@ -1126,7 +1362,7 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             return_length  (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to return the lengths of the encoded inputs.
             verbose (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether or not to print informations and warnings.
+                Whether or not to print more information and warnings.
             **kwargs: passed to the :obj:`self.tokenize()` method
 
         Return:
@@ -1135,26 +1371,30 @@ ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             - **input_ids** -- List of token ids to be fed to a model.
 
               `What are input IDs? <../glossary.html#input-ids>`__
+
             - **token_type_ids** -- List of token type ids to be fed to a model (when :obj:`return_token_type_ids=True`
               or if `"token_type_ids"` is in :obj:`self.model_input_names`).
 
               `What are token type IDs? <../glossary.html#token-type-ids>`__
+
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
               :obj:`return_attention_mask=True` or if `"attention_mask"` is in :obj:`self.model_input_names`).
 
               `What are attention masks? <../glossary.html#attention-mask>`__
+
             - **overflowing_tokens** -- List of overflowing tokens sequences (when a :obj:`max_length` is specified and
               :obj:`return_overflowing_tokens=True`).
             - **num_truncated_tokens** -- Number of tokens truncated (when a :obj:`max_length` is specified and
               :obj:`return_overflowing_tokens=True`).
-            - **special_tokens_mask** -- List of 0s and 1s, with 0 specifying added special tokens and 1 specifying
-              regual sequence tokens (when :obj:`add_special_tokens=True` and :obj:`return_special_tokens_mask=True`).
+            - **special_tokens_mask** -- List of 0s and 1s, with 1 specifying added special tokens and 0 specifying
+              regular sequence tokens (when :obj:`add_special_tokens=True` and :obj:`return_special_tokens_mask=True`).
             - **length** -- The length of the inputs (when :obj:`return_length=True`)
 """
 
 INIT_TOKENIZER_DOCSTRING = r"""
     Class attributes (overridden by derived classes)
-        - **vocab_files_names** (:obj:`Dict[str, str]`) -- A ditionary with, as keys, the ``__init__`` keyword name of
+
+        - **vocab_files_names** (:obj:`Dict[str, str]`) -- A dictionary with, as keys, the ``__init__`` keyword name of
           each vocabulary file required by the model, and as associated values, the filename for saving the associated
           file (string).
         - **pretrained_vocab_files_map** (:obj:`Dict[str, Dict[str, str]]`) -- A dictionary of dictionaries, with the
@@ -1165,8 +1405,8 @@ INIT_TOKENIZER_DOCSTRING = r"""
           :obj:`short-cut-names` of the pretrained models, and as associated values, the maximum length of the sequence
           inputs of this model, or :obj:`None` if the model has no maximum input size.
         - **pretrained_init_configuration** (:obj:`Dict[str, Dict[str, Any]]`) -- A dictionary with, as keys, the
-          :obj:`short-cut-names` of the pretrained models, and as associated values, a dictionnary of specific
-          arguments to pass to the ``__init__`` method of the tokenizer class for this pretrained model when loading the
+          :obj:`short-cut-names` of the pretrained models, and as associated values, a dictionary of specific arguments
+          to pass to the ``__init__`` method of the tokenizer class for this pretrained model when loading the
           tokenizer with the :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`
           method.
         - **model_input_names** (:obj:`List[str]`) -- A list of inputs expected in the forward pass of the model.
@@ -1175,11 +1415,10 @@ INIT_TOKENIZER_DOCSTRING = r"""
 
     Args:
         model_max_length (:obj:`int`, `optional`):
-            The maximum length (in number of tokens) for the inputs to the transformer model.
-            When the tokenizer is loaded with
-            :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`, this will be set to
-            the value stored for the associated model in ``max_model_input_sizes`` (see above). If no value is
-            provided, will default to VERY_LARGE_INTEGER (:obj:`int(1e30)`).
+            The maximum length (in number of tokens) for the inputs to the transformer model. When the tokenizer is
+            loaded with :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained`, this
+            will be set to the value stored for the associated model in ``max_model_input_sizes`` (see above). If no
+            value is provided, will default to VERY_LARGE_INTEGER (:obj:`int(1e30)`).
         padding_side: (:obj:`str`, `optional`):
             The side on which the model should have padding applied. Should be selected between ['right', 'left'].
             Default value is picked from the class attribute of the same name.
@@ -1216,20 +1455,21 @@ INIT_TOKENIZER_DOCSTRING = r"""
 
 
 PREPARE_SEQ2SEQ_BATCH_DOCSTRING = """
+        Prepare model inputs for translation. For best performance, translate one sentence at a time.
 
         Arguments:
-            src_texts: (:obj:`list`):
-                list of documents to summarize or source language texts
-            tgt_texts: (:obj:`list`, `optional`):
-                list of tgt language texts or summaries.
+            src_texts (:obj:`List[str]`):
+                List of documents to summarize or source language texts.
+            tgt_texts (:obj:`list`, `optional`):
+                List of summaries or target language texts.
             max_length (:obj:`int`, `optional`):
-                Controls the maximum length for encoder inputs (documents to summarize or source language texts)
-                If left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum
-                length is required by one of the truncation/padding parameters. If the model has no specific maximum
-                input length (like XLNet) truncation/padding to a maximum length will be deactivated.
+                Controls the maximum length for encoder inputs (documents to summarize or source language texts) If
+                left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum length
+                is required by one of the truncation/padding parameters. If the model has no specific maximum input
+                length (like XLNet) truncation/padding to a maximum length will be deactivated.
             max_target_length (:obj:`int`, `optional`):
-                Controls the maximum length of decoder inputs (target language texts or summaries)
-                If left unset or set to :obj:`None`, this will use the max_length value.
+                Controls the maximum length of decoder inputs (target language texts or summaries) If left unset or set
+                to :obj:`None`, this will use the max_length value.
             padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
                 Activates and controls padding. Accepts the following values:
 
@@ -1239,7 +1479,7 @@ PREPARE_SEQ2SEQ_BATCH_DOCSTRING = """
                   maximum acceptable input length for the model if that argument is not provided.
                 * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
                   different lengths).
-            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`, defaults to "pt"):
+            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
@@ -1260,18 +1500,18 @@ PREPARE_SEQ2SEQ_BATCH_DOCSTRING = """
                   truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
                 * :obj:`False` or :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with
                   sequence lengths greater than the model maximum admissible input size).
+            **kwargs:
+                Additional keyword arguments passed along to :obj:`self.__call__`.
 
         Return:
             :class:`~transformers.BatchEncoding`: A :class:`~transformers.BatchEncoding` with the following fields:
 
             - **input_ids** -- List of token ids to be fed to the encoder.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model.
-            - **decoder_input_ids** -- List of token ids to be fed to the decoder.
-            - **decoder_attention_mask** -- List of indices specifying which tokens should be attended to by the decoder.
-                This does not include causal mask, which is built by the model.
+            - **labels** -- List of token ids for tgt_texts.
 
-            The full set of keys ``[input_ids, attention_mask, decoder_input_ids,  decoder_attention_mask]``,
-            will only be returned if tgt_texts is passed. Otherwise, input_ids, attention_mask will be the only keys.
+            The full set of keys ``[input_ids, attention_mask, labels]``, will only be returned if tgt_texts is passed.
+            Otherwise, input_ids, attention_mask will be the only keys.
 
 """
 
@@ -1290,11 +1530,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     max_model_input_sizes: Dict[str, Optional[int]] = {}
     model_input_names: List[str] = ["token_type_ids", "attention_mask"]
     padding_side: str = "right"
+    slow_tokenizer_class = None
 
     def __init__(self, **kwargs):
         # inputs and kwargs for saving and re-loading (see ``from_pretrained`` and ``save_pretrained``)
         self.init_inputs = ()
-        self.init_kwargs = kwargs
+        self.init_kwargs = copy.deepcopy(kwargs)
+        self.name_or_path = kwargs.pop("name_or_path", "")
 
         # For backward compatibility we fallback to set model_max_length from max_len if provided
         model_max_length = kwargs.pop("model_max_length", kwargs.pop("max_len", None))
@@ -1308,19 +1550,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         ], f"Padding side should be selected between 'right' and 'left', current value: {self.padding_side}"
         self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
 
-        super().__init__(**kwargs)
+        self.deprecation_warnings = (
+            {}
+        )  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
 
-    @property
-    def max_len(self) -> int:
-        """
-        :obj:`int`: **Deprecated** Kept here for backward compatibility. Now renamed to :obj:`model_max_length` to
-        avoid ambiguity.
-        """
-        warnings.warn(
-            "The `max_len` attribute has been deprecated and will be removed in a future version, use `model_max_length` instead.",
-            FutureWarning,
-        )
-        return self.model_max_length
+        super().__init__(**kwargs)
 
     @property
     def max_len_single_sentence(self) -> int:
@@ -1340,9 +1574,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     def max_len_single_sentence(self, value) -> int:
         # For backward compatibility, allow to try to setup 'max_len_single_sentence'.
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=False) and self.verbose:
-            logger.warning(
-                "Setting 'max_len_single_sentence' is now deprecated. " "This value is automatically set up."
-            )
+            if not self.deprecation_warnings.get("max_len_single_sentence", False):
+                logger.warning(
+                    "Setting 'max_len_single_sentence' is now deprecated. " "This value is automatically set up."
+                )
+            self.deprecation_warnings["max_len_single_sentence"] = True
         else:
             raise ValueError(
                 "Setting 'max_len_single_sentence' is now deprecated. " "This value is automatically set up."
@@ -1352,35 +1588,55 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     def max_len_sentences_pair(self, value) -> int:
         # For backward compatibility, allow to try to setup 'max_len_sentences_pair'.
         if value == self.model_max_length - self.num_special_tokens_to_add(pair=True) and self.verbose:
-            logger.warning(
-                "Setting 'max_len_sentences_pair' is now deprecated. " "This value is automatically set up."
-            )
+            if not self.deprecation_warnings.get("max_len_sentences_pair", False):
+                logger.warning(
+                    "Setting 'max_len_sentences_pair' is now deprecated. " "This value is automatically set up."
+                )
+            self.deprecation_warnings["max_len_sentences_pair"] = True
         else:
             raise ValueError(
                 "Setting 'max_len_sentences_pair' is now deprecated. " "This value is automatically set up."
             )
 
+    def __repr__(self) -> str:
+        return (
+            f"{'PreTrainedTokenizerFast' if self.is_fast else 'PreTrainedTokenizer'}(name_or_path='{self.name_or_path}', "
+            f"vocab_size={self.vocab_size}, model_max_len={self.model_max_length}, is_fast={self.is_fast}, "
+            f"padding_side='{self.padding_side}', special_tokens={self.special_tokens_map_extended})"
+        )
+
+    def get_vocab(self) -> Dict[str, int]:
+        """
+        Returns the vocabulary as a dictionary of token to index.
+
+        :obj:`tokenizer.get_vocab()[token]` is equivalent to :obj:`tokenizer.convert_tokens_to_ids(token)` when
+        :obj:`token` is in the vocab.
+
+        Returns:
+            :obj:`Dict[str, int]`: The vocabulary.
+        """
+        raise NotImplementedError()
+
     @classmethod
-    def from_pretrained(cls, *inputs, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], *init_inputs, **kwargs):
         r"""
         Instantiate a :class:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase` (or a derived class) from
         a predefined tokenizer.
 
         Args:
-            pretrained_model_name_or_path (:obj:`str`):
+            pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
                 Can be either:
 
-                - A string with the `shortcut name` of a predefined tokenizer to load from cache or download, e.g.,
-                  ``bert-base-uncased``.
-                - A string with the `identifier name` of a predefined tokenizer that was user-uploaded to our S3, e.g.,
-                  ``dbmdz/bert-base-german-cased``.
+                - A string, the `model id` of a predefined tokenizer hosted inside a model repo on huggingface.co.
+                  Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under a
+                  user or organization name, like ``dbmdz/bert-base-german-cased``.
                 - A path to a `directory` containing vocabulary files required by the tokenizer, for instance saved
                   using the :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.save_pretrained`
                   method, e.g., ``./my_model_directory/``.
                 - (**Deprecated**, not applicable to all derived classes) A path or url to a single saved vocabulary
                   file (if and only if the tokenizer only requires a single vocabulary file like Bert or XLNet), e.g.,
                   ``./my_model_directory/vocab.txt``.
-            cache_dir (:obj:`str`, `optional`):
+            cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
                 Path to a directory in which a downloaded predefined tokenizer vocabulary files should be cached if the
                 standard cache should not be used.
             force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -1390,9 +1646,18 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 Whether or not to delete incompletely received files. Attempt to resume the download if such a file
                 exists.
             proxies (:obj:`Dict[str, str], `optional`):
-                A dictionary of proxy servers to use by protocol or endpoint, e.g.,
-                :obj:`{'http': 'foo.bar:3128', 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each
-                request.
+                A dictionary of proxy servers to use by protocol or endpoint, e.g., :obj:`{'http': 'foo.bar:3128',
+                'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
+            use_auth_token (:obj:`str` or `bool`, `optional`):
+                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
+            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+                git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
+                identifier allowed by git.
+            subfolder (:obj:`str`, `optional`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co (e.g. for
+                facebook/rag-token-base), specify it here.
             inputs (additional positional arguments, `optional`):
                 Will be passed along to the Tokenizer ``__init__`` method.
             kwargs (additional keyword arguments, `optional`):
@@ -1400,13 +1665,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 ``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``,
                 ``mask_token``, ``additional_special_tokens``. See parameters in the ``__init__`` for more details.
 
+        .. note::
+
+            Passing :obj:`use_auth_token=True` is required when you want to use a private model.
+
         Examples::
 
             # We can't instantiate directly the base class `PreTrainedTokenizerBase` so let's show our examples on a derived class: BertTokenizer
-            # Download vocabulary from S3 and cache.
+            # Download vocabulary from huggingface.co and cache.
             tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
-            # Download vocabulary from S3 (user-uploaded) and cache.
+            # Download vocabulary from huggingface.co (user-uploaded) and cache.
             tokenizer = BertTokenizer.from_pretrained('dbmdz/bert-base-german-cased')
 
             # If vocabulary files are in a directory (e.g. tokenizer was saved using `save_pretrained('./test/saved_model/')`)
@@ -1422,17 +1691,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             assert tokenizer.unk_token == '<unk>'
 
         """
-        return cls._from_pretrained(*inputs, **kwargs)
-
-    @classmethod
-    def _from_pretrained(cls, pretrained_model_name_or_path, *init_inputs, **kwargs):
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
         resume_download = kwargs.pop("resume_download", False)
         proxies = kwargs.pop("proxies", None)
         local_files_only = kwargs.pop("local_files_only", False)
+        use_auth_token = kwargs.pop("use_auth_token", None)
+        revision = kwargs.pop("revision", None)
+        subfolder = kwargs.pop("subfolder", None)
 
         s3_models = list(cls.max_model_input_sizes.keys())
+        pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         vocab_files = {}
         init_configuration = {}
         if pretrained_model_name_or_path in s3_models:
@@ -1472,29 +1741,36 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                     "added_tokens_file": ADDED_TOKENS_FILE,
                     "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
                     "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
-                    "full_tokenizer_file": FULL_TOKENIZER_FILE,
+                    "tokenizer_file": FULL_TOKENIZER_FILE,
                 }
                 # Look for the tokenizer files
                 for file_id, file_name in {**cls.vocab_files_names, **additional_files_names}.items():
                     if os.path.isdir(pretrained_model_name_or_path):
-                        full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
+                        if subfolder is not None:
+                            full_file_name = os.path.join(pretrained_model_name_or_path, subfolder, file_name)
+                        else:
+                            full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
                         if not os.path.exists(full_file_name):
                             logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
                             full_file_name = None
                     else:
                         full_file_name = hf_bucket_url(
-                            pretrained_model_name_or_path, filename=file_name, use_cdn=False
+                            pretrained_model_name_or_path,
+                            filename=file_name,
+                            subfolder=subfolder,
+                            revision=revision,
+                            mirror=None,
                         )
 
                     vocab_files[file_id] = full_file_name
 
         # Get files from url, cache, or disk depending on the case
-        try:
-            resolved_vocab_files = {}
-            for file_id, file_path in vocab_files.items():
-                if file_path is None:
-                    resolved_vocab_files[file_id] = None
-                else:
+        resolved_vocab_files = {}
+        for file_id, file_path in vocab_files.items():
+            if file_path is None:
+                resolved_vocab_files[file_id] = None
+            else:
+                try:
                     resolved_vocab_files[file_id] = cached_path(
                         file_path,
                         cache_dir=cache_dir,
@@ -1502,41 +1778,52 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                         proxies=proxies,
                         resume_download=resume_download,
                         local_files_only=local_files_only,
+                        use_auth_token=use_auth_token,
                     )
-        except EnvironmentError:
-            if pretrained_model_name_or_path in s3_models:
-                msg = "Couldn't reach server at '{}' to download vocabulary files."
-            else:
-                msg = (
-                    "Model name '{}' was not found in tokenizers model name list ({}). "
-                    "We assumed '{}' was a path or url to a directory containing vocabulary files "
-                    "named {}, but couldn't find such vocabulary files at this path or url.".format(
-                        pretrained_model_name_or_path,
-                        ", ".join(s3_models),
-                        pretrained_model_name_or_path,
-                        list(cls.vocab_files_names.values()),
-                    )
-                )
-
-            raise EnvironmentError(msg)
+                except requests.exceptions.HTTPError as err:
+                    if "404 Client Error" in str(err):
+                        logger.debug(err)
+                        resolved_vocab_files[file_id] = None
+                    else:
+                        raise err
 
         if all(full_file_name is None for full_file_name in resolved_vocab_files.values()):
-            raise EnvironmentError(
-                "Model name '{}' was not found in tokenizers model name list ({}). "
-                "We assumed '{}' was a path, a model identifier, or url to a directory containing vocabulary files "
-                "named {} but couldn't find such vocabulary files at this path or url.".format(
-                    pretrained_model_name_or_path,
-                    ", ".join(s3_models),
-                    pretrained_model_name_or_path,
-                    list(cls.vocab_files_names.values()),
-                )
+            msg = (
+                f"Can't load tokenizer for '{pretrained_model_name_or_path}'. Make sure that:\n\n"
+                f"- '{pretrained_model_name_or_path}' is a correct model identifier listed on 'https://huggingface.co/models'\n\n"
+                f"- or '{pretrained_model_name_or_path}' is the correct path to a directory containing relevant tokenizer files\n\n"
             )
+            raise EnvironmentError(msg)
 
         for file_id, file_path in vocab_files.items():
             if file_path == resolved_vocab_files[file_id]:
                 logger.info("loading file {}".format(file_path))
             else:
                 logger.info("loading file {} from cache at {}".format(file_path, resolved_vocab_files[file_id]))
+
+        return cls._from_pretrained(
+            resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs
+        )
+
+    @classmethod
+    def _from_pretrained(
+        cls, resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs
+    ):
+        # We instantiate fast tokenizers based on a slow tokenizer for now
+        # In the future we can also use a direct way based on saving/instantiating
+        # tokenizer's Tokenizer directly from it's serialization JSON
+        if (
+            "tokenizer_file" not in resolved_vocab_files or resolved_vocab_files["tokenizer_file"] is None
+        ) and cls.slow_tokenizer_class is not None:
+            slow_tokenizer = (cls.slow_tokenizer_class)._from_pretrained(
+                copy.deepcopy(resolved_vocab_files),
+                pretrained_model_name_or_path,
+                copy.deepcopy(init_configuration),
+                *init_inputs,
+                **(copy.deepcopy(kwargs)),
+            )
+        else:
+            slow_tokenizer = None
 
         # Prepare tokenizer initialization kwargs
         # Did we saved some inputs and kwargs to reload ?
@@ -1553,6 +1840,19 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         # Update with newly provided kwargs
         init_kwargs.update(kwargs)
 
+        # Convert AddedTokens serialized as dict to class instances
+        def convert_added_tokens(obj: Union[AddedToken, Any]):
+            if isinstance(obj, dict) and "__type" in obj and obj["__type"] == "AddedToken":
+                obj.pop("__type")
+                return AddedToken(**obj)
+            elif isinstance(obj, (list, tuple)):
+                return list(convert_added_tokens(o) for o in obj)
+            elif isinstance(obj, dict):
+                return {k: convert_added_tokens(v) for k, v in obj.items()}
+            return obj
+
+        init_kwargs = convert_added_tokens(init_kwargs)
+
         # Set max length if needed
         if pretrained_model_name_or_path in cls.max_model_input_sizes:
             # if we're using a pretrained model, ensure the tokenizer
@@ -1567,6 +1867,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             if args_name not in init_kwargs:
                 init_kwargs[args_name] = file_path
 
+        if slow_tokenizer is not None:
+            init_kwargs["__slow_tokenizer"] = slow_tokenizer
+
+        init_kwargs["name_or_path"] = pretrained_model_name_or_path
+
         # Instantiate tokenizer.
         try:
             tokenizer = cls(*init_inputs, **init_kwargs)
@@ -1577,15 +1882,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             )
 
         # Save inputs and kwargs for saving and re-loading with ``save_pretrained``
-        tokenizer.init_inputs = init_inputs
-        tokenizer.init_kwargs = init_kwargs
+        # Removed: Now done at the base class level
+        # tokenizer.init_inputs = init_inputs
+        # tokenizer.init_kwargs = init_kwargs
 
         # If there is a complementary special token map, load it
         special_tokens_map_file = resolved_vocab_files.pop("special_tokens_map_file", None)
         if special_tokens_map_file is not None:
             with open(special_tokens_map_file, encoding="utf-8") as special_tokens_map_handle:
                 special_tokens_map = json.load(special_tokens_map_handle)
-
             for key, value in special_tokens_map.items():
                 if isinstance(value, dict):
                     value = AddedToken(**value)
@@ -1618,23 +1923,38 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         return tokenizer
 
-    def save_pretrained(self, save_directory: str) -> Tuple[str]:
+    def save_pretrained(
+        self,
+        save_directory: Union[str, os.PathLike],
+        legacy_format: bool = True,
+        filename_prefix: Optional[str] = None,
+    ) -> Tuple[str]:
         """
-        Save the tokenizer vocabulary files together with:
+        Save the full tokenizer state.
 
-            - added tokens,
-            - special tokens to class attributes mapping,
-            - tokenizer instantiation positional and keywords inputs (e.g. do_lower_case for Bert).
 
         This method make sure the full tokenizer can then be re-loaded using the
-        :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.from_pretrained` class method.
+        :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained` class method.
+
+        .. Note::
+            A "fast" tokenizer (instance of :class:`transformers.PreTrainedTokenizerFast`) saved with this method will
+            not be possible to load back in a "slow" tokenizer, i.e. in a :class:`transformers.PreTrainedTokenizer`
+            instance. It can only be loaded in a "fast" tokenizer, i.e. in a
+            :class:`transformers.PreTrainedTokenizerFast` instance.
 
         .. Warning::
            This won't save modifications you may have applied to the tokenizer after the instantiation (for instance,
            modifying :obj:`tokenizer.do_lower_case` after creation).
 
         Args:
-            save_directory (:obj:`str`): The path to adirectory where the tokenizer will be saved.
+            save_directory (:obj:`str` or :obj:`os.PathLike`): The path to a directory where the tokenizer will be saved.
+            legacy_format (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether to save the tokenizer in legacy format (default), i.e. with tokenizer specific vocabulary and a
+                separate added_tokens files or in the unified JSON file format for the `tokenizers` library. It's only
+                possible to save a Fast tokenizer in the unified JSON format and this format is incompatible with
+                "slow" tokenizers (not powered by the `tokenizers` library).
+            filename_prefix: (:obj:`str`, `optional`):
+                A prefix to add to the names of the files saved by the tokenizer.
 
         Returns:
             A tuple of :obj:`str`: The files saved.
@@ -1644,9 +1964,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             return
         os.makedirs(save_directory, exist_ok=True)
 
-        special_tokens_map_file = os.path.join(save_directory, SPECIAL_TOKENS_MAP_FILE)
-        added_tokens_file = os.path.join(save_directory, ADDED_TOKENS_FILE)
-        tokenizer_config_file = os.path.join(save_directory, TOKENIZER_CONFIG_FILE)
+        special_tokens_map_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + SPECIAL_TOKENS_MAP_FILE
+        )
+        tokenizer_config_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_CONFIG_FILE
+        )
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
         if len(self.init_inputs) > 0:
@@ -1654,31 +1977,115 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         for file_id in self.vocab_files_names.keys():
             tokenizer_config.pop(file_id, None)
 
+        # Sanitize AddedTokens
+        def convert_added_tokens(obj: Union[AddedToken, Any], add_type_field=True):
+            if isinstance(obj, AddedToken):
+                out = obj.__getstate__()
+                if add_type_field:
+                    out["__type"] = "AddedToken"
+                return out
+            elif isinstance(obj, (list, tuple)):
+                return list(convert_added_tokens(o, add_type_field=add_type_field) for o in obj)
+            elif isinstance(obj, dict):
+                return {k: convert_added_tokens(v, add_type_field=add_type_field) for k, v in obj.items()}
+            return obj
+
+        # add_type_field=True to allow dicts in the kwargs / differentiate from AddedToken serialization
+        tokenizer_config = convert_added_tokens(tokenizer_config, add_type_field=True)
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(tokenizer_config, ensure_ascii=False))
 
+        # Sanitize AddedTokens in special_tokens_map
+        write_dict = convert_added_tokens(self.special_tokens_map_extended, add_type_field=False)
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
-            write_dict = {}
-            for key, value in self.special_tokens_map_extended.items():
-                if isinstance(value, AddedToken):
-                    write_dict[key] = value.__getstate__()
-                elif isinstance(value, list):
-                    write_dict[key] = [
-                        token.__getstate__() if isinstance(token, AddedToken) else token for token in value
-                    ]
-                else:
-                    write_dict[key] = value
             f.write(json.dumps(write_dict, ensure_ascii=False))
 
+        file_names = (tokenizer_config_file, special_tokens_map_file)
+
+        return self._save_pretrained(
+            save_directory=save_directory,
+            file_names=file_names,
+            legacy_format=legacy_format,
+            filename_prefix=filename_prefix,
+        )
+
+    def _save_pretrained(
+        self,
+        save_directory: Union[str, os.PathLike],
+        file_names: Tuple[str],
+        legacy_format: bool = True,
+        filename_prefix: Optional[str] = None,
+    ) -> Tuple[str]:
+        """
+        Save a tokenizer using the slow-tokenizer/legacy format: vocabulary + added tokens.
+
+        Fast tokenizers can also be saved in a unique JSON file containing {config + vocab + added-tokens} using the
+        specific :meth:`~transformers.tokenization_utils_fast.PreTrainedTokenizerFast._save_pretrained`
+        """
+        if not legacy_format:
+            raise ValueError(
+                "Only fast tokenizers (instances of PretrainedTokenizerFast) can be saved in non legacy format."
+            )
+
+        save_directory = str(save_directory)
+
+        added_tokens_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + ADDED_TOKENS_FILE
+        )
         added_vocab = self.get_added_vocab()
         if added_vocab:
             with open(added_tokens_file, "w", encoding="utf-8") as f:
                 out_str = json.dumps(added_vocab, ensure_ascii=False)
                 f.write(out_str)
 
-        vocab_files = self.save_vocabulary(save_directory)
+        vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
 
-        return vocab_files + (special_tokens_map_file, added_tokens_file)
+        return file_names + vocab_files + (added_tokens_file,)
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        """
+        Save only the vocabulary of the tokenizer (vocabulary + added tokens).
+
+        This method won't save the configuration and special token mappings of the tokenizer. Use
+        :meth:`~transformers.PreTrainedTokenizerFast._save_pretrained` to save the whole state of the tokenizer.
+
+        Args:
+            save_directory (:obj:`str`):
+                The directory in which to save the vocabulary.
+            filename_prefix (:obj:`str`, `optional`):
+                An optional prefix to add to the named of the saved files.
+
+        Returns:
+            :obj:`Tuple(str)`: Paths to the files saved.
+        """
+        raise NotImplementedError
+
+    def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
+        """
+        Converts a string in a sequence of tokens, using the backend Rust tokenizer.
+
+        Note that this method behave differently between fast and slow tokenizers:
+
+            - in fast tokenizers (instances of :class:`~transformers.PreTrainedTokenizerFast`), this method will
+              replace the unknown tokens with the :obj:`unk_token`,
+            - in slow tokenizers (instances of :class:`~transformers.PreTrainedTokenizer`), this method keep unknown
+              tokens unchanged.
+
+        Args:
+            text (:obj:`str`):
+                The sequence to be encoded.
+            pair (:obj:`str`, `optional`):
+                A second sequence to be encoded with the first.
+            add_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to add the special tokens associated with the corresponding model.
+            kwargs (additional keyword arguments, `optional`):
+                Will be passed to the underlying model specific encode method. See details in
+                :meth:`~transformers.PreTrainedTokenizer.__call__`
+
+        Returns:
+            :obj:`List[str]`: The list of tokens.
+        """
+        raise NotImplementedError
 
     @add_end_docstrings(
         ENCODE_KWARGS_DOCSTRING,
@@ -1687,8 +2094,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         """,
         """
         Returns:
-            :obj:`List[int]`, :obj:`torch.Tensor`, :obj:`tf.Tensor` or :obj:`np.ndarray`:
-            The tokenized ids of the text.
+            :obj:`List[int]`, :obj:`torch.Tensor`, :obj:`tf.Tensor` or :obj:`np.ndarray`: The tokenized ids of the
+            text.
         """,
     )
     def encode(
@@ -1710,12 +2117,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         Args:
             text (:obj:`str`, :obj:`List[str]` or :obj:`List[int]`):
-                The first sequence to be encoded. This can be a string, a list of strings (tokenized string using
-                the ``tokenize`` method) or a list of integers (tokenized string ids using the
-                ``convert_tokens_to_ids`` method).
+                The first sequence to be encoded. This can be a string, a list of strings (tokenized string using the
+                ``tokenize`` method) or a list of integers (tokenized string ids using the ``convert_tokens_to_ids``
+                method).
             text_pair (:obj:`str`, :obj:`List[str]` or :obj:`List[int]`, `optional`):
-                Optional second sequence to be encoded. This can be a string, a list of strings (tokenized
-                string using the ``tokenize`` method) or a list of integers (tokenized string ids using the
+                Optional second sequence to be encoded. This can be a string, a list of strings (tokenized string using
+                the ``tokenize`` method) or a list of integers (tokenized string ids using the
                 ``convert_tokens_to_ids`` method).
         """
         encoded_inputs = self.encode_plus(
@@ -1739,8 +2146,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         self, padding=False, truncation=False, max_length=None, pad_to_multiple_of=None, verbose=True, **kwargs
     ):
         """
-        Find the correct padding/truncation strategy with backward compatibility
-        for old arguments (truncation_strategy and pad_to_max_length) and behaviors.
+        Find the correct padding/truncation strategy with backward compatibility for old arguments (truncation_strategy
+        and pad_to_max_length) and behaviors.
         """
         old_truncation_strategy = kwargs.pop("truncation_strategy", "do_not_truncate")
         old_pad_to_max_length = kwargs.pop("pad_to_max_length", False)
@@ -1749,13 +2156,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         # If you only set max_length, it activates truncation for max_length
         if max_length is not None and padding is False and truncation is False:
             if verbose:
-                logger.warning(
-                    "Truncation was not explicitely activated but `max_length` is provided a specific value, "
-                    "please use `truncation=True` to explicitely truncate examples to max length. "
-                    "Defaulting to 'longest_first' truncation strategy. "
-                    "If you encode pairs of sequences (GLUE-style) with the tokenizer you can select this strategy "
-                    "more precisely by providing a specific strategy to `truncation`."
-                )
+                if not self.deprecation_warnings.get("Truncation-not-explicitly-activated", False):
+                    logger.warning(
+                        "Truncation was not explicitly activated but `max_length` is provided a specific value, "
+                        "please use `truncation=True` to explicitly truncate examples to max length. "
+                        "Defaulting to 'longest_first' truncation strategy. "
+                        "If you encode pairs of sequences (GLUE-style) with the tokenizer you can select this strategy "
+                        "more precisely by providing a specific strategy to `truncation`."
+                    )
+                self.deprecation_warnings["Truncation-not-explicitly-activated"] = True
             truncation = "longest_first"
 
         # Get padding strategy
@@ -1778,6 +2187,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch
             elif not isinstance(padding, PaddingStrategy):
                 padding_strategy = PaddingStrategy(padding)
+            elif isinstance(padding, PaddingStrategy):
+                padding_strategy = padding
         else:
             padding_strategy = PaddingStrategy.DO_NOT_PAD
 
@@ -1803,6 +2214,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 )  # Default to truncate the longest sequences in pairs of inputs
             elif not isinstance(truncation, TruncationStrategy):
                 truncation_strategy = TruncationStrategy(truncation)
+            elif isinstance(truncation, TruncationStrategy):
+                truncation_strategy = truncation
         else:
             truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
 
@@ -1811,10 +2224,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             if padding_strategy == PaddingStrategy.MAX_LENGTH:
                 if self.model_max_length > LARGE_INTEGER:
                     if verbose:
-                        logger.warning(
-                            "Asking to pad to max_length but no maximum length is provided and the model has no predefined maximum length. "
-                            "Default to no padding."
-                        )
+                        if not self.deprecation_warnings.get("Asking-to-pad-to-max_length", False):
+                            logger.warning(
+                                "Asking to pad to max_length but no maximum length is provided and the model has no predefined maximum length. "
+                                "Default to no padding."
+                            )
+                        self.deprecation_warnings["Asking-to-pad-to-max_length"] = True
                     padding_strategy = PaddingStrategy.DO_NOT_PAD
                 else:
                     max_length = self.model_max_length
@@ -1822,10 +2237,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE:
                 if self.model_max_length > LARGE_INTEGER:
                     if verbose:
-                        logger.warning(
-                            "Asking to truncate to max_length but no maximum length is provided and the model has no predefined maximum length. "
-                            "Default to no truncation."
-                        )
+                        if not self.deprecation_warnings.get("Asking-to-truncate-to-max_length", False):
+                            logger.warning(
+                                "Asking to truncate to max_length but no maximum length is provided and the model has no predefined maximum length. "
+                                "Default to no truncation."
+                            )
+                        self.deprecation_warnings["Asking-to-truncate-to-max_length"] = True
                     truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
                 else:
                     max_length = self.model_max_length
@@ -1863,7 +2280,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         truncation: Union[bool, str, TruncationStrategy] = False,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_pretokenized: bool = False,
+        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -1881,15 +2298,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         Args:
             text (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
-                The sequence or batch of sequences to be encoded.
-                Each sequence can be a string or a list of strings (pretokenized string).
-                If the sequences are provided as list of strings (pretokenized), you must set
-                :obj:`is_pretokenized=True` (to lift the ambiguity with a batch of sequences).
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                :obj:`is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
             text_pair (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
-                The sequence or batch of sequences to be encoded.
-                Each sequence can be a string or a list of strings (pretokenized string).
-                If the sequences are provided as list of strings (pretokenized), you must set
-                :obj:`is_pretokenized=True` (to lift the ambiguity with a batch of sequences).
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                :obj:`is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
         """
         # Input type checking for clearer error
         assert isinstance(text, str) or (
@@ -1928,8 +2343,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         )
 
         is_batched = bool(
-            (not is_pretokenized and isinstance(text, (list, tuple)))
-            or (is_pretokenized and isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple)))
+            (not is_split_into_words and isinstance(text, (list, tuple)))
+            or (
+                is_split_into_words and isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
+            )
         )
 
         if is_batched:
@@ -1941,7 +2358,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 truncation=truncation,
                 max_length=max_length,
                 stride=stride,
-                is_pretokenized=is_pretokenized,
+                is_split_into_words=is_split_into_words,
                 pad_to_multiple_of=pad_to_multiple_of,
                 return_tensors=return_tensors,
                 return_token_type_ids=return_token_type_ids,
@@ -1962,7 +2379,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 truncation=truncation,
                 max_length=max_length,
                 stride=stride,
-                is_pretokenized=is_pretokenized,
+                is_split_into_words=is_split_into_words,
                 pad_to_multiple_of=pad_to_multiple_of,
                 return_tensors=return_tensors,
                 return_token_type_ids=return_token_type_ids,
@@ -1985,7 +2402,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         truncation: Union[bool, str, TruncationStrategy] = False,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_pretokenized: bool = False,
+        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -2005,12 +2422,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         Args:
             text (:obj:`str`, :obj:`List[str]` or :obj:`List[int]` (the latter only for not-fast tokenizers)):
-                The first sequence to be encoded. This can be a string, a list of strings (tokenized string using
-                the ``tokenize`` method) or a list of integers (tokenized string ids using the
-                ``convert_tokens_to_ids`` method).
+                The first sequence to be encoded. This can be a string, a list of strings (tokenized string using the
+                ``tokenize`` method) or a list of integers (tokenized string ids using the ``convert_tokens_to_ids``
+                method).
             text_pair (:obj:`str`, :obj:`List[str]` or :obj:`List[int]`, `optional`):
-                Optional second sequence to be encoded. This can be a string, a list of strings (tokenized
-                string using the ``tokenize`` method) or a list of integers (tokenized string ids using the
+                Optional second sequence to be encoded. This can be a string, a list of strings (tokenized string using
+                the ``tokenize`` method) or a list of integers (tokenized string ids using the
                 ``convert_tokens_to_ids`` method).
         """
 
@@ -2032,7 +2449,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             truncation_strategy=truncation_strategy,
             max_length=max_length,
             stride=stride,
-            is_pretokenized=is_pretokenized,
+            is_split_into_words=is_split_into_words,
             pad_to_multiple_of=pad_to_multiple_of,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
@@ -2054,7 +2471,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_pretokenized: bool = False,
+        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -2084,7 +2501,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         truncation: Union[bool, str, TruncationStrategy] = False,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_pretokenized: bool = False,
+        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -2104,9 +2521,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         Args:
             batch_text_or_text_pairs (:obj:`List[str]`, :obj:`List[Tuple[str, str]]`, :obj:`List[List[str]]`, :obj:`List[Tuple[List[str], List[str]]]`, and for not-fast tokenizers, also :obj:`List[List[int]]`, :obj:`List[Tuple[List[int], List[int]]]`):
-                Batch of sequences or pair of sequences to be encoded.
-                This can be a list of string/string-sequences/int-sequences or a list of pair of
-                string/string-sequences/int-sequence (see details in ``encode_plus``).
+                Batch of sequences or pair of sequences to be encoded. This can be a list of
+                string/string-sequences/int-sequences or a list of pair of string/string-sequences/int-sequence (see
+                details in ``encode_plus``).
         """
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
@@ -2126,7 +2543,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             truncation_strategy=truncation_strategy,
             max_length=max_length,
             stride=stride,
-            is_pretokenized=is_pretokenized,
+            is_split_into_words=is_split_into_words,
             pad_to_multiple_of=pad_to_multiple_of,
             return_tensors=return_tensors,
             return_token_type_ids=return_token_type_ids,
@@ -2154,7 +2571,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
         max_length: Optional[int] = None,
         stride: int = 0,
-        is_pretokenized: bool = False,
+        is_split_into_words: bool = False,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         return_token_type_ids: Optional[bool] = None,
@@ -2188,8 +2605,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         Pad a single encoded input or a batch of encoded inputs up to predefined length or to the max sequence length
         in the batch.
 
-        Padding side (left/right) padding token ids are defined at the tokenizer level
-        (with ``self.padding_side``, ``self.pad_token_id`` and ``self.pad_token_type_id``)
+        Padding side (left/right) padding token ids are defined at the tokenizer level (with ``self.padding_side``,
+        ``self.pad_token_id`` and ``self.pad_token_type_id``)
 
         .. note::
 
@@ -2199,14 +2616,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         Args:
             encoded_inputs (:class:`~transformers.BatchEncoding`, list of :class:`~transformers.BatchEncoding`, :obj:`Dict[str, List[int]]`, :obj:`Dict[str, List[List[int]]` or :obj:`List[Dict[str, List[int]]]`):
-                Tokenized inputs. Can represent one input (:class:`~transformers.BatchEncoding` or
-                :obj:`Dict[str, List[int]]`) or a batch of tokenized inputs (list of
-                :class:`~transformers.BatchEncoding`, `Dict[str, List[List[int]]]` or `List[Dict[str, List[int]]]`) so
-                you can use this method during preprocessing as well as in a PyTorch Dataloader collate function.
+                Tokenized inputs. Can represent one input (:class:`~transformers.BatchEncoding` or :obj:`Dict[str,
+                List[int]]`) or a batch of tokenized inputs (list of :class:`~transformers.BatchEncoding`, `Dict[str,
+                List[List[int]]]` or `List[Dict[str, List[int]]]`) so you can use this method during preprocessing as
+                well as in a PyTorch Dataloader collate function.
 
                 Instead of :obj:`List[int]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors),
                 see the note above for the return type.
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
+            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
 
@@ -2235,7 +2652,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
                 * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
             verbose (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether or not to print informations and warnings.
+                Whether or not to print more information and warnings.
         """
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
@@ -2256,10 +2673,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         # If we have PyTorch/TF/NumPy tensors/arrays as inputs, we cast them as python objects
         # and rebuild them afterwards if no return_tensors is specified
         # Note that we lose the specific device the tensor may be on for PyTorch
+
         first_element = encoded_inputs["input_ids"][0]
-        if isinstance(first_element, (list, tuple)) and first_element:
-            first_element = first_element[0]
-        if not isinstance(first_element, int):
+        if isinstance(first_element, (list, tuple)):
+            # first_element might be an empty list/tuple in some edge cases so we grab the first non empty element.
+            index = 0
+            while len(encoded_inputs["input_ids"][index]) == 0:
+                index += 1
+            if index < len(encoded_inputs["input_ids"]):
+                first_element = encoded_inputs["input_ids"][index][0]
+        # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
+        if not isinstance(first_element, (int, list, tuple)):
             if is_tf_available() and isinstance(first_element, tf.Tensor):
                 return_tensors = "tf" if return_tensors is None else return_tensors
             elif is_torch_available() and isinstance(first_element, torch.Tensor):
@@ -2271,18 +2695,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                     f"type of {first_element} unknown: {type(first_element)}. "
                     f"Should be one of a python, numpy, pytorch or tensorflow object."
                 )
-
-            def to_py_obj(obj):
-                if isinstance(obj, (list, tuple)):
-                    return [to_py_obj(o) for o in obj]
-                elif is_tf_available() and isinstance(obj, tf.Tensor):
-                    return obj.numpy().tolist()
-                elif is_torch_available() and isinstance(obj, torch.Tensor):
-                    return obj.cpu().tolist()
-                elif isinstance(obj, np.ndarray):
-                    return obj.tolist()
-                else:
-                    return obj
 
             for key, value in encoded_inputs.items():
                 encoded_inputs[key] = to_py_obj(value)
@@ -2305,7 +2717,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         batch_size = len(encoded_inputs["input_ids"])
         assert all(
             len(v) == batch_size for v in encoded_inputs.values()
-        ), "Some items in the output dictionnary have a different batch size than others."
+        ), "Some items in the output dictionary have a different batch size than others."
 
         if padding_strategy == PaddingStrategy.LONGEST:
             max_length = max(len(inputs) for inputs in encoded_inputs["input_ids"])
@@ -2333,10 +2745,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create the token type IDs corresponding to the sequences passed.
-        `What are token type IDs? <../glossary.html#token-type-ids>`__
+        Create the token type IDs corresponding to the sequences passed. `What are token type IDs?
+        <../glossary.html#token-type-ids>`__
 
-        Should be overriden in a subclass if the model has a special way of building those.
+        Should be overridden in a subclass if the model has a special way of building those.
 
         Args:
             token_ids_0 (:obj:`List[int]`): The first tokenized sequence.
@@ -2353,10 +2765,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-        by concatenating and adding special tokens.
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens.
 
-        This implementation does not add special tokens and this method should be overriden in a subclass.
+        This implementation does not add special tokens and this method should be overridden in a subclass.
 
         Args:
             token_ids_0 (:obj:`List[int]`): The first tokenized sequence.
@@ -2392,27 +2804,18 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         **kwargs
     ) -> BatchEncoding:
         """
-        Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model.
-        It adds special tokens, truncates sequences if overflowing while taking into account the special tokens and
+        Prepares a sequence of input id, or a pair of sequences of inputs ids so that it can be used by the model. It
+        adds special tokens, truncates sequences if overflowing while taking into account the special tokens and
         manages a moving window (with user defined stride) for overflowing tokens
 
         Args:
             ids (:obj:`List[int]`):
-                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the
-                ``tokenize`` and ``convert_tokens_to_ids`` methods.
+                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the ``tokenize``
+                and ``convert_tokens_to_ids`` methods.
             pair_ids (:obj:`List[int]`, `optional`):
-                Tokenized input ids of the second sequence. Can be obtained from a string by chaining the
-                ``tokenize`` and ``convert_tokens_to_ids`` methods.
+                Tokenized input ids of the second sequence. Can be obtained from a string by chaining the ``tokenize``
+                and ``convert_tokens_to_ids`` methods.
         """
-
-        if "return_lengths" in kwargs:
-            if verbose:
-                warnings.warn(
-                    "The PreTrainedTokenizerBase.prepare_for_model `return_lengths` parameter is deprecated. "
-                    "Please use `return_length` instead.",
-                    FutureWarning,
-                )
-            return_length = kwargs["return_lengths"]
 
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
@@ -2428,6 +2831,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         len_ids = len(ids)
         len_pair_ids = len(pair_ids) if pair else 0
 
+        if return_token_type_ids and not add_special_tokens:
+            raise ValueError(
+                "Asking to return token_type_ids while setting add_special_tokens to False "
+                "results in an undefined behavior. Please set add_special_tokens to True or "
+                "set return_token_type_ids to None."
+            )
+
         # Load from model defaults
         if return_token_type_ids is None:
             return_token_type_ids = "token_type_ids" in self.model_input_names
@@ -2440,6 +2850,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         total_len = len_ids + len_pair_ids + (self.num_special_tokens_to_add(pair=pair) if add_special_tokens else 0)
 
         # Truncation: Handle max sequence length
+        overflowing_tokens = []
         if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length and total_len > max_length:
             ids, pair_ids, overflowing_tokens = self.truncate_sequences(
                 ids,
@@ -2448,9 +2859,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 truncation_strategy=truncation_strategy,
                 stride=stride,
             )
-            if return_overflowing_tokens:
-                encoded_inputs["overflowing_tokens"] = overflowing_tokens
-                encoded_inputs["num_truncated_tokens"] = total_len - max_length
+
+        if return_overflowing_tokens:
+            encoded_inputs["overflowing_tokens"] = overflowing_tokens
+            encoded_inputs["num_truncated_tokens"] = total_len - max_length
 
         # Add special tokens
         if add_special_tokens:
@@ -2458,9 +2870,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             token_type_ids = self.create_token_type_ids_from_sequences(ids, pair_ids)
         else:
             sequence = ids + pair_ids if pair else ids
-            token_type_ids = [0] * len(ids) + ([1] * len(pair_ids) if pair else [])
+            token_type_ids = [0] * len(ids) + ([0] * len(pair_ids) if pair else [])
 
-        # Build output dictionnary
+        # Build output dictionary
         encoded_inputs["input_ids"] = sequence
         if return_token_type_ids:
             encoded_inputs["token_type_ids"] = token_type_ids
@@ -2471,12 +2883,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 encoded_inputs["special_tokens_mask"] = [0] * len(sequence)
 
         # Check lengths
-        if max_length is None and len(encoded_inputs["input_ids"]) > self.model_max_length and verbose:
-            logger.warning(
-                "Token indices sequence length is longer than the specified maximum sequence length "
-                "for this model ({} > {}). Running this sequence through the model will result in "
-                "indexing errors".format(len(ids), self.model_max_length)
-            )
+        self._eventual_warn_about_too_long_sequence(encoded_inputs["input_ids"], max_length, verbose)
 
         # Padding
         if padding_strategy != PaddingStrategy.DO_NOT_PAD or return_attention_mask:
@@ -2510,41 +2917,35 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         Args:
             ids (:obj:`List[int]`):
-                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the
-                ``tokenize`` and ``convert_tokens_to_ids`` methods.
+                Tokenized input ids of the first sequence. Can be obtained from a string by chaining the ``tokenize``
+                and ``convert_tokens_to_ids`` methods.
             pair_ids (:obj:`List[int]`, `optional`):
-                Tokenized input ids of the second sequence. Can be obtained from a string by chaining the
-                ``tokenize`` and ``convert_tokens_to_ids`` methods.
+                Tokenized input ids of the second sequence. Can be obtained from a string by chaining the ``tokenize``
+                and ``convert_tokens_to_ids`` methods.
             num_tokens_to_remove (:obj:`int`, `optional`, defaults to 0):
                 Number of tokens to remove using the truncation strategy.
-            truncation (:obj:`str` or :class:`~transformers.tokenization_utils_base.TruncationStrategy`, `optional`, defaults to :obj:`False`):
+            truncation_strategy (:obj:`str` or :class:`~transformers.tokenization_utils_base.TruncationStrategy`, `optional`, defaults to :obj:`False`):
                 The strategy to follow for truncation. Can be:
 
-                * :obj:`'longest_first'`: Truncate to a maximum length specified with the argument
-                  :obj:`max_length` or to the maximum acceptable input length for the model if that argument is not
-                  provided. This will truncate token by token, removing a token from the longest sequence in the pair
-                  if a pair of sequences (or a batch of pairs) is provided.
+                * :obj:`'longest_first'`: Truncate to a maximum length specified with the argument :obj:`max_length` or
+                  to the maximum acceptable input length for the model if that argument is not provided. This will
+                  truncate token by token, removing a token from the longest sequence in the pair if a pair of
+                  sequences (or a batch of pairs) is provided.
                 * :obj:`'only_first'`: Truncate to a maximum length specified with the argument :obj:`max_length` or to
                   the maximum acceptable input length for the model if that argument is not provided. This will only
                   truncate the first sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
                 * :obj:`'only_second'`: Truncate to a maximum length specified with the argument :obj:`max_length` or
                   to the maximum acceptable input length for the model if that argument is not provided. This will only
                   truncate the second sequence of a pair if a pair of sequences (or a batch of pairs) is provided.
-                * :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with
-                  sequence lengths greater than the model maximum admissible input size).
-            max_length (:obj:`int`, `optional`):
-                Controls the maximum length to use by one of the truncation/padding parameters.
-
-                If left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum
-                length is required by one of the truncation/padding parameters. If the model has no specific maximum
-                input length (like XLNet) truncation/padding to a maximum length will be deactivated.
+                * :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with sequence lengths
+                  greater than the model maximum admissible input size).
             stride (:obj:`int`, `optional`, defaults to 0):
-                If set to a positive number, the overflowing tokens returned will contain some tokens
-                from the main sequence returned. The value of this argument defines the number of additional tokens.
+                If set to a positive number, the overflowing tokens returned will contain some tokens from the main
+                sequence returned. The value of this argument defines the number of additional tokens.
 
         Returns:
-            :obj:`Tuple[List[int], List[int], List[int]]`:
-            The truncated ``ids``, the truncated ``pair_ids`` and the list of overflowing tokens.
+            :obj:`Tuple[List[int], List[int], List[int]]`: The truncated ``ids``, the truncated ``pair_ids`` and the
+            list of overflowing tokens.
         """
         if num_tokens_to_remove <= 0:
             return ids, pair_ids, []
@@ -2605,17 +3006,19 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         return_attention_mask: Optional[bool] = None,
     ) -> dict:
         """
-        Pad encoded inputs (on left/right and up to predefined legnth or max length in the batch)
+        Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
 
         Args:
             encoded_inputs: Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
             max_length: maximum length of the returned list and optionally padding length (see below).
                 Will truncate by taking into account the special tokens.
             padding_strategy: PaddingStrategy to use for padding.
+
                 - PaddingStrategy.LONGEST Pad to the longest sequence in the batch
                 - PaddingStrategy.MAX_LENGTH: Pad to the max length (default)
                 - PaddingStrategy.DO_NOT_PAD: Do not pad
                 The tokenizer padding sides are defined in self.padding_side:
+
                     - 'left': pads on the left of the sequences
                     - 'right': pads on the right of the sequences
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
@@ -2661,56 +3064,98 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 encoded_inputs["input_ids"] = [self.pad_token_id] * difference + encoded_inputs["input_ids"]
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
-        else:
-            if return_attention_mask:
-                encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"])
+        elif return_attention_mask and "attention_mask" not in encoded_inputs:
+            encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"])
 
         return encoded_inputs
 
+    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+        """
+        Converts a sequence of token ids in a single string. The most simple way to do it is ``" ".join(tokens)`` but
+        we often want to remove sub-word tokenization artifacts at the same time
+
+        Args:
+            tokens (:obj:`List[str]`): The token to join in a string.
+        Return: The joined tokens.
+        """
+        raise NotImplementedError
+
     def batch_decode(
-        self, sequences: List[List[int]], skip_special_tokens: bool = False, clean_up_tokenization_spaces: bool = True
+        self,
+        sequences: Union[List[int], List[List[int]], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = True,
+        **kwargs
     ) -> List[str]:
         """
         Convert a list of lists of token ids into a list of strings by calling decode.
 
         Args:
-            sequences (:obj:`List[List[int]]`):
+            sequences (:obj:`Union[List[int], List[List[int]], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the ``__call__`` method.
             skip_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to clean up the tokenization spaces.
+            kwargs (additional keyword arguments, `optional`):
+                Will be passed to the underlying model specific decode method.
 
         Returns:
             :obj:`List[str]`: The list of decoded sentences.
         """
         return [
             self.decode(
-                seq, skip_special_tokens=skip_special_tokens, clean_up_tokenization_spaces=clean_up_tokenization_spaces
+                seq,
+                skip_special_tokens=skip_special_tokens,
+                clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                **kwargs,
             )
             for seq in sequences
         ]
 
     def decode(
-        self, token_ids: List[int], skip_special_tokens: bool = False, clean_up_tokenization_spaces: bool = True
+        self,
+        token_ids: Union[int, List[int], "np.ndarray", "torch.Tensor", "tf.Tensor"],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = True,
+        **kwargs
     ) -> str:
         """
-        Converts a sequence of ids in a string, using the tokenizer and vocabulary
-        with options to remove special tokens and clean up tokenization spaces.
+        Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
+        tokens and clean up tokenization spaces.
 
         Similar to doing ``self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))``.
 
         Args:
-            token_ids (:obj:`List[int]`):
+            token_ids (:obj:`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
                 List of tokenized input ids. Can be obtained using the ``__call__`` method.
             skip_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to remove special tokens in the decoding.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to clean up the tokenization spaces.
+            kwargs (additional keyword arguments, `optional`):
+                Will be passed to the underlying model specific decode method.
 
         Returns:
             :obj:`str`: The decoded sentence.
         """
+        # Convert inputs to python lists
+        token_ids = to_py_obj(token_ids)
+
+        return self._decode(
+            token_ids=token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
+
+    def _decode(
+        self,
+        token_ids: Union[int, List[int]],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = True,
+        **kwargs
+    ) -> str:
         raise NotImplementedError
 
     def get_special_tokens_mask(
@@ -2726,7 +3171,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             token_ids_1 (:obj:`List[int]`, `optional`):
                 List of ids of the second sequence.
             already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Wheter or not the token list is already formated with special tokens for the model.
+                Whether or not the token list is already formatted with special tokens for the model.
 
         Returns:
             A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
@@ -2734,7 +3179,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         assert already_has_special_tokens and token_ids_1 is None, (
             "You cannot use ``already_has_special_tokens=False`` with this tokenizer. "
             "Please use a slow (full python) tokenizer to activate this argument."
-            "Or set `return_special_token_mask=True` when calling the encoding method "
+            "Or set `return_special_tokens_mask=True` when calling the encoding method "
             "to get the special tokens mask in any tokenizer. "
         )
 
@@ -2747,7 +3192,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     @staticmethod
     def clean_up_tokenization(out_string: str) -> str:
         """
-        Clean up a list of simple English tokenization artifacts like spaces before punctuations and abreviated forms.
+        Clean up a list of simple English tokenization artifacts like spaces before punctuations and abbreviated forms.
 
         Args:
             out_string (:obj:`str`): The text to clean up.
@@ -2768,3 +3213,23 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             .replace(" 're", "'re")
         )
         return out_string
+
+    def _eventual_warn_about_too_long_sequence(self, ids: List[int], max_length: Optional[int], verbose: bool):
+        """
+        Depending on the input and internal state we might trigger a warning about a sequence that is too long for it's
+        corresponding model
+
+        Args:
+            ids (:obj:`List[str]`): The ids produced by the tokenization
+            max_length (:obj:`int`, `optional`): The max_length desired (does not trigger a warning if it is set)
+            verbose (:obj:`bool`): Whether or not to print more information and warnings.
+
+        """
+        if max_length is None and len(ids) > self.model_max_length and verbose:
+            if not self.deprecation_warnings.get("sequence-length-is-longer-than-the-specified-maximum", False):
+                logger.warning(
+                    "Token indices sequence length is longer than the specified maximum sequence length "
+                    "for this model ({} > {}). Running this sequence through the model will result in "
+                    "indexing errors".format(len(ids), self.model_max_length)
+                )
+            self.deprecation_warnings["sequence-length-is-longer-than-the-specified-maximum"] = True

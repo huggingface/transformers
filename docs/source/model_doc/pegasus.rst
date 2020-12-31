@@ -1,49 +1,82 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Pegasus
-----------------------------------------------------
-**DISCLAIMER:** If you see something strange,
-file a `Github Issue <https://github.com/huggingface/transformers/issues/new?assignees=sshleifer&labels=&template=bug-report.md&title>`__ and assign
-@sshleifer.
+-----------------------------------------------------------------------------------------------------------------------
+
+**DISCLAIMER:** If you see something strange, file a `Github Issue
+<https://github.com/huggingface/transformers/issues/new?assignees=sshleifer&labels=&template=bug-report.md&title>`__
+and assign @patrickvonplaten.
 
 
 Overview
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The Pegasus model was proposed in `PEGASUS: Pre-training with Extracted Gap-sentences for
-Abstractive Summarization <https://arxiv.org/pdf/1912.08777.pdf>`_ by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu on Dec 18, 2019.
+The Pegasus model was proposed in `PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive Summarization
+<https://arxiv.org/pdf/1912.08777.pdf>`__ by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu on Dec 18, 2019.
+
 According to the abstract,
 
-- Pegasus' pretraining task is intentionally similar to summarization: important sentences are removed/masked from an input document and are generated together as one output sequence from the remaining sentences, similar to an extractive summary.
+- Pegasus' pretraining task is intentionally similar to summarization: important sentences are removed/masked from an
+  input document and are generated together as one output sequence from the remaining sentences, similar to an
+  extractive summary.
 - Pegasus achieves SOTA summarization performance on all 12 downstream tasks, as measured by ROUGE and human eval.
 
-The Authors' code can be found `here <https://github.com/google-research/pegasus>`_.
+The Authors' code can be found `here <https://github.com/google-research/pegasus>`__.
 
 
 Checkpoints
-~~~~~~~~~~~
-All the `checkpoints <https://huggingface.co/models?search=pegasus>`_ are finetuned for summarization, besides ``pegasus-large``, whence the other checkpoints are finetuned.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+All the `checkpoints <https://huggingface.co/models?search=pegasus>`__ are fine-tuned for summarization, besides
+`pegasus-large`, whence the other checkpoints are fine-tuned:
+
 - Each checkpoint is 2.2 GB on disk and 568M parameters.
 - FP16 is not supported (help/ideas on this appreciated!).
 - Summarizing xsum in fp32 takes about 400ms/sample, with default parameters on a v100 GPU.
-- For XSUM, The paper reports rouge1,rouge2, rougeL of paper: 47.21/24.56/39.25. As of Aug 9, this port scores 46.91/24.34/39.1.
-The gap is likely because of different alpha/length_penalty implementations in beam search.
+- Full replication results and correctly pre-processed data can be found in this `Issue
+  <https://github.com/huggingface/transformers/issues/6844#issue-689259666>`__.
+- `Distilled checkpoints <https://huggingface.co/models?search=distill-pegasus>`__ are described in this `paper
+  <https://arxiv.org/abs/2010.13002>`__.
+
+Examples
+_______________________________________________________________________________________________________________________
+
+- `Script <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/finetune_pegasus_xsum.sh>`__ to
+  fine-tune pegasus on the XSUM dataset. Data download instructions at `examples/seq2seq/
+  <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`__.
+- FP16 is not supported (help/ideas on this appreciated!).
+- The adafactor optimizer is recommended for pegasus fine-tuning.
 
 
 Implementation Notes
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - All models are transformer encoder-decoders with 16 layers in each component.
-- The implementation is completely inherited from ``BartForConditionalGeneration``
+- The implementation is completely inherited from :class:`~transformers.BartForConditionalGeneration`
 - Some key configuration differences:
+
     - static, sinusoidal position embeddings
-    - no ``layernorm_embedding`` (``PegasusConfig.normalize_embedding=False``)
+    - no :obj:`layernorm_embedding` (:obj:`PegasusConfig.normalize_embedding=False`)
     - the model starts generating with pad_token_id (which has 0 token_embedding) as the prefix.
-    - ``num_beams=8``
-- All pretrained pegasus checkpoints are the same besides three attributes: ``tokenizer.model_max_length`` (max input size),  ``max_length`` (max num tokens to generate) and ``length_penalty``
-- Code to convert checkpoints trained in the author's `repo <https://github.com/google-research/pegasus>`_ can be found in ``convert_pegasus_tf_to_pytorch.py``
+    - more beams are used (:obj:`num_beams=8`)
+- All pretrained pegasus checkpoints are the same besides three attributes: :obj:`tokenizer.model_max_length` (maximum
+  input size), :obj:`max_length` (the maximum number of tokens to generate) and :obj:`length_penalty`.
+- The code to convert checkpoints trained in the author's `repo <https://github.com/google-research/pegasus>`_ can be
+  found in ``convert_pegasus_tf_to_pytorch.py``.
 
 
 Usage Example
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 
@@ -57,61 +90,48 @@ Usage Example
     torch_device = 'cuda' if torch.cuda.is_available() else 'cpu'
     tokenizer = PegasusTokenizer.from_pretrained(model_name)
     model = PegasusForConditionalGeneration.from_pretrained(model_name).to(torch_device)
-    batch = tokenizer.prepare_seq2seq_batch(src_text, truncation=True, padding='longest').to(torch_device)
+    batch = tokenizer.prepare_seq2seq_batch(src_text, truncation=True, padding='longest', return_tensors="pt").to(torch_device)
     translated = model.generate(**batch)
     tgt_text = tokenizer.batch_decode(translated, skip_special_tokens=True)
-    assert tgt_text[0] == "California's largest electricity provider has turned off power to tens of thousands of customers."
+    assert tgt_text[0] == "California's largest electricity provider has turned off power to hundreds of thousands of customers."
 
-PegasusForConditionalGeneration
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-This class inherits all functionality from ``BartForConditionalGeneration``, see that page for method signatures.
-Available models are listed at `Model List <https://huggingface.co/models?search=pegasus>`__
-
-.. autoclass:: transformers.PegasusForConditionalGeneration
-    :members:
 
 
 PegasusConfig
-~~~~~~~~~~~~~~~~~~~
-This config fully inherits from ``BartConfig``, but pegasus uses different default values:
-Up to date parameter values can be seen in `S3 <https://s3.amazonaws.com/models.huggingface.co/bert/google/pegasus-xsum/config.json>`_.
-As of Aug 10, 2020, they are:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: python
-
-    dict(
-    vocab_size=96103,
-    max_position_embeddings=512,
-    d_model=1024,
-    encoder_ffn_dim=4096,
-    decoder_ffn_dim=4096,
-    encoder_attention_heads=16,
-    decoder_attention_heads=16,
-    encoder_layers=16,
-    decoder_layers=16,
-    dropout=0.1,
-    attention_dropout=0.1,
-    activation_dropout=0.1,
-    pad_token_id=0,
-    eos_token_id=1,
-    is_encoder_decoder=True,
-    normalize_before=True,
-    scale_embedding=True,
-    normalize_embedding=False,
-    add_final_layer_norm=True,
-    static_position_embeddings=True,
-    num_beams=8,
-    activation_function="relu",
-    )
+.. autoclass:: transformers.PegasusConfig
 
 
 PegasusTokenizer
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 warning: ``add_tokens`` does not work at the moment.
 
 .. autoclass:: transformers.PegasusTokenizer
     :members: __call__, prepare_seq2seq_batch
 
 
+PegasusTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+.. autoclass:: transformers.PegasusTokenizerFast
+    :members:
+
+
+PegasusModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.PegasusModel
+
+
+PegasusForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.PegasusForConditionalGeneration
+
+
+TFPegasusForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFPegasusForConditionalGeneration

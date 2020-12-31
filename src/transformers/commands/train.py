@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import os
 from argparse import ArgumentParser, Namespace
 
@@ -19,7 +33,8 @@ USE_AMP = False
 def train_command_factory(args: Namespace):
     """
     Factory function used to instantiate training command from provided command line arguments.
-    :return: TrainCommand
+
+    Returns: TrainCommand
     """
     return TrainCommand(args)
 
@@ -29,8 +44,9 @@ class TrainCommand(BaseTransformersCLICommand):
     def register_subcommand(parser: ArgumentParser):
         """
         Register this command to argparse so it's available for the transformer-cli
-        :param parser: Root parser to register command-specific arguments
-        :return:
+
+        Args:
+            parser: Root parser to register command-specific arguments
         """
         train_parser = parser.add_parser("train", help="CLI tool to train a model on a task.")
 

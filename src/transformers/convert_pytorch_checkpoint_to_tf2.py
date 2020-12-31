@@ -20,10 +20,14 @@ import os
 
 from transformers import (
     ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    BART_PRETRAINED_MODEL_ARCHIVE_LIST,
     BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+    DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+    DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
     ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -37,10 +41,12 @@ from transformers import (
     XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
     AlbertConfig,
+    BartConfig,
     BertConfig,
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
+    DPRConfig,
     ElectraConfig,
     FlaubertConfig,
     GPT2Config,
@@ -49,6 +55,7 @@ from transformers import (
     RobertaConfig,
     T5Config,
     TFAlbertForPreTraining,
+    TFBartForConditionalGeneration,
     TFBertForPreTraining,
     TFBertForQuestionAnswering,
     TFBertForSequenceClassification,
@@ -56,6 +63,9 @@ from transformers import (
     TFCTRLLMHeadModel,
     TFDistilBertForMaskedLM,
     TFDistilBertForQuestionAnswering,
+    TFDPRContextEncoder,
+    TFDPRQuestionEncoder,
+    TFDPRReader,
     TFElectraForPreTraining,
     TFFlaubertWithLMHeadModel,
     TFGPT2LMHeadModel,
@@ -87,6 +97,7 @@ if is_torch_available():
 
     from transformers import (
         AlbertForPreTraining,
+        BartForConditionalGeneration,
         BertForPreTraining,
         BertForQuestionAnswering,
         BertForSequenceClassification,
@@ -94,6 +105,9 @@ if is_torch_available():
         CTRLLMHeadModel,
         DistilBertForMaskedLM,
         DistilBertForQuestionAnswering,
+        DPRContextEncoder,
+        DPRQuestionEncoder,
+        DPRReader,
         ElectraForPreTraining,
         FlaubertWithLMHeadModel,
         GPT2LMHeadModel,
@@ -113,6 +127,12 @@ if is_torch_available():
 logging.set_verbosity_info()
 
 MODEL_CLASSES = {
+    "bart": (
+        BartConfig,
+        TFBartForConditionalGeneration,
+        BartForConditionalGeneration,
+        BART_PRETRAINED_MODEL_ARCHIVE_LIST,
+    ),
     "bert": (
         BertConfig,
         TFBertForPreTraining,
@@ -136,6 +156,18 @@ MODEL_CLASSES = {
         TFBertForSequenceClassification,
         BertForSequenceClassification,
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
+    "dpr": (
+        DPRConfig,
+        TFDPRQuestionEncoder,
+        TFDPRContextEncoder,
+        TFDPRReader,
+        DPRQuestionEncoder,
+        DPRContextEncoder,
+        DPRReader,
+        DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
     ),
     "gpt2": (
         GPT2Config,

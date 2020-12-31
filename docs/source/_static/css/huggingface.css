@@ -2,6 +2,15 @@
 
 /* Colab dropdown */
 
+table.center-aligned-table td {
+    text-align: center;
+}
+
+table.center-aligned-table th {
+    text-align: center;
+    vertical-align: middle;
+}
+
 .colab-dropdown {
     position: relative;
     display: inline-block;
@@ -123,6 +132,12 @@ a.copybtn {
 /* The toc tree */
 .wy-nav-side{
     background-color: #6670FF;
+}
+
+/* The section headers in the toc tree */
+.wy-menu-vertical p.caption{
+    background-color: #4d59ff;
+    line-height: 40px;
 }
 
 /* The selected items in the toc tree */

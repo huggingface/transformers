@@ -1,6 +1,0 @@
----
-tags:
-- summarization
-
-license: mit
----

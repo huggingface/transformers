@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import unittest
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
@@ -10,7 +24,7 @@ from transformers.convert_graph_to_onnx import (
     infer_shapes,
     quantize,
 )
-from transformers.testing_utils import require_tf, require_torch, slow
+from transformers.testing_utils import require_tf, require_tokenizers, require_torch, slow
 
 
 class FuncContiguousArgs:
@@ -94,25 +108,29 @@ class OnnxExportTestCase(unittest.TestCase):
             self.fail(e)
 
     @require_torch
+    @require_tokenizers
+    @slow
     def test_infer_dynamic_axis_pytorch(self):
         """
         Validate the dynamic axis generated for each parameters are correct
         """
         from transformers import BertModel
 
-        model = BertModel(BertConfig.from_pretrained("bert-base-cased"))
-        tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
+        model = BertModel(BertConfig.from_pretrained("lysandre/tiny-bert-random"))
+        tokenizer = BertTokenizerFast.from_pretrained("lysandre/tiny-bert-random")
         self._test_infer_dynamic_axis(model, tokenizer, "pt")
 
     @require_tf
+    @require_tokenizers
+    @slow
     def test_infer_dynamic_axis_tf(self):
         """
         Validate the dynamic axis generated for each parameters are correct
         """
         from transformers import TFBertModel
 
-        model = TFBertModel(BertConfig.from_pretrained("bert-base-cased"))
-        tokenizer = BertTokenizerFast.from_pretrained("bert-base-cased")
+        model = TFBertModel(BertConfig.from_pretrained("lysandre/tiny-bert-random"))
+        tokenizer = BertTokenizerFast.from_pretrained("lysandre/tiny-bert-random")
         self._test_infer_dynamic_axis(model, tokenizer, "tf")
 
     def _test_infer_dynamic_axis(self, model, tokenizer, framework):

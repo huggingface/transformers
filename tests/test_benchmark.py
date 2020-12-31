@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import os
 import tempfile
 import unittest
@@ -24,10 +38,10 @@ class BenchmarkTest(unittest.TestCase):
         benchmark_args = PyTorchBenchmarkArguments(
             models=[MODEL_ID],
             training=False,
-            no_inference=False,
+            inference=True,
             sequence_lengths=[8],
             batch_sizes=[1],
-            no_multi_process=True,
+            multi_process=False,
         )
         benchmark = PyTorchBenchmark(benchmark_args)
         results = benchmark.run()
@@ -39,10 +53,10 @@ class BenchmarkTest(unittest.TestCase):
         benchmark_args = PyTorchBenchmarkArguments(
             models=[MODEL_ID],
             training=False,
-            no_inference=False,
+            inference=True,
             sequence_lengths=[8],
             batch_sizes=[1],
-            no_multi_process=True,
+            multi_process=False,
             only_pretrain_model=True,
         )
         benchmark = PyTorchBenchmark(benchmark_args)
@@ -55,11 +69,11 @@ class BenchmarkTest(unittest.TestCase):
         benchmark_args = PyTorchBenchmarkArguments(
             models=[MODEL_ID],
             training=False,
-            no_inference=False,
+            inference=True,
             torchscript=True,
             sequence_lengths=[8],
             batch_sizes=[1],
-            no_multi_process=True,
+            multi_process=False,
         )
         benchmark = PyTorchBenchmark(benchmark_args)
         results = benchmark.run()
@@ -72,11 +86,11 @@ class BenchmarkTest(unittest.TestCase):
         benchmark_args = PyTorchBenchmarkArguments(
             models=[MODEL_ID],
             training=False,
-            no_inference=False,
+            inference=True,
             fp16=True,
             sequence_lengths=[8],
             batch_sizes=[1],
-            no_multi_process=True,
+            multi_process=False,
         )
         benchmark = PyTorchBenchmark(benchmark_args)
         results = benchmark.run()
@@ -91,10 +105,10 @@ class BenchmarkTest(unittest.TestCase):
         benchmark_args = PyTorchBenchmarkArguments(
             models=[MODEL_ID],
             training=True,
-            no_inference=False,
+            inference=True,
             sequence_lengths=[8],
             batch_sizes=[1],
-            no_multi_process=True,
+            multi_process=False,
         )
         benchmark = PyTorchBenchmark(benchmark_args, configs=[config])
         results = benchmark.run()
@@ -106,10 +120,10 @@ class BenchmarkTest(unittest.TestCase):
         benchmark_args = PyTorchBenchmarkArguments(
             models=[MODEL_ID],
             training=True,
-            no_inference=True,
+            inference=False,
             sequence_lengths=[8],
             batch_sizes=[1],
-            no_multi_process=True,
+            multi_process=False,
         )
         benchmark = PyTorchBenchmark(benchmark_args)
         results = benchmark.run()
@@ -122,11 +136,11 @@ class BenchmarkTest(unittest.TestCase):
         benchmark_args = PyTorchBenchmarkArguments(
             models=[MODEL_ID],
             training=True,
-            no_inference=True,
+            inference=False,
             sequence_lengths=[8],
             batch_sizes=[1],
             fp16=True,
-            no_multi_process=True,
+            multi_process=False,
         )
         benchmark = PyTorchBenchmark(benchmark_args)
         results = benchmark.run()
@@ -139,10 +153,10 @@ class BenchmarkTest(unittest.TestCase):
         benchmark_args = PyTorchBenchmarkArguments(
             models=[MODEL_ID],
             training=False,
-            no_inference=False,
+            inference=True,
             sequence_lengths=[8],
             batch_sizes=[1],
-            no_multi_process=True,
+            multi_process=False,
         )
         benchmark = PyTorchBenchmark(benchmark_args, configs=[config])
         results = benchmark.run()
@@ -155,10 +169,10 @@ class BenchmarkTest(unittest.TestCase):
         benchmark_args = PyTorchBenchmarkArguments(
             models=[MODEL_ID],
             training=False,
-            no_inference=False,
+            inference=True,
             sequence_lengths=[8],
             batch_sizes=[1],
-            no_multi_process=True,
+            multi_process=False,
         )
         benchmark = PyTorchBenchmark(benchmark_args, configs=[config])
         results = benchmark.run()
@@ -171,10 +185,10 @@ class BenchmarkTest(unittest.TestCase):
         benchmark_args = PyTorchBenchmarkArguments(
             models=[MODEL_ID],
             training=True,
-            no_inference=True,
+            inference=False,
             sequence_lengths=[8],
             batch_sizes=[1],
-            no_multi_process=True,
+            multi_process=False,
         )
         benchmark = PyTorchBenchmark(benchmark_args, configs=[config])
         results = benchmark.run()
@@ -187,10 +201,10 @@ class BenchmarkTest(unittest.TestCase):
         benchmark_args = PyTorchBenchmarkArguments(
             models=[MODEL_ID],
             training=True,
-            no_inference=True,
+            inference=True,
             sequence_lengths=[8],
             batch_sizes=[1],
-            no_multi_process=True,
+            multi_process=False,
         )
         benchmark = PyTorchBenchmark(benchmark_args, configs=[config])
         results = benchmark.run()
@@ -203,7 +217,7 @@ class BenchmarkTest(unittest.TestCase):
             benchmark_args = PyTorchBenchmarkArguments(
                 models=[MODEL_ID],
                 training=True,
-                no_inference=False,
+                inference=True,
                 save_to_csv=True,
                 sequence_lengths=[8],
                 batch_sizes=[1],
@@ -212,7 +226,7 @@ class BenchmarkTest(unittest.TestCase):
                 inference_memory_csv_file=os.path.join(tmp_dir, "inf_mem.csv"),
                 train_time_csv_file=os.path.join(tmp_dir, "train_time.csv"),
                 env_info_csv_file=os.path.join(tmp_dir, "env.csv"),
-                no_multi_process=True,
+                multi_process=False,
             )
             benchmark = PyTorchBenchmark(benchmark_args)
             benchmark.run()
@@ -235,13 +249,13 @@ class BenchmarkTest(unittest.TestCase):
             benchmark_args = PyTorchBenchmarkArguments(
                 models=[MODEL_ID],
                 training=True,
-                no_inference=False,
+                inference=True,
                 sequence_lengths=[8],
                 batch_sizes=[1],
                 log_filename=os.path.join(tmp_dir, "log.txt"),
                 log_print=True,
                 trace_memory_line_by_line=True,
-                no_multi_process=True,
+                multi_process=False,
             )
             benchmark = PyTorchBenchmark(benchmark_args)
             result = benchmark.run()

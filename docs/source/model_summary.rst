@@ -1,12 +1,24 @@
-Summary of the models
-================================================
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
 
-This is a summary of the models available in 🤗 Transformers. It assumes you’re familiar with the original
-`transformer model <https://arxiv.org/abs/1706.03762>`_. For a gentle introduction check the `annotated transformer
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
+Summary of the models
+=======================================================================================================================
+
+This is a summary of the models available in 🤗 Transformers. It assumes you’re familiar with the original `transformer
+model <https://arxiv.org/abs/1706.03762>`_. For a gentle introduction check the `annotated transformer
 <http://nlp.seas.harvard.edu/2018/04/03/attention.html>`_. Here we focus on the high-level differences between the
-models. You can check them more in detail in their respective documentation. Also checkout the
-:doc:`pretrained model page </pretrained_models>` to see the checkpoints available for each type of model and all `the
-community models <https://huggingface.co/models>`_.
+models. You can check them more in detail in their respective documentation. Also check out the :doc:`pretrained model
+page </pretrained_models>` to see the checkpoints available for each type of model and all `the community models
+<https://huggingface.co/models>`_.
 
 Each one of the models in the library falls into one of the following categories:
 
@@ -18,9 +30,9 @@ Each one of the models in the library falls into one of the following categories
 
 Autoregressive models are pretrained on the classic language modeling task: guess the next token having read all the
 previous ones. They correspond to the decoder of the original transformer model, and a mask is used on top of the full
-sentence so that the attention heads can only see what was before in the next, and not what’s after. Although those
-models can be fine-tuned and achieve great results on many tasks, the most natural application is text generation.
-A typical example of such models is GPT.
+sentence so that the attention heads can only see what was before in the text, and not what’s after. Although those
+models can be fine-tuned and achieve great results on many tasks, the most natural application is text generation. A
+typical example of such models is GPT.
 
 Autoencoding models are pretrained by corrupting the input tokens in some way and trying to reconstruct the original
 sentence. They correspond to the encoder of the original transformer model in the sense that they get access to the
@@ -30,8 +42,8 @@ sentence classification or token classification. A typical example of such model
 
 Note that the only difference between autoregressive models and autoencoding models is in the way the model is
 pretrained. Therefore, the same architecture can be used for both autoregressive and autoencoding models. When a given
-model has been used for both types of pretraining, we have put it in the category corresponding to the article where it was first
-introduced.
+model has been used for both types of pretraining, we have put it in the category corresponding to the article where it
+was first introduced.
 
 Sequence-to-sequence models use both the encoder and the decoder of the original transformer, either for translation
 tasks or by transforming other tasks to sequence-to-sequence problems. They can be fine-tuned to many tasks but their
@@ -43,13 +55,13 @@ Multimodal models mix text inputs with other kinds (e.g. images) and are more sp
 .. _autoregressive-models:
 
 Autoregressive models
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 As mentioned before, these models rely on the decoder part of the original transformer and use an attention mask so
 that at each position, the model can only look at the tokens before the attention heads.
 
 Original GPT
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -60,8 +72,8 @@ Original GPT
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-openai--gpt-blueviolet">
    </a>
 
-`Improving Language Understanding by Generative Pre-Training <https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf>`_,
-Alec Radford et al.
+`Improving Language Understanding by Generative Pre-Training
+<https://cdn.openai.com/research-covers/language-unsupervised/language_understanding_paper.pdf>`_, Alec Radford et al.
 
 The first autoregressive model based on the transformer architecture, pretrained on the Book Corpus dataset.
 
@@ -69,7 +81,7 @@ The library provides versions of the model for language modeling and multitask l
 classification.
 
 GPT-2
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -80,7 +92,8 @@ GPT-2
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-gpt2-blueviolet">
    </a>
 
-`Language Models are Unsupervised Multitask Learners <https://d4mucfpksywv.cloudfront.net/better-language-models/language_models_are_unsupervised_multitask_learners.pdf>`_,
+`Language Models are Unsupervised Multitask Learners
+<https://d4mucfpksywv.cloudfront.net/better-language-models/language_models_are_unsupervised_multitask_learners.pdf>`_,
 Alec Radford et al.
 
 A bigger and better version of GPT, pretrained on WebText (web pages from outgoing links in Reddit with 3 karmas or
@@ -90,7 +103,7 @@ The library provides versions of the model for language modeling and multitask l
 classification.
 
 CTRL
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -111,7 +124,7 @@ wikipedia article, a book or a movie review.
 The library provides a version of the model for language modeling only.
 
 Transformer-XL
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -122,8 +135,8 @@ Transformer-XL
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-transfo--xl-blueviolet">
    </a>
 
-`Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context <https://arxiv.org/abs/1901.02860>`_,
-Zihang Dai et al.
+`Transformer-XL: Attentive Language Models Beyond a Fixed-Length Context <https://arxiv.org/abs/1901.02860>`_, Zihang
+Dai et al.
 
 Same as a regular GPT model, but introduces a recurrence mechanism for two consecutive segments (similar to a regular
 RNNs with two consecutive inputs). In this context, a segment is a number of consecutive tokens (for instance 512) that
@@ -142,7 +155,7 @@ The library provides a version of the model for language modeling only.
 .. _reformer:
 
 Reformer
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -153,8 +166,7 @@ Reformer
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-reformer-blueviolet">
    </a>
 
-`Reformer: The Efficient Transformer <https://arxiv.org/abs/2001.04451>`_,
-Nikita Kitaev et al .
+`Reformer: The Efficient Transformer <https://arxiv.org/abs/2001.04451>`_, Nikita Kitaev et al .
 
 An autoregressive transformer model with lots of tricks to reduce memory footprint and compute time. Those tricks
 include:
@@ -177,7 +189,7 @@ pretraining yet, though.
 The library provides a version of the model for language modeling only.
 
 XLNet
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -188,8 +200,8 @@ XLNet
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-xlnet-blueviolet">
    </a>
 
-`XLNet: Generalized Autoregressive Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`_,
-Zhilin Yang et al.
+`XLNet: Generalized Autoregressive Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`_, Zhilin
+Yang et al.
 
 XLNet is not a traditional autoregressive model but uses a training strategy that builds on that. It permutes the
 tokens in the sentence, then allows the model to use the last n tokens to predict the token n+1. Since this is all done
@@ -204,13 +216,14 @@ multiple choice classification and question answering.
 .. _autoencoding-models:
 
 Autoencoding models
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 As mentioned before, these models rely on the encoder part of the original transformer and use no mask so the model can
-look at all the tokens in the attention heads. For pretraining, targets are the original sentences and inputs are their corrupted versions.
+look at all the tokens in the attention heads. For pretraining, targets are the original sentences and inputs are their
+corrupted versions.
 
 BERT
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -239,7 +252,7 @@ The library provides a version of the model for language modeling (traditional o
 token classification, sentence classification, multiple choice classification and question answering.
 
 ALBERT
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -260,15 +273,15 @@ Same as BERT but with a few tweaks:
     sequence of tokens) so it's more logical to have H >> E. Also, the embedding matrix is large since it's V x E (V
     being the vocab size). If E < H, it has less parameters.
   * Layers are split in groups that share parameters (to save memory).
-  * Next sentence prediction is replaced by a sentence ordering prediction: in the inputs, we have two sentences A and B
-    (that are consecutive) and we either feed A followed by B or B followed by A. The model must predict if they have
+  * Next sentence prediction is replaced by a sentence ordering prediction: in the inputs, we have two sentences A and
+    B (that are consecutive) and we either feed A followed by B or B followed by A. The model must predict if they have
     been swapped or not.
 
 The library provides a version of the model for masked language modeling, token classification, sentence
 classification, multiple choice classification and question answering.
 
 RoBERTa
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -279,8 +292,7 @@ RoBERTa
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-roberta-blueviolet">
    </a>
 
-`RoBERTa: A Robustly Optimized BERT Pretraining Approach <https://arxiv.org/abs/1907.11692>`_,
-Yinhan Liu et al.
+`RoBERTa: A Robustly Optimized BERT Pretraining Approach <https://arxiv.org/abs/1907.11692>`_, Yinhan Liu et al.
 
 Same as BERT with better pretraining tricks:
 
@@ -294,7 +306,7 @@ The library provides a version of the model for masked language modeling, token 
 classification, multiple choice classification and question answering.
 
 DistilBERT
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -319,7 +331,7 @@ The library provides a version of the model for masked language modeling, token 
 and question answering.
 
 XLM
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -339,8 +351,8 @@ library provides checkpoints for all of them:
     previous section as well). One of the languages is selected for each training sample, and the model input is a
     sentence of 256 tokens, that may span over several documents in one of those languages.
   * Masked language modeling (MLM) which is like RoBERTa. One of the languages is selected for each training sample,
-    and the model input is a sentence of 256 tokens, that may span over several documents in one of those languages, with
-    dynamic masking of the tokens.
+    and the model input is a sentence of 256 tokens, that may span over several documents in one of those languages,
+    with dynamic masking of the tokens.
   * A combination of MLM and translation language modeling (TLM). This consists of concatenating a sentence in two
     different languages, with random masking. To predict one of the masked tokens, the model can use both, the
     surrounding context in language 1 and the context given by language 2.
@@ -353,7 +365,7 @@ The library provides a version of the model for language modeling, token classif
 question answering.
 
 XLM-RoBERTa
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -375,7 +387,7 @@ The library provides a version of the model for masked language modeling, token 
 classification, multiple choice classification and question answering.
 
 FlauBERT
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -393,7 +405,7 @@ Like RoBERTa, without the sentence ordering prediction (so just trained on the M
 The library provides a version of the model for language modeling and sentence classification.
 
 ELECTRA
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -416,10 +428,42 @@ traditional GAN setting) then the ELECTRA model is trained for a few steps.
 The library provides a version of the model for masked language modeling, token classification and sentence
 classification.
 
+Funnel Transformer
+-----------------------------------------------------------------------------------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=funnel">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-funnel-blueviolet">
+   </a>
+   <a href="model_doc/funnel.html">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-funnel-blueviolet">
+   </a>
+
+`Funnel-Transformer: Filtering out Sequential Redundancy for Efficient Language Processing
+<https://arxiv.org/abs/2006.03236>`_, Zihang Dai et al.
+
+Funnel Transformer is a transformer model using pooling, a bit like a ResNet model: layers are grouped in blocks, and
+at the beginning of each block (except the first one), the hidden states are pooled among the sequence dimension. This
+way, their length is divided by 2, which speeds up the computation of the next hidden states. All pretrained models
+have three blocks, which means the final hidden state has a sequence length that is one fourth of the original sequence
+length.
+
+For tasks such as classification, this is not a problem, but for tasks like masked language modeling or token
+classification, we need a hidden state with the same sequence length as the original input. In those cases, the final
+hidden states are upsampled to the input sequence length and go through two additional layers. That's why there are two
+versions of each checkpoint. The version suffixed with "-base" contains only the three blocks, while the version
+without that suffix contains the three blocks and the upsampling head with its additional layers.
+
+The pretrained models available use the same pretraining objective as ELECTRA.
+
+The library provides a version of the model for masked language modeling, token classification, sentence
+classification, multiple choice classification and question answering.
+
 .. _longformer:
 
 Longformer
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -448,12 +492,12 @@ classification, multiple choice classification and question answering.
 .. _seq-to-seq-models:
 
 Sequence-to-sequence models
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 As mentioned before, these models keep both the encoder and the decoder of the original transformer.
 
 BART
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -468,8 +512,8 @@ BART
 <https://arxiv.org/abs/1910.13461>`_, Mike Lewis et al.
 
 Sequence-to-sequence model with an encoder and a decoder. Encoder is fed a corrupted version of the tokens, decoder is
-fed the original tokens (but has a mask to hide the future words like a regular transformers decoder). For the encoder, on the
-pretraining tasks, a composition of the following transformations are applied:
+fed the original tokens (but has a mask to hide the future words like a regular transformers decoder). A composition of
+the following transformations are applied on the pretraining tasks for the encoder:
 
   * mask random tokens (like in BERT)
   * delete random tokens
@@ -480,7 +524,7 @@ pretraining tasks, a composition of the following transformations are applied:
 The library provides a version of this model for conditional generation and sequence classification.
 
 Pegasus
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -491,21 +535,27 @@ Pegasus
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-pegasus-blueviolet">
    </a>
 
-`PEGASUS: Pre-training with Extracted Gap-sentences forAbstractive Summarization 
+`PEGASUS: Pre-training with Extracted Gap-sentences forAbstractive Summarization
 <https://arxiv.org/pdf/1912.08777.pdf>`_, Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu on Dec 18, 2019.
 
-Sequence-to-sequence model with the same encoder-decoder model architecture as BART. Pegasus is pre-trained jointly on two self-supervised objective functions: Masked Language Modeling (MLM) and a novel summarization specific pre-training objective, called Gap Sentence Generation (GSG).
+Sequence-to-sequence model with the same encoder-decoder model architecture as BART. Pegasus is pre-trained jointly on
+two self-supervised objective functions: Masked Language Modeling (MLM) and a novel summarization specific pretraining
+objective, called Gap Sentence Generation (GSG).
 
-  * MLM: encoder input tokens are randomely replaced by a mask tokens and have to be predicted by the encoder (like in BERT)
-  * GSG: whole encoder input sentences are replaced by a second mask token and fed to the decoder, but which has a causal mask to hide the future words like a regular auto-regressive transformer decoder.
+  * MLM: encoder input tokens are randomly replaced by a mask tokens and have to be predicted by the encoder (like in
+    BERT)
+  * GSG: whole encoder input sentences are replaced by a second mask token and fed to the decoder, but which has a
+    causal mask to hide the future words like a regular auto-regressive transformer decoder.
 
-In contrast to BART, Pegasus' pretraining task is intentionally similar to summarization: important sentences are masked and are generated together as one output sequence from the remaining sentences, similar to an extractive summary.
+In contrast to BART, Pegasus' pretraining task is intentionally similar to summarization: important sentences are
+masked and are generated together as one output sequence from the remaining sentences, similar to an extractive
+summary.
 
 The library provides a version of this model for conditional generation, which should be used for summarization.
 
 
 MarianMT
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -522,8 +572,9 @@ A framework for translation models, using the same models as BART
 
 The library provides a version of this model for conditional generation.
 
+
 T5
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -534,27 +585,50 @@ T5
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-t5-blueviolet">
    </a>
 
-`Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer <https://arxiv.org/abs/1910.10683>`_,
-Colin Raffel et al.
+`Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer
+<https://arxiv.org/abs/1910.10683>`_, Colin Raffel et al.
 
-Uses the traditional transformer model (with a slight change in the positional embeddings, which are learned at
-each layer). To be able to operate on all NLP tasks, it transforms them into text-to-text problems by using specific
+Uses the traditional transformer model (with a slight change in the positional embeddings, which are learned at each
+layer). To be able to operate on all NLP tasks, it transforms them into text-to-text problems by using specific
 prefixes: “summarize: ”, “question: ”, “translate English to German: ” and so forth.
 
 The pretraining includes both supervised and self-supervised training. Supervised training is conducted on downstream
 tasks provided by the GLUE and SuperGLUE benchmarks (converting them into text-to-text tasks as explained above).
 
-Self-supervised training uses corrupted tokens, by randomly removing 15% of the tokens and
-replacing them with individual sentinel tokens (if several consecutive tokens are marked for removal, the whole group is replaced with a single sentinel token). The input of the encoder is the corrupted sentence, the input of the decoder is the
-original sentence and the target is then the dropped out tokens delimited by their sentinel tokens.
+Self-supervised training uses corrupted tokens, by randomly removing 15% of the tokens and replacing them with
+individual sentinel tokens (if several consecutive tokens are marked for removal, the whole group is replaced with a
+single sentinel token). The input of the encoder is the corrupted sentence, the input of the decoder is the original
+sentence and the target is then the dropped out tokens delimited by their sentinel tokens.
 
-For instance, if we have the sentence “My dog is very cute .”, and we decide to remove the tokens: "dog", "is" and "cute", the encoder
-input becomes “My <x> very <y> .” and the target input becomes “<x> dog is <y> cute .<z>”
+For instance, if we have the sentence “My dog is very cute .”, and we decide to remove the tokens: "dog", "is" and
+"cute", the encoder input becomes “My <x> very <y> .” and the target input becomes “<x> dog is <y> cute .<z>”
 
 The library provides a version of this model for conditional generation.
 
+
+MT5
+-----------------------------------------------------------------------------------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=mt5">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-mt5-blueviolet">
+   </a>
+   <a href="model_doc/mt5.html">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-mt5-blueviolet">
+   </a>
+
+`mT5: A massively multilingual pre-trained text-to-text transformer <https://arxiv.org/abs/2010.11934>`_, Linting Xue
+et al.
+
+The model architecture is same as T5. mT5's pretraining objective includes T5's self-supervised training, but not T5's
+supervised training. mT5 is trained on 101 languages.
+
+The library provides a version of this model for conditional generation.
+
+
 MBart
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
@@ -565,37 +639,86 @@ MBart
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-mbart-blueviolet">
    </a>
 
-`Multilingual Denoising Pre-training for Neural Machine Translation <https://arxiv.org/abs/2001.08210>`_ by Yinhan Liu, Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov
-Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.
+`Multilingual Denoising Pre-training for Neural Machine Translation <https://arxiv.org/abs/2001.08210>`_ by Yinhan Liu,
+Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.
 
-The model architecture and pre-training objective is same as BART, but MBart is trained on 25 languages 
-and is intended for supervised and unsupervised machine translation. MBart is one of the first methods 
-for pre-training a complete sequence-to-sequence model by denoising full texts in multiple languages,
+The model architecture and pretraining objective is same as BART, but MBart is trained on 25 languages and is intended
+for supervised and unsupervised machine translation. MBart is one of the first methods for pretraining a complete
+sequence-to-sequence model by denoising full texts in multiple languages,
 
 The library provides a version of this model for conditional generation.
 
-The `mbart-large-en-ro checkpoint <https://huggingface.co/facebook/mbart-large-en-ro>`_ can be used for english -> romanian translation.
+The `mbart-large-en-ro checkpoint <https://huggingface.co/facebook/mbart-large-en-ro>`_ can be used for english ->
+romanian translation.
 
-The `mbart-large-cc25 <https://huggingface.co/facebook/mbart-large-cc25>`_ checkpoint can be finetuned for other translation and summarization tasks, using code in ```examples/seq2seq/``` , but is not very useful without finetuning.
+The `mbart-large-cc25 <https://huggingface.co/facebook/mbart-large-cc25>`_ checkpoint can be finetuned for other
+translation and summarization tasks, using code in ```examples/seq2seq/``` , but is not very useful without finetuning.
+
+
+ProphetNet
+-----------------------------------------------------------------------------------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=prophetnet">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-prophetnet-blueviolet">
+   </a>
+   <a href="model_doc/prophetnet.html">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-prophetnet-blueviolet">
+   </a>
+
+`ProphetNet: Predicting Future N-gram for Sequence-to-Sequence Pre-training, <https://arxiv.org/abs/2001.04063>`__ by
+Yu Yan, Weizhen Qi, Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang, Ming Zhou.
+
+ProphetNet introduces a novel *sequence-to-sequence* pretraining objective, called *future n-gram prediction*. In
+future n-gram prediction, the model predicts the next n tokens simultaneously based on previous context tokens at each
+time step instead instead of just the single next token. The future n-gram prediction explicitly encourages the model
+to plan for the future tokens and prevent overfitting on strong local correlations. The model architecture is based on
+the original Transformer, but replaces the "standard" self-attention mechanism in the decoder by a a main
+self-attention mechanism and a self and n-stream (predict) self-attention mechanism.
+
+The library provides a pre-trained version of this model for conditional generation and a fine-tuned version for
+summarization.
+
+XLM-ProphetNet
+-----------------------------------------------------------------------------------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=xprophetnet">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-xprophetnet-blueviolet">
+   </a>
+   <a href="model_doc/xlmprophetnet.html">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-xprophetnet-blueviolet">
+   </a>
+
+`ProphetNet: Predicting Future N-gram for Sequence-to-Sequence Pre-training, <https://arxiv.org/abs/2001.04063>`__ by
+Yu Yan, Weizhen Qi, Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang, Ming Zhou.
+
+XLM-ProphetNet's model architecture and pretraining objective is same as ProphetNet, but XLM-ProphetNet was pre-trained
+on the cross-lingual dataset `XGLUE <https://arxiv.org/abs/2004.01401>`__.
+
+The library provides a pre-trained version of this model for multi-lingual conditional generation and fine-tuned
+versions for headline generation and question generation, respectively.
 
 .. _multimodal-models:
 
 Multimodal models
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 There is one multimodal model in the library which has not been pretrained in the self-supervised fashion like the
 others.
 
 MMBT
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 `Supervised Multimodal Bitransformers for Classifying Images and Text <https://arxiv.org/abs/1909.02950>`_, Douwe Kiela
 et al.
 
 A transformers model used in multimodal settings, combining a text and an image to make predictions. The transformer
 model takes as inputs the embeddings of the tokenized text and the final activations of a pretrained on images resnet
-(after the pooling layer) that goes through a linear layer (to go from number of features at the end of the
-resnet to the hidden state dimension of the transformer).
+(after the pooling layer) that goes through a linear layer (to go from number of features at the end of the resnet to
+the hidden state dimension of the transformer).
 
 The different inputs are concatenated, and on top of the positional embeddings, a segment embedding is added to let the
 model know which part of the input vector corresponds to the text and which to the image.
@@ -603,48 +726,73 @@ model know which part of the input vector corresponds to the text and which to t
 The pretrained model only works for classification.
 
 ..
-    More information in this :doc:`model documentation </model_doc/mmbt.html>`.
-    TODO: write this page
+    More information in this :doc:`model documentation </model_doc/mmbt.html>`. TODO: write this page
 
 .. _retrieval-based-models:
 
 Retrieval-based models
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Some models use documents retrieval during (pre)training and inference for open-domain question answering, for example.
 
 
 DPR
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. raw:: html
 
    <a href="https://huggingface.co/models?filter=dpr">
        <img alt="Models" src="https://img.shields.io/badge/All_model_pages-dpr-blueviolet">
    </a>
-   <a href="model_doc/ctrl.dpr">
+   <a href="model_doc/dpr.html">
        <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-dpr-blueviolet">
    </a>
 
-`Dense Passage Retrieval for Open-Domain Question Answering <https://arxiv.org/abs/2004.04906>`_,
-Vladimir Karpukhin et al.
+`Dense Passage Retrieval for Open-Domain Question Answering <https://arxiv.org/abs/2004.04906>`_, Vladimir Karpukhin et
+al.
 
-Dense Passage Retrieval (DPR) - is a set of tools and models for state-of-the-art open-domain question-answering research.
+Dense Passage Retrieval (DPR) - is a set of tools and models for state-of-the-art open-domain question-answering
+research.
 
 
 DPR consists in three models:
 
   * Question encoder: encode questions as vectors
   * Context encoder: encode contexts as vectors
-  * Reader: extract the answer of the questions inside retrieved contexts, along with a relevance score (high if the inferred span actually answers the question).
+  * Reader: extract the answer of the questions inside retrieved contexts, along with a relevance score (high if the
+    inferred span actually answers the question).
 
-DPR's pipeline (not implemented yet) uses a retrieval step to find the top k contexts given a certain question, and then it calls the reader with the question and the retrieved documents to get the answer.
+DPR's pipeline (not implemented yet) uses a retrieval step to find the top k contexts given a certain question, and
+then it calls the reader with the question and the retrieved documents to get the answer.
+
+RAG
+-----------------------------------------------------------------------------------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=rag">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-rag-blueviolet">
+   </a>
+   <a href="model_doc/rag.html">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-rag-blueviolet">
+   </a>
+
+`Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks <https://arxiv.org/abs/2005.11401>`_, Patrick Lewis,
+Ethan Perez, Aleksandara Piktus, Fabio Petroni, Vladimir Karpukhin, Naman Goyal, Heinrich Küttler, Mike Lewis, Wen-tau
+Yih, Tim Rocktäschel, Sebastian Riedel, Douwe Kiela
+
+Retrieval-augmented generation ("RAG") models combine the powers of pretrained dense retrieval (DPR) and Seq2Seq
+models. RAG models retrieve docs, pass them to a seq2seq model, then marginalize to generate outputs. The retriever and
+seq2seq modules are initialized from pretrained models, and fine-tuned jointly, allowing both retrieval and generation
+to adapt to downstream tasks.
+
+The two models RAG-Token and RAG-Sequence are available for generation.
 
 More technical aspects
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Full vs sparse attention
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 Most transformer models use full attention in the sense that the attention matrix is square. It can be a big
 computational bottleneck when you have long texts. Longformer and reformer are models that try to be more efficient and
@@ -655,19 +803,19 @@ use a sparse version of the attention matrix to speed up training.
 **LSH attention**
 
 :ref:`Reformer <reformer>` uses LSH attention. In the softmax(QK^t), only the biggest elements (in the softmax
-dimension) of the matrix QK^t are going to give useful contributions. So for each query q in Q, we can  consider only
+dimension) of the matrix QK^t are going to give useful contributions. So for each query q in Q, we can consider only
 the keys k in K that are close to q. A hash function is used to determine if q and k are close. The attention mask is
-modified to mask the current token (except at the first position), because it will give a query and a key equal (so very
-similar to each other). Since the hash can be a bit random, several hash functions are used in practice (determined by
-a n_rounds parameter) and then are averaged together.
+modified to mask the current token (except at the first position), because it will give a query and a key equal (so
+very similar to each other). Since the hash can be a bit random, several hash functions are used in practice
+(determined by a n_rounds parameter) and then are averaged together.
 
 .. _local-attention:
 
 **Local attention**
 
-:ref:`Longformer <longformer>` uses local attention: often, the local context (e.g., what are the two tokens to the left and
-right?) is enough to take action for a given token. Also, by stacking attention layers that have a small window, the
-last layer will have a receptive field of more than just the tokens in the window, allowing them to build a
+:ref:`Longformer <longformer>` uses local attention: often, the local context (e.g., what are the two tokens to the
+left and right?) is enough to take action for a given token. Also, by stacking attention layers that have a small
+window, the last layer will have a receptive field of more than just the tokens in the window, allowing them to build a
 representation of the whole sentence.
 
 Some preselected input tokens are also given global attention: for those few tokens, the attention matrix can access
@@ -682,7 +830,7 @@ Using those attention matrices with less parameters then allows the model to hav
 length.
 
 Other tricks
-----------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 .. _axial-pos-encoding:
 
@@ -690,8 +838,9 @@ Other tricks
 
 :ref:`Reformer <reformer>` uses axial positional encodings: in traditional transformer models, the positional encoding
 E is a matrix of size :math:`l` by :math:`d`, :math:`l` being the sequence length and :math:`d` the dimension of the
-hidden state. If you have very long texts, this matrix can be huge and take way too much space on the GPU. To alleviate that, axial positional encodings consist of factorizing that big matrix E in two smaller matrices E1 and
-E2, with dimensions :math:`l_{1} \times d_{1}` and :math:`l_{2} \times d_{2}`, such that :math:`l_{1} \times l_{2} = l`
-and :math:`d_{1} + d_{2} = d` (with the product for the lengths, this ends up being way smaller). The embedding for
-time step :math:`j` in E is obtained by concatenating the embeddings for timestep :math:`j \% l1` in E1 and
-:math:`j // l1` in E2.
+hidden state. If you have very long texts, this matrix can be huge and take way too much space on the GPU. To alleviate
+that, axial positional encodings consist of factorizing that big matrix E in two smaller matrices E1 and E2, with
+dimensions :math:`l_{1} \times d_{1}` and :math:`l_{2} \times d_{2}`, such that :math:`l_{1} \times l_{2} = l` and
+:math:`d_{1} + d_{2} = d` (with the product for the lengths, this ends up being way smaller). The embedding for time
+step :math:`j` in E is obtained by concatenating the embeddings for timestep :math:`j \% l1` in E1 and :math:`j // l1`
+in E2.

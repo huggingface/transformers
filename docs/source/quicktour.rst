@@ -1,8 +1,20 @@
-Quick tour
-==========
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
 
-Let's have a quick look at the 🤗 Transformers library features. The library downloads pretrained models for
-Natural Language Understanding (NLU) tasks, such as analyzing the sentiment of a text, and Natural Language Generation (NLG),
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
+Quick tour
+=======================================================================================================================
+
+Let's have a quick look at the 🤗 Transformers library features. The library downloads pretrained models for Natural
+Language Understanding (NLU) tasks, such as analyzing the sentiment of a text, and Natural Language Generation (NLG),
 such as completing a prompt with new text or translating in another language.
 
 First we will see how to easily leverage the pipeline API to quickly use those pretrained models at inference. Then, we
@@ -14,7 +26,7 @@ will dig a little bit more and see how the library gives you access to those mod
     not, the code is expected to work for both backends without any change needed.
 
 Getting started on a task with a pipeline
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The easiest way to use a pretrained model on a given task is to use :func:`~transformers.pipeline`. 🤗 Transformers
 provides the following tasks out of the box:
@@ -29,8 +41,8 @@ provides the following tasks out of the box:
 - Translation: translate a text in another language.
 - Feature extraction: return a tensor representation of the text.
 
-Let's see how this work for sentiment analysis (the other tasks are all covered in the
-:doc:`task summary </task_summary>`):
+Let's see how this work for sentiment analysis (the other tasks are all covered in the :doc:`task summary
+</task_summary>`):
 
 .. code-block::
 
@@ -123,7 +135,7 @@ to share your fine-tuned model on the hub with the community, using :doc:`this t
 .. _pretrained-model:
 
 Under the hood: pretrained models
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Let's now see what happens beneath the hood when using those pipelines. As we saw, the model and tokenizer are created
 using the :obj:`from_pretrained` method:
@@ -142,11 +154,11 @@ using the :obj:`from_pretrained` method:
     >>> tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 Using the tokenizer
-^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 We mentioned the tokenizer is responsible for the preprocessing of your texts. First, it will split a given text in
 words (or part of words, punctuation symbols, etc.) usually called `tokens`. There are multiple rules that can govern
-that process (you can learn more about them in the :doc:`tokenizer summary <tokenizer_summary>`, which is why we need
+that process (you can learn more about them in the :doc:`tokenizer summary <tokenizer_summary>`), which is why we need
 to instantiate the tokenizer using the name of the model, to make sure we use the same rules as when the model was
 pretrained.
 
@@ -160,9 +172,10 @@ To apply these steps on a given text, we can just feed it to our tokenizer:
 
     >>> inputs = tokenizer("We are very happy to show you the 🤗 Transformers library.")
 
-This returns a dictionary string to list of ints. It contains the `ids of the tokens <glossary.html#input-ids>`__,
-as mentioned before, but also additional arguments that will be useful to the model. Here for instance, we also have an
-`attention mask <glossary.html#attention-mask>`__ that the model will use to have a better understanding of the sequence:
+This returns a dictionary string to list of ints. It contains the `ids of the tokens <glossary.html#input-ids>`__, as
+mentioned before, but also additional arguments that will be useful to the model. Here for instance, we also have an
+`attention mask <glossary.html#attention-mask>`__ that the model will use to have a better understanding of the
+sequence:
 
 
 .. code-block::
@@ -181,6 +194,7 @@ and get tensors back. You can specify all of that to the tokenizer:
     ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
     ...     padding=True,
     ...     truncation=True,
+    ...     max_length=512,
     ...     return_tensors="pt"
     ... )
     >>> ## TENSORFLOW CODE
@@ -188,11 +202,12 @@ and get tensors back. You can specify all of that to the tokenizer:
     ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
     ...     padding=True,
     ...     truncation=True,
+    ...     max_length=512,
     ...     return_tensors="tf"
     ... )
 
-The padding is automatically applied on the side expected by the model (in this case, on the right), with the
-padding token the model was pretrained with. The attention mask is also adapted to take the padding into account:
+The padding is automatically applied on the side expected by the model (in this case, on the right), with the padding
+token the model was pretrained with. The attention mask is also adapted to take the padding into account:
 
 .. code-block::
 
@@ -210,11 +225,11 @@ padding token the model was pretrained with. The attention mask is also adapted 
 You can learn more about tokenizers :doc:`here <preprocessing>`.
 
 Using the model
-^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Once your input has been preprocessed by the tokenizer, you can send it directly to the model. As we mentioned, it will
-contain all the relevant information the model needs. If you're using a TensorFlow model, you can pass the
-dictionary keys directly to tensors, for a PyTorch model, you need to unpack the dictionary by adding :obj:`**`.
+contain all the relevant information the model needs. If you're using a TensorFlow model, you can pass the dictionary
+keys directly to tensors, for a PyTorch model, you need to unpack the dictionary by adding :obj:`**`.
 
 .. code-block::
 
@@ -223,8 +238,8 @@ dictionary keys directly to tensors, for a PyTorch model, you need to unpack the
     >>> ## TENSORFLOW CODE
     >>> tf_outputs = tf_model(tf_batch)
 
-In 🤗 Transformers, all outputs are tuples (with only one element potentially). Here, we get a tuple with just the
-final activations of the model.
+In 🤗 Transformers, all outputs are tuples (with only one element potentially). Here, we get a tuple with just the final
+activations of the model.
 
 .. code-block::
 
@@ -240,10 +255,11 @@ final activations of the model.
 
 The model can return more than just the final activations, which is why the output is a tuple. Here we only asked for
 the final activations, so we get a tuple with one element.
+
 .. note::
 
-    All 🤗 Transformers models (PyTorch or TensorFlow) return the activations of the model *before* the final
-    activation function (like SoftMax) since this final activation function is often fused with the loss.
+    All 🤗 Transformers models (PyTorch or TensorFlow) return the activations of the model *before* the final activation
+    function (like SoftMax) since this final activation function is often fused with the loss.
 
 Let's apply the SoftMax activation to get predictions.
 
@@ -281,11 +297,11 @@ If you have labels, you can provide them to the model, it will return a tuple wi
     >>> import tensorflow as tf
     >>> tf_outputs = tf_model(tf_batch, labels = tf.constant([1, 0]))
 
-Models are standard `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ or
-`tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ so you can use them in your usual
-training loop. 🤗 Transformers also provides a :class:`~transformers.Trainer` (or :class:`~transformers.TFTrainer` if
-you are using TensorFlow) class to help with your training (taking care of things such as distributed training, mixed
-precision, etc.). See the :doc:`training tutorial <training>` for more details.
+Models are standard `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__ or `tf.keras.Model
+<https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ so you can use them in your usual training loop. 🤗
+Transformers also provides a :class:`~transformers.Trainer` (or :class:`~transformers.TFTrainer` if you are using
+TensorFlow) class to help with your training (taking care of things such as distributed training, mixed precision,
+etc.). See the :doc:`training tutorial <training>` for more details.
 
 .. note::
 
@@ -330,19 +346,19 @@ Lastly, you can also ask the model to return all hidden states and all attention
     >>> all_hidden_states, all_attentions = tf_outputs[-2:]
 
 Accessing the code
-^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The :obj:`AutoModel` and :obj:`AutoTokenizer` classes are just shortcuts that will automatically work with any
 pretrained model. Behind the scenes, the library has one model class per combination of architecture plus class, so the
 code is easy to access and tweak if you need to.
 
-In our previous example, the model was called "distilbert-base-uncased-finetuned-sst-2-english", which means it's
-using the :doc:`DistilBERT </model_doc/distilbert>` architecture. As
-:class:`~transformers.AutoModelForSequenceClassification` (or :class:`~transformers.TFAutoModelForSequenceClassification`
-if you are using TensorFlow) was used, the model automatically created is then a
-:class:`~transformers.DistilBertForSequenceClassification`. You can look at its documentation for all details relevant
-to that specific model, or browse the source code. This is how you would directly instantiate model and tokenizer
-without the auto magic:
+In our previous example, the model was called "distilbert-base-uncased-finetuned-sst-2-english", which means it's using
+the :doc:`DistilBERT </model_doc/distilbert>` architecture. As
+:class:`~transformers.AutoModelForSequenceClassification` (or
+:class:`~transformers.TFAutoModelForSequenceClassification` if you are using TensorFlow) was used, the model
+automatically created is then a :class:`~transformers.DistilBertForSequenceClassification`. You can look at its
+documentation for all details relevant to that specific model, or browse the source code. This is how you would
+directly instantiate model and tokenizer without the auto magic:
 
 .. code-block::
 
@@ -358,7 +374,7 @@ without the auto magic:
     >>> tokenizer = DistilBertTokenizer.from_pretrained(model_name)
 
 Customizing the model
-^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 If you want to change how the model itself is built, you can define your custom configuration class. Each architecture
 comes with its own relevant configuration (in the case of DistilBERT, :class:`~transformers.DistilBertConfig`) which

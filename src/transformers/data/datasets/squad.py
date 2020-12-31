@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import os
 import time
 from dataclasses import dataclass, field
@@ -9,7 +23,7 @@ from torch.utils.data.dataset import Dataset
 
 from filelock import FileLock
 
-from ...modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
+from ...models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 from ..processors.squad import SquadFeatures, SquadV1Processor, SquadV2Processor, squad_convert_examples_to_features
@@ -86,8 +100,7 @@ class Split(Enum):
 
 class SquadDataset(Dataset):
     """
-    This will be superseded by a framework-agnostic approach
-    soon.
+    This will be superseded by a framework-agnostic approach soon.
     """
 
     args: SquadDataTrainingArguments

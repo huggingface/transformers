@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 LXMERT Authors.
+# Copyright 2018 LXMERT Authors, The Hugging Face Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,15 +17,20 @@
 import os
 import unittest
 
-from transformers.tokenization_bert import VOCAB_FILES_NAMES
-from transformers.tokenization_lxmert import LxmertTokenizer
+from transformers import LxmertTokenizer, LxmertTokenizerFast
+from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES
+from transformers.testing_utils import require_tokenizers
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
+@require_tokenizers
 class LxmertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = LxmertTokenizer
+    rust_tokenizer_class = LxmertTokenizerFast
+    test_rust_tokenizer = True
+    space_between_special_tokens = True
 
     def setUp(self):
         super().setUp()
@@ -49,9 +54,6 @@ class LxmertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
 
-    def get_tokenizer(self, **kwargs):
-        return LxmertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
-
     def get_input_output_texts(self, tokenizer):
         input_text = "UNwant\u00E9d,running"
         output_text = "unwanted, running"
@@ -63,3 +65,25 @@ class LxmertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens = tokenizer.tokenize("UNwant\u00E9d,running")
         self.assertListEqual(tokens, ["un", "##want", "##ed", ",", "runn", "##ing"])
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [7, 4, 5, 10, 8, 9])
+
+    def test_rust_and_python_full_tokenizers(self):
+        if not self.test_rust_tokenizer:
+            return
+
+        tokenizer = self.get_tokenizer()
+        rust_tokenizer = self.get_rust_tokenizer()
+
+        sequence = "I was born in 92000, and this is falsé."
+
+        tokens = tokenizer.tokenize(sequence)
+        rust_tokens = rust_tokenizer.tokenize(sequence)
+        self.assertListEqual(tokens, rust_tokens)
+
+        ids = tokenizer.encode(sequence, add_special_tokens=False)
+        rust_ids = rust_tokenizer.encode(sequence, add_special_tokens=False)
+        self.assertListEqual(ids, rust_ids)
+
+        rust_tokenizer = self.get_rust_tokenizer()
+        ids = tokenizer.encode(sequence)
+        rust_ids = rust_tokenizer.encode(sequence)
+        self.assertListEqual(ids, rust_ids)

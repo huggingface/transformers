@@ -1,5 +1,17 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Model outputs
--------------
+-----------------------------------------------------------------------------------------------------------------------
 
 PyTorch models have outputs that are instances of subclasses of :class:`~transformers.file_utils.ModelOutput`. Those
 are data structures containing all the information returned by the model, but that can also be used as tuples or
@@ -44,98 +56,246 @@ values. Here for instance, it has two keys that are ``loss`` and ``logits``.
 We document here the generic model outputs that are used by more than one model type. Specific output types are
 documented on their corresponding model page.
 
-``ModelOutput``
-~~~~~~~~~~~~~~~
+ModelOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.file_utils.ModelOutput
     :members:
 
-``BaseModelOutput``
-~~~~~~~~~~~~~~~~~~~
+
+BaseModelOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_outputs.BaseModelOutput
     :members:
 
-``BaseModelOutputWithPooling``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+BaseModelOutputWithPooling
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_outputs.BaseModelOutputWithPooling
     :members:
 
-``BaseModelOutputWithPast``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+BaseModelOutputWithCrossAttentions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_outputs.BaseModelOutputWithCrossAttentions
+    :members:
+
+
+BaseModelOutputWithPoolingAndCrossAttentions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_outputs.BaseModelOutputWithPoolingAndCrossAttentions
+    :members:
+
+
+BaseModelOutputWithPast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_outputs.BaseModelOutputWithPast
     :members:
 
-``Seq2SeqModelOutput``
-~~~~~~~~~~~~~~~~~~~~~~
+
+BaseModelOutputWithPastAndCrossAttentions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_outputs.BaseModelOutputWithPastAndCrossAttentions
+    :members:
+
+
+Seq2SeqModelOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_outputs.Seq2SeqModelOutput
     :members:
 
-``CausalLMOutput``
-~~~~~~~~~~~~~~~~~~
+
+CausalLMOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_outputs.CausalLMOutput
     :members:
 
-``CausalLMOutputWithPast``
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+CausalLMOutputWithCrossAttentions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_outputs.CausalLMOutputWithCrossAttentions
+    :members:
+
+
+CausalLMOutputWithPast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_outputs.CausalLMOutputWithPast
     :members:
 
-``MaskedLMOutput``
-~~~~~~~~~~~~~~~~~~
+
+MaskedLMOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_outputs.MaskedLMOutput
     :members:
 
-``Seq2SeqLMOutput``
-~~~~~~~~~~~~~~~~~~~
+
+Seq2SeqLMOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_outputs.Seq2SeqLMOutput
     :members:
 
-``NextSentencePredictorOutput``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+NextSentencePredictorOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_outputs.NextSentencePredictorOutput
     :members:
 
-``SequenceClassifierOutput``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+SequenceClassifierOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_outputs.SequenceClassifierOutput
     :members:
 
-``Seq2SeqSequenceClassifierOutput``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Seq2SeqSequenceClassifierOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_outputs.Seq2SeqSequenceClassifierOutput
     :members:
 
-``MultipleChoiceModelOutput``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+MultipleChoiceModelOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_outputs.MultipleChoiceModelOutput
     :members:
 
-``TokenClassifierOutput``
-~~~~~~~~~~~~~~~~~~~~~~~~~
+
+TokenClassifierOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_outputs.TokenClassifierOutput
     :members:
 
-``QuestionAnsweringModelOutput``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+QuestionAnsweringModelOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_outputs.QuestionAnsweringModelOutput
     :members:
 
-``Seq2SeqQuestionAnsweringModelOutput``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Seq2SeqQuestionAnsweringModelOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_outputs.Seq2SeqQuestionAnsweringModelOutput
+    :members:
+
+
+TFBaseModelOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_outputs.TFBaseModelOutput
+    :members:
+
+
+TFBaseModelOutputWithPooling
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_outputs.TFBaseModelOutputWithPooling
+    :members:
+
+
+TFBaseModelOutputWithPast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_outputs.TFBaseModelOutputWithPast
+    :members:
+
+
+TFSeq2SeqModelOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_outputs.TFSeq2SeqModelOutput
+    :members:
+
+
+TFCausalLMOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_outputs.TFCausalLMOutput
+    :members:
+
+
+TFCausalLMOutputWithPast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_outputs.TFCausalLMOutputWithPast
+    :members:
+
+
+TFMaskedLMOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_outputs.TFMaskedLMOutput
+    :members:
+
+
+TFSeq2SeqLMOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_outputs.TFSeq2SeqLMOutput
+    :members:
+
+
+TFNextSentencePredictorOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_outputs.TFNextSentencePredictorOutput
+    :members:
+
+
+TFSequenceClassifierOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_outputs.TFSequenceClassifierOutput
+    :members:
+
+
+TFSeq2SeqSequenceClassifierOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_outputs.TFSeq2SeqSequenceClassifierOutput
+    :members:
+
+
+TFMultipleChoiceModelOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_outputs.TFMultipleChoiceModelOutput
+    :members:
+
+
+TFTokenClassifierOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_outputs.TFTokenClassifierOutput
+    :members:
+
+
+TFQuestionAnsweringModelOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_outputs.TFQuestionAnsweringModelOutput
+    :members:
+
+
+TFSeq2SeqQuestionAnsweringModelOutput
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.modeling_tf_outputs.TFSeq2SeqQuestionAnsweringModelOutput
     :members:

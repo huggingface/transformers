@@ -25,7 +25,7 @@ from typing import Callable, Optional
 
 from ..configuration_utils import PretrainedConfig
 from ..file_utils import is_py3nvml_available, is_tf_available
-from ..modeling_tf_auto import TF_MODEL_MAPPING, TF_MODEL_WITH_LM_HEAD_MAPPING
+from ..models.auto.modeling_tf_auto import TF_MODEL_MAPPING, TF_MODEL_WITH_LM_HEAD_MAPPING
 from ..utils import logging
 from .benchmark_utils import (
     Benchmark,
@@ -248,7 +248,7 @@ class TensorFlowBenchmark(Benchmark):
                 if self.args.is_tpu:
                     # tpu
                     raise NotImplementedError(
-                        "Memory Benchmarking is currently not implemented for TPU. Please disable memory benchmarking with `args.no_memory=True`"
+                        "Memory Benchmarking is currently not implemented for TPU. Please disable memory benchmarking with `args.memory=False`"
                     )
                 elif self.args.is_gpu:
                     # gpu

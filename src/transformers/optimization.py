@@ -15,12 +15,13 @@
 """PyTorch optimization for BERT model."""
 
 import math
-from typing import Callable, Iterable, Tuple
+from typing import Callable, Iterable, Optional, Tuple, Union
 
 import torch
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
 
+from .trainer_utils import SchedulerType
 from .utils import logging
 
 
@@ -70,8 +71,8 @@ def get_constant_schedule_with_warmup(optimizer: Optimizer, num_warmup_steps: in
 
 def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, last_epoch=-1):
     """
-    Create a schedule with a learning rate that decreases linearly from the initial lr set in the optimizer to 0,
-    after a warmup period during which it increases linearly from 0 to the initial lr set in the optimizer.
+    Create a schedule with a learning rate that decreases linearly from the initial lr set in the optimizer to 0, after
+    a warmup period during which it increases linearly from 0 to the initial lr set in the optimizer.
 
     Args:
         optimizer (:class:`~torch.optim.Optimizer`):
@@ -170,9 +171,8 @@ def get_polynomial_decay_schedule_with_warmup(
     optimizer, num_warmup_steps, num_training_steps, lr_end=1e-7, power=1.0, last_epoch=-1
 ):
     """
-    Create a schedule with a learning rate that decreases as a polynomial decay
-    from the initial lr set in the optimizer to end lr defined by `lr_end`,
-    after a warmup period during which it increases linearly from 0 to the
+    Create a schedule with a learning rate that decreases as a polynomial decay from the initial lr set in the
+    optimizer to end lr defined by `lr_end`, after a warmup period during which it increases linearly from 0 to the
     initial lr set in the optimizer.
 
     Args:
@@ -189,8 +189,8 @@ def get_polynomial_decay_schedule_with_warmup(
         last_epoch (:obj:`int`, `optional`, defaults to -1):
             The index of the last epoch when resuming training.
 
-    Note: `power` defaults to 1.0 as in the fairseq implementation, which in turn is
-    based on the original BERT implementation at
+    Note: `power` defaults to 1.0 as in the fairseq implementation, which in turn is based on the original BERT
+    implementation at
     https://github.com/google-research/bert/blob/f39e881b169b9d53bea03d2d341b31707a6c052b/optimization.py#L37
 
     Return:
@@ -216,10 +216,60 @@ def get_polynomial_decay_schedule_with_warmup(
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
+TYPE_TO_SCHEDULER_FUNCTION = {
+    SchedulerType.LINEAR: get_linear_schedule_with_warmup,
+    SchedulerType.COSINE: get_cosine_schedule_with_warmup,
+    SchedulerType.COSINE_WITH_RESTARTS: get_cosine_with_hard_restarts_schedule_with_warmup,
+    SchedulerType.POLYNOMIAL: get_polynomial_decay_schedule_with_warmup,
+    SchedulerType.CONSTANT: get_constant_schedule,
+    SchedulerType.CONSTANT_WITH_WARMUP: get_constant_schedule_with_warmup,
+}
+
+
+def get_scheduler(
+    name: Union[str, SchedulerType],
+    optimizer: Optimizer,
+    num_warmup_steps: Optional[int] = None,
+    num_training_steps: Optional[int] = None,
+):
+    """
+    Unified API to get any scheduler from its name.
+
+    Args:
+        name (:obj:`str` or `:obj:`SchedulerType`):
+            The name of the scheduler to use.
+        optimizer (:obj:`torch.optim.Optimizer`):
+            The optimizer that will be used during training.
+        num_warmup_steps (:obj:`int`, `optional`):
+            The number of warmup steps to do. This is not required by all schedulers (hence the argument being
+            optional), the function will raise an error if it's unset and the scheduler type requires it.
+        num_training_steps (:obj:`int`, `optional`):
+            The number of training steps to do. This is not required by all schedulers (hence the argument being
+            optional), the function will raise an error if it's unset and the scheduler type requires it.
+    """
+    name = SchedulerType(name)
+    schedule_func = TYPE_TO_SCHEDULER_FUNCTION[name]
+    if name == SchedulerType.CONSTANT:
+        return schedule_func(optimizer)
+
+    # All other schedulers require `num_warmup_steps`
+    if num_warmup_steps is None:
+        raise ValueError(f"{name} requires `num_warmup_steps`, please provide that argument.")
+
+    if name == SchedulerType.CONSTANT_WITH_WARMUP:
+        return schedule_func(optimizer, num_warmup_steps=num_warmup_steps)
+
+    # All other schedulers require `num_training_steps`
+    if num_training_steps is None:
+        raise ValueError(f"{name} requires `num_training_steps`, please provide that argument.")
+
+    return schedule_func(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)
+
+
 class AdamW(Optimizer):
     """
-    Implements Adam algorithm with weight decay fix as introduced in
-    `Decoupled Weight Decay Regularization <https://arxiv.org/abs/1711.05101>`__.
+    Implements Adam algorithm with weight decay fix as introduced in `Decoupled Weight Decay Regularization
+    <https://arxiv.org/abs/1711.05101>`__.
 
     Parameters:
         params (:obj:`Iterable[torch.nn.parameter.Parameter]`):
@@ -320,12 +370,13 @@ class AdamW(Optimizer):
 
 class Adafactor(Optimizer):
     """
-    AdaFactor pytorch implementation can be used as a drop in replacement for Adam
-    original fairseq code: https://github.com/pytorch/fairseq/blob/master/fairseq/optim/adafactor.py
+    AdaFactor pytorch implementation can be used as a drop in replacement for Adam original fairseq code:
+    https://github.com/pytorch/fairseq/blob/master/fairseq/optim/adafactor.py
 
-    Paper: `Adafactor: Adaptive Learning Rates with Sublinear Memory Cost` https://arxiv.org/abs/1804.04235
-    Note that this optimizer internally adjusts the learning rate depending on the *scale_parameter*, *relative_step* and
-    *warmup_init* options. To use a manual (external) learning rate schedule you should set `scale_parameter=False` and `relative_step=False`.
+    Paper: `Adafactor: Adaptive Learning Rates with Sublinear Memory Cost` https://arxiv.org/abs/1804.04235 Note that
+    this optimizer internally adjusts the learning rate depending on the *scale_parameter*, *relative_step* and
+    *warmup_init* options. To use a manual (external) learning rate schedule you should set `scale_parameter=False` and
+    `relative_step=False`.
 
     Arguments:
         params (:obj:`Iterable[torch.nn.parameter.Parameter]`):
@@ -352,6 +403,7 @@ class Adafactor(Optimizer):
     This implementation handles low-precision (FP16, bfloat) values, but we have not thoroughly tested.
 
     Recommended T5 finetuning settings:
+
         - Scheduled LR warm-up to fixed LR
         - disable relative updates
         - use clip threshold: https://arxiv.org/abs/2004.14546
@@ -440,7 +492,9 @@ class Adafactor(Optimizer):
         return torch.mm(r_factor.unsqueeze(-1), c_factor.unsqueeze(0))
 
     def step(self, closure=None):
-        """Performs a single optimization step.
+        """
+        Performs a single optimization step
+
         Arguments:
             closure (callable, optional): A closure that reevaluates the model
                 and returns the loss.

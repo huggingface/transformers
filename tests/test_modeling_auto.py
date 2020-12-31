@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,13 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import DUMMY_UNKWOWN_IDENTIFIER, SMALL_MODEL_IDENTIFIER, require_torch, slow
+from transformers.testing_utils import (
+    DUMMY_UNKWOWN_IDENTIFIER,
+    SMALL_MODEL_IDENTIFIER,
+    require_scatter,
+    require_torch,
+    slow,
+)
 
 
 if is_torch_available():
@@ -30,6 +36,7 @@ if is_torch_available():
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
+        AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
         AutoModelWithLMHead,
         BertConfig,
@@ -44,21 +51,25 @@ if is_torch_available():
         RobertaForMaskedLM,
         T5Config,
         T5ForConditionalGeneration,
+        TapasConfig,
+        TapasForQuestionAnswering,
     )
-    from transformers.modeling_auto import (
+    from transformers.models.auto.modeling_auto import (
         MODEL_FOR_CAUSAL_LM_MAPPING,
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_PRETRAINING_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         MODEL_MAPPING,
         MODEL_WITH_LM_HEAD_MAPPING,
     )
-    from transformers.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
-    from transformers.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.bert.modeling_bert import BERT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.gpt2.modeling_gpt2 import GPT2_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.t5.modeling_t5 import T5_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.tapas.modeling_tapas import TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 @require_torch
@@ -169,6 +180,21 @@ class AutoModelTest(unittest.TestCase):
             self.assertIsInstance(model, BertForQuestionAnswering)
 
     @slow
+    @require_scatter
+    def test_table_question_answering_model_from_pretrained(self):
+        for model_name in TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST[5:6]:
+            config = AutoConfig.from_pretrained(model_name)
+            self.assertIsNotNone(config)
+            self.assertIsInstance(config, TapasConfig)
+
+            model = AutoModelForTableQuestionAnswering.from_pretrained(model_name)
+            model, loading_info = AutoModelForTableQuestionAnswering.from_pretrained(
+                model_name, output_loading_info=True
+            )
+            self.assertIsNotNone(model)
+            self.assertIsInstance(model, TapasForQuestionAnswering)
+
+    @slow
     def test_token_classification_model_from_pretrained(self):
         for model_name in BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             config = AutoConfig.from_pretrained(model_name)
@@ -183,14 +209,14 @@ class AutoModelTest(unittest.TestCase):
     def test_from_pretrained_identifier(self):
         model = AutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)
         self.assertIsInstance(model, BertForMaskedLM)
-        self.assertEqual(model.num_parameters(), 14830)
-        self.assertEqual(model.num_parameters(only_trainable=True), 14830)
+        self.assertEqual(model.num_parameters(), 14410)
+        self.assertEqual(model.num_parameters(only_trainable=True), 14410)
 
     def test_from_identifier_from_model_type(self):
         model = AutoModelWithLMHead.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER)
         self.assertIsInstance(model, RobertaForMaskedLM)
-        self.assertEqual(model.num_parameters(), 14830)
-        self.assertEqual(model.num_parameters(only_trainable=True), 14830)
+        self.assertEqual(model.num_parameters(), 14410)
+        self.assertEqual(model.num_parameters(only_trainable=True), 14410)
 
     def test_parents_and_children_in_mappings(self):
         # Test that the children are placed before the parents in the mappings, as the `instanceof` will be triggered
@@ -200,6 +226,7 @@ class AutoModelTest(unittest.TestCase):
             MODEL_MAPPING,
             MODEL_FOR_PRETRAINING_MAPPING,
             MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+            MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
@@ -212,8 +239,9 @@ class AutoModelTest(unittest.TestCase):
             mapping = tuple(mapping.items())
             for index, (child_config, child_model) in enumerate(mapping[1:]):
                 for parent_config, parent_model in mapping[: index + 1]:
-                    with self.subTest(
-                        msg="Testing if {} is child of {}".format(child_config.__name__, parent_config.__name__)
-                    ):
-                        self.assertFalse(issubclass(child_config, parent_config))
-                        self.assertFalse(issubclass(child_model, parent_model))
+                    assert not issubclass(
+                        child_config, parent_config
+                    ), "{child_config.__name__} is child of {parent_config.__name__}"
+                    assert not issubclass(
+                        child_model, parent_model
+                    ), "{child_config.__name__} is child of {parent_config.__name__}"

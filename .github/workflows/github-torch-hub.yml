@@ -8,6 +8,9 @@ on:
 jobs:
   torch_hub_integration:
     runs-on: ubuntu-latest
+    env:
+      # TODO quickfix but may need more investigation
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: True
     steps:
     # no checkout necessary here.
     - name: Extract branch name
@@ -30,7 +33,7 @@ jobs:
       run: |
         pip install --upgrade pip
         pip install torch
-        pip install numpy tokenizers filelock requests tqdm regex sentencepiece sacremoses packaging
+        pip install numpy filelock protobuf requests tqdm regex sentencepiece sacremoses tokenizers packaging
 
     - name: Torch hub list
       run: |

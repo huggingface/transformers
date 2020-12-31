@@ -66,9 +66,16 @@ class ConfigTester(object):
         self.parent.assertEqual(len(config.id2label), 3)
         self.parent.assertEqual(len(config.label2id), 3)
 
+    def check_config_can_be_init_without_params(self):
+        if self.config_class.is_composition:
+            return
+        config = self.config_class()
+        self.parent.assertIsNotNone(config)
+
     def run_common_tests(self):
         self.create_and_test_config_common_properties()
         self.create_and_test_config_to_json_string()
         self.create_and_test_config_to_json_file()
         self.create_and_test_config_from_and_save_pretrained()
         self.create_and_test_config_with_num_labels()
+        self.check_config_can_be_init_without_params()

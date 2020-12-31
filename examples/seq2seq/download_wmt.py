@@ -1,3 +1,18 @@
+#!/usr/bin/env python
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from pathlib import Path
 
 import fire
@@ -5,25 +20,25 @@ from tqdm import tqdm
 
 
 def download_wmt_dataset(src_lang="ro", tgt_lang="en", dataset="wmt16", save_dir=None) -> None:
-    """Download a dataset using the nlp package and save it to the format expected by finetune.py
+    """Download a dataset using the datasets package and save it to the format expected by finetune.py
     Format of save_dir: train.source, train.target, val.source, val.target, test.source, test.target.
 
     Args:
         src_lang: <str> source language
         tgt_lang: <str> target language
-        dataset: <str> wmt16, wmt17, etc. wmt16 is a good start as it's small. To get the full list run `import nlp; print([d.id for d in nlp.list_datasets() if "wmt" in d.id])`
+        dataset: <str> wmt16, wmt17, etc. wmt16 is a good start as it's small. To get the full list run `import datasets; print([d.id for d in datasets.list_datasets() if "wmt" in d.id])`
         save_dir: <str>, where to save the datasets, defaults to f'{dataset}-{src_lang}-{tgt_lang}'
 
     Usage:
         >>> download_wmt_dataset('ro', 'en', dataset='wmt16') # saves to wmt16-ro-en
     """
     try:
-        import nlp
+        import datasets
     except (ModuleNotFoundError, ImportError):
-        raise ImportError("run pip install nlp")
+        raise ImportError("run pip install datasets")
     pair = f"{src_lang}-{tgt_lang}"
     print(f"Converting {dataset}-{pair}")
-    ds = nlp.load_dataset(dataset, pair)
+    ds = datasets.load_dataset(dataset, pair)
     if save_dir is None:
         save_dir = f"{dataset}-{pair}"
     save_dir = Path(save_dir)

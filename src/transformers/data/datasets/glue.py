@@ -1,5 +1,20 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import os
 import time
+import warnings
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import List, Optional, Union
@@ -9,10 +24,7 @@ from torch.utils.data.dataset import Dataset
 
 from filelock import FileLock
 
-from ...tokenization_bart import BartTokenizer, BartTokenizerFast
-from ...tokenization_roberta import RobertaTokenizer, RobertaTokenizerFast
-from ...tokenization_utils import PreTrainedTokenizer
-from ...tokenization_xlm_roberta import XLMRobertaTokenizer
+from ...tokenization_utils_base import PreTrainedTokenizerBase
 from ...utils import logging
 from ..processors.glue import glue_convert_examples_to_features, glue_output_modes, glue_processors
 from ..processors.utils import InputFeatures
@@ -26,9 +38,8 @@ class GlueDataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
 
-    Using `HfArgumentParser` we can turn this class
-    into argparse arguments to be able to specify them on
-    the command line.
+    Using `HfArgumentParser` we can turn this class into argparse arguments to be able to specify them on the command
+    line.
     """
 
     task_name: str = field(metadata={"help": "The name of the task to train on: " + ", ".join(glue_processors.keys())})
@@ -58,8 +69,7 @@ class Split(Enum):
 
 class GlueDataset(Dataset):
     """
-    This will be superseded by a framework-agnostic approach
-    soon.
+    This will be superseded by a framework-agnostic approach soon.
     """
 
     args: GlueDataTrainingArguments
@@ -69,11 +79,17 @@ class GlueDataset(Dataset):
     def __init__(
         self,
         args: GlueDataTrainingArguments,
-        tokenizer: PreTrainedTokenizer,
+        tokenizer: PreTrainedTokenizerBase,
         limit_length: Optional[int] = None,
         mode: Union[str, Split] = Split.train,
         cache_dir: Optional[str] = None,
     ):
+        warnings.warn(
+            "This dataset will be removed from the library soon, preprocessing should be handled with the 🤗 Datasets "
+            "library. You can have a look at this example script for pointers: "
+            "https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_glue.py",
+            FutureWarning,
+        )
         self.args = args
         self.processor = glue_processors[args.task_name]()
         self.output_mode = glue_output_modes[args.task_name]
@@ -93,12 +109,12 @@ class GlueDataset(Dataset):
             ),
         )
         label_list = self.processor.get_labels()
-        if args.task_name in ["mnli", "mnli-mm"] and tokenizer.__class__ in (
-            RobertaTokenizer,
-            RobertaTokenizerFast,
-            XLMRobertaTokenizer,
-            BartTokenizer,
-            BartTokenizerFast,
+        if args.task_name in ["mnli", "mnli-mm"] and tokenizer.__class__.__name__ in (
+            "RobertaTokenizer",
+            "RobertaTokenizerFast",
+            "XLMRobertaTokenizer",
+            "BartTokenizer",
+            "BartTokenizerFast",
         ):
             # HACK(label indices are swapped in RoBERTa pretrained model)
             label_list[1], label_list[2] = label_list[2], label_list[1]

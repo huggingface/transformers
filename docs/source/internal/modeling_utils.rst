@@ -1,13 +1,25 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Custom Layers and Utilities
----------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 This page lists all the custom layers used by the library, as well as the utility functions it provides for modeling.
 
 Most of those are only useful if you are studying the code of the models in the library.
 
 
-``Pytorch custom modules``
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+Pytorch custom modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_utils.Conv1D
 
@@ -29,8 +41,8 @@ Most of those are only useful if you are studying the code of the models in the 
     :members: forward
 
 
-``PyTorch Helper Functions``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+PyTorch Helper Functions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autofunction:: transformers.apply_chunking_to_forward
 
@@ -42,8 +54,8 @@ Most of those are only useful if you are studying the code of the models in the 
 
 .. autofunction:: transformers.modeling_utils.prune_linear_layer
 
-``TensorFlow custom layers``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+TensorFlow custom layers
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_tf_utils.TFConv1D
 
@@ -54,8 +66,8 @@ Most of those are only useful if you are studying the code of the models in the 
     :members: call
 
 
-``TensorFlow loss functions``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+TensorFlow loss functions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_tf_utils.TFCausalLanguageModelingLoss
     :members:
@@ -76,10 +88,8 @@ Most of those are only useful if you are studying the code of the models in the 
     :members:
 
 
-``TensorFlow Helper Functions``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autofunction:: transformers.modeling_tf_utils.cast_bool_to_primitive
+TensorFlow Helper Functions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autofunction:: transformers.modeling_tf_utils.get_initializer
 

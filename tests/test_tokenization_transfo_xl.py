@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,20 +17,15 @@
 import os
 import unittest
 
-from transformers import is_torch_available
-from transformers.testing_utils import require_torch
+from transformers.models.transfo_xl.tokenization_transfo_xl import VOCAB_FILES_NAMES, TransfoXLTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
-if is_torch_available():
-    from transformers.tokenization_transfo_xl import VOCAB_FILES_NAMES, TransfoXLTokenizer
-
-
-@require_torch
 class TransfoXLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
-    tokenizer_class = TransfoXLTokenizer if is_torch_available() else None
+    tokenizer_class = TransfoXLTokenizer
+    test_rust_tokenizer = False
 
     def setUp(self):
         super().setUp()

@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import argparse
 import unittest
 from argparse import Namespace
@@ -93,13 +107,13 @@ class HfArgumentParserTest(unittest.TestCase):
 
         expected = argparse.ArgumentParser()
         expected.add_argument("--foo", action="store_true")
-        expected.add_argument("--no-baz", action="store_false", dest="baz")
+        expected.add_argument("--no_baz", action="store_false", dest="baz")
         self.argparsersEqual(parser, expected)
 
         args = parser.parse_args([])
         self.assertEqual(args, Namespace(foo=False, baz=True))
 
-        args = parser.parse_args(["--foo", "--no-baz"])
+        args = parser.parse_args(["--foo", "--no_baz"])
         self.assertEqual(args, Namespace(foo=True, baz=False))
 
     def test_with_enum(self):

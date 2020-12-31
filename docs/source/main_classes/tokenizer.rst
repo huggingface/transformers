@@ -1,5 +1,17 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Tokenizer
-----------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------
 
 A tokenizer is in charge of preparing the inputs for a model. The library contains tokenizers for all the models. Most
 of the tokenizers are available in two flavors: a full python implementation and a "Fast" implementation based on the
@@ -29,31 +41,32 @@ methods for using all the tokenizers:
 
 :class:`~transformers.BatchEncoding` holds the output of the tokenizer's encoding methods (``__call__``,
 ``encode_plus`` and ``batch_encode_plus``) and is derived from a Python dictionary. When the tokenizer is a pure python
-tokenizer, this class behaves just like a standard python dictionary and holds the various model inputs computed by these
-methods (``input_ids``, ``attention_mask``...). When the tokenizer is a "Fast" tokenizer (i.e., backed by HuggingFace
-`tokenizers library <https://github.com/huggingface/tokenizers>`__), this class provides in addition several advanced
-alignment methods which can be used to map between the original string (character and words) and the token space (e.g.,
-getting the index of the token comprising a given character or the span of characters corresponding to a given token).
+tokenizer, this class behaves just like a standard python dictionary and holds the various model inputs computed by
+these methods (``input_ids``, ``attention_mask``...). When the tokenizer is a "Fast" tokenizer (i.e., backed by
+HuggingFace `tokenizers library <https://github.com/huggingface/tokenizers>`__), this class provides in addition
+several advanced alignment methods which can be used to map between the original string (character and words) and the
+token space (e.g., getting the index of the token comprising a given character or the span of characters corresponding
+to a given token).
 
 
-``PreTrainedTokenizer``
-~~~~~~~~~~~~~~~~~~~~~~~~
+PreTrainedTokenizer
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.PreTrainedTokenizer
     :special-members: __call__
     :members:
 
 
-``PreTrainedTokenizerFast``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+PreTrainedTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.PreTrainedTokenizerFast
     :special-members: __call__
     :members:
 
 
-``BatchEncoding``
-~~~~~~~~~~~~~~~~~~~~~~~~
+BatchEncoding
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.BatchEncoding
     :members:

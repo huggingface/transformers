@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
+from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
@@ -37,7 +38,7 @@ if is_torch_available():
         XLNetLMHeadModel,
         XLNetModel,
     )
-    from transformers.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.xlnet.modeling_xlnet import XLNET_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class XLNetModelTester:
@@ -147,7 +148,6 @@ class XLNetModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             eos_token_id=self.eos_token_id,
-            return_dict=True,
         )
 
         return (
@@ -206,7 +206,36 @@ class XLNetModelTester:
             [(self.seq_length, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
-    def create_and_check_xlnet_model_use_cache(
+    def create_and_check_use_mems_train(
+        self,
+        config,
+        input_ids_1,
+        input_ids_2,
+        input_ids_q,
+        perm_mask,
+        input_mask,
+        target_mapping,
+        segment_ids,
+        lm_labels,
+        sequence_labels,
+        is_impossible_labels,
+        token_labels,
+    ):
+        model = XLNetForSequenceClassification(config)
+        model.to(torch_device)
+        model.train()
+
+        train_size = input_ids_1.shape[0]
+
+        batch_size = 4
+        for i in range(train_size // batch_size + 1):
+            input_ids = input_ids_1[i : (i + 1) * batch_size]
+            labels = sequence_labels[i : (i + 1) * batch_size]
+            outputs = model(input_ids=input_ids, labels=labels, return_dict=True)
+            self.parent.assertIsNone(outputs.mems)
+            self.parent.assertIsNotNone(outputs.loss)
+
+    def create_and_check_xlnet_model_use_mems(
         self,
         config,
         input_ids_1,
@@ -234,8 +263,8 @@ class XLNetModelTester:
             device=torch_device,
         )
         causal_mask = torch.triu(causal_mask, diagonal=0)
-        outputs_cache = model(input_ids_1, use_cache=True, perm_mask=causal_mask)
-        outputs_no_cache = model(input_ids_1, use_cache=False, perm_mask=causal_mask)
+        outputs_cache = model(input_ids_1, use_mems=True, perm_mask=causal_mask)
+        outputs_no_cache = model(input_ids_1, use_mems=False, perm_mask=causal_mask)
         outputs_conf = model(input_ids_1)
 
         self.parent.assertTrue(len(outputs_cache) == len(outputs_conf))
@@ -479,7 +508,7 @@ class XLNetModelTester:
 
 
 @require_torch
-class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
+class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             XLNetModel,
@@ -498,6 +527,21 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
     )  # TODO (PVP): Check other models whether language generation is also applicable
     test_pruning = False
 
+    # XLNet has 2 QA models -> need to manually set the correct labels for one of them here
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class.__name__ == "XLNetForQuestionAnswering":
+                inputs_dict["start_positions"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+                inputs_dict["end_positions"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+
+        return inputs_dict
+
     def setUp(self):
         self.model_tester = XLNetModelTester(self)
         self.config_tester = ConfigTester(self, config_class=XLNetConfig, d_inner=37)
@@ -510,11 +554,15 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlnet_base_model(*config_and_inputs)
 
-    def test_xlnet_base_model_use_cache(self):
-        # checking that in auto-regressive mode, `use_cache` gives the same results
+    def test_xlnet_base_model_use_mems(self):
+        # checking that in auto-regressive mode, :obj:`use_mems` gives the same results
         self.model_tester.set_seed()
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_xlnet_model_use_cache(*config_and_inputs)
+        self.model_tester.create_and_check_xlnet_model_use_mems(*config_and_inputs)
+
+    def test_seq_classification_use_mems_train(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_use_mems_train(*config_and_inputs)
 
     def test_xlnet_base_model_with_att_output(self):
         self.model_tester.set_seed()
@@ -540,6 +588,10 @@ class XLNetModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.set_seed()
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlnet_qa(*config_and_inputs)
+
+    def test_retain_grad_hidden_states_attentions(self):
+        # xlnet cannot keep gradients in attentions or hidden states
+        return
 
     @slow
     def test_model_from_pretrained(self):

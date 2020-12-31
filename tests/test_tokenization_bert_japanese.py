@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,16 +15,18 @@
 
 
 import os
+import pickle
 import unittest
 
-from transformers.testing_utils import custom_tokenizers
-from transformers.tokenization_bert import WordpieceTokenizer
-from transformers.tokenization_bert_japanese import (
+from transformers import AutoTokenizer
+from transformers.models.bert_japanese.tokenization_bert_japanese import (
     VOCAB_FILES_NAMES,
     BertJapaneseTokenizer,
     CharacterTokenizer,
     MecabTokenizer,
+    WordpieceTokenizer,
 )
+from transformers.testing_utils import custom_tokenizers
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -33,6 +35,7 @@ from .test_tokenization_common import TokenizerTesterMixin
 class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BertJapaneseTokenizer
+    space_between_special_tokens = True
 
     def setUp(self):
         super().setUp()
@@ -86,6 +89,26 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens = tokenizer.tokenize("こんにちは、世界。\nこんばんは、世界。")
         self.assertListEqual(tokens, ["こんにちは", "、", "世界", "。", "こん", "##ばんは", "、", "世界", "。"])
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [3, 12, 10, 14, 4, 9, 12, 10, 14])
+
+    def test_pickle_mecab_tokenizer(self):
+        tokenizer = self.tokenizer_class(self.vocab_file, word_tokenizer_type="mecab")
+        self.assertIsNotNone(tokenizer)
+
+        text = "こんにちは、世界。\nこんばんは、世界。"
+        tokens = tokenizer.tokenize(text)
+        self.assertListEqual(tokens, ["こんにちは", "、", "世界", "。", "こん", "##ばんは", "、", "世界", "。"])
+        self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [3, 12, 10, 14, 4, 9, 12, 10, 14])
+
+        filename = os.path.join(self.tmpdirname, "tokenizer.bin")
+        with open(filename, "wb") as handle:
+            pickle.dump(tokenizer, handle)
+
+        with open(filename, "rb") as handle:
+            tokenizer_new = pickle.load(handle)
+
+        tokens_loaded = tokenizer_new.tokenize(text)
+
+        self.assertListEqual(tokens, tokens_loaded)
 
     def test_mecab_tokenizer_ipadic(self):
         tokenizer = MecabTokenizer(mecab_dic="ipadic")
@@ -245,3 +268,11 @@ class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestC
         # 2 is for "[CLS]", 3 is for "[SEP]"
         assert encoded_sentence == [2] + text + [3]
         assert encoded_pair == [2] + text + [3] + text_2 + [3]
+
+
+@custom_tokenizers
+class AutoTokenizerCustomTest(unittest.TestCase):
+    def test_tokenizer_bert_japanese(self):
+        EXAMPLE_BERT_JAPANESE_ID = "cl-tohoku/bert-base-japanese"
+        tokenizer = AutoTokenizer.from_pretrained(EXAMPLE_BERT_JAPANESE_ID)
+        self.assertIsInstance(tokenizer, BertJapaneseTokenizer)
