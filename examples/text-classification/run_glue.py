@@ -67,8 +67,7 @@ class DataTrainingArguments:
     """
 
     task_name: Optional[str] = field(
-        default=None,
-        metadata={"help": "The name of the task to train on: " + ", ".join(task_to_keys.keys())},
+        default=None, metadata={"help": "The name of the task to train on: " + ", ".join(task_to_keys.keys())},
     )
     max_seq_length: int = field(
         default=128,
@@ -133,12 +132,51 @@ class ModelArguments:
     )
 
 
+# Should be moved to transformers/src/transformers/file_utils.py
+def is_run_on_sagemaker():
+    if "SM_OUTPUT_DATA_DIR" in os.environ and "SM_MODEL_DIR" in os.environ:
+        return True
+    else:
+        return False
+
+
+# Should be moved to transformers/src/transformers/file_utils.py or transformers/src/transformers/hf_argparser.py
+def parse_sagemaker_args(argv):
+    ## add output_dir
+    argv.extend(["--output_dir", os.environ["SM_OUTPUT_DATA_DIR"]])
+    # if datafiles add them as args
+    for key, value in os.environ.items():
+        # get all passed in s3 data_paths
+        if key.startswith("SM_CHANNEL_"):
+            # extract channel
+            key_type = key.split("_")[-1].lower()
+            # check if sm_channel is a real file with *.csv or *.json or if it is a path
+            if value.endswith(".csv") or value.endswith(".json"):
+                # if true add args --{channel}_file with value
+                argv.extend([f"--{channel}_file", value])
+            else:  # if train file is passed hyperparameter and channel is a directory
+                # get index of {channel}_file and add +1 to get the file path
+                index_of_file_from_key_type = argv.index(f"--{key_type}_file") + 1
+                # create new path from channel and file name
+                new_path = os.path.join(value, argv[index_of_file_from_key_type])
+                # overwrite existing argument for {channel}_file
+                argv[index_of_file_from_key_type] = new_path
+    ## remove True for Argsparser to work
+    argv = [args for args in argv if args != "True"]
+    return argv
+
+
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
-
+    # ##### $custom ####
+    if is_run_on_sagemaker():
+        sys.argv = parse_sagemaker_args(sys.argv)
+        print(sys.argv)
+    ####  $custom end ####
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
+
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
@@ -353,20 +391,29 @@ def main():
         train_result = trainer.train(
             model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
         )
-        metrics = train_result.metrics
-
-        trainer.save_model()  # Saves the tokenizer too for easy upload
+        ##### $custom ####
+        if is_run_on_sagemaker():
+            trainer.save_model(os.environ["SM_MODEL_DIR"])  # Saves the tokenizer too for easy upload
+        else:
+            trainer.save_model()  # Saves the tokenizer too for easy upload
+        ####  $custom end ####
 
         output_train_file = os.path.join(training_args.output_dir, "train_results.txt")
         if trainer.is_world_process_zero():
             with open(output_train_file, "w") as writer:
                 logger.info("***** Train results *****")
-                for key, value in sorted(metrics.items()):
+                for key, value in sorted(train_result._asdict().items()):
                     logger.info(f"  {key} = {value}")
                     writer.write(f"{key} = {value}\n")
 
-            # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
-            trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
+            ##### $custom ####
+            if is_run_on_sagemaker():
+                # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
+                trainer.state.save_to_json(os.path.join(os.environ["SM_MODEL_DIR"], "trainer_state.json"))
+            else:
+                # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
+                trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
+            ####  $custom end ####
 
     # Evaluation
     eval_results = {}
