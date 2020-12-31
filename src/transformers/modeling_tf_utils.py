@@ -837,7 +837,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         """
         raise NotImplementedError
 
-    def save_pretrained(self, save_directory, saved_model=True):
+    def save_pretrained(self, save_directory, saved_model=True, version=1):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
         :func:`~transformers.TFPreTrainedModel.from_pretrained` class method.
@@ -847,6 +847,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 Directory to which to save. Will be created if it doesn't exist.
             saved_model (:obj:`bool`, `optional`, defaults to False):
                 If the model has to be saved in saved model format as well or not.
+            version: (:obj:`int`, `optional`, defaults to 1):
+                The version of the saved model.
         """
         if os.path.isfile(save_directory):
             logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
@@ -854,7 +856,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         os.makedirs(save_directory, exist_ok=True)
 
         if saved_model:
-            saved_model_dir = os.path.join(save_directory, "saved_model")
+            saved_model_dir = os.path.join(save_directory, "saved_model", str(version))
             self.save(saved_model_dir, include_optimizer=False, signatures=self.serving)
             logger.info(f"Saved model created in {saved_model_dir}")
 
