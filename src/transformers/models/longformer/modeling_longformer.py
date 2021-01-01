@@ -794,7 +794,7 @@ class LongformerSelfAttention(nn.Module):
         # matrix multiplication
         # bcxd: batch_size * num_heads x chunks x 2window_overlap x head_dim
         # bcyd: batch_size * num_heads x chunks x 2window_overlap x head_dim
-        # bcxy: batch_size * num_heads x chunks x 2window_overlap x window_overlap
+        # bcxy: batch_size * num_heads x chunks x 2window_overlap x 2window_overlap
         chunked_attention_scores = torch.einsum("bcxd,bcyd->bcxy", (chunked_query, chunked_key))  # multiply
 
         # convert diagonals into columns
