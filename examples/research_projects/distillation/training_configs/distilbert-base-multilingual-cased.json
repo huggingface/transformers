@@ -1,0 +1,15 @@
+{
+	"activation": "gelu",
+	"attention_dropout": 0.1,
+	"dim": 768,
+	"dropout": 0.1,
+	"hidden_dim": 3072,
+	"initializer_range": 0.02,
+	"max_position_embeddings": 512,
+	"n_heads": 12,
+	"n_layers": 6,
+	"sinusoidal_pos_embds": true,
+	"tie_weights_": true,
+	"vocab_size": 119547
+  }
+  

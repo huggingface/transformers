@@ -1,0 +1,11 @@
+{
+  "modelname": "TemplatePT",
+  "uppercase_modelname": "TEMPLATE_PT",
+  "lowercase_modelname": "template_pt",
+  "camelcase_modelname": "TemplatePt",
+  "authors": "The HuggingFace Team",
+  "checkpoint_identifier": "brand-new-bert-base-cased",
+  "tokenizer_type": "Based on BERT",
+  "generate_tensorflow_and_pytorch": "PyTorch",
+  "is_encoder_decoder_model": "False"
+}

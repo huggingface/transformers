@@ -8,6 +8,13 @@ __pycache__/
 # C extensions
 *.so
 
+# tests and logs
+tests/fixtures/*
+!tests/fixtures/sample_text_no_unicode.txt
+logs/
+lightning_logs/
+lang_code_data/
+
 # Distribution / packaging
 .Python
 build/
@@ -116,10 +123,42 @@ dmypy.json
 .pyre/
 
 # vscode
+.vs
 .vscode
+
+# Pycharm
+.idea
 
 # TF code
 tensorflow_code
 
 # Models
-models
+proc_data
+
+# examples
+runs
+/runs_old
+/wandb
+/examples/runs
+/examples/**/*.args
+/examples/rag/sweep
+
+# data
+/data
+serialization_dir
+
+# emacs
+*.*~
+debug.env
+
+# vim
+.*.swp
+
+#ctags
+tags
+
+# pre-commit
+.pre-commit*
+
+# .lock
+*.lock
