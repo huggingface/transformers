@@ -23,6 +23,7 @@ from typing import Dict, Optional, Tuple
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
+from torch.nn import LayerNorm
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -508,16 +509,6 @@ class ProphetNetDecoderLMOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     ngram_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
-def ProphetNetLayerNorm(normalized_shape, eps=1e-5, elementwise_affine=True):
-    try:
-        from apex.normalization import FusedLayerNorm
-
-        return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
-    except ImportError:
-        pass
-    return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
 
 
 class ProphetNetPreTrainedModel(PreTrainedModel):
@@ -1044,11 +1035,11 @@ class ProphetNetEncoderLayer(nn.Module):
         super().__init__()
         # 1st residual block
         self.self_attn = ProphetNetSelfAttention(config, config.num_encoder_attention_heads)
-        self.self_attn_layer_norm = ProphetNetLayerNorm(config.hidden_size)
+        self.self_attn_layer_norm = LayerNorm(config.hidden_size)
 
         # 2nd residual block
         self.feed_forward = ProhpetNetFeedForward(config, config.encoder_ffn_dim)
-        self.feed_forward_layer_norm = ProphetNetLayerNorm(config.hidden_size)
+        self.feed_forward_layer_norm = LayerNorm(config.hidden_size)
 
     def forward(self, hidden_states, attention_mask):
         # 1st residual block
@@ -1073,16 +1064,16 @@ class ProphetNetDecoderLayer(nn.Module):
         super().__init__()
         # 1st residual block
         self.self_attn = ProphetNetNgramProphetNetSelfAttention(config)
-        self.self_attn_layer_norm = ProphetNetLayerNorm(config.hidden_size)
+        self.self_attn_layer_norm = LayerNorm(config.hidden_size)
 
         # 2nd residual block
         if config.add_cross_attention:
             self.cross_attn = ProphetNetSelfAttention(config, config.num_decoder_attention_heads)
-            self.cross_attn_layer_norm = ProphetNetLayerNorm(config.hidden_size)
+            self.cross_attn_layer_norm = LayerNorm(config.hidden_size)
 
         # 3rd residual block
         self.feed_forward = ProhpetNetFeedForward(config, config.decoder_ffn_dim)
-        self.feed_forward_layer_norm = ProphetNetLayerNorm(config.hidden_size)
+        self.feed_forward_layer_norm = LayerNorm(config.hidden_size)
 
     def forward(
         self,
@@ -1154,7 +1145,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
             else nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         )
         self.position_embeddings = ProhpetNetPositionalEmbeddings(config)
-        self.embeddings_layer_norm = ProphetNetLayerNorm(config.hidden_size)
+        self.embeddings_layer_norm = LayerNorm(config.hidden_size)
 
         self.layers = nn.ModuleList([ProphetNetEncoderLayer(config) for _ in range(config.num_encoder_layers)])
 
@@ -1274,7 +1265,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         self.ngram_embeddings = nn.Embedding(self.ngram, config.hidden_size, None)
         self.layers = nn.ModuleList([ProphetNetDecoderLayer(config) for _ in range(config.num_decoder_layers)])
-        self.embeddings_layer_norm = ProphetNetLayerNorm(config.hidden_size)
+        self.embeddings_layer_norm = LayerNorm(config.hidden_size)
 
         self.init_weights()
 
