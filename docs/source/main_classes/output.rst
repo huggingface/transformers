@@ -126,13 +126,6 @@ CausalLMOutputWithCrossAttentions
     :members:
 
 
-CausalLMOutputWithPastAndCrossAttentions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.modeling_outputs.CausalLMOutputWithPastAndCrossAttentions
-    :members:
-
-
 CausalLMOutputWithPast
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

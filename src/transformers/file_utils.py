@@ -760,7 +760,7 @@ PT_CAUSAL_LM_SAMPLE = r"""
         >>> from transformers import {tokenizer_class}, {model_class}
 
         >>> tokenizer = {tokenizer_class}.from_pretrained('{checkpoint}')
-        >>> model = {model_class}.from_pretrained('{checkpoint})
+        >>> model = {model_class}.from_pretrained('{checkpoint}')
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs, labels=inputs["input_ids"])
@@ -851,7 +851,7 @@ TF_BASE_MODEL_SAMPLE = r"""
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
         >>> outputs = model(inputs)
 
-        >>> last_hidden_states = outputs.last_hidden_states
+        >>> last_hidden_states = outputs.last_hidden_state
 """
 
 TF_MULTIPLE_CHOICE_SAMPLE = r"""

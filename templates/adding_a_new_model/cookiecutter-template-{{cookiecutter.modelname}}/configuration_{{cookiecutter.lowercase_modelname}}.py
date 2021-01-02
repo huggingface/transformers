@@ -71,6 +71,11 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if ``config.is_decoder=True``.
+        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         {% else -%}
         vocab_size (:obj:`int`, `optional`, defaults to 50265):
             Vocabulary size of the {{cookiecutter.modelname}} model. Defines the number of different tokens that can be represented by the
@@ -146,6 +151,7 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
+        use_cache=True,
         is_encoder_decoder=False,
         {% else -%}
         vocab_size=50265,
@@ -168,6 +174,8 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         init_std=0.02,
         decoder_start_token_id=2,
         classifier_dropout=0.0,
+        scale_embedding=False,
+        gradient_checkpointing=False,
         {% endif -%}
         pad_token_id=1,
         bos_token_id=0,
@@ -199,6 +207,7 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
+        self.use_cache = use_cache
         {% else -%}
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
@@ -217,6 +226,9 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
+        self.gradient_checkpointing = gradient_checkpointing
+        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+
         {% endif -%}
 
     {% if cookiecutter.is_encoder_decoder_model == "False" %}

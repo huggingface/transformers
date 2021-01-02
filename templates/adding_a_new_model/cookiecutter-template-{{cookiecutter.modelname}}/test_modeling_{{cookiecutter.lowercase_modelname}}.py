@@ -224,6 +224,68 @@ class {{cookiecutter.camelcase_modelname}}ModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    def create_and_check_decoder_model_past_large_inputs(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
+    ):
+        config.is_decoder = True
+        config.add_cross_attention = True
+        model = {{cookiecutter.camelcase_modelname}}ForCausalLM(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        # first forward pass
+        outputs = model(
+            input_ids,
+            attention_mask=input_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            use_cache=True,
+        )
+        past_key_values = outputs.past_key_values
+
+        # create hypothetical multiple next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
+
+        # append to next input_ids and
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
+
+        output_from_no_past = model(
+            next_input_ids,
+            attention_mask=next_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            output_hidden_states=True,
+        )["hidden_states"][0]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            output_hidden_states=True,
+        )["hidden_states"][0]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+
+        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
     def create_and_check_for_question_answering(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -335,6 +397,10 @@ class {{cookiecutter.camelcase_modelname}}ModelTest(ModelTesterMixin, unittest.T
     def test_for_multiple_choice(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
+
+    def test_decoder_model_past_with_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -616,23 +682,6 @@ class {{cookiecutter.camelcase_modelname}}ModelTest(ModelTesterMixin, Generation
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    def test_initialization_more(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        model = {{cookiecutter.camelcase_modelname}}Model(config)
-        model.to(torch_device)
-        model.eval()
-        # test init
-        self.assertTrue((model.encoder.embed_tokens.weight == model.shared.weight).all().item())
-
-        def _check_var(module):
-            """Check that we initialized various parameters from N(0, config.init_std)."""
-            self.assertAlmostEqual(torch.std(module.weight).item(), config.init_std, 2)
-
-        _check_var(model.encoder.embed_tokens)
-        _check_var(model.encoder.layers[0].self_attn.k_proj)
-        _check_var(model.encoder.layers[0].fc1)
-        _check_var(model.encoder.embed_positions)
 
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
