@@ -851,7 +851,7 @@ TF_BASE_MODEL_SAMPLE = r"""
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
         >>> outputs = model(inputs)
 
-        >>> last_hidden_states = outputs.last_hidden_states
+        >>> last_hidden_states = outputs.last_hidden_state
 """
 
 TF_MULTIPLE_CHOICE_SAMPLE = r"""
