@@ -26,9 +26,7 @@ if is_torch_available():
         BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,
         BlenderbotForConditionalGeneration,
         BlenderbotModel,
-        BlenderbotPreTrainedModel,
     )
-
 
 if is_tf_available():
     from .modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration
