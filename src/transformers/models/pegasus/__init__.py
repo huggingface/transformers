@@ -15,10 +15,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...file_utils import is_tf_available, is_tokenizers_available, is_torch_available
+from ...file_utils import is_sentencepiece_available, is_tf_available, is_tokenizers_available, is_torch_available
 from .configuration_pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig
-from .tokenization_pegasus import PegasusTokenizer
 
+
+if is_sentencepiece_available():
+    from .tokenization_pegasus import PegasusTokenizer
 
 if is_tokenizers_available():
     from .tokenization_pegasus_fast import PegasusTokenizerFast
