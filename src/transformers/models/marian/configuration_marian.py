@@ -156,6 +156,17 @@ class MarianConfig(PretrainedConfig):
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
+        # IMPORTANT
+        # DELETE ALL OF THE FOLLOWING LINES AS SOON AS TF IS READY
+        self.extra_pos_embeddings = 0
+        self.normalize_before = False
+        self.add_final_layer_norm = False
+        self.do_blenderbot_90_layernorm = False
+        self.normalize_embedding = False
+        self.static_position_embeddings = True
+        self.add_bias_logits = False
+        self.force_bos_token_to_be_generated = False
+
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads
@@ -163,37 +174,3 @@ class MarianConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
-
-    # IMPORTANT
-    # DELETE ALL OF THE FOLLOWING LINES AS SOON AS TF IS READY
-    @property
-    def extra_pos_embeddings(self) -> int:
-        return 0
-
-    @property
-    def normalize_before(self) -> bool:
-        return False
-
-    @property
-    def add_final_layer_norm(self) -> bool:
-        return False
-
-    @property
-    def do_blenderbot_90_layernorm(self) -> bool:
-        return False
-
-    @property
-    def normalize_embedding(self) -> bool:
-        return False
-
-    @property
-    def static_position_embeddings(self) -> bool:
-        return True
-
-    @property
-    def add_bias_logits(self) -> bool:
-        return False
-
-    @property
-    def force_bos_token_to_be_generated(self) -> bool:
-        return False

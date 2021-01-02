@@ -162,6 +162,16 @@ class BartConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.force_bos_token_to_be_generated = force_bos_token_to_be_generated  # only relevant for CNN
 
+        # IMPORTANT
+        # DELETE ALL OF THE FOLLOWING LINES AS SOON AS TF IS READY
+        self.extra_pos_embeddings = 2
+        self.normalize_before = False
+        self.add_final_layer_norm = False
+        self.do_blenderbot_90_layernorm = False
+        self.normalize_embedding = True
+        self.static_position_embeddings = False
+        self.add_bias_logits = False
+
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads
@@ -169,33 +179,3 @@ class BartConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
-
-    # IMPORTANT
-    # DELETE ALL OF THE FOLLOWING LINES AS SOON AS TF IS READY
-    @property
-    def extra_pos_embeddings(self) -> int:
-        return 2
-
-    @property
-    def normalize_before(self) -> bool:
-        return False
-
-    @property
-    def add_final_layer_norm(self) -> bool:
-        return False
-
-    @property
-    def do_blenderbot_90_layernorm(self) -> bool:
-        return False
-
-    @property
-    def normalize_embedding(self) -> bool:
-        return True
-
-    @property
-    def static_position_embeddings(self) -> bool:
-        return False
-
-    @property
-    def add_bias_logits(self) -> bool:
-        return False
