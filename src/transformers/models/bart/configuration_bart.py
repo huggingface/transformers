@@ -169,3 +169,33 @@ class BartConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
+
+    # IMPORTANT
+    # DELETE ALL OF THE FOLLOWING LINES AS SOON AS TF IS READY
+    @property
+    def extra_pos_embeddings(self) -> int:
+        return 2
+
+    @property
+    def normalize_before(self) -> bool:
+        return False
+
+    @property
+    def add_final_layer_norm(self) -> bool:
+        return False
+
+    @property
+    def do_blenderbot_90_layernorm(self) -> bool:
+        return False
+
+    @property
+    def normalize_embedding(self) -> bool:
+        return True
+
+    @property
+    def static_position_embeddings(self) -> bool:
+        return False
+
+    @property
+    def add_bias_logits(self) -> bool:
+        return False
