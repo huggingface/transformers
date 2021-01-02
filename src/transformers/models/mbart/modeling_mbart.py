@@ -57,19 +57,23 @@ MBART_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
     """
-    Shift input ids one token to the right.
+    Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that MBart does not
+    have a single `decoder_start_token_id` in contrast to other Bart-like models.
     """
-    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
-    shifted_input_ids[:, 0] = decoder_start_token_id
+    prev_output_tokens = input_ids.clone()
 
     assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
     # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+    prev_output_tokens.masked_fill_(prev_output_tokens == -100, pad_token_id)
 
-    return shifted_input_ids
+    index_of_eos = (prev_output_tokens.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
+    decoder_start_tokens = prev_output_tokens.gather(1, index_of_eos).squeeze()
+    prev_output_tokens[:, 1:] = prev_output_tokens[:, :-1].clone()
+    prev_output_tokens[:, 0] = decoder_start_tokens
+
+    return prev_output_tokens
 
 
 def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
@@ -1150,9 +1154,7 @@ class MBartForConditionalGeneration(MBartPreTrainedModel):
 
         if labels is not None:
             if decoder_input_ids is None:
-                decoder_input_ids = shift_tokens_right(
-                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
-                )
+                decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id)
 
         outputs = self.model(
             input_ids,

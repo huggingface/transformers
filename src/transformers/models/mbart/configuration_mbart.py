@@ -116,7 +116,6 @@ class MBartConfig(PretrainedConfig):
         attention_dropout=0.0,
         activation_dropout=0.0,
         init_std=0.02,
-        decoder_start_token_id=2,
         classifier_dropout=0.0,
         scale_embedding=False,
         gradient_checkpointing=False,
@@ -130,7 +129,6 @@ class MBartConfig(PretrainedConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
 

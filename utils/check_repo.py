@@ -30,11 +30,17 @@ PATH_TO_DOC = "docs/source"
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = [
     # models to ignore for not tested
-    "BlenderbotSmallEncoder",  # Building part of bigger (tested) model.
-    "BlenderbotSmallDecoder",  # Building part of bigger (tested) model.
     "BartDecoder",  # Building part of bigger (tested) model.
     "BartEncoder",  # Building part of bigger (tested) model.
     "BertLMHeadModel",  # Needs to be setup as decoder.
+    "BlenderbotSmallEncoder",  # Building part of bigger (tested) model.
+    "BlenderbotSmallDecoder",  # Building part of bigger (tested) model.
+    "BlenderbotEncoder",  # Building part of bigger (tested) model.
+    "BlenderbotDecoder",  # Building part of bigger (tested) model.
+    "MBartEncoder",  # Building part of bigger (tested) model.
+    "MBartDecoder",  # Building part of bigger (tested) model.
+    "PegasusEncoder",  # Building part of bigger (tested) model.
+    "PegasusDecoder",  # Building part of bigger (tested) model.
     "DPREncoder",  # Building part of bigger (tested) model.
     "DPRSpanPredictor",  # Building part of bigger (tested) model.
     "ProphetNetDecoderWrapper",  # Building part of bigger (tested) model.
@@ -66,10 +72,12 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = [
     # models to ignore for model xxx mapping
-    "BlenderbotSmallEncoder",
-    "BlenderbotSmallDecoder",
     "BartDecoder",
     "BartEncoder",
+    "BlenderbotSmallEncoder",
+    "BlenderbotSmallDecoder",
+    "BlenderbotEncoder",
+    "BlenderbotDecoder",
     "DPRContextEncoder",
     "DPREncoder",
     "DPRReader",
@@ -78,7 +86,11 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "FunnelBaseModel",
     "GPT2DoubleHeadsModel",
     "MT5EncoderModel",
+    "MBartEncoder",
+    "MBartDecoder",
     "OpenAIGPTDoubleHeadsModel",
+    "PegasusEncoder",
+    "PegasusDecoder",
     "ProphetNetDecoder",
     "ProphetNetEncoder",
     "ProphetNetDecoderWrapper",
