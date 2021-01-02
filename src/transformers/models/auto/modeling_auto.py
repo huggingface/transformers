@@ -21,6 +21,8 @@ from collections import OrderedDict
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings
 from ...utils import logging
+
+# Add modeling imports here
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -49,8 +51,6 @@ from ..bert.modeling_bert import (
 )
 from ..bert_generation.modeling_bert_generation import BertGenerationDecoder, BertGenerationEncoder
 from ..blenderbot.modeling_blenderbot import BlenderbotForConditionalGeneration, BlenderbotModel
-
-# Add modeling imports here
 from ..blenderbot_small.modeling_blenderbot_small import BlenderbotSmallForConditionalGeneration, BlenderbotSmallModel
 from ..camembert.modeling_camembert import (
     CamembertForCausalLM,
