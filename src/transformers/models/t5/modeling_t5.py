@@ -794,7 +794,6 @@ class T5Stack(T5PreTrainedModel):
                 self.block[layer] = self.block[layer].to(cuda_device)
 
         # Set embed_tokens to first layer
-        # XXX: same gets set in forward 2nd time
         self.embed_tokens = self.embed_tokens.to(self.first_device)
         # Set final layer norm to last device
         self.final_layer_norm = self.final_layer_norm.to(self.last_device)
@@ -952,12 +951,9 @@ class T5Stack(T5PreTrainedModel):
 
             # Model Parallel: If it's the last layer for that device, put things on the next device
             if self.model_parallel:
-                devices = list(self.device_map.keys())
-                for e, d in enumerate(devices):
-                    if i == self.device_map[d][-1] and f"cuda:{d}" != self.last_device:
-                        hidden_states = hidden_states.to(
-                            f"cuda:{devices[e+1]}"
-                        )  # again assumption that devices are not only ordered but also have a stride of 1
+                for k, v in self.device_map.items():
+                    if i == v[-1] and "cuda:" + str(k) != self.last_device:
+                        hidden_states = hidden_states.to("cuda:" + str(k + 1))
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
