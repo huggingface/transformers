@@ -252,10 +252,7 @@ class TFBartModelIntegrationTest(unittest.TestCase):
         output = model(**inputs_dict)[0]
         expected_shape = (1, 11, 1024)
         self.assertEqual(output.shape, expected_shape)
-        import ipdb
-
-        ipdb.set_trace()
-        expected_slice = tf.convert_to_tensor(
+        expected_slice = tf.Tensor(
             [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],
         )
         self.assertTrue(tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE))
