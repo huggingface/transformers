@@ -28,14 +28,13 @@ PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class PegasusConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.PegasusModel`.
-    It is used to instantiate an PEGASUS model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the PEGASUS `google/pegasus-large <https://huggingface.co/google/pegasus-large>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.PegasusModel`. It is used to
+    instantiate an PEGASUS model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the PEGASUS `google/pegasus-large
+    <https://huggingface.co/google/pegasus-large>`__ architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
 
     Args:
@@ -80,7 +79,8 @@ class PegasusConfig(PretrainedConfig):
             The LayerDrop probability for the decoder. See the `LayerDrop paper <see
             https://arxiv.org/abs/1909.11556>`__ for more details.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
+            Whether or not the model should return the last key/values attentions (not used by all models)
+
         Example::
 
         >>> from transformers import PegasusModel, PegasusConfig
@@ -131,7 +131,7 @@ class PegasusConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
-            **kwargs
+            **kwargs,
         )
 
         self.vocab_size = vocab_size
@@ -156,7 +156,6 @@ class PegasusConfig(PretrainedConfig):
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
-        
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads

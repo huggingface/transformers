@@ -34,13 +34,13 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoTokenizer,
         BatchEncoding,
         MBartConfig,
         MBartForConditionalGeneration,
         MBartForQuestionAnswering,
         MBartForSequenceClassification,
         MBartModel,
-        MBartTokenizer,
     )
     from transformers.models.mbart.modeling_mbart import MBartDecoder, MBartEncoder
 
@@ -313,7 +313,7 @@ class AbstractSeq2SeqIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.tokenizer = MBartTokenizer.from_pretrained(cls.checkpoint_name, use_fast=False)
+        cls.tokenizer = AutoTokenizer.from_pretrained(cls.checkpoint_name, use_fast=False)
         return cls
 
     @cached_property
