@@ -154,20 +154,20 @@ class AddNewModelCommand(BaseTransformersCLICommand):
             os.remove(f"{directory}/modeling_tf_{lowercase_model_name}.py")
             os.remove(f"{directory}/test_modeling_tf_{lowercase_model_name}.py")
 
-        #        shutil.move(
-        #            f"{directory}/{lowercase_model_name}.rst",
-        #            f"{path_to_transformer_root}/docs/source/model_doc/{lowercase_model_name}.rst",
-        #        )
-        #
-        #        shutil.move(
-        #            f"{directory}/tokenization_{lowercase_model_name}.py",
-        #            f"{model_dir}/tokenization_{lowercase_model_name}.py",
-        #        )
-        #
-        #        shutil.move(
-        #            f"{directory}/tokenization_fast_{lowercase_model_name}.py",
-        #            f"{model_dir}/tokenization_{lowercase_model_name}_fast.py",
-        #        )
+        shutil.move(
+            f"{directory}/{lowercase_model_name}.rst",
+            f"{path_to_transformer_root}/docs/source/model_doc/{lowercase_model_name}.rst",
+        )
+
+        shutil.move(
+            f"{directory}/tokenization_{lowercase_model_name}.py",
+            f"{model_dir}/tokenization_{lowercase_model_name}.py",
+        )
+
+        shutil.move(
+            f"{directory}/tokenization_fast_{lowercase_model_name}.py",
+            f"{model_dir}/tokenization_{lowercase_model_name}_fast.py",
+        )
 
         from os import fdopen, remove
         from shutil import copymode, move
@@ -225,5 +225,5 @@ class AddNewModelCommand(BaseTransformersCLICommand):
 
             remove(path_to_datafile)
 
-        #        replace_in_files(f"{directory}/to_replace_{lowercase_model_name}.py")
+        replace_in_files(f"{directory}/to_replace_{lowercase_model_name}.py")
         os.rmdir(directory)
