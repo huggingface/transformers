@@ -110,7 +110,7 @@ from ..longformer.modeling_longformer import (
     LongformerModel,
 )
 from ..lxmert.modeling_lxmert import LxmertForPreTraining, LxmertForQuestionAnswering, LxmertModel
-from ..marian.modeling_marian import MarianMTModel
+from ..marian.modeling_marian import MarianModel, MarianMTModel
 from ..mbart.modeling_mbart import (
     MBartForConditionalGeneration,
     MBartForQuestionAnswering,
@@ -299,6 +299,7 @@ MODEL_MAPPING = OrderedDict(
         (ProphetNetConfig, ProphetNetModel),
         (MPNetConfig, MPNetModel),
         (TapasConfig, TapasModel),
+        (MarianConfig, MarianModel),
     ]
 )
 

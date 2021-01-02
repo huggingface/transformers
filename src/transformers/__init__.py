@@ -526,7 +526,7 @@ if is_torch_available():
         LxmertVisualFeatureEncoder,
         LxmertXLayer,
     )
-    from .models.marian import MarianMTModel
+    from .models.marian import MarianModel, MarianMTModel
     from .models.mbart import (
         MBartForConditionalGeneration,
         MBartForQuestionAnswering,
