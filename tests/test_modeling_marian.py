@@ -40,7 +40,6 @@ if is_torch_available():
         MarianConfig,
         MarianModel,
         MarianMTModel,
-        MarianTokenizer,
         TranslationPipeline,
     )
     from transformers.models.marian.convert_marian_to_pytorch import (
@@ -320,7 +319,7 @@ class MarianIntegrationTest(unittest.TestCase):
         return cls
 
     @cached_property
-    def tokenizer(self) -> MarianTokenizer:
+    def tokenizer(self):
         return AutoTokenizer.from_pretrained(self.model_name)
 
     @property
