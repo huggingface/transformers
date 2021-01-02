@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright The Marian Team Authors and The HuggingFace Inc. team. All rights reserved.
+# Copyright Facebook, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,14 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch MarianMTModel model, ported from the Marian C++ repo."""
+""" PyTorch BlenderbotSmall model. """
 
 
 import math
 import random
 from typing import Optional, Tuple
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -41,18 +40,18 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from .configuration_marian import MarianConfig
+from .configuration_blenderbot_small import BlenderbotSmallConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "MarianConfig"
-_TOKENIZER_FOR_DOC = "MarianTokenizer"
+_CONFIG_FOR_DOC = "BlenderbotSmallConfig"
+_TOKENIZER_FOR_DOC = "BlenderbotSmallTokenizer"
 
 
-MARIAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Helsinki-NLP/opus-mt-en-de",
-    # See all Marian models at https://huggingface.co/models?filter=marian
+BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/blenderbot-90M",
+    # See all BlenderbotSmall models at https://huggingface.co/models?filter=blenderbot_small
 ]
 
 
@@ -100,7 +99,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
-def MarianLayerNorm(normalized_shape: torch.Size, eps: float = 1e-5, elementwise_affine: bool = True):
+def BlenderbotSmallLayerNorm(normalized_shape: torch.Size, eps: float = 1e-5, elementwise_affine: bool = True):
     if torch.cuda.is_available():
         try:
             from apex.normalization import FusedLayerNorm
@@ -111,31 +110,16 @@ def MarianLayerNorm(normalized_shape: torch.Size, eps: float = 1e-5, elementwise
     return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
 
 
-class MarianSinusoidalPositionalEmbedding(nn.Embedding):
-    """This module produces sinusoidal positional embeddings of any length."""
+class BlenderbotSmallLearnedPositionalEmbedding(nn.Embedding):
+    """
+    This module learns positional embeddings up to a fixed maximum size.
+    """
 
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
-        super().__init__(num_positions, embedding_dim)
-        self.weight = self._init_weight(self.weight)
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int):
+        assert padding_idx is not None, "`padding_idx` should not be None, but of type int"
+        num_embeddings
+        super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
 
-    @staticmethod
-    def _init_weight(out: nn.Parameter):
-        """
-        Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
-        the 2nd half of the vector. [dim // 2:]
-        """
-        n_pos, dim = out.shape
-        position_enc = np.array(
-            [[pos / np.power(10000, 2 * (j // 2) / dim) for j in range(dim)] for pos in range(n_pos)]
-        )
-        out.requires_grad = False  # set early to avoid an error in pytorch-1.8+
-        sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
-        out[:, 0:sentinel] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
-        out[:, sentinel:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
-        out.detach_()
-        return out
-
-    @torch.no_grad()
     def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         bsz, seq_len = input_ids_shape[:2]
@@ -145,7 +129,7 @@ class MarianSinusoidalPositionalEmbedding(nn.Embedding):
         return super().forward(positions)
 
 
-class MarianAttention(nn.Module):
+class BlenderbotSmallAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -279,22 +263,22 @@ class MarianAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class MarianEncoderLayer(nn.Module):
-    def __init__(self, config: MarianConfig):
+class BlenderbotSmallEncoderLayer(nn.Module):
+    def __init__(self, config: BlenderbotSmallConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = MarianAttention(
+        self.self_attn = BlenderbotSmallAttention(
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
         )
-        self.self_attn_layer_norm = MarianLayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = BlenderbotSmallLayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
         self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = MarianLayerNorm(self.embed_dim)
+        self.final_layer_norm = BlenderbotSmallLayerNorm(self.embed_dim)
 
     def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, output_attentions: bool = False):
         """
@@ -333,12 +317,12 @@ class MarianEncoderLayer(nn.Module):
         return outputs
 
 
-class MarianDecoderLayer(nn.Module):
-    def __init__(self, config: MarianConfig):
+class BlenderbotSmallDecoderLayer(nn.Module):
+    def __init__(self, config: BlenderbotSmallConfig):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = MarianAttention(
+        self.self_attn = BlenderbotSmallAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -348,17 +332,17 @@ class MarianDecoderLayer(nn.Module):
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = MarianLayerNorm(self.embed_dim)
-        self.encoder_attn = MarianAttention(
+        self.self_attn_layer_norm = BlenderbotSmallLayerNorm(self.embed_dim)
+        self.encoder_attn = BlenderbotSmallAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
         )
-        self.encoder_attn_layer_norm = MarianLayerNorm(self.embed_dim)
+        self.encoder_attn_layer_norm = BlenderbotSmallLayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = MarianLayerNorm(self.embed_dim)
+        self.final_layer_norm = BlenderbotSmallLayerNorm(self.embed_dim)
 
     def forward(
         self,
@@ -440,8 +424,8 @@ class MarianDecoderLayer(nn.Module):
         return outputs
 
 
-class MarianPreTrainedModel(PreTrainedModel):
-    config_class = MarianConfig
+class BlenderbotSmallPreTrainedModel(PreTrainedModel):
+    config_class = BlenderbotSmallConfig
     base_model_prefix = "model"
 
     def _init_weights(self, module):
@@ -450,8 +434,6 @@ class MarianPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, MarianSinusoidalPositionalEmbedding):
-            pass
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -468,7 +450,7 @@ class MarianPreTrainedModel(PreTrainedModel):
         return dummy_inputs
 
 
-MARIAN_START_DOCSTRING = r"""
+BLENDERBOT_SMALL_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
@@ -478,39 +460,35 @@ MARIAN_START_DOCSTRING = r"""
     general usage and behavior.
 
     Parameters:
-        config (:class:`~transformers.MarianConfig`):
+        config (:class:`~transformers.BlenderbotSmallConfig`):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
-MARIAN_GENERATION_EXAMPLE = r"""
-        Pytorch version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints.
-        Available models are listed `here <https://huggingface.co/models?search=Helsinki-NLP>`__.
+BLENDERBOT_SMALL_GENERATION_EXAMPLE = r"""
+    Summarization example::
 
-        Examples::
+        >>> from transformers import BlenderbotSmallTokenizer, BlenderbotSmallForConditionalGeneration, BlenderbotSmallConfig
 
-            >>> from transformers import MarianTokenizer, MarianMTModel
-            >>> from typing import List
-            >>> src = 'fr'  # source language
-            >>> trg = 'en'  # target language
-            >>> sample_text = "où est l'arrêt de bus ?"
-            >>> mname = f'Helsinki-NLP/opus-mt-{src}-{trg}'
+        >>> model = BlenderbotSmallForConditionalGeneration.from_pretrained('facebook/blenderbot-90M')
+        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained('facebook/blenderbot-90M')
 
-            >>> model = MarianMTModel.from_pretrained(mname)
-            >>> tok = MarianTokenizer.from_pretrained(mname)
-            >>> batch = tok.prepare_seq2seq_batch(src_texts=[sample_text], return_tensors="pt")  # don't need tgt_text for inference
-            >>> gen = model.generate(**batch)
-            >>> words: List[str] = tok.batch_decode(gen, skip_special_tokens=True)  # returns "Where is the bus stop ?"
+        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
+
+        >>> # Generate Summary
+        >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
+        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
 """
 
-MARIAN_INPUTS_DOCSTRING = r"""
+BLENDERBOT_SMALL_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.MarianTokenizer`. See
+            Indices can be obtained using :class:`~transformers.BlenderbotSmallTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -529,9 +507,9 @@ MARIAN_INPUTS_DOCSTRING = r"""
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
 
-            If you want to change padding behavior, you should read :func:`modeling_marian._prepare_decoder_inputs` and
-            modify to your needs. See diagram 1 in `the paper <https://arxiv.org/abs/1910.13461>`__ for more
-            information on the default strategy.
+            If you want to change padding behavior, you should read
+            :func:`modeling_blenderbot_small._prepare_decoder_inputs` and modify to your needs. See diagram 1 in `the
+            paper <https://arxiv.org/abs/1910.13461>`__ for more information on the default strategy.
         encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
             Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
             :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
@@ -569,17 +547,17 @@ MARIAN_INPUTS_DOCSTRING = r"""
 """
 
 
-class MarianEncoder(MarianPreTrainedModel):
+class BlenderbotSmallEncoder(BlenderbotSmallPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    :class:`MarianEncoderLayer`.
+    :class:`BlenderbotSmallEncoderLayer`.
 
     Args:
-        config: MarianConfig
+        config: BlenderbotSmallConfig
         embed_tokens (torch.nn.Embedding): output embedding
     """
 
-    def __init__(self, config: MarianConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: BlenderbotSmallConfig, embed_tokens: Optional[nn.Embedding] = None):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -595,12 +573,14 @@ class MarianEncoder(MarianPreTrainedModel):
         else:
             self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
-        self.embed_positions = MarianSinusoidalPositionalEmbedding(
+        self.embed_positions = BlenderbotSmallLearnedPositionalEmbedding(
             config.max_position_embeddings,
             embed_dim,
             self.padding_idx,
         )
-        self.layers = nn.ModuleList([MarianEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([BlenderbotSmallEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layernorm_embedding = BlenderbotSmallLayerNorm(embed_dim)
+
         self.init_weights()
 
     def forward(
@@ -618,7 +598,7 @@ class MarianEncoder(MarianPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.MarianTokenizer`. See
+                Indices can be obtained using :class:`~transformers.BlenderbotSmallTokenizer`. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -666,6 +646,7 @@ class MarianEncoder(MarianPreTrainedModel):
         embed_pos = self.embed_positions(input_shape)
 
         hidden_states = inputs_embeds + embed_pos
+        hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # expand attention_mask
@@ -714,16 +695,17 @@ class MarianEncoder(MarianPreTrainedModel):
         )
 
 
-class MarianDecoder(MarianPreTrainedModel):
+class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`MarianDecoderLayer`
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a
+    :class:`BlenderbotSmallDecoderLayer`
 
     Args:
-        config: MarianConfig
+        config: BlenderbotSmallConfig
         embed_tokens (torch.nn.Embedding): output embedding
     """
 
-    def __init__(self, config: MarianConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: BlenderbotSmallConfig, embed_tokens: Optional[nn.Embedding] = None):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -736,12 +718,14 @@ class MarianDecoder(MarianPreTrainedModel):
         else:
             self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
-        self.embed_positions = MarianSinusoidalPositionalEmbedding(
+        self.embed_positions = BlenderbotSmallLearnedPositionalEmbedding(
             config.max_position_embeddings,
             config.d_model,
             self.padding_idx,
         )
-        self.layers = nn.ModuleList([MarianDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList([BlenderbotSmallDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layernorm_embedding = BlenderbotSmallLayerNorm(config.d_model)
+
         self.init_weights()
 
     def forward(
@@ -763,7 +747,7 @@ class MarianDecoder(MarianPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.MarianTokenizer`. See
+                Indices can be obtained using :class:`~transformers.BlenderbotSmallTokenizer`. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -853,6 +837,8 @@ class MarianDecoder(MarianPreTrainedModel):
         # embed positions
         positions = self.embed_positions(input_shape, past_key_values_length)
 
+        # BlenderbotSmall applies layer norm on hidden_states
+        inputs_embeds = self.layernorm_embedding(inputs_embeds)
         hidden_states = inputs_embeds + positions
 
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -934,18 +920,18 @@ class MarianDecoder(MarianPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare Marian Model outputting raw hidden-states without any specific head on top.",
-    MARIAN_START_DOCSTRING,
+    "The bare BlenderbotSmall Model outputting raw hidden-states without any specific head on top.",
+    BLENDERBOT_SMALL_START_DOCSTRING,
 )
-class MarianModel(MarianPreTrainedModel):
-    def __init__(self, config: MarianConfig):
+class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
+    def __init__(self, config: BlenderbotSmallConfig):
         super().__init__(config)
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
 
-        self.encoder = MarianEncoder(config, self.shared)
-        self.decoder = MarianDecoder(config, self.shared)
+        self.encoder = BlenderbotSmallEncoder(config, self.shared)
+        self.decoder = BlenderbotSmallDecoder(config, self.shared)
 
         self.init_weights()
 
@@ -963,10 +949,10 @@ class MarianModel(MarianPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    @add_start_docstrings_to_model_forward(MARIAN_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BLENDERBOT_SMALL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="Helsinki-NLP/opus-mt-en-de",
+        checkpoint="facebook/blenderbot-90M",
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1039,26 +1025,21 @@ class MarianModel(MarianPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The Marian Model with a language modeling head. Can be used for summarization.", MARIAN_START_DOCSTRING
+    "The BlenderbotSmall Model with a language modeling head. Can be used for summarization.",
+    BLENDERBOT_SMALL_START_DOCSTRING,
 )
-class MarianMTModel(MarianPreTrainedModel):
+class BlenderbotSmallForConditionalGeneration(BlenderbotSmallPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
         r"final_logits_bias",
         r"encoder\.version",
         r"decoder\.version",
         r"lm_head\.weight",
-        r"embed_positions",
     ]
 
-    _keys_to_ignore_on_save = [
-        "model.encoder.embed_positions.weight",
-        "model.decoder.embed_positions.weight",
-    ]
-
-    def __init__(self, config: MarianConfig):
+    def __init__(self, config: BlenderbotSmallConfig):
         super().__init__(config)
-        self.model = MarianModel(config)
+        self.model = BlenderbotSmallModel(config)
         self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
@@ -1090,9 +1071,9 @@ class MarianMTModel(MarianPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    @add_start_docstrings_to_model_forward(MARIAN_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BLENDERBOT_SMALL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    @add_end_docstrings(MARIAN_GENERATION_EXAMPLE)
+    @add_end_docstrings(BLENDERBOT_SMALL_GENERATION_EXAMPLE)
     def forward(
         self,
         input_ids=None,
@@ -1119,11 +1100,11 @@ class MarianMTModel(MarianPreTrainedModel):
 
         Conditional generation example::
 
-            >>> from transformers import MarianTokenizer, MarianMTModel
-            >>> tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+            >>> from transformers import BlenderbotSmallTokenizer, BlenderbotSmallForConditionalGeneration
+            >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained('facebook/blenderbot-90M')
             >>> TXT = "My friends are <mask> but they eat too many carbs."
 
-            >>> model = MarianMTModel.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+            >>> model = BlenderbotSmallForConditionalGeneration.from_pretrained('facebook/blenderbot-90M')
             >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
             >>> logits = model(input_ids).logits
 
@@ -1195,7 +1176,6 @@ class MarianMTModel(MarianPreTrainedModel):
         }
 
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
-        logits[:, self.config.pad_token_id] = float("-inf")  # never predict pad token.
         if cur_len == max_length - 1 and self.config.eos_token_id is not None:
             self._force_token_id_to_be_generated(logits, self.config.eos_token_id)
         return logits

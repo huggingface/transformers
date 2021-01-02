@@ -23,6 +23,10 @@ from ..bart.configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartCo
 from ..bert.configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from ..bert_generation.configuration_bert_generation import BertGenerationConfig
 from ..blenderbot.configuration_blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig
+from ..blenderbot_small.configuration_blenderbot_small import (
+    BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    BlenderbotSmallConfig,
+)
 from ..camembert.configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from ..ctrl.configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from ..deberta.configuration_deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig
@@ -66,6 +70,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     (key, value)
     for pretrained_map in [
         # Add archive maps here
+        BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BART_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -105,6 +110,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
+        ("blenderbot_small", BlenderbotSmallConfig),
         ("retribert", RetriBertConfig),
         ("mt5", MT5Config),
         ("t5", T5Config),
@@ -150,6 +156,7 @@ CONFIG_MAPPING = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("blenderbot_small", "BlenderbotSmall"),
         ("retribert", "RetriBERT"),
         ("t5", "T5"),
         ("mobilebert", "MobileBERT"),

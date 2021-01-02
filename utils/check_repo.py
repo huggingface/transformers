@@ -30,6 +30,8 @@ PATH_TO_DOC = "docs/source"
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = [
     # models to ignore for not tested
+    "BlenderbotSmallEncoder",  # Building part of bigger (tested) model.
+    "BlenderbotSmallDecoder",  # Building part of bigger (tested) model.
     "BartDecoder",  # Building part of bigger (tested) model.
     "BartEncoder",  # Building part of bigger (tested) model.
     "BertLMHeadModel",  # Needs to be setup as decoder.
@@ -64,6 +66,8 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = [
     # models to ignore for model xxx mapping
+    "BlenderbotSmallEncoder",
+    "BlenderbotSmallDecoder",
     "BartDecoder",
     "BartEncoder",
     "DPRContextEncoder",

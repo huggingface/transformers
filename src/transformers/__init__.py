@@ -120,11 +120,11 @@ from .models.bert import (
 from .models.bert_generation import BertGenerationConfig
 from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .models.bertweet import BertweetTokenizer
-from .models.blenderbot import (
-    BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    BlenderbotConfig,
+from .models.blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig, BlenderbotTokenizer
+from .models.blenderbot_small import (
+    BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    BlenderbotSmallConfig,
     BlenderbotSmallTokenizer,
-    BlenderbotTokenizer,
 )
 from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
@@ -299,6 +299,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Modeling
 if is_torch_available():
+
     # Benchmarks
     from .benchmark.benchmark import PyTorchBenchmark
     from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -411,6 +412,11 @@ if is_torch_available():
         BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,
         BlenderbotForConditionalGeneration,
         BlenderbotModel,
+    )
+    from .models.blenderbot_small import (
+        BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        BlenderbotSmallForConditionalGeneration,
+        BlenderbotSmallModel,
     )
     from .models.camembert import (
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

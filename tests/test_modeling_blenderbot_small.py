@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Blenderbot model. """
+""" Testing suite for the PyTorch BlenderbotSmall model. """
 
 
 import tempfile
@@ -22,7 +22,7 @@ import timeout_decorator  # noqa
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
@@ -32,11 +32,19 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import BlenderbotConfig, BlenderbotForConditionalGeneration, BlenderbotModel, BlenderbotTokenizer
-    from transformers.models.blenderbot.modeling_blenderbot import BlenderbotDecoder, BlenderbotEncoder
+    from transformers import (
+        BlenderbotSmallConfig,
+        BlenderbotSmallForConditionalGeneration,
+        BlenderbotSmallModel,
+        BlenderbotSmallTokenizer,
+    )
+    from transformers.models.blenderbot_small.modeling_blenderbot_small import (
+        BlenderbotSmallDecoder,
+        BlenderbotSmallEncoder,
+    )
 
 
-def prepare_blenderbot_inputs_dict(
+def prepare_blenderbot_small_inputs_dict(
     config,
     input_ids,
     decoder_input_ids,
@@ -56,7 +64,7 @@ def prepare_blenderbot_inputs_dict(
 
 
 @require_torch
-class BlenderbotModelTester:
+class BlenderbotSmallModelTester:
     def __init__(
         self,
         parent,
@@ -104,7 +112,7 @@ class BlenderbotModelTester:
 
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        config = BlenderbotConfig(
+        config = BlenderbotSmallConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -120,7 +128,7 @@ class BlenderbotModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
         )
-        inputs_dict = prepare_blenderbot_inputs_dict(config, input_ids, decoder_input_ids)
+        inputs_dict = prepare_blenderbot_small_inputs_dict(config, input_ids, decoder_input_ids)
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
@@ -128,7 +136,7 @@ class BlenderbotModelTester:
         return config, inputs_dict
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
-        model = BlenderbotModel(config=config).get_decoder().to(torch_device).eval()
+        model = BlenderbotSmallModel(config=config).get_decoder().to(torch_device).eval()
         input_ids = inputs_dict["input_ids"]
         attention_mask = inputs_dict["attention_mask"]
 
@@ -161,7 +169,7 @@ class BlenderbotModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
 
     def check_encoder_decoder_model_standalone(self, config, inputs_dict):
-        model = BlenderbotModel(config=config).to(torch_device).eval()
+        model = BlenderbotSmallModel(config=config).to(torch_device).eval()
         outputs = model(**inputs_dict)
 
         encoder_last_hidden_state = outputs.encoder_last_hidden_state
@@ -170,7 +178,7 @@ class BlenderbotModelTester:
         with tempfile.TemporaryDirectory() as tmpdirname:
             encoder = model.get_encoder()
             encoder.save_pretrained(tmpdirname)
-            encoder = BlenderbotEncoder.from_pretrained(tmpdirname).to(torch_device)
+            encoder = BlenderbotSmallEncoder.from_pretrained(tmpdirname).to(torch_device)
 
         encoder_last_hidden_state_2 = encoder(inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"])[
             0
@@ -181,7 +189,7 @@ class BlenderbotModelTester:
         with tempfile.TemporaryDirectory() as tmpdirname:
             decoder = model.get_decoder()
             decoder.save_pretrained(tmpdirname)
-            decoder = BlenderbotDecoder.from_pretrained(tmpdirname).to(torch_device)
+            decoder = BlenderbotSmallDecoder.from_pretrained(tmpdirname).to(torch_device)
 
         last_hidden_state_2 = decoder(
             input_ids=inputs_dict["decoder_input_ids"],
@@ -194,17 +202,17 @@ class BlenderbotModelTester:
 
 
 @require_torch
-class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (BlenderbotModel, BlenderbotForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (BlenderbotForConditionalGeneration,) if is_torch_available() else ()
+class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (BlenderbotSmallModel, BlenderbotSmallForConditionalGeneration) if is_torch_available() else ()
+    all_generative_model_classes = (BlenderbotSmallForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
 
     def setUp(self):
-        self.model_tester = BlenderbotModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BlenderbotConfig)
+        self.model_tester = BlenderbotSmallModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=BlenderbotSmallConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -231,7 +239,7 @@ class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        model = BlenderbotForConditionalGeneration(config).eval().to(torch_device)
+        model = BlenderbotSmallForConditionalGeneration(config).eval().to(torch_device)
         if torch_device == "cuda":
             model.half()
         model.generate(input_ids, attention_mask=attention_mask)
@@ -257,40 +265,53 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
         raise AssertionError(msg)
 
 
-@unittest.skipUnless(torch_device != "cpu", "3B test too slow on CPU.")
 @require_torch
-@require_sentencepiece
-@require_tokenizers
-class Blenderbot3BIntegrationTests(unittest.TestCase):
-    ckpt = "facebook/blenderbot-3B"
+class Blenderbot90MIntegrationTests(unittest.TestCase):
+    ckpt = "facebook/blenderbot-90M"
+
+    @cached_property
+    def model(self):
+        model = BlenderbotSmallForConditionalGeneration.from_pretrained(self.ckpt).to(torch_device)
+        if torch_device == "cuda":
+            model = model.half()
+        return model
 
     @cached_property
     def tokenizer(self):
-        return BlenderbotTokenizer.from_pretrained(self.ckpt)
+        return BlenderbotSmallTokenizer.from_pretrained(self.ckpt)
 
     @slow
-    def test_generation_from_short_input_same_as_parlai_3B(self):
-        FASTER_GEN_KWARGS = dict(num_beams=1, early_stopping=True, min_length=15, max_length=25)
-        TOK_DECODE_KW = dict(skip_special_tokens=True, clean_up_tokenization_spaces=True)
+    def test_90_generation_from_long_input(self):
 
-        torch.cuda.empty_cache()
-        model = BlenderbotForConditionalGeneration.from_pretrained(self.ckpt).half().to(torch_device)
+        src_text = [
+            "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like\
+       i'm going to throw up.\nand why is that?"
+        ]
 
-        src_text = ["Sam"]
         model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
 
-        generated_utterances = model.generate(**model_inputs, **FASTER_GEN_KWARGS)
-        tgt_text = 'Sam is a great name. It means "sun" in Gaelic.'
+        # model does not have "token_type_ids"
+        model_inputs.pop("token_type_ids")
+        assert isinstance(self.tokenizer, BlenderbotSmallTokenizer)
+        generated_ids = self.model.generate(**model_inputs)[0]
+        reply = self.tokenizer.decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
 
-        generated_txt = self.tokenizer.batch_decode(generated_utterances, **TOK_DECODE_KW)
-        assert generated_txt[0].strip() == tgt_text
+        assert reply in (
+            "i don't know. i just feel like i'm going to throw up. it's not fun.",
+            "i'm not sure. i just feel like i've been feeling like i have to be in a certain place",
+        )
 
-        src_text = "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like i'm going to throw up.\nand why is that?"
+    def test_90_generation_from_short_input(self):
+        model_inputs = self.tokenizer(["sam"], return_tensors="pt").to(torch_device)
 
-        model_inputs = self.tokenizer([src_text], return_tensors="pt").to(torch_device)
+        # model does not have "token_type_ids"
+        model_inputs.pop("token_type_ids")
+        generated_utterances = self.model.generate(**model_inputs)
 
-        generated_ids = model.generate(**model_inputs, **FASTER_GEN_KWARGS)[0]
-        reply = self.tokenizer.decode(generated_ids, **TOK_DECODE_KW)
-
-        assert "I think it's because we are so worried about what people think of us." == reply.strip()
-        del model
+        clean_txt = self.tokenizer.decode(
+            generated_utterances[0], skip_special_tokens=True, clean_up_tokenization_spaces=True
+        )
+        assert clean_txt in (
+            "have you ever been to a sam club? it's a great club in the south.",
+            "have you ever heard of sam harris? he's an american singer, songwriter, and actor.",
+        )

@@ -21,8 +21,6 @@ from collections import OrderedDict
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings
 from ...utils import logging
-
-# Add modeling imports here
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -51,6 +49,9 @@ from ..bert.modeling_bert import (
 )
 from ..bert_generation.modeling_bert_generation import BertGenerationDecoder, BertGenerationEncoder
 from ..blenderbot.modeling_blenderbot import BlenderbotForConditionalGeneration, BlenderbotModel
+
+# Add modeling imports here
+from ..blenderbot_small.modeling_blenderbot_small import BlenderbotSmallForConditionalGeneration, BlenderbotSmallModel
 from ..camembert.modeling_camembert import (
     CamembertForCausalLM,
     CamembertForMaskedLM,
@@ -219,6 +220,7 @@ from .configuration_auto import (
     BertConfig,
     BertGenerationConfig,
     BlenderbotConfig,
+    BlenderbotSmallConfig,
     CamembertConfig,
     CTRLConfig,
     DebertaConfig,
@@ -262,6 +264,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
+        (BlenderbotSmallConfig, BlenderbotSmallModel),
         (RetriBertConfig, RetriBertModel),
         (MT5Config, MT5Model),
         (T5Config, T5Model),
@@ -338,6 +341,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
+        (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
         (LayoutLMConfig, LayoutLMForMaskedLM),
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
@@ -418,6 +422,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
         (MT5Config, MT5ForConditionalGeneration),
         (T5Config, T5ForConditionalGeneration),
         (PegasusConfig, PegasusForConditionalGeneration),
