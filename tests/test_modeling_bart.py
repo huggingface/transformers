@@ -114,6 +114,9 @@ class BartModelTester:
         self.bos_token_id = bos_token_id
         torch.manual_seed(0)
 
+    def get_large_model_config(self):
+        return BartConfig.from_pretrained("facebook/bart-base")
+
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
             3,
@@ -218,10 +221,12 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (BartForConditionalGeneration,) if is_torch_available() else ()
+    all_parallelizable_model_classes = (BartModel, BartForConditionalGeneration) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    test_model_parallel = True
 
     def setUp(self):
         self.model_tester = BartModelTester(self)
