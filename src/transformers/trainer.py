@@ -221,8 +221,9 @@ class Trainer:
             :class:`~transformers.AdamW` on your model and a scheduler given by
             :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
 
-    Important accessors: ``self.model`` - always points to a PretrainedModule subclass (i.e. inner `transformers`
-    model)
+    Important accessors:
+
+        ``self.model`` - always points to a PretrainedModule subclass (i.e. inner `transformers` model)
 
         ``self.model_wrapped`` - always points to the most external model in case one or more other modules wrap the
         original model. For example, under ``DeepSpeed``, the inner model is wrapped in ``DeepSpeed`` and then again in
@@ -328,7 +329,6 @@ class Trainer:
         # Mixed precision setup
         self.use_apex = False
         self.use_amp = False
-
         if args.fp16:
             if args.fp16_backend == "auto":
                 backend = "amp" if _is_native_amp_available else "apex"
