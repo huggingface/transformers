@@ -987,9 +987,10 @@ class TFBartModel(TFBartPretrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, config.pad_token_id, name="model.shared")
 
-        load_weight_prefix = (
-            load_weight_prefix + "/" + "model.shared" if load_weight_prefix is not None else "model.shared"
-        )
+        # set tf scope correctly
+        if load_weight_prefix is None:
+            load_weight_prefix = "model.shared"
+
         with tf.compat.v1.variable_scope(load_weight_prefix) as shared_abs_scope_name:
             pass
 

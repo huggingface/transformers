@@ -26,4 +26,4 @@ if is_torch_available():
     from .modeling_rag import RagModel, RagSequenceForGeneration, RagTokenForGeneration
 
 if is_tf_available():
-    from .modeling_tf_rag import TFRagModel, TFRagTokenForGeneration, TFRagSequenceForGeneration
+    from .modeling_tf_rag import TFRagModel, TFRagSequenceForGeneration, TFRagTokenForGeneration

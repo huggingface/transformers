@@ -1036,9 +1036,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
         config.name_or_path = pretrained_model_name_or_path
 
-        # Instantiate model.
+        # composed models, *e.g.* TFRag, require special treatment when it comes to loading
+        # pre-trained weights.
         if "load_weight_prefix" in inspect.signature(cls.__init__).parameters.keys():
-            model_kwargs["load_weight_prefix"] = load_weight_prefix
+            model_kwargs["load_weight_prefix"] = load_weight_prefix + "/" + model_kwargs.get("name")
+
+        # Instantiate model.
         model = cls(config, *model_args, **model_kwargs)
 
         if from_pt:

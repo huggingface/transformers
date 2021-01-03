@@ -18,8 +18,8 @@ if is_tf_available() and is_datasets_available() and is_faiss_available():
         TFBartForConditionalGeneration,
         TFDPRQuestionEncoder,
         TFRagModel,
+        TFRagSequenceForGeneration,
         TFRagTokenForGeneration,
-        TFRagSequenceForGeneration
     )
 
 
@@ -54,10 +54,8 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         )
 
     def token_model_nq_checkpoint(self, retriever):
-        return TFRagTokenForGeneration.from_pretrained(
-            "facebook/rag-token-nq", from_pt=True, retriever=retriever
-        )
-    
+        return TFRagTokenForGeneration.from_pretrained("facebook/rag-token-nq", from_pt=True, retriever=retriever)
+
     def get_rag_config(self):
         question_encoder_config = AutoConfig.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
         generator_config = AutoConfig.from_pretrained("facebook/bart-large-cnn")
@@ -152,11 +150,9 @@ class TFRagModelIntegrationTests(unittest.TestCase):
 
         tf.debugging.assert_near(output.loss, expected_loss, atol=1e-3)
         tf.debugging.assert_near(output.doc_scores, expected_doc_scores, atol=1e-3)
-    
+
     @slow
     def test_rag_token_inference_nq_checkpoint(self):
-        print('\n\n Special check on facebook/rag-token-nq weight!\n\n')
-
         rag_config = self.get_rag_config()
         rag_decoder_tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
         rag_question_encoder_tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(
@@ -169,6 +165,12 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         )
 
         rag_token = self.token_model_nq_checkpoint(retriever=rag_retriever)
+
+        # check that outputs after saving and loading are equal
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            rag_token.save_pretrained(tmpdirname)
+            rag_token = TFRagTokenForGeneration.from_pretrained(tmpdirname, retriever=rag_retriever)
+
         input_ids = rag_question_encoder_tokenizer(
             "who sings does he love me with reba", return_tensors="tf"
         ).input_ids
@@ -187,7 +189,7 @@ class TFRagModelIntegrationTests(unittest.TestCase):
 
         tf.debugging.assert_near(output.loss, expected_loss, atol=1e-3)
         tf.debugging.assert_near(output.doc_scores, expected_doc_scores, atol=1e-3)
-    
+
     @slow
     def test_rag_token_inference_save_pretrained(self):
         rag_config = self.get_rag_config()
@@ -302,7 +304,7 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         input_ids = input_dict.input_ids
         attention_mask = input_dict.attention_mask
 
-#         rag_token.config.num_beams = 1 -> different in 2 answers (obama, united stadium) to num_beams=4 labels
+        #         rag_token.config.num_beams = 1 -> different in 2 answers (obama, united stadium) to num_beams=4 labels
         output_ids = rag_token.generate(
             input_ids,
             attention_mask=attention_mask,
@@ -332,8 +334,12 @@ class TFRagModelIntegrationTests(unittest.TestCase):
     @slow
     def test_rag_sequence_generate_batch(self):
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
-        retriever = RagRetriever.from_pretrained("facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True)
-        rag_sequence = TFRagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever, from_pt=True)
+        retriever = RagRetriever.from_pretrained(
+            "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True
+        )
+        rag_sequence = TFRagSequenceForGeneration.from_pretrained(
+            "facebook/rag-sequence-nq", retriever=retriever, from_pt=True
+        )
 
         input_dict = tokenizer(
             self.test_data_questions,
@@ -377,7 +383,9 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         retriever = RagRetriever.from_pretrained(
             "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True
         )
-        rag_sequence = TFRagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever, from_pt=True)
+        rag_sequence = TFRagSequenceForGeneration.from_pretrained(
+            "facebook/rag-sequence-nq", retriever=retriever, from_pt=True
+        )
         input_dict = tokenizer(
             self.test_data_questions,
             return_tensors="tf",
@@ -390,12 +398,18 @@ class TFRagModelIntegrationTests(unittest.TestCase):
 
         question_hidden_states = rag_sequence.question_encoder(input_ids)[0]
         docs_dict = retriever(input_ids.numpy(), question_hidden_states.numpy(), return_tensors="tf")
-        doc_scores = tf.squeeze(tf.matmul(tf.expand_dims(question_hidden_states, axis=[1]), docs_dict["retrieved_doc_embeds"], transpose_b=True), axis=[1])
-        output_ids = rag_sequence.generate(context_input_ids=docs_dict["context_input_ids"], 
-                                           context_attention_mask=docs_dict["context_attention_mask"], 
-                                           doc_scores=doc_scores, 
-                                           do_deduplication=True,
-                                           )
+        doc_scores = tf.squeeze(
+            tf.matmul(
+                tf.expand_dims(question_hidden_states, axis=[1]), docs_dict["retrieved_doc_embeds"], transpose_b=True
+            ),
+            axis=[1],
+        )
+        output_ids = rag_sequence.generate(
+            context_input_ids=docs_dict["context_input_ids"],
+            context_attention_mask=docs_dict["context_attention_mask"],
+            doc_scores=doc_scores,
+            do_deduplication=True,
+        )
 
         outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
