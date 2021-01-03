@@ -507,12 +507,29 @@ MBART_GENERATION_EXAMPLE = r"""
         >>> model = MBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25')
         >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
 
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+        >>> ARTICLE_TO_SUMMARIZE = "Meine Freunde sind cool, aber sie essen zu viel Kuchen."
         >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
 
         >>> # Generate Summary
         >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
         >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
+
+    Mask filling example::
+
+        >>> from transformers import MBartTokenizer, MBartForConditionalGeneration
+        >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
+        >>> # de_DE is the language symbol id <LID> for German
+        >>> TXT = "</s> Meine Freunde sind <mask> nett aber sie essen zu viel Kuchen. </s> de_DE"
+
+        >>> model = MBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25')
+        >>> input_ids = tokenizer([TXT], add_special_tokens=False, return_tensors='pt')['input_ids']
+        >>> logits = model(input_ids).logits
+
+        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+        >>> probs = logits[0, masked_index].softmax(dim=0)
+        >>> values, predictions = probs.topk(5)
+
+        >>> tokenizer.decode(predictions).split()
 """
 
 MBART_INPUTS_DOCSTRING = r"""
@@ -536,6 +553,23 @@ MBART_INPUTS_DOCSTRING = r"""
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Provide for translation and summarization training. By default, the model will create this tensor by
             shifting the :obj:`input_ids` to the right, following the paper.
+        decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`~transformers.BartTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+
+            MBart uses a specific language id token as the starting token for :obj:`decoder_input_ids` generation that
+            varies according to source and target language, *e.g.* 25004 for `en_XX`, and 25003 for `de_DE`. If
+            :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
+            :obj:`past_key_values`).
+
+            For translation and summarization training, :obj:`decoder_input_ids` should be provided. If no
+            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`input_ids` to
+            the right for denoising pre-training following the paper.
         decoder_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
@@ -1015,6 +1049,11 @@ class MBartModel(MBartPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # different to other models, MBart automatically creates decoder_input_ids from
+        # input_ids if no decoder_input_ids are provided
+        if decoder_input_ids is None and decoder_inputs_embeds is None:
+            decoder_input_ids = shift_tokens_right(input_ids, self.config.pad_token_id)
+
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -1134,21 +1173,6 @@ class MBartForConditionalGeneration(MBartPreTrainedModel):
 
         Returns:
 
-        Conditional generation example::
-
-            >>> from transformers import MBartTokenizer, MBartForConditionalGeneration
-            >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
-            >>> TXT = "My friends are <mask> but they eat too many carbs."
-
-            >>> model = MBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25')
-            >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
-            >>> logits = model(input_ids).logits
-
-            >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-            >>> probs = logits[0, masked_index].softmax(dim=0)
-            >>> values, predictions = probs.topk(5)
-
-            >>> tokenizer.decode(predictions).split()
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

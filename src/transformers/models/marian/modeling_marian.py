@@ -27,7 +27,6 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
-    add_code_sample_docstrings,
     add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -523,8 +522,17 @@ MARIAN_INPUTS_DOCSTRING = r"""
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Provide for translation and summarization training. By default, the model will create this tensor by
-            shifting the :obj:`input_ids` to the right, following the paper.
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`~transformers.MarianTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+
+            Marian uses the :obj:`pad_token_id` as the starting token for :obj:`decoder_input_ids` generation. If
+            :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
+            :obj:`past_key_values`).
         decoder_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
@@ -964,12 +972,7 @@ class MarianModel(MarianPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(MARIAN_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="Helsinki-NLP/opus-mt-en-de",
-        output_type=Seq2SeqModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -985,6 +988,23 @@ class MarianModel(MarianPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        Returns:
+
+        Example::
+
+            >>> from transformers import MarianTokenizer, MarianModel
+
+            >>> tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+            >>> model = MarianModel.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+
+            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
+            >>> decoder_input_ids = tokenizer("<pad> Studien haben gezeigt dass es hilfreich ist einen Hund zu besitzen",
+            ... return_tensors="pt", add_special_tokens=False).input_ids  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+
+            >>> last_hidden_states = outputs.last_hidden_state
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1117,21 +1137,6 @@ class MarianMTModel(MarianPreTrainedModel):
 
         Returns:
 
-        Conditional generation example::
-
-            >>> from transformers import MarianTokenizer, MarianMTModel
-            >>> tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
-            >>> TXT = "My friends are <mask> but they eat too many carbs."
-
-            >>> model = MarianMTModel.from_pretrained('Helsinki-NLP/opus-mt-en-de')
-            >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
-            >>> logits = model(input_ids).logits
-
-            >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-            >>> probs = logits[0, masked_index].softmax(dim=0)
-            >>> values, predictions = probs.topk(5)
-
-            >>> tokenizer.decode(predictions).split()
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

@@ -81,7 +81,7 @@ class MarianConfig(PretrainedConfig):
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models)
 
-        Example::
+    Examples::
 
         >>> from transformers import MarianModel, MarianConfig
 

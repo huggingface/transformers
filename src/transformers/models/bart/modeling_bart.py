@@ -517,6 +517,22 @@ BART_GENERATION_EXAMPLE = r"""
         >>> # Generate Summary
         >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
         >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
+
+    Mask filling example::
+
+        >>> from transformers import BartTokenizer, BartForConditionalGeneration
+        >>> tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
+        >>> TXT = "My friends are <mask> but they eat too many carbs."
+
+        >>> model = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
+        >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
+        >>> logits = model(input_ids).logits
+
+        >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+        >>> probs = logits[0, masked_index].softmax(dim=0)
+        >>> values, predictions = probs.topk(5)
+
+        >>> tokenizer.decode(predictions).split()
 """
 
 BART_INPUTS_DOCSTRING = r"""
@@ -538,8 +554,21 @@ BART_INPUTS_DOCSTRING = r"""
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Provide for translation and summarization training. By default, the model will create this tensor by
-            shifting the :obj:`input_ids` to the right, following the paper.
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`~transformers.BartTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+
+            Bart uses the :obj:`eos_token_id` as the starting token for :obj:`decoder_input_ids` generation. If
+            :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
+            :obj:`past_key_values`).
+
+            For translation and summarization training, :obj:`decoder_input_ids` should be provided. If no
+            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`input_ids` to
+            the right for denoising pre-training following the paper.
         decoder_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
@@ -1139,22 +1168,6 @@ class BartForConditionalGeneration(BartPretrainedModel):
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
 
         Returns:
-
-        Conditional generation example::
-
-            >>> from transformers import BartTokenizer, BartForConditionalGeneration
-            >>> tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
-            >>> TXT = "My friends are <mask> but they eat too many carbs."
-
-            >>> model = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
-            >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
-            >>> logits = model(input_ids).logits
-
-            >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-            >>> probs = logits[0, masked_index].softmax(dim=0)
-            >>> values, predictions = probs.topk(5)
-
-            >>> tokenizer.decode(predictions).split()
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1446,8 +1459,6 @@ class BartForQuestionAnswering(BartPretrainedModel):
             end_logits=end_logits,
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
