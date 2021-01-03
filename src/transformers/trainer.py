@@ -91,6 +91,7 @@ from .trainer_utils import (
     EvalPrediction,
     HPSearchBackend,
     PredictionOutput,
+    SchedulerType,
     TrainOutput,
     default_compute_objective,
     default_hp_space,
@@ -270,8 +271,15 @@ class Trainer:
                 raise RuntimeError("`Trainer` requires either a `model` or `model_init` argument, but not both")
             self.model_init = None
 
+        default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
+        self.data_collator = data_collator if data_collator is not None else default_collator
+        self.train_dataset = train_dataset
+        self.eval_dataset = eval_dataset
+        self.tokenizer = tokenizer
+
         if args.deepspeed:
-            model, optimizer, lr_scheduler = self._init_deepspeed(model)
+            num_training_steps = self.get_num_training_steps()
+            model, optimizer, lr_scheduler = self._init_deepspeed(model, num_training_steps)
             self.optimizer = optimizer
             self.lr_scheduler = lr_scheduler
         else:
@@ -287,12 +295,6 @@ class Trainer:
             self.model = model.module
         else:
             self.model = model
-
-        default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
-        self.data_collator = data_collator if data_collator is not None else default_collator
-        self.train_dataset = train_dataset
-        self.eval_dataset = eval_dataset
-        self.tokenizer = tokenizer
 
         self.compute_metrics = compute_metrics
         if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
@@ -348,7 +350,7 @@ class Trainer:
 
         # deepspeed manages its own fp16, so don't interfere
         if args.deepspeed and args.fp16:
-            ds_config_file = args.deepspeed_config if args.deepspeed_config is not None else ""
+            ds_config_file = args.deepspeed if args.deepspeed is not None else ""
             raise ValueError(
                 f"Please use deepspeed's json configuration file {ds_config_file} to enable fp16 and not via --fp16 cl arg"
             )
@@ -391,13 +393,38 @@ class Trainer:
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
-    def _init_deepspeed(self, model):
+    def get_num_training_steps(self):
+        """
+        number of training steps is either 1. args.max_steps if --max_steps > 1 2. else derive from dataset if we can
+        get its size
+        """
+        if self.args.max_steps > 0:
+            return self.args.max_steps
+        elif isinstance(self.train_dataset, collections.abc.Sized):
+            # XXX: hack to get dataset len before dist world is initiated
+            train_dataloader = DataLoader(
+                self.train_dataset,
+                batch_size=self.args.train_batch_size,
+                collate_fn=self.data_collator,
+                drop_last=self.args.dataloader_drop_last,
+            )
+            num_update_steps_per_epoch = len(train_dataloader) // self.args.gradient_accumulation_steps
+            num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
+            return math.ceil(self.args.num_train_epochs * num_update_steps_per_epoch)
+        else:
+            raise ValueError(
+                "can't figure out the number of training steps, either set --max_steps or fix the dataloader so that it returns the length of the dataset"
+            )
+
+    def _init_deepspeed(self, model, num_training_steps):
+        args = self.args
+
         # for clarity extract what args are being passed to deepspeed
         # XXX: we shouldn't need to pass deepspeed_config anymore, since we handle it ourselves, but
         # currently ds won't work without this argument present in args
-        ds_args = dict(local_rank=self.args.local_rank, deepspeed_config=self.args.deepspeed)
+        ds_args = dict(local_rank=args.local_rank, deepspeed_config=args.deepspeed)
 
-        with io.open(self.args.deepspeed, "r", encoding="utf-8") as f:
+        with io.open(args.deepspeed, "r", encoding="utf-8") as f:
             config = json.load(f)
 
         # The following code injects some of trainer's cl args into the DS config
@@ -418,8 +445,67 @@ class Trainer:
         # DeepSpeed does:
         #   train_batch_size = n_gpus * train_micro_batch_size_per_gpu * gradient_accumulation_steps
         # therefore we just need to set:
-        config["train_micro_batch_size_per_gpu"] = self.args.per_device_train_batch_size
-        config["gradient_accumulation_steps"] = self.args.gradient_accumulation_steps
+        config["train_micro_batch_size_per_gpu"] = args.per_device_train_batch_size
+        config["gradient_accumulation_steps"] = args.gradient_accumulation_steps
+
+        # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
+        optimizer_configs = {
+            "Adam": {
+                "lr": args.learning_rate,
+                "betas": [args.adam_beta1, args.adam_beta2],
+                "eps": args.adam_epsilon,
+                "weight_decay": args.weight_decay,
+            }
+        }
+        optimizer = "Adam"  # currently trainer only has Adam config params
+
+        # override only if the ds config doesn't already have this section
+        if "optimizer" in config:
+            logger.info("Keeping the optimizer config from the config file intact")
+        else:
+            config["optimizer"] = {
+                "type": optimizer,
+                "params": optimizer_configs[optimizer],
+            }
+
+        # DS schedulers (deepspeed/runtime/lr_schedules.py):
+        #
+        # DS name      | --lr_scheduler_type  | HF func                           | Notes
+        # -------------| ---------------------|-----------------------------------|--------------------
+        # LRRangeTest  | na                   | na                                | LRRT
+        # OneCycle     | na                   | na                                | 1CLR
+        # WarmupLR     | constant_with_warmup | get_constant_schedule_with_warmup | w/ warmup_min_lr=0
+        # WarmupDecayLR| linear               | get_linear_schedule_with_warmup   |
+        hf2ds_remap = {
+            SchedulerType.LINEAR: "WarmupDecayLR",
+            SchedulerType.CONSTANT_WITH_WARMUP: "WarmupLR",
+        }
+        scheduler_configs = {
+            "WarmupLR": {
+                "warmup_min_lr": 0,
+                "warmup_max_lr": args.learning_rate,
+                "warmup_num_steps": args.warmup_steps,
+            },
+            "WarmupDecayLR": {  #
+                "last_batch_iteration": -1,
+                "total_num_steps": num_training_steps,
+                "warmup_min_lr": 0,
+                "warmup_max_lr": args.learning_rate,
+                "warmup_num_steps": args.warmup_steps,
+            },
+        }
+        if args.lr_scheduler_type not in hf2ds_remap:
+            raise ValueError(f"{args.lr_scheduler_type} scheduler type is not supported by DeepSpeed")
+        scheduler = hf2ds_remap[args.lr_scheduler_type]
+
+        # override only if the ds config doesn't already have this section
+        if "scheduler" in config:
+            logger.info("Keeping the scheduler config from the config file intact")
+        else:
+            config["scheduler"] = {
+                "type": scheduler,
+                "params": scheduler_configs[scheduler],
+            }
 
         # init that takes some config via `args`, and the bulk of it via `config_params`
         model_parameters = filter(lambda p: p.requires_grad, model.parameters())
