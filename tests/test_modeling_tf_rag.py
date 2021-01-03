@@ -288,6 +288,39 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         ]
 
     @slow
+    def test_rag_token_greedy_search(self):
+        tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")
+        retriever = RagRetriever.from_pretrained("facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True)
+        rag_token = TFRagTokenForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever, from_pt=True)
+
+        # check first two questions
+        input_dict = tokenizer(
+            self.test_data_questions[:2],
+            return_tensors="tf",
+            padding=True,
+            truncation=True,
+        )
+
+        input_ids = input_dict.input_ids
+        attention_mask = input_dict.attention_mask
+
+        # make sure only 1 beam is used
+        rag_token.config.num_beams = 1
+
+        output_ids = rag_token.generate(
+            input_ids,
+            attention_mask=attention_mask,
+        )
+
+        outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+
+        EXPECTED_OUTPUTS = [
+            " albert einstein",
+            " september 22, 2017",
+        ]
+        self.assertListEqual(outputs, EXPECTED_OUTPUTS)
+
+    @slow
     def test_rag_token_generate_batch(self):
         # NOTE: gold labels comes from num_beam=4 -- if change gold labels to greedy-generated, test will pass
         tokenizer = RagTokenizer.from_pretrained("facebook/rag-token-nq")

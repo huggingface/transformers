@@ -807,6 +807,9 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             assert (
                 decoder_cached_states
             ), f"decoder cached states must be truthy. got {decoder_cached_states} from the 2nd element of past"
+            # if past is defined cut decoder_input_ids to last token
+            decoder_input_ids = decoder_input_ids[:, -1:]
+
         assert isinstance(
             encoder_outputs, TFBaseModelOutput
         ), f"encoder_outputs should be a TFBaseModelOutput, Instead got {type(encoder_outputs)}."
