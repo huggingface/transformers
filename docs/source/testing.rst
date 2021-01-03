@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Testing
 =======================================================================================================================
 
@@ -405,16 +417,32 @@ decorators are used to set the requirements of tests CPU/GPU/TPU-wise:
 
 * ``require_torch`` - this test will run only under torch
 * ``require_torch_gpu`` - as ``require_torch`` plus requires at least 1 GPU
-* ``require_torch_multigpu`` - as ``require_torch`` plus requires at least 2 GPUs
-* ``require_torch_non_multigpu`` - as ``require_torch`` plus requires 0 or 1 GPUs
+* ``require_torch_multi_gpu`` - as ``require_torch`` plus requires at least 2 GPUs
+* ``require_torch_non_multi_gpu`` - as ``require_torch`` plus requires 0 or 1 GPUs
 * ``require_torch_tpu`` - as ``require_torch`` plus requires at least 1 TPU
+
+Let's depict the GPU requirements in the following table:
+
+
++----------+----------------------------------+
+| n gpus   |  decorator                       |
++==========+==================================+
+| ``>= 0`` | ``@require_torch``               |
++----------+----------------------------------+
+| ``>= 1`` | ``@require_torch_gpu``           |
++----------+----------------------------------+
+| ``>= 2`` | ``@require_torch_multi_gpu``     |
++----------+----------------------------------+
+| ``< 2``  | ``@require_torch_non_multi_gpu`` |
++----------+----------------------------------+
+
 
 For example, here is a test that must be run only when there are 2 or more GPUs available and pytorch is installed:
 
 .. code-block:: python
 
-    @require_torch_multigpu
-    def test_example_with_multigpu():
+    @require_torch_multi_gpu
+    def test_example_with_multi_gpu():
 
 If a test requires ``tensorflow`` use the ``require_tf`` decorator. For example:
 
@@ -438,7 +466,7 @@ last for them to work correctly. Here is an example of the correct usage:
 .. code-block:: python
 
     @parameterized.expand(...)
-    @require_torch_multigpu
+    @require_torch_multi_gpu
     def test_integration_foo():
 
 This order problem doesn't exist with ``@pytest.mark.parametrize``, you can put it first or last and it will still
@@ -450,7 +478,8 @@ Inside tests:
 
 .. code-block:: bash
 
-   torch.cuda.device_count()
+   from transformers.testing_utils import get_gpu_count
+   n_gpu = get_gpu_count() # works with torch and tf
 
 
 
@@ -699,11 +728,11 @@ Temporary files and directories
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Using unique temporary files and directories are essential for parallel test running, so that the tests won't overwrite
-each other's data. Also we want to get the temp files and directories removed at the end of each test that created
+each other's data. Also we want to get the temporary files and directories removed at the end of each test that created
 them. Therefore, using packages like ``tempfile``, which address these needs is essential.
 
-However, when debugging tests, you need to be able to see what goes into the temp file or directory and you want to
-know it's exact path and not having it randomized on every test re-run.
+However, when debugging tests, you need to be able to see what goes into the temporary file or directory and you want
+to know it's exact path and not having it randomized on every test re-run.
 
 A helper class :obj:`transformers.test_utils.TestCasePlus` is best used for such purposes. It's a sub-class of
 :obj:`unittest.TestCase`, so we can easily inherit from it in the test modules.
@@ -719,32 +748,33 @@ Here is an example of its usage:
 
 This code creates a unique temporary directory, and sets :obj:`tmp_dir` to its location.
 
-In this and all the following scenarios the temporary directory will be auto-removed at the end of test, unless
-``after=False`` is passed to the helper function.
-
-* Create a temporary directory of my choice and delete it at the end - useful for debugging when you want to monitor a
-  specific directory:
+* Create a unique temporary dir:
 
 .. code-block:: python
 
     def test_whatever(self):
-        tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test")
+        tmp_dir = self.get_auto_remove_tmp_dir()
 
-* Create a temporary directory of my choice and do not delete it at the end---useful for when you want to look at the
-  temp results:
+``tmp_dir`` will contain the path to the created temporary dir. It will be automatically removed at the end of the
+test.
+
+* Create a temporary dir of my choice, ensure it's empty before the test starts and don't empty it after the test.
 
 .. code-block:: python
 
     def test_whatever(self):
-        tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test", after=False)
+        tmp_dir = self.get_auto_remove_tmp_dir("./xxx")
 
-* Create a temporary directory of my choice and ensure to delete it right away---useful for when you disabled deletion
-  in the previous test run and want to make sure the that temporary directory is empty before the new test is run:
+This is useful for debug when you want to monitor a specific directory and want to make sure the previous tests didn't
+leave any data in there.
 
-.. code-block:: python
+* You can override the default behavior by directly overriding the ``before`` and ``after`` args, leading to one of the
+  following behaviors:
 
-   def test_whatever(self):
-        tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test", before=True)
+    - ``before=True``: the temporary dir will always be cleared at the beginning of the test.
+    - ``before=False``: if the temporary dir already existed, any existing files will remain there.
+    - ``after=True``: the temporary dir will always be deleted at the end of the test.
+    - ``after=False``: the temporary dir will always be left intact at the end of the test.
 
 .. note::
    In order to run the equivalent of ``rm -r`` safely, only subdirs of the project repository checkout are allowed if
@@ -798,7 +828,7 @@ or the ``xfail`` way:
     @pytest.mark.xfail
     def test_feature_x():
 
-Here is how to skip a test based on some internal check inside the test:
+- Here is how to skip a test based on some internal check inside the test:
 
 .. code-block:: python
 
@@ -821,7 +851,7 @@ or the ``xfail`` way:
     def test_feature_x():
         pytest.xfail("expected to fail until bug XYZ is fixed")
 
-Here is how to skip all tests in a module if some import is missing:
+- Here is how to skip all tests in a module if some import is missing:
 
 .. code-block:: python
 
@@ -891,9 +921,10 @@ pipelines), then we should run that test in the non-slow test suite. If it's foc
 such as the documentation or the examples, then we should run these tests in the slow test suite. And then, to refine
 this approach we should have exceptions:
 
-* All tests that need to download a heavy set of weights (e.g., model or tokenizer integration tests, pipeline
-  integration tests) should be set to slow. If you're adding a new model, you should create and upload to the hub a
-  tiny version of it (with random weights) for integration tests. This is discussed in the following paragraphs.
+* All tests that need to download a heavy set of weights or a dataset that is larger than ~50MB (e.g., model or
+  tokenizer integration tests, pipeline integration tests) should be set to slow. If you're adding a new model, you
+  should create and upload to the hub a tiny version of it (with random weights) for integration tests. This is
+  discussed in the following paragraphs.
 * All tests that need to do a training not specifically optimized to be fast should be set to slow.
 * We can introduce exceptions if some of these should-be-non-slow tests are excruciatingly slow, and set them to
   ``@slow``. Auto-modeling tests, which save and load large files to disk, are a good example of tests that are marked
@@ -1037,7 +1068,7 @@ If you need to validate the output of a logger, you can use :obj:`CaptureLogger`
 
     msg = "Testing 1, 2, 3"
     logging.set_verbosity_info()
-    logger = logging.get_logger("transformers.tokenization_bart")
+    logger = logging.get_logger("transformers.models.bart.tokenization_bart")
     with CaptureLogger(logger) as cl:
         logger.info(msg)
     assert cl.out, msg+"\n"
@@ -1111,3 +1142,66 @@ To start a debugger at the point of the warning, do this:
 .. code-block:: bash
 
     pytest tests/test_logging.py -W error::UserWarning --pdb
+
+
+
+Testing Experimental CI Features
+-----------------------------------------------------------------------------------------------------------------------
+
+Testing CI features can be potentially problematic as it can interfere with the normal CI functioning. Therefore if a
+new CI feature is to be added, it should be done as following.
+
+1. Create a new dedicated job that tests what needs to be tested
+2. The new job must always succeed so that it gives us a green ✓ (details below).
+3. Let it run for some days to see that a variety of different PR types get to run on it (user fork branches,
+   non-forked branches, branches originating from github.com UI direct file edit, various forced pushes, etc. - there
+   are so many) while monitoring the experimental job's logs (not the overall job green as it's purposefully always
+   green)
+4. When it's clear that everything is solid, then merge the new changes into existing jobs.
+
+That way experiments on CI functionality itself won't interfere with the normal workflow.
+
+Now how can we make the job always succeed while the new CI feature is being developed?
+
+Some CIs, like TravisCI support ignore-step-failure and will report the overall job as successful, but CircleCI and
+Github Actions as of this writing don't support that.
+
+So the following workaround can be used:
+
+1. ``set +euo pipefail`` at the beginning of the run command to suppress most potential failures in the bash script.
+2. the last command must be a success: ``echo "done"`` or just ``true`` will do
+
+Here is an example:
+
+.. code-block:: yaml
+
+    - run:
+        name: run CI experiment
+        command: |
+            set +euo pipefail
+            echo "setting run-all-despite-any-errors-mode"
+            this_command_will_fail
+            echo "but bash continues to run"
+            # emulate another failure
+            false
+            # but the last command must be a success
+            echo "during experiment do not remove: reporting success to CI, even if there were failures"
+
+For simple commands you could also do:
+
+.. code-block:: bash
+
+    cmd_that_may_fail || true
+
+Of course, once satisfied with the results, integrate the experimental step or job with the rest of the normal jobs,
+while removing ``set +euo pipefail`` or any other things you may have added to ensure that the experimental job doesn't
+interfere with the normal CI functioning.
+
+This whole process would have been much easier if we only could set something like ``allow-failure`` for the
+experimental step, and let it fail without impacting the overall status of PRs. But as mentioned earlier CircleCI and
+Github Actions don't support it at the moment.
+
+You can vote for this feature and see where it is at at these CI-specific threads:
+
+* `Github Actions: <https://github.com/actions/toolkit/issues/399>`__
+* `CircleCI: <https://ideas.circleci.com/ideas/CCI-I-344>`__

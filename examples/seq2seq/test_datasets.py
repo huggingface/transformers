@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import os
 from pathlib import Path
 
@@ -8,15 +22,32 @@ from torch.utils.data import DataLoader
 from pack_dataset import pack_data_dir
 from parameterized import parameterized
 from save_len_file import save_len_file
-from test_seq2seq_examples import ARTICLES, BART_TINY, MARIAN_TINY, MBART_TINY, SUMMARIES, T5_TINY, make_test_data_dir
 from transformers import AutoTokenizer
-from transformers.modeling_bart import shift_tokens_right
-from transformers.testing_utils import TestCasePlus, slow
+from transformers.models.bart.modeling_bart import shift_tokens_right
+from transformers.testing_utils import TestCasePlus, require_torch_non_multi_gpu_but_fix_me, slow
 from utils import FAIRSEQ_AVAILABLE, DistributedSortishSampler, LegacySeq2SeqDataset, Seq2SeqDataset
 
 
 BERT_BASE_CASED = "bert-base-cased"
 PEGASUS_XSUM = "google/pegasus-xsum"
+ARTICLES = [" Sam ate lunch today.", "Sams lunch ingredients."]
+SUMMARIES = ["A very interesting story about what I ate for lunch.", "Avocado, celery, turkey, coffee"]
+T5_TINY = "patrickvonplaten/t5-tiny-random"
+BART_TINY = "sshleifer/bart-tiny-random"
+MBART_TINY = "sshleifer/tiny-mbart"
+MARIAN_TINY = "sshleifer/tiny-marian-en-de"
+
+
+def _dump_articles(path: Path, articles: list):
+    content = "\n".join(articles)
+    Path(path).open("w").writelines(content)
+
+
+def make_test_data_dir(tmp_dir):
+    for split in ["train", "val", "test"]:
+        _dump_articles(os.path.join(tmp_dir, f"{split}.source"), ARTICLES)
+        _dump_articles(os.path.join(tmp_dir, f"{split}.target"), SUMMARIES)
+    return tmp_dir
 
 
 class TestAll(TestCasePlus):
@@ -30,6 +61,7 @@ class TestAll(TestCasePlus):
         ],
     )
     @slow
+    @require_torch_non_multi_gpu_but_fix_me
     def test_seq2seq_dataset_truncation(self, tok_name):
         tokenizer = AutoTokenizer.from_pretrained(tok_name)
         tmp_dir = make_test_data_dir(tmp_dir=self.get_auto_remove_tmp_dir())
@@ -69,6 +101,7 @@ class TestAll(TestCasePlus):
             break  # No need to test every batch
 
     @parameterized.expand([BART_TINY, BERT_BASE_CASED])
+    @require_torch_non_multi_gpu_but_fix_me
     def test_legacy_dataset_truncation(self, tok):
         tokenizer = AutoTokenizer.from_pretrained(tok)
         tmp_dir = make_test_data_dir(tmp_dir=self.get_auto_remove_tmp_dir())
@@ -93,6 +126,7 @@ class TestAll(TestCasePlus):
             assert max_len_target > trunc_target  # Truncated
             break  # No need to test every batch
 
+    @require_torch_non_multi_gpu_but_fix_me
     def test_pack_dataset(self):
         tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
 
@@ -111,6 +145,7 @@ class TestAll(TestCasePlus):
         assert orig_paths == new_paths
 
     @pytest.mark.skipif(not FAIRSEQ_AVAILABLE, reason="This test requires fairseq")
+    @require_torch_non_multi_gpu_but_fix_me
     def test_dynamic_batch_size(self):
         if not FAIRSEQ_AVAILABLE:
             return
@@ -135,6 +170,7 @@ class TestAll(TestCasePlus):
         if failures:
             raise AssertionError(f"too many tokens in {len(failures)} batches")
 
+    @require_torch_non_multi_gpu_but_fix_me
     def test_sortish_sampler_reduces_padding(self):
         ds, _, tokenizer = self._get_dataset(max_len=512)
         bs = 2
@@ -174,6 +210,7 @@ class TestAll(TestCasePlus):
         )
         return ds, max_tokens, tokenizer
 
+    @require_torch_non_multi_gpu_but_fix_me
     def test_distributed_sortish_sampler_splits_indices_between_procs(self):
         ds, max_tokens, tokenizer = self._get_dataset()
         ids1 = set(DistributedSortishSampler(ds, 256, num_replicas=2, rank=0, add_extra_examples=False))
@@ -189,8 +226,9 @@ class TestAll(TestCasePlus):
             PEGASUS_XSUM,
         ],
     )
+    @require_torch_non_multi_gpu_but_fix_me
     def test_dataset_kwargs(self, tok_name):
-        tokenizer = AutoTokenizer.from_pretrained(tok_name)
+        tokenizer = AutoTokenizer.from_pretrained(tok_name, use_fast=False)
         if tok_name == MBART_TINY:
             train_dataset = Seq2SeqDataset(
                 tokenizer,

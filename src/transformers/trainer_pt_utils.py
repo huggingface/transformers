@@ -19,11 +19,11 @@ Torch utilities for the Trainer class.
 import math
 import warnings
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import List, Optional, Union
 
 import numpy as np
 import torch
-from packaging import version
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler
 
@@ -34,25 +34,59 @@ from .utils import logging
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
 
-if version.parse(torch.__version__) <= version.parse("1.4.1"):
-    SAVE_STATE_WARNING = ""
-else:
+# this is used to supress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
+try:
     from torch.optim.lr_scheduler import SAVE_STATE_WARNING
+except ImportError:
+    SAVE_STATE_WARNING = ""
 
 logger = logging.get_logger(__name__)
 
 
-def nested_concat(tensors, new_tensors, dim=0):
-    "Concat the `new_tensors` to `tensors` on `dim`. Works for tensors or nested list/tuples of tensors."
+def torch_pad_and_concatenate(tensor1, tensor2, padding_index=-100):
+    """Concatenates `tensor1` and `tensor2` on first axis, applying padding on the second if necessary."""
+    if len(tensor1.shape) == 1 or tensor1.shape[1] == tensor2.shape[1]:
+        return torch.cat((tensor1, tensor2), dim=0)
+
+    # Let's figure out the new shape
+    new_shape = (tensor1.shape[0] + tensor2.shape[0], max(tensor1.shape[1], tensor2.shape[1])) + tensor1.shape[2:]
+
+    # Now let's fill the result tensor
+    result = tensor1.new_full(new_shape, padding_index)
+    result[: tensor1.shape[0], : tensor1.shape[1]] = tensor1
+    result[tensor1.shape[0] :, : tensor2.shape[1]] = tensor2
+    return result
+
+
+def numpy_pad_and_concatenate(array1, array2, padding_index=-100):
+    """Concatenates `array1` and `array2` on first axis, applying padding on the second if necessary."""
+    if len(array1.shape) == 1 or array1.shape[1] == array2.shape[1]:
+        return np.concatenate((array1, array2), dim=0)
+
+    # Let's figure out the new shape
+    new_shape = (array1.shape[0] + array2.shape[0], max(array1.shape[1], array2.shape[1])) + array1.shape[2:]
+
+    # Now let's fill the result tensor
+    result = np.full_like(array1, padding_index, shape=new_shape)
+    result[: array1.shape[0], : array1.shape[1]] = array1
+    result[array1.shape[0] :, : array2.shape[1]] = array2
+    return result
+
+
+def nested_concat(tensors, new_tensors, padding_index=-100):
+    """
+    Concat the `new_tensors` to `tensors` on the first dim and pad them on the second if needed. Works for tensors or
+    nested list/tuples of tensors.
+    """
     assert type(tensors) == type(
         new_tensors
     ), f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
     if isinstance(tensors, (list, tuple)):
-        return type(tensors)(nested_concat(t, n, dim) for t, n in zip(tensors, new_tensors))
+        return type(tensors)(nested_concat(t, n, padding_index=padding_index) for t, n in zip(tensors, new_tensors))
     elif isinstance(tensors, torch.Tensor):
-        return torch.cat((tensors, new_tensors), dim=dim)
+        return torch_pad_and_concatenate(tensors, new_tensors, padding_index=padding_index)
     elif isinstance(tensors, np.ndarray):
-        return np.concatenate((tensors, new_tensors), axis=dim)
+        return numpy_pad_and_concatenate(tensors, new_tensors, padding_index=padding_index)
     else:
         raise TypeError(f"Unsupported type for concatenation: got {type(tensors)}")
 
@@ -190,11 +224,21 @@ def get_tpu_sampler(dataset: torch.utils.data.dataset.Dataset):
     return DistributedSampler(dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
 
 
-def nested_new_like(arrays, num_samples):
+def nested_new_like(arrays, num_samples, padding_index=-100):
     """ Create the same nested structure as `arrays` with a first dimension always at `num_samples`."""
     if isinstance(arrays, (list, tuple)):
         return type(arrays)(nested_new_like(x, num_samples) for x in arrays)
-    return np.zeros((num_samples, *arrays.shape[1:]), dtype=arrays.dtype)
+    return np.full_like(arrays, padding_index, shape=(num_samples, *arrays.shape[1:]))
+
+
+def nested_expand_like(arrays, new_seq_length, padding_index=-100):
+    """ Expand the `arrays` so that the second dimension grows to `new_seq_length`. Uses `padding_index` for padding."""
+    if isinstance(arrays, (list, tuple)):
+        return type(arrays)(nested_expand_like(x, new_seq_length, padding_index=padding_index) for x in arrays)
+
+    result = np.full_like(arrays, padding_index, shape=(arrays.shape[0], new_seq_length) + arrays.shape[2:])
+    result[:, : arrays.shape[1]] = arrays
+    return result
 
 
 def nested_truncate(tensors, limit):
@@ -202,6 +246,13 @@ def nested_truncate(tensors, limit):
     if isinstance(tensors, (list, tuple)):
         return type(tensors)(nested_truncate(t, limit) for t in tensors)
     return tensors[:limit]
+
+
+def _get_first_shape(arrays):
+    """Return the shape of the first array found in the nested struct `arrays`."""
+    if isinstance(arrays, (list, tuple)):
+        return _get_first_shape(arrays[0])
+    return arrays.shape
 
 
 class DistributedTensorGatherer:
@@ -247,9 +298,11 @@ class DistributedTensorGatherer:
         make_multiple_of (:obj:`int`, `optional`):
             If passed, the class assumes the datasets passed to each process are made to be a multiple of this argument
             (by adding samples).
+        padding_index (:obj:`int`, `optional`, defaults to -100):
+            The padding index to use if the arrays don't all have the same sequence length.
     """
 
-    def __init__(self, world_size, num_samples, make_multiple_of=None):
+    def __init__(self, world_size, num_samples, make_multiple_of=None, padding_index=-100):
         self.world_size = world_size
         self.num_samples = num_samples
         total_size = world_size if make_multiple_of is None else world_size * make_multiple_of
@@ -257,6 +310,7 @@ class DistributedTensorGatherer:
         self.process_length = self.total_samples // world_size
         self._storage = None
         self._offsets = None
+        self.padding_index = padding_index
 
     def add_arrays(self, arrays):
         """
@@ -266,8 +320,14 @@ class DistributedTensorGatherer:
         if arrays is None:
             return
         if self._storage is None:
-            self._storage = nested_new_like(arrays, self.total_samples)
+            self._storage = nested_new_like(arrays, self.total_samples, padding_index=self.padding_index)
             self._offsets = list(range(0, self.total_samples, self.process_length))
+        else:
+            storage_shape = _get_first_shape(self._storage)
+            arrays_shape = _get_first_shape(arrays)
+            if len(storage_shape) > 1 and storage_shape[1] < arrays_shape[1]:
+                # If we get new arrays that are too big too fit, we expand the shape fo the storage
+                self._storage = nested_expand_like(self._storage, arrays_shape[1], padding_index=self.padding_index)
         slice_len = self._nested_set_tensors(self._storage, arrays)
         for i in range(self.world_size):
             self._offsets[i] += slice_len
@@ -283,7 +343,12 @@ class DistributedTensorGatherer:
 
         slice_len = arrays.shape[0] // self.world_size
         for i in range(self.world_size):
-            storage[self._offsets[i] : self._offsets[i] + slice_len] = arrays[i * slice_len : (i + 1) * slice_len]
+            if len(arrays.shape) == 1:
+                storage[self._offsets[i] : self._offsets[i] + slice_len] = arrays[i * slice_len : (i + 1) * slice_len]
+            else:
+                storage[self._offsets[i] : self._offsets[i] + slice_len, : arrays.shape[1]] = arrays[
+                    i * slice_len : (i + 1) * slice_len
+                ]
         return slice_len
 
     def finalize(self):
@@ -296,3 +361,32 @@ class DistributedTensorGatherer:
         if self._offsets[0] != self.process_length:
             logger.warn("Not all data has been set. Are you sure you passed all values?")
         return nested_truncate(self._storage, self.num_samples)
+
+
+@dataclass
+class LabelSmoother:
+    """
+    Adds label-smoothing on a pre-computed output from a Transformers model.
+
+    Args:
+        epsilon (:obj:`float`, `optional`, defaults to 0.1):
+            The label smoothing factor.
+        ignore_index (:obj:`int`, `optional`, defaults to -100):
+            The index in the labels to ignore when computing the loss.
+    """
+
+    epsilon: float = 0.1
+    ignore_index: int = -100
+
+    def __call__(self, model_output, labels):
+        model_loss = model_output["loss"] if isinstance(model_output, dict) else model_output[0]
+        logits = model_output["logits"] if isinstance(model_output, dict) else model_output[1]
+        log_probs = -torch.nn.functional.log_softmax(logits, dim=-1)
+
+        # Look at the ignored index and mask the corresponding log_probs.
+        padding_mask = labels.unsqueeze(-1).eq(self.ignore_index)
+        log_probs.masked_fill_(padding_mask, 0.0)
+
+        # Take the mean over the label dimensions, then divide by the number of active elements (i.e. not-padded):
+        smoothed_loss = log_probs.mean(dim=-1).sum() / (padding_mask.numel() - padding_mask.long().sum())
+        return (1 - self.epsilon) * model_loss + self.epsilon * smoothed_loss

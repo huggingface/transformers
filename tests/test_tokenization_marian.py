@@ -25,7 +25,7 @@ from transformers.testing_utils import _sentencepiece_available, _torch_availabl
 
 
 if _sentencepiece_available:
-    from transformers.tokenization_marian import save_json, vocab_files_names
+    from transformers.models.marian.tokenization_marian import save_json, vocab_files_names
 
 from .test_tokenization_common import TokenizerTesterMixin
 

@@ -14,7 +14,6 @@
 # limitations under the License.
 
 
-import tempfile
 import unittest
 
 import numpy as np
@@ -31,7 +30,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFBartForConditionalGeneration, TFBartModel
-    from transformers.modeling_tf_bart import TFSinusoidalPositionalEmbedding
+    from transformers.models.bart.modeling_tf_bart import TFBartSinusoidalPositionalEmbedding
 
 
 @require_tf
@@ -86,6 +85,41 @@ class TFBartModelTester:
         inputs_dict = prepare_bart_inputs_dict(config, input_ids)
         return config, inputs_dict
 
+    def check_decoder_model_past_large_inputs(self, config, inputs_dict):
+        model = TFBartModel(config=config).get_decoder()
+        input_ids = inputs_dict["input_ids"]
+
+        input_ids = input_ids[:1, :]
+        attention_mask = inputs_dict["attention_mask"][:1, :]
+        self.batch_size = 1
+
+        # first forward pass
+        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
+
+        output, past_key_values = outputs.to_tuple()
+        past_key_values = past_key_values[1]
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_attn_mask = tf.cast(ids_tensor((self.batch_size, 3), 2), tf.int8)
+
+        # append to next input_ids and
+        next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
+        next_attention_mask = tf.concat([attention_mask, next_attn_mask], axis=-1)
+
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[0]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[0]
+
+        self.parent.assertEqual(next_tokens.shape[1], output_from_past.shape[1])
+
+        # select random slice
+        random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx]
+        output_from_past_slice = output_from_past[:, :, random_slice_idx]
+
+        # test that outputs are equal for slice
+        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
+
 
 def prepare_bart_inputs_dict(
     config,
@@ -102,62 +136,33 @@ def prepare_bart_inputs_dict(
 
 
 @require_tf
-class TestTFBart(TFModelTesterMixin, unittest.TestCase):
+class TFBartModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFBartForConditionalGeneration, TFBartModel) if is_tf_available() else ()
     all_generative_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
-    model_tester_cls = TFBartModelTester
 
     def setUp(self):
-        self.model_tester = self.model_tester_cls(self)
+        self.model_tester = TFBartModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BartConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_inputs_embeds(self):
-        # inputs_embeds not supported
-        pass
+    def test_decoder_model_past_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_compile_tf_model(self):
+    def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
-        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
-
-        model_class = self.all_generative_model_classes[0]
-        input_ids = {
-            "decoder_input_ids": tf.keras.Input(batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"),
-            "input_ids": tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32"),
-        }
-
-        # Prepare our model
-        model = model_class(config)
-        model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
-        # Let's load it from the disk to be sure we can use pretrained weights
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname)
-            model = model_class.from_pretrained(tmpdirname)
-
-        outputs_dict = model(input_ids)
-        hidden_states = outputs_dict[0]
-
-        # Add a dense layer on top to test integration with other keras modules
-        outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
-
-        # Compile extended model
-        extended_model = tf.keras.Model(inputs=[input_ids], outputs=[outputs])
-        extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
-
-    def test_saved_model_with_hidden_states_output(self):
-        # Should be uncommented during patrick TF refactor
-        pass
-
-    def test_saved_model_with_attentions_output(self):
-        # Should be uncommented during patrick TF refactor
-        pass
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+            x = model.get_output_layer_with_bias()
+            assert x is None
+            name = model.get_prefix_bias_name()
+            assert name is None
 
 
 @require_tf
@@ -182,7 +187,6 @@ class TFBartHeadTests(unittest.TestCase):
             eos_token_id=2,
             pad_token_id=1,
             bos_token_id=0,
-            return_dict=True,
             decoder_start_token_id=2,
         )
         return config, input_ids, batch_size
@@ -191,7 +195,7 @@ class TFBartHeadTests(unittest.TestCase):
         config, input_ids, batch_size = self._get_config_and_data()
         decoder_lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size)
         lm_model = TFBartForConditionalGeneration(config)
-        outputs = lm_model(inputs=input_ids, lm_labels=decoder_lm_labels, decoder_input_ids=input_ids, use_cache=False)
+        outputs = lm_model(input_ids=input_ids, labels=decoder_lm_labels, decoder_input_ids=input_ids, use_cache=False)
         expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
         self.assertEqual(outputs.logits.shape, expected_shape)
 
@@ -206,12 +210,11 @@ class TFBartHeadTests(unittest.TestCase):
             encoder_ffn_dim=32,
             decoder_ffn_dim=32,
             max_position_embeddings=48,
-            return_dict=True,
         )
         lm_model = TFBartForConditionalGeneration(config)
         context = tf.fill((7, 2), 4)
         summary = tf.fill((7, 7), 6)
-        outputs = lm_model(inputs=context, decoder_input_ids=summary, use_cache=False)
+        outputs = lm_model(input_ids=context, decoder_input_ids=summary, use_cache=False)
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(outputs.logits.shape, expected_shape)
 
@@ -317,13 +320,11 @@ class FasterTFBartModelIntegrationTests(unittest.TestCase):
         model = self.xsum_1_1_model
         assert model.model.decoder.embed_tokens._layer == model.model.shared
         ARTICLE = 'The Palestinian Authority officially became the 123rd member of the International Criminal Court on Wednesday, a step that gives the court jurisdiction over alleged crimes in Palestinian territories. The formal accession was marked with a ceremony at The Hague, in the Netherlands, where the court is based. The Palestinians signed the ICC\'s founding Rome Statute in January, when they also accepted its jurisdiction over alleged crimes committed "in the occupied Palestinian territory, including East Jerusalem, since June 13, 2014." Later that month, the ICC opened a preliminary examination into the situation in Palestinian territories, paving the way for possible war crimes investigations against Israelis. As members of the court, Palestinians may be subject to counter-charges as well. Israel and the United States, neither of which is an ICC member, opposed the Palestinians\' efforts to join the body. But Palestinian Foreign Minister Riad al-Malki, speaking at Wednesday\'s ceremony, said it was a move toward greater justice. "As Palestine formally becomes a State Party to the Rome Statute today, the world is also a step closer to ending a long era of impunity and injustice," he said, according to an ICC news release. "Indeed, today brings us closer to our shared goals of justice and peace." Judge Kuniko Ozaki, a vice president of the ICC, said acceding to the treaty was just the first step for the Palestinians. "As the Rome Statute today enters into force for the State of Palestine, Palestine acquires all the rights as well as responsibilities that come with being a State Party to the Statute. These are substantive commitments, which cannot be taken lightly," she said. Rights group Human Rights Watch welcomed the development. "Governments seeking to penalize Palestine for joining the ICC should immediately end their pressure, and countries that support universal acceptance of the court\'s treaty should speak out to welcome its membership," said Balkees Jarrah, international justice counsel for the group. "What\'s objectionable is the attempts to undermine international justice, not Palestine\'s decision to join a treaty to which over 100 countries around the world are members." In January, when the preliminary ICC examination was opened, Israeli Prime Minister Benjamin Netanyahu described it as an outrage, saying the court was overstepping its boundaries. The United States also said it "strongly" disagreed with the court\'s decision. "As we have said repeatedly, we do not believe that Palestine is a state and therefore we do not believe that it is eligible to join the ICC," the State Department said in a statement. It urged the warring sides to resolve their differences through direct negotiations. "We will continue to oppose actions against Israel at the ICC as counterproductive to the cause of peace," it said. But the ICC begs to differ with the definition of a state for its purposes and refers to the territories as "Palestine." While a preliminary examination is not a formal investigation, it allows the court to review evidence and determine whether to investigate suspects on both sides. Prosecutor Fatou Bensouda said her office would "conduct its analysis in full independence and impartiality." The war between Israel and Hamas militants in Gaza last summer left more than 2,000 people dead. The inquiry will include alleged war crimes committed since June. The International Criminal Court was set up in 2002 to prosecute genocide, crimes against humanity and war crimes.'
+        EXPECTED = " The International Criminal Court (ICC) has announced that it has been announced by the International Criminal court."
         dct = self.tok(ARTICLE, return_tensors="tf")
         generated_ids = model.generate(**dct, num_beams=4)
         result = self.tok.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        assert (
-            result
-            == " The International Criminal Court (ICC) has announced that it has been announced by the International Criminal court."
-        )
+        assert result == EXPECTED
 
     def test_xsum_1_1_batch_generation(self):
         batch = self.tok(
@@ -356,8 +357,7 @@ class FasterTFBartModelIntegrationTests(unittest.TestCase):
             padding="longest",
             truncation=True,
         )
-        features = self.xsum_1_1_model.get_encoder()(**batch, return_dict=True).last_hidden_state
-        import numpy as np
+        features = self.xsum_1_1_model.get_encoder()(**batch).last_hidden_state
 
         expected = np.array([[-0.0828, -0.0251, -0.0674], [0.1277, 0.3311, -0.0255], [0.2613, -0.0840, -0.2763]])
         assert np.allclose(features[0, :3, :3].numpy(), expected, atol=1e-3)
@@ -372,16 +372,14 @@ class TestTFSinusoidalPositionalEmbeddings(unittest.TestCase):
     ]
 
     def test_positional_emb_cache_logic(self):
-        input_ids = _long_tensor([[4, 10]])
-        emb1 = TFSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=6)
-        no_cache = emb1(input_ids, use_cache=False)
-        yes_cache = emb1(input_ids, use_cache=True)
-        self.assertEqual((1, 1, 6), yes_cache.shape)  # extra dim to allow broadcasting, feel free to delete!
-
-        np.testing.assert_almost_equal(no_cache[-1].numpy(), yes_cache[0][0].numpy())
+        emb1 = TFBartSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=6)
+        no_cache = emb1((4, 10), past_key_values_length=0)
+        yes_cache = emb1((4, 10), past_key_values_length=2)
+        self.assertTrue(no_cache.shape == yes_cache.shape == (10, 6))
+        self.assertListEqual(no_cache[2:].numpy().tolist(), yes_cache[:-2].numpy().tolist())
 
     def test_positional_emb_weights_against_marian(self):
-        emb1 = TFSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512)
+        emb1 = TFBartSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512)
         emb1.build(None)
         weights = emb1.embeddings.numpy()
         for i, (expected_weight, actual_weight) in enumerate(zip(self.desired_weights, weights)):

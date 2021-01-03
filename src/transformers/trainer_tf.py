@@ -1,9 +1,21 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Tensorflow trainer class."""
 
 import datetime
 import math
 import os
-import warnings
 from typing import Callable, Dict, Optional, Tuple
 
 
@@ -20,7 +32,7 @@ from tensorflow.python.distribute.values import PerReplica
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, set_seed
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, EvaluationStrategy, PredictionOutput, set_seed
 from .training_args_tf import TFTrainingArguments
 from .utils import logging
 
@@ -66,8 +78,6 @@ class TFTrainer:
             :class:`~transformers.AdamWeightDecay`. The scheduler will default to an instance of
             :class:`tf.keras.optimizers.schedules.PolynomialDecay` if :obj:`args.num_warmup_steps` is 0 else an
             instance of :class:`~transformers.WarmUp`.
-        kwargs:
-            Deprecated keyword arguments.
     """
 
     def __init__(
@@ -82,7 +92,6 @@ class TFTrainer:
             None,
             None,
         ),
-        **kwargs,
     ):
         assert parse(tf.__version__).release >= (2, 2, 0), (
             "You need to run the TensorFlow trainer with at least the version 2.2.0, your version is %r "
@@ -98,13 +107,6 @@ class TFTrainer:
         self.gradient_accumulator = GradientAccumulator()
         self.global_step = 0
         self.epoch_logging = 0
-        if "prediction_loss_only" in kwargs:
-            warnings.warn(
-                "Passing `prediction_loss_only` as a keyword argument is deprecated and won't be possible in a future version. Use `args.prediction_loss_only` instead.",
-                FutureWarning,
-            )
-            self.args.prediction_loss_only = kwargs.pop("prediction_loss_only")
-        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
 
         if tb_writer is not None:
             self.tb_writer = tb_writer
@@ -249,12 +251,6 @@ class TFTrainer:
             WANDB_DISABLED:
                 (Optional): boolean - defaults to false, set to "true" to disable wandb entirely.
         """
-        if hasattr(self, "_setup_wandb"):
-            warnings.warn(
-                "The `_setup_wandb` method is deprecated and won't be called in a future version, define `setup_wandb` in your subclass.",
-                FutureWarning,
-            )
-            return self._setup_wandb()
 
         logger.info('Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"')
         combined_dict = {**self.model.config.to_dict(), **self.args.to_sanitized_dict()}
@@ -304,14 +300,6 @@ class TFTrainer:
 
         Works both with or without labels.
         """
-        if hasattr(self, "_prediction_loop"):
-            warnings.warn(
-                "The `_prediction_loop` method is deprecated and won't be called in a future version, define `prediction_loop` in your subclass.",
-                FutureWarning,
-            )
-            return self._prediction_loop(
-                dataset, steps, num_examples, description, prediction_loss_only=prediction_loss_only
-            )
 
         prediction_loss_only = (
             prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
@@ -393,12 +381,6 @@ class TFTrainer:
             logs (:obj:`Dict[str, float]`):
                 The values to log.
         """
-        if hasattr(self, "_log"):
-            warnings.warn(
-                "The `_log` method is deprecated and won't be called in a future version, define `log` in your subclass.",
-                FutureWarning,
-            )
-            return self._log(logs)
         logs["epoch"] = self.epoch_logging
 
         if self.tb_writer:
@@ -592,7 +574,7 @@ class TFTrainer:
 
                     if (
                         self.args.eval_steps > 0
-                        and self.args.evaluate_during_training
+                        and self.args.evaluation_strategy == EvaluationStrategy.STEPS
                         and self.global_step % self.args.eval_steps == 0
                     ):
                         self.evaluate()
@@ -733,12 +715,6 @@ class TFTrainer:
         Returns:
             A tuple of two :obj:`tf.Tensor`: The loss and logits.
         """
-        if hasattr(self, "_run_model"):
-            warnings.warn(
-                "The `_run_model` method is deprecated and won't be called in a future version, define `run_model` in your subclass.",
-                FutureWarning,
-            )
-            return self._run_model(features, labels, training)
 
         if self.args.past_index >= 0 and getattr(self, "_past", None) is not None:
             features["mems"] = self._past

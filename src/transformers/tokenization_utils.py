@@ -19,7 +19,6 @@
 import itertools
 import re
 import unicodedata
-import warnings
 from typing import Any, Dict, List, Optional, Tuple, Union, overload
 
 from .file_utils import add_end_docstrings
@@ -246,12 +245,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Returns:
             :obj:`List[str]`: The list of tokens.
         """
-        if "is_pretokenized" in kwargs:
-            warnings.warn(
-                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
-                FutureWarning,
-            )
-            kwargs["is_split_into_words"] = kwargs.pop("is_pretokenized")
         # Simple mapping string => AddedToken for special tokens with specific tokenization behaviors
         all_special_tokens_extended = dict(
             (str(t), t) for t in self.all_special_tokens_extended if isinstance(t, AddedToken)
@@ -291,7 +284,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                             full_word += sub_text + tok
                         elif full_word:
                             full_word += sub_text
-                            result += [full_word]
+                            result.append(full_word)
                             full_word = ""
                             continue
                     # Strip white spaces on the right
@@ -310,16 +303,16 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                         sub_text = sub_text.lstrip()
 
                 if i == 0 and not sub_text:
-                    result += [tok]
+                    result.append(tok)
                 elif i == len(split_text) - 1:
                     if sub_text:
-                        result += [sub_text]
+                        result.append(sub_text)
                     else:
                         pass
                 else:
                     if sub_text:
-                        result += [sub_text]
-                    result += [tok]
+                        result.append(sub_text)
+                    result.append(tok)
             return result
 
         def split_on_tokens(tok_list, text):
@@ -334,9 +327,9 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 tokenized_text = []
                 for sub_text in text_list:
                     if sub_text not in self.unique_no_split_tokens:
-                        tokenized_text += split_on_token(tok, sub_text)
+                        tokenized_text.extend(split_on_token(tok, sub_text))
                     else:
-                        tokenized_text += [sub_text]
+                        tokenized_text.append(sub_text)
                 text_list = tokenized_text
 
             return list(
@@ -448,13 +441,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 "https://github.com/huggingface/transformers/pull/2674"
             )
 
-        if "is_pretokenized" in kwargs:
-            warnings.warn(
-                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
-                FutureWarning,
-            )
-            is_split_into_words = kwargs.pop("is_pretokenized")
-
         first_ids = get_input_ids(text)
         second_ids = get_input_ids(text_pair) if text_pair is not None else None
 
@@ -529,13 +515,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                 "To use this feature, change your tokenizer to one deriving from "
                 "transformers.PreTrainedTokenizerFast."
             )
-
-        if "is_pretokenized" in kwargs:
-            warnings.warn(
-                "`is_pretokenized` is deprecated and will be removed in a future version, use `is_split_into_words` instead.",
-                FutureWarning,
-            )
-            is_split_into_words = kwargs.pop("is_pretokenized")
 
         input_ids = []
         for ids_or_pair_ids in batch_text_or_text_pairs:
@@ -797,7 +776,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
                   maximum acceptable input length for the model if that argument is not provided.
                 * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
                   different lengths).
-            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`, defaults to "pt"):
+            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.

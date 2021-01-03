@@ -2,6 +2,36 @@
 from ..file_utils import requires_flax
 
 
+class FlaxPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_flax(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_flax(self)
+
+
+FLAX_MODEL_MAPPING = None
+
+
+class FlaxAutoModel:
+    def __init__(self, *args, **kwargs):
+        requires_flax(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_flax(self)
+
+
+class FlaxBertForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_flax(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_flax(self)
+
+
 class FlaxBertModel:
     def __init__(self, *args, **kwargs):
         requires_flax(self)

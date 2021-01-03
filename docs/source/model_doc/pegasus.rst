@@ -1,9 +1,21 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Pegasus
 -----------------------------------------------------------------------------------------------------------------------
 
 **DISCLAIMER:** If you see something strange, file a `Github Issue
 <https://github.com/huggingface/transformers/issues/new?assignees=sshleifer&labels=&template=bug-report.md&title>`__
-and assign @sshleifer.
+and assign @patrickvonplaten.
 
 
 Overview
@@ -31,10 +43,19 @@ All the `checkpoints <https://huggingface.co/models?search=pegasus>`__ are fine-
 - Each checkpoint is 2.2 GB on disk and 568M parameters.
 - FP16 is not supported (help/ideas on this appreciated!).
 - Summarizing xsum in fp32 takes about 400ms/sample, with default parameters on a v100 GPU.
-- For XSUM, The paper reports rouge1,rouge2, rougeL of paper: 47.21/24.56/39.25. As of Aug 9, this port scores
-  46.91/24.34/39.1.
+- Full replication results and correctly pre-processed data can be found in this `Issue
+  <https://github.com/huggingface/transformers/issues/6844#issue-689259666>`__.
+- `Distilled checkpoints <https://huggingface.co/models?search=distill-pegasus>`__ are described in this `paper
+  <https://arxiv.org/abs/2010.13002>`__.
 
-The gap is likely because of different alpha/length_penalty implementations in beam search.
+Examples
+_______________________________________________________________________________________________________________________
+
+- `Script <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/finetune_pegasus_xsum.sh>`__ to
+  fine-tune pegasus on the XSUM dataset. Data download instructions at `examples/seq2seq/
+  <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`__.
+- FP16 is not supported (help/ideas on this appreciated!).
+- The adafactor optimizer is recommended for pegasus fine-tuning.
 
 
 Implementation Notes
@@ -45,7 +66,7 @@ Implementation Notes
 - Some key configuration differences:
 
     - static, sinusoidal position embeddings
-    - no :obj:`layernorm_embedding` (:obj`PegasusConfig.normalize_embedding=False`)
+    - no :obj:`layernorm_embedding` (:obj:`PegasusConfig.normalize_embedding=False`)
     - the model starts generating with pad_token_id (which has 0 token_embedding) as the prefix.
     - more beams are used (:obj:`num_beams=8`)
 - All pretrained pegasus checkpoints are the same besides three attributes: :obj:`tokenizer.model_max_length` (maximum
@@ -69,7 +90,7 @@ Usage Example
     torch_device = 'cuda' if torch.cuda.is_available() else 'cpu'
     tokenizer = PegasusTokenizer.from_pretrained(model_name)
     model = PegasusForConditionalGeneration.from_pretrained(model_name).to(torch_device)
-    batch = tokenizer.prepare_seq2seq_batch(src_text, truncation=True, padding='longest').to(torch_device)
+    batch = tokenizer.prepare_seq2seq_batch(src_text, truncation=True, padding='longest', return_tensors="pt").to(torch_device)
     translated = model.generate(**batch)
     tgt_text = tokenizer.batch_decode(translated, skip_special_tokens=True)
     assert tgt_text[0] == "California's largest electricity provider has turned off power to hundreds of thousands of customers."
@@ -89,6 +110,19 @@ warning: ``add_tokens`` does not work at the moment.
 
 .. autoclass:: transformers.PegasusTokenizer
     :members: __call__, prepare_seq2seq_batch
+
+
+PegasusTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.PegasusTokenizerFast
+    :members:
+
+
+PegasusModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.PegasusModel
 
 
 PegasusForConditionalGeneration

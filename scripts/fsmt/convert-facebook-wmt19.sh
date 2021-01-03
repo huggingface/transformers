@@ -1,4 +1,17 @@
 #!/usr/bin/env bash
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 # this script acquires data and converts it to fsmt model
 # it covers:
@@ -55,7 +68,3 @@ cd -
 perl -le 'for $f (@ARGV) { print qq[transformers-cli upload -y $_/$f --filename $_/$f] for map { "wmt19-$_" } ("en-ru", "ru-en", "de-en", "en-de")}' vocab-src.json vocab-tgt.json tokenizer_config.json config.json
 # add/remove files as needed
 
-# Caching note: Unfortunately due to CDN caching the uploaded model may be unavailable for up to 24hs after upload
-# So the only way to start using the new model sooner is either:
-# 1. download it to a local path and use that path as model_name
-# 2. make sure you use: from_pretrained(..., use_cdn=False) everywhere

@@ -1,16 +1,11 @@
-.PHONY: modified_only_fixup extra_quality_checks quality style fixup fix-copies test test-examples docs
+.PHONY: deps_table_update modified_only_fixup extra_quality_checks quality style fixup fix-copies test test-examples docs
 
 
 check_dirs := examples tests src utils
 
-# get modified files since the branch was made
-fork_point_sha := $(shell git merge-base --fork-point master)
-joined_dirs := $(shell echo $(check_dirs) | tr " " "|")
-modified_py_files := $(shell git diff --name-only $(fork_point_sha) | egrep '^($(joined_dirs))' | egrep '\.py$$')
-#$(info modified files are: $(modified_py_files))
-
 modified_only_fixup:
-	@if [ -n "$(modified_py_files)" ]; then \
+	$(eval modified_py_files := $(shell python utils/get_modified_files.py $(check_dirs)))
+	@if test -n "$(modified_py_files)"; then \
 		echo "Checking/fixing $(modified_py_files)"; \
 		black $(modified_py_files); \
 		isort $(modified_py_files); \
@@ -19,10 +14,16 @@ modified_only_fixup:
 		echo "No library .py files were modified"; \
 	fi
 
+# Update src/transformers/dependency_versions_table.py
+
+deps_table_update:
+	@python setup.py deps_table_update
+
 # Check that source code meets quality standards
 
-extra_quality_checks:
+extra_quality_checks: deps_table_update
 	python utils/check_copies.py
+	python utils/check_table.py
 	python utils/check_dummies.py
 	python utils/check_repo.py
 	python utils/style_doc.py src/transformers docs/source --max_len 119
@@ -37,7 +38,7 @@ quality:
 
 # Format source code automatically and check is there are any problems left that need manual fixing
 
-style:
+style: deps_table_update
 	black $(check_dirs)
 	isort $(check_dirs)
 	python utils/style_doc.py src/transformers docs/source --max_len 119
@@ -50,6 +51,7 @@ fixup: modified_only_fixup extra_quality_checks
 
 fix-copies:
 	python utils/check_copies.py --fix_and_overwrite
+	python utils/check_table.py --fix_and_overwrite
 	python utils/check_dummies.py --fix_and_overwrite
 
 # Run tests for the library

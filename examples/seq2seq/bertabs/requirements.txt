@@ -1,5 +1,0 @@
-transformers
-
-# For ROUGE
-nltk
-py-rouge

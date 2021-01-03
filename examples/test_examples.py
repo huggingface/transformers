@@ -23,12 +23,19 @@ from unittest.mock import patch
 import torch
 
 from transformers.file_utils import is_apex_available
-from transformers.testing_utils import TestCasePlus, torch_device
+from transformers.testing_utils import TestCasePlus, require_torch_non_multi_gpu_but_fix_me, torch_device
 
 
 SRC_DIRS = [
     os.path.join(os.path.dirname(__file__), dirname)
-    for dirname in ["text-generation", "text-classification", "language-modeling", "question-answering"]
+    for dirname in [
+        "text-generation",
+        "text-classification",
+        "token-classification",
+        "language-modeling",
+        "multiple-choice",
+        "question-answering",
+    ]
 ]
 sys.path.extend(SRC_DIRS)
 
@@ -38,8 +45,9 @@ if SRC_DIRS is not None:
     import run_generation
     import run_glue
     import run_mlm
-    import run_pl_glue
-    import run_squad
+    import run_ner
+    import run_qa as run_squad
+    import run_swag
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -60,6 +68,7 @@ def is_cuda_and_apex_available():
 
 
 class ExamplesTests(TestCasePlus):
+    @require_torch_non_multi_gpu_but_fix_me
     def test_run_glue(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -88,47 +97,9 @@ class ExamplesTests(TestCasePlus):
 
         with patch.object(sys, "argv", testargs):
             result = run_glue.main()
-            del result["eval_loss"]
-            for value in result.values():
-                self.assertGreaterEqual(value, 0.75)
+            self.assertGreaterEqual(result["eval_accuracy"], 0.75)
 
-    def test_run_pl_glue(self):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
-        tmp_dir = self.get_auto_remove_tmp_dir()
-        testargs = f"""
-            run_pl_glue.py
-            --model_name_or_path bert-base-cased
-            --data_dir ./tests/fixtures/tests_samples/MRPC/
-            --output_dir {tmp_dir}
-            --task mrpc
-            --do_train
-            --do_predict
-            --train_batch_size=32
-            --learning_rate=1e-4
-            --num_train_epochs=1
-            --seed=42
-            --max_seq_length=128
-            """.split()
-        if torch.cuda.is_available():
-            testargs += ["--gpus=1"]
-        if is_cuda_and_apex_available():
-            testargs.append("--fp16")
-
-        with patch.object(sys, "argv", testargs):
-            result = run_pl_glue.main()[0]
-            # for now just testing that the script can run to completion
-            self.assertGreater(result["acc"], 0.25)
-            #
-            # TODO: this fails on CI - doesn't get acc/f1>=0.75:
-            #
-            #     # remove all the various *loss* attributes
-            #     result = {k: v for k, v in result.items() if "loss" not in k}
-            #     for k, v in result.items():
-            #         self.assertGreaterEqual(v, 0.75, f"({k})")
-            #
-
+    @require_torch_non_multi_gpu_but_fix_me
     def test_run_clm(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -160,6 +131,7 @@ class ExamplesTests(TestCasePlus):
             result = run_clm.main()
             self.assertLess(result["perplexity"], 100)
 
+    @require_torch_non_multi_gpu_but_fix_me
     def test_run_mlm(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -185,6 +157,38 @@ class ExamplesTests(TestCasePlus):
             result = run_mlm.main()
             self.assertLess(result["perplexity"], 42)
 
+    @require_torch_non_multi_gpu_but_fix_me
+    def test_run_ner(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_ner.py
+            --model_name_or_path bert-base-uncased
+            --train_file tests/fixtures/tests_samples/conll/sample.json
+            --validation_file tests/fixtures/tests_samples/conll/sample.json
+            --output_dir {tmp_dir}
+            --overwrite_output_dir
+            --do_train
+            --do_eval
+            --warmup_steps=2
+            --learning_rate=2e-4
+            --per_device_train_batch_size=2
+            --per_device_eval_batch_size=2
+            --num_train_epochs=2
+        """.split()
+
+        if torch_device != "cuda":
+            testargs.append("--no_cuda")
+
+        with patch.object(sys, "argv", testargs):
+            result = run_ner.main()
+            self.assertGreaterEqual(result["eval_accuracy_score"], 0.75)
+            self.assertGreaterEqual(result["eval_precision"], 0.75)
+            self.assertLess(result["eval_loss"], 0.5)
+
+    @require_torch_non_multi_gpu_but_fix_me
     def test_run_squad(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -192,27 +196,53 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_squad.py
-            --model_type=distilbert
-            --model_name_or_path=sshleifer/tiny-distilbert-base-cased-distilled-squad
-            --data_dir=./tests/fixtures/tests_samples/SQUAD
+            --model_name_or_path bert-base-uncased
+            --version_2_with_negative
+            --train_file tests/fixtures/tests_samples/SQUAD/sample.json
+            --validation_file tests/fixtures/tests_samples/SQUAD/sample.json
             --output_dir {tmp_dir}
             --overwrite_output_dir
             --max_steps=10
             --warmup_steps=2
             --do_train
             --do_eval
-            --version_2_with_negative
             --learning_rate=2e-4
-            --per_gpu_train_batch_size=2
-            --per_gpu_eval_batch_size=1
-            --seed=42
+            --per_device_train_batch_size=2
+            --per_device_eval_batch_size=1
         """.split()
 
         with patch.object(sys, "argv", testargs):
             result = run_squad.main()
-            self.assertGreaterEqual(result["f1"], 25)
-            self.assertGreaterEqual(result["exact"], 21)
+            self.assertGreaterEqual(result["f1"], 30)
+            self.assertGreaterEqual(result["exact"], 30)
 
+    @require_torch_non_multi_gpu_but_fix_me
+    def test_run_swag(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_swag.py
+            --model_name_or_path bert-base-uncased
+            --train_file tests/fixtures/tests_samples/swag/sample.json
+            --validation_file tests/fixtures/tests_samples/swag/sample.json
+            --output_dir {tmp_dir}
+            --overwrite_output_dir
+            --max_steps=20
+            --warmup_steps=2
+            --do_train
+            --do_eval
+            --learning_rate=2e-4
+            --per_device_train_batch_size=2
+            --per_device_eval_batch_size=1
+        """.split()
+
+        with patch.object(sys, "argv", testargs):
+            result = run_swag.main()
+            self.assertGreaterEqual(result["eval_accuracy"], 0.8)
+
+    @require_torch_non_multi_gpu_but_fix_me
     def test_generation(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)

@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import json
 import os
 import pickle
@@ -19,7 +33,8 @@ logger = logging.get_logger(__name__)
 
 
 DEPRECATION_WARNING = (
-    "This dataset will be removed from the library soon, preprocessing should be handled with the 🤗 Datasets library."
+    "This dataset will be removed from the library soon, preprocessing should be handled with the 🤗 Datasets "
+    "library. You can have a look at this example script for pointers: {0}"
 )
 
 
@@ -36,7 +51,12 @@ class TextDataset(Dataset):
         overwrite_cache=False,
         cache_dir: Optional[str] = None,
     ):
-        warnings.warn(DEPRECATION_WARNING, FutureWarning)
+        warnings.warn(
+            DEPRECATION_WARNING.format(
+                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm.py"
+            ),
+            FutureWarning,
+        )
         assert os.path.isfile(file_path), f"Input file path {file_path} not found"
 
         block_size = block_size - tokenizer.num_special_tokens_to_add(pair=False)
@@ -101,7 +121,12 @@ class LineByLineTextDataset(Dataset):
     """
 
     def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int):
-        warnings.warn(DEPRECATION_WARNING, FutureWarning)
+        warnings.warn(
+            DEPRECATION_WARNING.format(
+                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm.py"
+            ),
+            FutureWarning,
+        )
         assert os.path.isfile(file_path), f"Input file path {file_path} not found"
         # Here, we do not cache the features, operating under the assumption
         # that we will soon use fast multithreaded tokenizers from the
@@ -128,7 +153,12 @@ class LineByLineWithRefDataset(Dataset):
     """
 
     def __init__(self, tokenizer: PreTrainedTokenizer, file_path: str, block_size: int, ref_path: str):
-        warnings.warn(DEPRECATION_WARNING, FutureWarning)
+        warnings.warn(
+            DEPRECATION_WARNING.format(
+                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm_wwm.py"
+            ),
+            FutureWarning,
+        )
         assert os.path.isfile(file_path), f"Input file path {file_path} not found"
         assert os.path.isfile(ref_path), f"Ref file path {file_path} not found"
         # Here, we do not cache the features, operating under the assumption
@@ -165,7 +195,12 @@ class LineByLineWithSOPTextDataset(Dataset):
     """
 
     def __init__(self, tokenizer: PreTrainedTokenizer, file_dir: str, block_size: int):
-        warnings.warn(DEPRECATION_WARNING, FutureWarning)
+        warnings.warn(
+            DEPRECATION_WARNING.format(
+                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm.py"
+            ),
+            FutureWarning,
+        )
         assert os.path.isdir(file_dir)
         logger.info(f"Creating features from dataset file folder at {file_dir}")
         self.examples = []
@@ -208,7 +243,7 @@ class LineByLineWithSOPTextDataset(Dataset):
         # to `block_size` anyways, so short sequences are generally wasted
         # computation. However, we *sometimes*
         # (i.e., short_seq_prob == 0.1 == 10% of the time) want to use shorter
-        # sequences to minimize the mismatch between pre-training and fine-tuning.
+        # sequences to minimize the mismatch between pretraining and fine-tuning.
         # The `target_seq_length` is just a rough target however, whereas
         # `block_size` is a hard limit.
         target_seq_length = max_num_tokens
@@ -315,7 +350,12 @@ class TextDatasetForNextSentencePrediction(Dataset):
         short_seq_probability=0.1,
         nsp_probability=0.5,
     ):
-        warnings.warn(DEPRECATION_WARNING, FutureWarning)
+        warnings.warn(
+            DEPRECATION_WARNING.format(
+                "https://github.com/huggingface/transformers/blob/master/examples/language-modeling/run_mlm.py"
+            ),
+            FutureWarning,
+        )
         assert os.path.isfile(file_path), f"Input file path {file_path} not found"
 
         self.block_size = block_size - tokenizer.num_special_tokens_to_add(pair=True)
@@ -399,7 +439,7 @@ class TextDatasetForNextSentencePrediction(Dataset):
         # to `block_size` anyways, so short sequences are generally wasted
         # computation. However, we *sometimes*
         # (i.e., short_seq_prob == 0.1 == 10% of the time) want to use shorter
-        # sequences to minimize the mismatch between pre-training and fine-tuning.
+        # sequences to minimize the mismatch between pretraining and fine-tuning.
         # The `target_seq_length` is just a rough target however, whereas
         # `block_size` is a hard limit.
         target_seq_length = max_num_tokens

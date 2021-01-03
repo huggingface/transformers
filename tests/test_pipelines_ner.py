@@ -1,8 +1,22 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import unittest
 
 from transformers import AutoTokenizer, pipeline
-from transformers.pipelines import Pipeline
-from transformers.testing_utils import require_tf, require_torch
+from transformers.pipelines import Pipeline, TokenClassificationArgumentHandler
+from transformers.testing_utils import require_tf, require_torch, slow
 
 from .test_pipelines_common import CustomInputPipelineCommonMixin
 
@@ -18,55 +32,207 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
     large_models = []  # Models tested with the @slow decorator
 
     def _test_pipeline(self, nlp: Pipeline):
-        output_keys = {"entity", "word", "score"}
+        output_keys = {"entity", "word", "score", "start", "end"}
         if nlp.grouped_entities:
-            output_keys = {"entity_group", "word", "score"}
+            output_keys = {"entity_group", "word", "score", "start", "end"}
 
         ungrouped_ner_inputs = [
             [
-                {"entity": "B-PER", "index": 1, "score": 0.9994944930076599, "is_subword": False, "word": "Cons"},
-                {"entity": "B-PER", "index": 2, "score": 0.8025449514389038, "is_subword": True, "word": "##uelo"},
-                {"entity": "I-PER", "index": 3, "score": 0.9993102550506592, "is_subword": False, "word": "Ara"},
-                {"entity": "I-PER", "index": 4, "score": 0.9993743896484375, "is_subword": True, "word": "##új"},
-                {"entity": "I-PER", "index": 5, "score": 0.9992871880531311, "is_subword": True, "word": "##o"},
-                {"entity": "I-PER", "index": 6, "score": 0.9993029236793518, "is_subword": False, "word": "No"},
-                {"entity": "I-PER", "index": 7, "score": 0.9981776475906372, "is_subword": True, "word": "##guera"},
-                {"entity": "B-PER", "index": 15, "score": 0.9998136162757874, "is_subword": False, "word": "Andrés"},
-                {"entity": "I-PER", "index": 16, "score": 0.999740719795227, "is_subword": False, "word": "Pas"},
-                {"entity": "I-PER", "index": 17, "score": 0.9997414350509644, "is_subword": True, "word": "##tran"},
-                {"entity": "I-PER", "index": 18, "score": 0.9996136426925659, "is_subword": True, "word": "##a"},
-                {"entity": "B-ORG", "index": 28, "score": 0.9989739060401917, "is_subword": False, "word": "Far"},
-                {"entity": "I-ORG", "index": 29, "score": 0.7188422083854675, "is_subword": True, "word": "##c"},
+                {
+                    "entity": "B-PER",
+                    "index": 1,
+                    "score": 0.9994944930076599,
+                    "is_subword": False,
+                    "word": "Cons",
+                    "start": 0,
+                    "end": 4,
+                },
+                {
+                    "entity": "B-PER",
+                    "index": 2,
+                    "score": 0.8025449514389038,
+                    "is_subword": True,
+                    "word": "##uelo",
+                    "start": 4,
+                    "end": 8,
+                },
+                {
+                    "entity": "I-PER",
+                    "index": 3,
+                    "score": 0.9993102550506592,
+                    "is_subword": False,
+                    "word": "Ara",
+                    "start": 9,
+                    "end": 11,
+                },
+                {
+                    "entity": "I-PER",
+                    "index": 4,
+                    "score": 0.9993743896484375,
+                    "is_subword": True,
+                    "word": "##új",
+                    "start": 11,
+                    "end": 13,
+                },
+                {
+                    "entity": "I-PER",
+                    "index": 5,
+                    "score": 0.9992871880531311,
+                    "is_subword": True,
+                    "word": "##o",
+                    "start": 13,
+                    "end": 14,
+                },
+                {
+                    "entity": "I-PER",
+                    "index": 6,
+                    "score": 0.9993029236793518,
+                    "is_subword": False,
+                    "word": "No",
+                    "start": 15,
+                    "end": 17,
+                },
+                {
+                    "entity": "I-PER",
+                    "index": 7,
+                    "score": 0.9981776475906372,
+                    "is_subword": True,
+                    "word": "##guera",
+                    "start": 17,
+                    "end": 22,
+                },
+                {
+                    "entity": "B-PER",
+                    "index": 15,
+                    "score": 0.9998136162757874,
+                    "is_subword": False,
+                    "word": "Andrés",
+                    "start": 23,
+                    "end": 28,
+                },
+                {
+                    "entity": "I-PER",
+                    "index": 16,
+                    "score": 0.999740719795227,
+                    "is_subword": False,
+                    "word": "Pas",
+                    "start": 29,
+                    "end": 32,
+                },
+                {
+                    "entity": "I-PER",
+                    "index": 17,
+                    "score": 0.9997414350509644,
+                    "is_subword": True,
+                    "word": "##tran",
+                    "start": 32,
+                    "end": 36,
+                },
+                {
+                    "entity": "I-PER",
+                    "index": 18,
+                    "score": 0.9996136426925659,
+                    "is_subword": True,
+                    "word": "##a",
+                    "start": 36,
+                    "end": 37,
+                },
+                {
+                    "entity": "B-ORG",
+                    "index": 28,
+                    "score": 0.9989739060401917,
+                    "is_subword": False,
+                    "word": "Far",
+                    "start": 39,
+                    "end": 42,
+                },
+                {
+                    "entity": "I-ORG",
+                    "index": 29,
+                    "score": 0.7188422083854675,
+                    "is_subword": True,
+                    "word": "##c",
+                    "start": 42,
+                    "end": 43,
+                },
             ],
             [
-                {"entity": "I-PER", "index": 1, "score": 0.9968166351318359, "is_subword": False, "word": "En"},
-                {"entity": "I-PER", "index": 2, "score": 0.9957635998725891, "is_subword": True, "word": "##zo"},
-                {"entity": "I-ORG", "index": 7, "score": 0.9986497163772583, "is_subword": False, "word": "UN"},
+                {
+                    "entity": "I-PER",
+                    "index": 1,
+                    "score": 0.9968166351318359,
+                    "is_subword": False,
+                    "word": "En",
+                    "start": 0,
+                    "end": 2,
+                },
+                {
+                    "entity": "I-PER",
+                    "index": 2,
+                    "score": 0.9957635998725891,
+                    "is_subword": True,
+                    "word": "##zo",
+                    "start": 2,
+                    "end": 4,
+                },
+                {
+                    "entity": "I-ORG",
+                    "index": 7,
+                    "score": 0.9986497163772583,
+                    "is_subword": False,
+                    "word": "UN",
+                    "start": 11,
+                    "end": 13,
+                },
             ],
         ]
 
         expected_grouped_ner_results = [
             [
-                {"entity_group": "PER", "score": 0.999369223912557, "word": "Consuelo Araújo Noguera"},
-                {"entity_group": "PER", "score": 0.9997771680355072, "word": "Andrés Pastrana"},
-                {"entity_group": "ORG", "score": 0.9989739060401917, "word": "Farc"},
+                {
+                    "entity_group": "PER",
+                    "score": 0.999369223912557,
+                    "word": "Consuelo Araújo Noguera",
+                    "start": 0,
+                    "end": 22,
+                },
+                {
+                    "entity_group": "PER",
+                    "score": 0.9997771680355072,
+                    "word": "Andrés Pastrana",
+                    "start": 23,
+                    "end": 37,
+                },
+                {"entity_group": "ORG", "score": 0.9989739060401917, "word": "Farc", "start": 39, "end": 43},
             ],
             [
-                {"entity_group": "PER", "score": 0.9968166351318359, "word": "Enzo"},
-                {"entity_group": "ORG", "score": 0.9986497163772583, "word": "UN"},
+                {"entity_group": "PER", "score": 0.9968166351318359, "word": "Enzo", "start": 0, "end": 4},
+                {"entity_group": "ORG", "score": 0.9986497163772583, "word": "UN", "start": 11, "end": 13},
             ],
         ]
 
         expected_grouped_ner_results_w_subword = [
             [
-                {"entity_group": "PER", "score": 0.9994944930076599, "word": "Cons"},
-                {"entity_group": "PER", "score": 0.9663328925768534, "word": "##uelo Araújo Noguera"},
-                {"entity_group": "PER", "score": 0.9997273534536362, "word": "Andrés Pastrana"},
-                {"entity_group": "ORG", "score": 0.8589080572128296, "word": "Farc"},
+                {"entity_group": "PER", "score": 0.9994944930076599, "word": "Cons", "start": 0, "end": 4},
+                {
+                    "entity_group": "PER",
+                    "score": 0.9663328925768534,
+                    "word": "##uelo Araújo Noguera",
+                    "start": 4,
+                    "end": 22,
+                },
+                {
+                    "entity_group": "PER",
+                    "score": 0.9997273534536362,
+                    "word": "Andrés Pastrana",
+                    "start": 23,
+                    "end": 37,
+                },
+                {"entity_group": "ORG", "score": 0.8589080572128296, "word": "Farc", "start": 39, "end": 43},
             ],
             [
-                {"entity_group": "PER", "score": 0.9962901175022125, "word": "Enzo"},
-                {"entity_group": "ORG", "score": 0.9986497163772583, "word": "UN"},
+                {"entity_group": "PER", "score": 0.9962901175022125, "word": "Enzo", "start": 0, "end": 4},
+                {"entity_group": "ORG", "score": 0.9986497163772583, "word": "UN", "start": 11, "end": 13},
             ],
         ]
 
@@ -107,12 +273,8 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
     def test_tf_only(self):
         model_name = "Narsil/small"  # This model only has a TensorFlow version
         # We test that if we don't specificy framework='tf', it gets detected automatically
-        tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        nlp = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
+        nlp = pipeline(task="ner", model=model_name)
         self._test_pipeline(nlp)
-
-    #         offset=tokenizer(VALID_INPUTS[0],return_offsets_mapping=True)['offset_mapping']
-    #         pipeline_running_kwargs = {"offset_mapping"}  # Additional kwargs to run the pipeline with
 
     @require_tf
     def test_tf_defaults(self):
@@ -122,9 +284,8 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
         self._test_pipeline(nlp)
 
     @require_tf
-    def test_tf_small(self):
+    def test_tf_small_ignore_subwords_available_for_fast_tokenizers(self):
         for model_name in self.small_models:
-            print(model_name)
             tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
             nlp = pipeline(
                 task="ner",
@@ -136,27 +297,69 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
             )
             self._test_pipeline(nlp)
 
-            for model_name in self.small_models:
-                tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-                nlp = pipeline(
-                    task="ner",
-                    model=model_name,
-                    tokenizer=tokenizer,
-                    framework="tf",
-                    grouped_entities=True,
-                    ignore_subwords=False,
-                )
-                self._test_pipeline(nlp)
-
-    @require_torch
-    def test_pt_defaults(self):
         for model_name in self.small_models:
             tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+            nlp = pipeline(
+                task="ner",
+                model=model_name,
+                tokenizer=tokenizer,
+                framework="tf",
+                grouped_entities=True,
+                ignore_subwords=False,
+            )
+            self._test_pipeline(nlp)
+
+    @require_torch
+    def test_pt_ignore_subwords_slow_tokenizer_raises(self):
+        for model_name in self.small_models:
+            tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=False)
+
+            with self.assertRaises(ValueError):
+                pipeline(task="ner", model=model_name, tokenizer=tokenizer, ignore_subwords=True, use_fast=False)
+
+    @require_torch
+    def test_pt_defaults_slow_tokenizer(self):
+        for model_name in self.small_models:
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
             nlp = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
             self._test_pipeline(nlp)
 
     @require_torch
-    def test_torch_small(self):
+    def test_pt_defaults(self):
+        for model_name in self.small_models:
+            nlp = pipeline(task="ner", model=model_name)
+            self._test_pipeline(nlp)
+
+    @slow
+    @require_torch
+    def test_simple(self):
+        nlp = pipeline(task="ner", model="dslim/bert-base-NER", grouped_entities=True)
+        output = nlp("Hello Sarah Jessica Parker who Jessica lives in New York")
+
+        def simplify(output):
+            for i in range(len(output)):
+                output[i]["score"] = round(output[i]["score"], 3)
+            return output
+
+        output = simplify(output)
+
+        self.assertEqual(
+            output,
+            [
+                {
+                    "entity_group": "PER",
+                    "score": 0.996,
+                    "word": "Sarah Jessica Parker",
+                    "start": 6,
+                    "end": 26,
+                },
+                {"entity_group": "PER", "score": 0.977, "word": "Jessica", "start": 31, "end": 38},
+                {"entity_group": "LOC", "score": 0.999, "word": "New York", "start": 48, "end": 56},
+            ],
+        )
+
+    @require_torch
+    def test_pt_small_ignore_subwords_available_for_fast_tokenizers(self):
         for model_name in self.small_models:
             tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
             nlp = pipeline(
@@ -170,3 +373,46 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
                 task="ner", model=model_name, tokenizer=tokenizer, grouped_entities=True, ignore_subwords=False
             )
             self._test_pipeline(nlp)
+
+
+class TokenClassificationArgumentHandlerTestCase(unittest.TestCase):
+    def setUp(self):
+        self.args_parser = TokenClassificationArgumentHandler()
+
+    def test_simple(self):
+        string = "This is a simple input"
+
+        inputs, offset_mapping = self.args_parser(string)
+        self.assertEqual(inputs, [string])
+        self.assertEqual(offset_mapping, None)
+
+        inputs, offset_mapping = self.args_parser(string, string)
+        self.assertEqual(inputs, [string, string])
+        self.assertEqual(offset_mapping, None)
+
+        inputs, offset_mapping = self.args_parser(string, offset_mapping=[(0, 1), (1, 2)])
+        self.assertEqual(inputs, [string])
+        self.assertEqual(offset_mapping, [[(0, 1), (1, 2)]])
+
+        inputs, offset_mapping = self.args_parser(string, string, offset_mapping=[[(0, 1), (1, 2)], [(0, 2), (2, 3)]])
+        self.assertEqual(inputs, [string, string])
+        self.assertEqual(offset_mapping, [[(0, 1), (1, 2)], [(0, 2), (2, 3)]])
+
+    def test_errors(self):
+        string = "This is a simple input"
+
+        # 2 sentences, 1 offset_mapping
+        with self.assertRaises(ValueError):
+            self.args_parser(string, string, offset_mapping=[[(0, 1), (1, 2)]])
+
+        # 2 sentences, 1 offset_mapping
+        with self.assertRaises(ValueError):
+            self.args_parser(string, string, offset_mapping=[(0, 1), (1, 2)])
+
+        # 1 sentences, 2 offset_mapping
+        with self.assertRaises(ValueError):
+            self.args_parser(string, offset_mapping=[[(0, 1), (1, 2)], [(0, 2), (2, 3)]])
+
+        # 0 sentences, 1 offset_mapping
+        with self.assertRaises(ValueError):
+            self.args_parser(offset_mapping=[[(0, 1), (1, 2)]])

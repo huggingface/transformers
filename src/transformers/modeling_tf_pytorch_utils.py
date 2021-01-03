@@ -39,7 +39,7 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
     return tuple with:
 
         - pytorch model weight name
-        - transpose: boolean indicating wether TF2.0 and PyTorch weights matrices are transposed with regards to each
+        - transpose: boolean indicating whether TF2.0 and PyTorch weights matrices are transposed with regards to each
           other
     """
     tf_name = tf_name.replace(":0", "")  # device ids
@@ -51,7 +51,9 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
     )  # '_._' is replaced by a level separation (can be used to convert TF2.0 lists in PyTorch nn.ModulesList)
     tf_name = re.sub(r"//+", "/", tf_name)  # Remove empty levels at the end
     tf_name = tf_name.split("/")  # Convert from TF2.0 '/' separators to PyTorch '.' separators
-    tf_name = tf_name[1:]  # Remove level zero
+    # Some weights have a single name withtout "/" such as final_logits_bias in BART
+    if len(tf_name) > 1:
+        tf_name = tf_name[1:]  # Remove level zero
 
     # When should we transpose the weights
     transpose = bool(tf_name[-1] == "kernel" or "emb_projs" in tf_name or "out_projs" in tf_name)
@@ -164,9 +166,9 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             if allow_missing_keys:
                 missing_keys.append(name)
                 continue
-            elif tf_model.authorized_missing_keys is not None:
+            elif tf_model._keys_to_ignore_on_load_missing is not None:
                 # authorized missing keys don't have to be loaded
-                if any(re.search(pat, name) is not None for pat in tf_model.authorized_missing_keys):
+                if any(re.search(pat, name) is not None for pat in tf_model._keys_to_ignore_on_load_missing):
                     continue
 
             raise AttributeError("{} not found in PyTorch model".format(name))
@@ -209,11 +211,11 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
     unexpected_keys = list(all_pytorch_weights)
 
-    if tf_model.authorized_missing_keys is not None:
-        for pat in tf_model.authorized_missing_keys:
+    if tf_model._keys_to_ignore_on_load_missing is not None:
+        for pat in tf_model._keys_to_ignore_on_load_missing:
             missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
-    if tf_model.authorized_unexpected_keys is not None:
-        for pat in tf_model.authorized_unexpected_keys:
+    if tf_model._keys_to_ignore_on_load_unexpected is not None:
+        for pat in tf_model._keys_to_ignore_on_load_unexpected:
             unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
     if len(unexpected_keys) > 0:
@@ -221,7 +223,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             f"Some weights of the PyTorch model were not used when "
             f"initializing the TF 2.0 model {tf_model.__class__.__name__}: {unexpected_keys}\n"
             f"- This IS expected if you are initializing {tf_model.__class__.__name__} from a PyTorch model trained on another task "
-            f"or with another architecture (e.g. initializing a TFBertForSequenceClassification model from a BertForPretraining model).\n"
+            f"or with another architecture (e.g. initializing a TFBertForSequenceClassification model from a BertForPreTraining model).\n"
             f"- This IS NOT expected if you are initializing {tf_model.__class__.__name__} from a PyTorch model that you expect "
             f"to be exactly identical (e.g. initializing a TFBertForSequenceClassification model from a BertForSequenceClassification model)."
         )
@@ -375,7 +377,7 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
             f"Some weights of the TF 2.0 model were not used when "
             f"initializing the PyTorch model {pt_model.__class__.__name__}: {unexpected_keys}\n"
             f"- This IS expected if you are initializing {pt_model.__class__.__name__} from a TF 2.0 model trained on another task "
-            f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a TFBertForPretraining model).\n"
+            f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a TFBertForPreTraining model).\n"
             f"- This IS NOT expected if you are initializing {pt_model.__class__.__name__} from a TF 2.0 model that you expect "
             f"to be exactly identical (e.g. initializing a BertForSequenceClassification model from a TFBertForSequenceClassification model)."
         )

@@ -12,8 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
+import collections
 import csv
 import json
 import os
@@ -30,13 +29,13 @@ from uuid import UUID
 
 import numpy as np
 
-from .configuration_auto import AutoConfig
 from .configuration_utils import PretrainedConfig
-from .data import SquadExample, squad_convert_examples_to_features
-from .file_utils import add_end_docstrings, is_tf_available, is_torch_available
+from .data import SquadExample, SquadFeatures, squad_convert_examples_to_features
+from .file_utils import add_end_docstrings, is_tf_available, is_torch_available, requires_pandas
 from .modelcard import ModelCard
-from .tokenization_auto import AutoTokenizer
-from .tokenization_bert import BasicTokenizer
+from .models.auto.configuration_auto import AutoConfig
+from .models.auto.tokenization_auto import AutoTokenizer
+from .models.bert.tokenization_bert import BasicTokenizer
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import PaddingStrategy
 from .utils import logging
@@ -45,7 +44,7 @@ from .utils import logging
 if is_tf_available():
     import tensorflow as tf
 
-    from .modeling_tf_auto import (
+    from .models.auto.modeling_tf_auto import (
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -63,11 +62,12 @@ if is_tf_available():
 if is_torch_available():
     import torch
 
-    from .modeling_auto import (
+    from .models.auto.modeling_auto import (
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         AutoModel,
         AutoModelForCausalLM,
@@ -75,6 +75,7 @@ if is_torch_available():
         AutoModelForQuestionAnswering,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
+        AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
     )
 
@@ -86,7 +87,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def get_framework(model):
+def get_framework(model, revision: Optional[str] = None):
     """
     Select framework (TensorFlow or PyTorch) to use.
 
@@ -103,14 +104,14 @@ def get_framework(model):
         )
     if isinstance(model, str):
         if is_torch_available() and not is_tf_available():
-            model = AutoModel.from_pretrained(model)
+            model = AutoModel.from_pretrained(model, revision=revision)
         elif is_tf_available() and not is_torch_available():
-            model = TFAutoModel.from_pretrained(model)
+            model = TFAutoModel.from_pretrained(model, revision=revision)
         else:
             try:
-                model = AutoModel.from_pretrained(model)
+                model = AutoModel.from_pretrained(model, revision=revision)
             except OSError:
-                model = TFAutoModel.from_pretrained(model)
+                model = TFAutoModel.from_pretrained(model, revision=revision)
 
     framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
     return framework
@@ -744,8 +745,8 @@ class TextGenerationPipeline(Pipeline):
     task identifier: :obj:`"text-generation"`.
 
     The models that this pipeline can use are models that have been trained with an autoregressive language modeling
-    objective, which includes the uni-directional models in the library (e.g. gpt2). See the list of available
-    community models on `huggingface.co/models <https://huggingface.co/models?filter=causal-lm>`__.
+    objective, which includes the uni-directional models in the library (e.g. gpt2). See the list of available models
+    on `huggingface.co/models <https://huggingface.co/models?filter=causal-lm>`__.
     """
 
     # Prefix text to help Transformer-XL and XLNet with short prompts as proposed by Aman Rusia
@@ -1057,12 +1058,12 @@ class ZeroShotClassificationPipeline(Pipeline):
         return -1
 
     def _parse_and_tokenize(
-        self, sequences, candidal_labels, hypothesis_template, padding=True, add_special_tokens=True, **kwargs
+        self, sequences, candidate_labels, hypothesis_template, padding=True, add_special_tokens=True, **kwargs
     ):
         """
         Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
         """
-        sequence_pairs = self._args_parser(sequences, candidal_labels, hypothesis_template)
+        sequence_pairs = self._args_parser(sequences, candidate_labels, hypothesis_template)
         inputs = self.tokenizer(
             sequence_pairs,
             add_special_tokens=add_special_tokens,
@@ -1182,7 +1183,6 @@ class FillMaskPipeline(Pipeline):
         device: int = -1,
         top_k=5,
         task: str = "",
-        **kwargs
     ):
         super().__init__(
             model=model,
@@ -1196,15 +1196,7 @@ class FillMaskPipeline(Pipeline):
         )
 
         self.check_model_type(TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_MASKED_LM_MAPPING)
-
-        if "topk" in kwargs:
-            warnings.warn(
-                "The `topk` argument is deprecated and will be removed in a future version, use `top_k` instead.",
-                FutureWarning,
-            )
-            self.top_k = kwargs.pop("topk")
-        else:
-            self.top_k = top_k
+        self.top_k = top_k
 
     def ensure_exactly_one_mask_token(self, masked_index: np.ndarray):
         numel = np.prod(masked_index.shape)
@@ -1333,18 +1325,17 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
     def __call__(self, *args, **kwargs):
 
         if args is not None and len(args) > 0:
-            if isinstance(args, str):
-                inputs = [args]
-            else:
-                inputs = args
+            inputs = list(args)
             batch_size = len(inputs)
+        else:
+            raise ValueError("At least one input is required.")
 
-        offset_mapping = kwargs.get("offset_mapping", None)
+        offset_mapping = kwargs.get("offset_mapping")
         if offset_mapping:
             if isinstance(offset_mapping, list) and isinstance(offset_mapping[0], tuple):
                 offset_mapping = [offset_mapping]
             if len(offset_mapping) != batch_size:
-                raise ("offset_mapping should have the same batch size as the input")
+                raise ValueError("offset_mapping should have the same batch size as the input")
         return inputs, offset_mapping
 
 
@@ -1379,20 +1370,19 @@ class TokenClassificationPipeline(Pipeline):
         tokenizer: PreTrainedTokenizer,
         modelcard: Optional[ModelCard] = None,
         framework: Optional[str] = None,
-        args_parser: ArgumentHandler = None,
+        args_parser: ArgumentHandler = TokenClassificationArgumentHandler(),
         device: int = -1,
         binary_output: bool = False,
         ignore_labels=["O"],
         task: str = "",
         grouped_entities: bool = False,
-        ignore_subwords: bool = True,
+        ignore_subwords: bool = False,
     ):
         super().__init__(
             model=model,
             tokenizer=tokenizer,
             modelcard=modelcard,
             framework=framework,
-            args_parser=TokenClassificationArgumentHandler(),
             device=device,
             binary_output=binary_output,
             task=task,
@@ -1405,9 +1395,16 @@ class TokenClassificationPipeline(Pipeline):
         )
 
         self._basic_tokenizer = BasicTokenizer(do_lower_case=False)
+        self._args_parser = args_parser
         self.ignore_labels = ignore_labels
         self.grouped_entities = grouped_entities
         self.ignore_subwords = ignore_subwords
+
+        if self.ignore_subwords and not self.tokenizer.is_fast:
+            raise ValueError(
+                "Slow tokenizers cannot ignore subwords. Please set the `ignore_subwords` option"
+                "to `False` or use a fast tokenizer."
+            )
 
     def __call__(self, inputs: Union[str, List[str]], **kwargs):
         """
@@ -1424,15 +1421,17 @@ class TokenClassificationPipeline(Pipeline):
 
             - **word** (:obj:`str`) -- The token/word classified.
             - **score** (:obj:`float`) -- The corresponding probability for :obj:`entity`.
-            - **entity** (:obj:`str`) -- The entity predicted for that token/word.
+            - **entity** (:obj:`str`) -- The entity predicted for that token/word (it is named `entity_group` when
+              `grouped_entities` is set to True.
             - **index** (:obj:`int`, only present when ``self.grouped_entities=False``) -- The index of the
               corresponding token in the sentence.
+            - **start** (:obj:`int`, `optional`) -- The index of the start of the corresponding entity in the sentence.
+              Only exists if the offsets are available within the tokenizer
+            - **end** (:obj:`int`, `optional`) -- The index of the end of the corresponding entity in the sentence.
+              Only exists if the offsets are available within the tokenizer
         """
 
-        if isinstance(inputs, str):
-            inputs = [inputs]
-
-        offset_mappings = kwargs.get("offset_mappings")
+        inputs, offset_mappings = self._args_parser(inputs, **kwargs)
 
         answers = []
 
@@ -1450,14 +1449,13 @@ class TokenClassificationPipeline(Pipeline):
                     return_offsets_mapping=self.tokenizer.is_fast,
                 )
                 if self.tokenizer.is_fast:
-                    offset_mapping = tokens["offset_mapping"].cpu().numpy()[0]
-                    del tokens["offset_mapping"]
+                    offset_mapping = tokens.pop("offset_mapping").cpu().numpy()[0]
                 elif offset_mappings:
                     offset_mapping = offset_mappings[i]
                 else:
-                    raise Exception("To decode [UNK] tokens use a fast tokenizer or provide offset_mapping parameter")
-                special_tokens_mask = tokens["special_tokens_mask"].cpu().numpy()[0]
-                del tokens["special_tokens_mask"]
+                    offset_mapping = None
+
+                special_tokens_mask = tokens.pop("special_tokens_mask").cpu().numpy()[0]
 
                 # Forward
                 if self.framework == "tf":
@@ -1482,20 +1480,28 @@ class TokenClassificationPipeline(Pipeline):
             ]
 
             for idx, label_idx in filtered_labels_idx:
-                start_ind, end_ind = offset_mapping[idx]
-                word_ref = sentence[start_ind:end_ind]
-                word = self.tokenizer.convert_ids_to_tokens([int(input_ids[idx])])[0]
-                is_subword = len(word_ref) != len(word)
+                if offset_mapping is not None:
+                    start_ind, end_ind = offset_mapping[idx]
+                    word_ref = sentence[start_ind:end_ind]
+                    word = self.tokenizer.convert_ids_to_tokens([int(input_ids[idx])])[0]
+                    is_subword = len(word_ref) != len(word)
 
-                if int(input_ids[idx]) == self.tokenizer.unk_token_id:
-                    word = word_ref
-                    is_subword = False
+                    if int(input_ids[idx]) == self.tokenizer.unk_token_id:
+                        word = word_ref
+                        is_subword = False
+                else:
+                    word = self.tokenizer.convert_ids_to_tokens(int(input_ids[idx]))
+
+                    start_ind = None
+                    end_ind = None
 
                 entity = {
                     "word": word,
                     "score": score[idx][label_idx].item(),
                     "entity": self.model.config.id2label[label_idx],
                     "index": idx,
+                    "start": start_ind,
+                    "end": end_ind,
                 }
 
                 if self.grouped_entities and self.ignore_subwords:
@@ -1529,6 +1535,8 @@ class TokenClassificationPipeline(Pipeline):
             "entity_group": entity,
             "score": np.mean(scores),
             "word": self.tokenizer.convert_tokens_to_string(tokens),
+            "start": entities[0]["start"],
+            "end": entities[-1]["end"],
         }
         return entity_group
 
@@ -1629,7 +1637,17 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
         elif "data" in kwargs:
             inputs = kwargs["data"]
         elif "question" in kwargs and "context" in kwargs:
-            inputs = [{"question": kwargs["question"], "context": kwargs["context"]}]
+            if isinstance(kwargs["question"], list) and isinstance(kwargs["context"], str):
+                inputs = [{"question": Q, "context": kwargs["context"]} for Q in kwargs["question"]]
+            elif isinstance(kwargs["question"], list) and isinstance(kwargs["context"], list):
+                if len(kwargs["question"]) != len(kwargs["context"]):
+                    raise ValueError("Questions and contexts don't have the same lengths")
+
+                inputs = [{"question": Q, "context": C} for Q, C in zip(kwargs["question"], kwargs["context"])]
+            elif isinstance(kwargs["question"], str) and isinstance(kwargs["context"], str):
+                inputs = [{"question": kwargs["question"], "context": kwargs["context"]}]
+            else:
+                raise ValueError("Arguments can't be understood")
         else:
             raise ValueError("Unknown arguments {}".format(kwargs))
 
@@ -1754,6 +1772,7 @@ class QuestionAnsweringPipeline(Pipeline):
             - **answer** (:obj:`str`) -- The answer to the question.
         """
         # Set defaults values
+        kwargs.setdefault("padding", "longest")
         kwargs.setdefault("topk", 1)
         kwargs.setdefault("doc_stride", 128)
         kwargs.setdefault("max_answer_len", 15)
@@ -1769,19 +1788,87 @@ class QuestionAnsweringPipeline(Pipeline):
 
         # Convert inputs to features
         examples = self._args_parser(*args, **kwargs)
-        features_list = [
-            squad_convert_examples_to_features(
-                examples=[example],
-                tokenizer=self.tokenizer,
-                max_seq_length=kwargs["max_seq_len"],
-                doc_stride=kwargs["doc_stride"],
-                max_query_length=kwargs["max_question_len"],
-                padding_strategy=PaddingStrategy.MAX_LENGTH.value,
-                is_training=False,
-                tqdm_enabled=False,
-            )
-            for example in examples
-        ]
+        if not self.tokenizer.is_fast:
+            features_list = [
+                squad_convert_examples_to_features(
+                    examples=[example],
+                    tokenizer=self.tokenizer,
+                    max_seq_length=kwargs["max_seq_len"],
+                    doc_stride=kwargs["doc_stride"],
+                    max_query_length=kwargs["max_question_len"],
+                    padding_strategy=PaddingStrategy.MAX_LENGTH.value,
+                    is_training=False,
+                    tqdm_enabled=False,
+                )
+                for example in examples
+            ]
+        else:
+            features_list = []
+            for example in examples:
+                # Define the side we want to truncate / pad and the text/pair sorting
+                question_first = bool(self.tokenizer.padding_side == "right")
+
+                encoded_inputs = self.tokenizer(
+                    text=example.question_text if question_first else example.context_text,
+                    text_pair=example.context_text if question_first else example.question_text,
+                    padding=kwargs["padding"],
+                    truncation="only_second" if question_first else "only_first",
+                    max_length=kwargs["max_seq_len"],
+                    stride=kwargs["doc_stride"],
+                    return_tensors="np",
+                    return_token_type_ids=True,
+                    return_overflowing_tokens=True,
+                    return_offsets_mapping=True,
+                    return_special_tokens_mask=True,
+                )
+
+                # When the input is too long, it's converted in a batch of inputs with overflowing tokens
+                # and a stride of overlap between the inputs. If a batch of inputs is given, a special output
+                # "overflow_to_sample_mapping" indicate which member of the encoded batch belong to which original batch sample.
+                # Here we tokenize examples one-by-one so we don't need to use "overflow_to_sample_mapping".
+                # "num_span" is the number of output samples generated from the overflowing tokens.
+                num_spans = len(encoded_inputs["input_ids"])
+
+                # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
+                # We put 0 on the tokens from the context and 1 everywhere else (question and special tokens)
+                p_mask = np.asarray(
+                    [
+                        [tok != 1 if question_first else 0 for tok in encoded_inputs.sequence_ids(span_id)]
+                        for span_id in range(num_spans)
+                    ]
+                )
+
+                # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
+                if self.tokenizer.cls_token_id:
+                    cls_index = np.nonzero(encoded_inputs["input_ids"] == self.tokenizer.cls_token_id)
+                    p_mask[cls_index] = 0
+
+                features = []
+                for span_idx in range(num_spans):
+                    features.append(
+                        SquadFeatures(
+                            input_ids=encoded_inputs["input_ids"][span_idx],
+                            attention_mask=encoded_inputs["attention_mask"][span_idx],
+                            token_type_ids=encoded_inputs["token_type_ids"][span_idx],
+                            p_mask=p_mask[span_idx].tolist(),
+                            encoding=encoded_inputs[span_idx],
+                            # We don't use the rest of the values - and actually
+                            # for Fast tokenizer we could totally avoid using SquadFeatures and SquadExample
+                            cls_index=None,
+                            token_to_orig_map={},
+                            example_index=0,
+                            unique_id=0,
+                            paragraph_len=0,
+                            token_is_max_context=0,
+                            tokens=[],
+                            start_position=0,
+                            end_position=0,
+                            is_impossible=False,
+                            qas_id=None,
+                        )
+                    )
+                features_list.append(features)
+
         all_answers = []
         for features, example in zip(features_list, examples):
             model_input_names = self.tokenizer.model_input_names + ["input_ids"]
@@ -1797,6 +1884,8 @@ class QuestionAnsweringPipeline(Pipeline):
                     with torch.no_grad():
                         # Retrieve the score for the context tokens only (removing question tokens)
                         fw_args = {k: torch.tensor(v, device=self.device) for (k, v) in fw_args.items()}
+                        # On Windows, the default int type in numpy is np.int32 so we get some non-long tensors.
+                        fw_args = {k: v.long() if v.dtype == torch.int32 else v for (k, v) in fw_args.items()}
                         start, end = self.model(**fw_args)[:2]
                         start, end = start.cpu().numpy(), end.cpu().numpy()
 
@@ -1824,20 +1913,56 @@ class QuestionAnsweringPipeline(Pipeline):
                 start_[0] = end_[0] = 0.0
 
                 starts, ends, scores = self.decode(start_, end_, kwargs["topk"], kwargs["max_answer_len"])
-                char_to_word = np.array(example.char_to_word_offset)
+                if not self.tokenizer.is_fast:
+                    char_to_word = np.array(example.char_to_word_offset)
 
-                # Convert the answer (tokens) back to the original text
-                answers += [
-                    {
-                        "score": score.item(),
-                        "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
-                        "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
-                        "answer": " ".join(
-                            example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
-                        ),
-                    }
-                    for s, e, score in zip(starts, ends, scores)
-                ]
+                    # Convert the answer (tokens) back to the original text
+                    # Score: score from the model
+                    # Start: Index of the first character of the answer in the context string
+                    # End: Index of the character following the last character of the answer in the context string
+                    # Answer: Plain text of the answer
+                    answers += [
+                        {
+                            "score": score.item(),
+                            "start": np.where(char_to_word == feature.token_to_orig_map[s])[0][0].item(),
+                            "end": np.where(char_to_word == feature.token_to_orig_map[e])[0][-1].item(),
+                            "answer": " ".join(
+                                example.doc_tokens[feature.token_to_orig_map[s] : feature.token_to_orig_map[e] + 1]
+                            ),
+                        }
+                        for s, e, score in zip(starts, ends, scores)
+                    ]
+                else:
+                    # Convert the answer (tokens) back to the original text
+                    # Score: score from the model
+                    # Start: Index of the first character of the answer in the context string
+                    # End: Index of the character following the last character of the answer in the context string
+                    # Answer: Plain text of the answer
+                    question_first = bool(self.tokenizer.padding_side == "right")
+                    enc = feature.encoding
+
+                    # Sometimes the max probability token is in the middle of a word so:
+                    # - we start by finding the right word containing the token with `token_to_word`
+                    # - then we convert this word in a character span with `word_to_chars`
+                    answers += [
+                        {
+                            "score": score.item(),
+                            "start": enc.word_to_chars(
+                                enc.token_to_word(s), sequence_index=1 if question_first else 0
+                            )[0],
+                            "end": enc.word_to_chars(enc.token_to_word(e), sequence_index=1 if question_first else 0)[
+                                1
+                            ],
+                            "answer": example.context_text[
+                                enc.word_to_chars(enc.token_to_word(s), sequence_index=1 if question_first else 0)[
+                                    0
+                                ] : enc.word_to_chars(enc.token_to_word(e), sequence_index=1 if question_first else 0)[
+                                    1
+                                ]
+                            ],
+                        }
+                        for s, e, score in zip(starts, ends, scores)
+                    ]
 
             if kwargs["handle_impossible_answer"]:
                 answers.append({"score": min_null_score, "start": 0, "end": 0, "answer": ""})
@@ -1932,6 +2057,274 @@ class QuestionAnsweringPipeline(Pipeline):
             "start": max(0, char_start_idx),
             "end": min(len(text), char_end_idx),
         }
+
+
+class TableQuestionAnsweringArgumentHandler(ArgumentHandler):
+    """
+    Handles arguments for the TableQuestionAnsweringPipeline
+    """
+
+    def __call__(self, table=None, query=None, sequential=False, padding=True, truncation=True):
+        # Returns tqa_pipeline_inputs of shape:
+        # [
+        #   {"table": pd.DataFrame, "query": List[str]},
+        #   ...,
+        #   {"table": pd.DataFrame, "query" : List[str]}
+        # ]
+        requires_pandas(self)
+        import pandas as pd
+
+        if table is None:
+            raise ValueError("Keyword argument `table` cannot be None.")
+        elif query is None:
+            if isinstance(table, dict) and table.get("query") is not None and table.get("table") is not None:
+                tqa_pipeline_inputs = [table]
+            elif isinstance(table, list) and len(table) > 0:
+                if not all(isinstance(d, dict) for d in table):
+                    raise ValueError(
+                        f"Keyword argument `table` should be a list of dict, but is {(type(d) for d in table)}"
+                    )
+
+                if table[0].get("query") is not None and table[0].get("table") is not None:
+                    tqa_pipeline_inputs = table
+                else:
+                    raise ValueError(
+                        f"If keyword argument `table` is a list of dictionaries, each dictionary should have a `table` "
+                        f"and `query` key, but only dictionary has keys {table[0].keys()} `table` and `query` keys."
+                    )
+            else:
+                raise ValueError(
+                    f"Invalid input. Keyword argument `table` should be either of type `dict` or `list`, but "
+                    f"is {type(table)})"
+                )
+        else:
+            tqa_pipeline_inputs = [{"table": table, "query": query}]
+
+        for tqa_pipeline_input in tqa_pipeline_inputs:
+            if not isinstance(tqa_pipeline_input["table"], pd.DataFrame):
+                if tqa_pipeline_input["table"] is None:
+                    raise ValueError("Table cannot be None.")
+
+                tqa_pipeline_input["table"] = pd.DataFrame(tqa_pipeline_input["table"])
+
+        return tqa_pipeline_inputs, sequential, padding, truncation
+
+
+@add_end_docstrings(PIPELINE_INIT_ARGS)
+class TableQuestionAnsweringPipeline(Pipeline):
+    """
+    Table Question Answering pipeline using a :obj:`ModelForTableQuestionAnswering`. This pipeline is only available in
+    PyTorch.
+
+    This tabular question answering pipeline can currently be loaded from :func:`~transformers.pipeline` using the
+    following task identifier: :obj:`"table-question-answering"`.
+
+    The models that this pipeline can use are models that have been fine-tuned on a tabular question answering task.
+    See the up-to-date list of available models on `huggingface.co/models
+    <https://huggingface.co/models?filter=table-question-answering>`__.
+    """
+
+    default_input_names = "table,query"
+
+    def __init__(self, args_parser=TableQuestionAnsweringArgumentHandler(), *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._args_parser = args_parser
+
+        if self.framework == "tf":
+            raise ValueError("The TableQuestionAnsweringPipeline is only available in PyTorch.")
+
+        self.check_model_type(MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING)
+
+        self.aggregate = bool(getattr(self.model.config, "aggregation_labels")) and bool(
+            getattr(self.model.config, "num_aggregation_labels")
+        )
+
+    def batch_inference(self, **inputs):
+        with torch.no_grad():
+            return self.model(**inputs)
+
+    def sequential_inference(self, **inputs):
+        """
+        Inference used for models that need to process sequences in a sequential fashion, like the SQA models which
+        handle conversational query related to a table.
+        """
+        with torch.no_grad():
+            all_logits = []
+            all_aggregations = []
+            prev_answers = None
+            batch_size = inputs["input_ids"].shape[0]
+
+            input_ids = inputs["input_ids"].to(self.device)
+            attention_mask = inputs["attention_mask"].to(self.device)
+            token_type_ids = inputs["token_type_ids"].to(self.device)
+            token_type_ids_example = None
+
+            for index in range(batch_size):
+                # If sequences have already been processed, the token type IDs will be created according to the previous
+                # answer.
+                if prev_answers is not None:
+                    prev_labels_example = token_type_ids_example[:, 3]  # shape (seq_len,)
+                    model_labels = np.zeros_like(prev_labels_example.cpu().numpy())  # shape (seq_len,)
+
+                    token_type_ids_example = token_type_ids[index]  # shape (seq_len, 7)
+                    for i in range(model_labels.shape[0]):
+                        segment_id = token_type_ids_example[:, 0].tolist()[i]
+                        col_id = token_type_ids_example[:, 1].tolist()[i] - 1
+                        row_id = token_type_ids_example[:, 2].tolist()[i] - 1
+
+                        if row_id >= 0 and col_id >= 0 and segment_id == 1:
+                            model_labels[i] = int(prev_answers[(col_id, row_id)])
+
+                    token_type_ids_example[:, 3] = torch.from_numpy(model_labels).type(torch.long).to(self.device)
+
+                input_ids_example = input_ids[index]
+                attention_mask_example = attention_mask[index]  # shape (seq_len,)
+                token_type_ids_example = token_type_ids[index]  # shape (seq_len, 7)
+                outputs = self.model(
+                    input_ids=input_ids_example.unsqueeze(0),
+                    attention_mask=attention_mask_example.unsqueeze(0),
+                    token_type_ids=token_type_ids_example.unsqueeze(0),
+                )
+                logits = outputs.logits
+
+                if self.aggregate:
+                    all_aggregations.append(outputs.logits_aggregation)
+
+                all_logits.append(logits)
+
+                dist_per_token = torch.distributions.Bernoulli(logits=logits)
+                probabilities = dist_per_token.probs * attention_mask_example.type(torch.float32).to(
+                    dist_per_token.probs.device
+                )
+
+                coords_to_probs = collections.defaultdict(list)
+                for i, p in enumerate(probabilities.squeeze().tolist()):
+                    segment_id = token_type_ids_example[:, 0].tolist()[i]
+                    col = token_type_ids_example[:, 1].tolist()[i] - 1
+                    row = token_type_ids_example[:, 2].tolist()[i] - 1
+                    if col >= 0 and row >= 0 and segment_id == 1:
+                        coords_to_probs[(col, row)].append(p)
+
+                prev_answers = {key: np.array(coords_to_probs[key]).mean() > 0.5 for key in coords_to_probs}
+
+            logits_batch = torch.cat(tuple(all_logits), 0)
+
+            return (logits_batch,) if not self.aggregate else (logits_batch, torch.cat(tuple(all_aggregations), 0))
+
+    def __call__(self, *args, **kwargs):
+        r"""
+        Answers queries according to a table. The pipeline accepts several types of inputs which are detailed below:
+
+        - ``pipeline(table, query)``
+        - ``pipeline(table, [query])``
+        - ``pipeline(table=table, query=query)``
+        - ``pipeline(table=table, query=[query])``
+        - ``pipeline({"table": table, "query": query})``
+        - ``pipeline({"table": table, "query": [query]})``
+        - ``pipeline([{"table": table, "query": query}, {"table": table, "query": query}])``
+
+        The :obj:`table` argument should be a dict or a DataFrame built from that dict, containing the whole table:
+
+        Example::
+
+            data = {
+                "actors": ["brad pitt", "leonardo di caprio", "george clooney"],
+                "age": ["56", "45", "59"],
+                "number of movies": ["87", "53", "69"],
+                "date of birth": ["7 february 1967", "10 june 1996", "28 november 1967"],
+            }
+
+        This dictionary can be passed in as such, or can be converted to a pandas DataFrame:
+
+        Example::
+
+            import pandas as pd
+            table = pd.DataFrame.from_dict(data)
+
+
+        Args:
+            table (:obj:`pd.DataFrame` or :obj:`Dict`):
+                Pandas DataFrame or dictionary that will be converted to a DataFrame containing all the table values.
+                See above for an example of dictionary.
+            query (:obj:`str` or :obj:`List[str]`):
+                Query or list of queries that will be sent to the model alongside the table.
+            sequential (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether to do inference sequentially or as a batch. Batching is faster, but models like SQA require the
+                inference to be done sequentially to extract relations within sequences, given their conversational
+                nature.
+            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
+                Activates and controls padding. Accepts the following values:
+
+                * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
+                  single sequence if provided).
+                * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided.
+                * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
+                  different lengths).
+
+            truncation (:obj:`bool`, :obj:`str` or :class:`~transformers.TapasTruncationStrategy`, `optional`, defaults to :obj:`False`):
+                Activates and controls truncation. Accepts the following values:
+
+                * :obj:`True` or :obj:`'drop_rows_to_fit'`: Truncate to a maximum length specified with the argument
+                  :obj:`max_length` or to the maximum acceptable input length for the model if that argument is not
+                  provided. This will truncate row by row, removing rows from the table.
+                * :obj:`False` or :obj:`'do_not_truncate'` (default): No truncation (i.e., can output batch with
+                  sequence lengths greater than the model maximum admissible input size).
+
+
+        Return:
+            A dictionary or a list of dictionaries containing results: Each result is a dictionary with the following
+            keys:
+
+            - **answer** (:obj:`str`) -- The answer of the query given the table. If there is an aggregator, the answer
+              will be preceded by :obj:`AGGREGATOR >`.
+            - **coordinates** (:obj:`List[Tuple[int, int]]`) -- Coordinates of the cells of the answers.
+            - **cells** (:obj:`List[str]`) -- List of strings made up of the answer cell values.
+            - **aggregator** (:obj:`str`) -- If the model has an aggregator, this returns the aggregator.
+        """
+        pipeline_inputs, sequential, padding, truncation = self._args_parser(*args, **kwargs)
+        batched_answers = []
+        for pipeline_input in pipeline_inputs:
+            table, query = pipeline_input["table"], pipeline_input["query"]
+            inputs = self.tokenizer(
+                table, query, return_tensors=self.framework, truncation="drop_rows_to_fit", padding=padding
+            )
+
+            outputs = self.sequential_inference(**inputs) if sequential else self.batch_inference(**inputs)
+
+            if self.aggregate:
+                logits, logits_agg = outputs[:2]
+                predictions = self.tokenizer.convert_logits_to_predictions(inputs, logits.detach(), logits_agg)
+                answer_coordinates_batch, agg_predictions = predictions
+                aggregators = {i: self.model.config.aggregation_labels[pred] for i, pred in enumerate(agg_predictions)}
+
+                no_agg_label_index = self.model.config.no_aggregation_label_index
+                aggregators_prefix = {
+                    i: aggregators[i] + " > " for i, pred in enumerate(agg_predictions) if pred != no_agg_label_index
+                }
+            else:
+                logits = outputs[0]
+                predictions = self.tokenizer.convert_logits_to_predictions(inputs, logits.detach())
+                answer_coordinates_batch = predictions[0]
+                aggregators = {}
+                aggregators_prefix = {}
+
+            answers = []
+            for index, coordinates in enumerate(answer_coordinates_batch):
+                cells = [table.iat[coordinate] for coordinate in coordinates]
+                aggregator = aggregators.get(index, "")
+                aggregator_prefix = aggregators_prefix.get(index, "")
+                answer = {
+                    "answer": aggregator_prefix + ", ".join(cells),
+                    "coordinates": coordinates,
+                    "cells": [table.iat[coordinate] for coordinate in coordinates],
+                }
+                if aggregator:
+                    answer["aggregator"] = aggregator
+
+                answers.append(answer)
+            batched_answers.append(answers if len(answers) > 1 else answers[0])
+        return batched_answers if len(batched_answers) > 1 else batched_answers[0]
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
@@ -2628,6 +3021,18 @@ SUPPORTED_TASKS = {
             "model": {"pt": "distilbert-base-cased-distilled-squad", "tf": "distilbert-base-cased-distilled-squad"},
         },
     },
+    "table-question-answering": {
+        "impl": TableQuestionAnsweringPipeline,
+        "pt": AutoModelForTableQuestionAnswering if is_torch_available() else None,
+        "tf": None,
+        "default": {
+            "model": {
+                "pt": "nielsr/tapas-base-finetuned-wtq",
+                "tokenizer": "nielsr/tapas-base-finetuned-wtq",
+                "tf": "nielsr/tapas-base-finetuned-wtq",
+            },
+        },
+    },
     "fill-mask": {
         "impl": FillMaskPipeline,
         "tf": TFAutoModelForMaskedLM if is_tf_available() else None,
@@ -2730,7 +3135,8 @@ def pipeline(
     config: Optional[Union[str, PretrainedConfig]] = None,
     tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
     framework: Optional[str] = None,
-    use_fast: bool = False,
+    revision: Optional[str] = None,
+    use_fast: bool = True,
     **kwargs
 ) -> Pipeline:
     """
@@ -2753,7 +3159,9 @@ def pipeline(
             - :obj:`"fill-mask"`: will return a :class:`~transformers.FillMaskPipeline`.
             - :obj:`"summarization"`: will return a :class:`~transformers.SummarizationPipeline`.
             - :obj:`"translation_xx_to_yy"`: will return a :class:`~transformers.TranslationPipeline`.
+            - :obj:`"text2text-generation"`: will return a :class:`~transformers.Text2TextGenerationPipeline`.
             - :obj:`"text-generation"`: will return a :class:`~transformers.TextGenerationPipeline`.
+            - :obj:`"zero-shot-classification:`: will return a :class:`~transformers.ZeroShotClassificationPipeline`.
             - :obj:`"conversation"`: will return a :class:`~transformers.ConversationalPipeline`.
         model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`):
             The model that will be used by the pipeline to make predictions. This can be a model identifier or an
@@ -2784,7 +3192,11 @@ def pipeline(
             If no framework is specified, will default to the one currently installed. If no framework is specified and
             both frameworks are installed, will default to the framework of the :obj:`model`, or to PyTorch if no model
             is provided.
-        use_fast (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
+            When passing a task name or a string model identifier: The specific model version to use. It can be a
+            branch name, a tag name, or a commit id, since we use a git-based system for storing models and other
+            artifacts on huggingface.co, so ``revision`` can be any identifier allowed by git.
+        use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to use a Fast tokenizer if possible (a :class:`~transformers.PreTrainedTokenizerFast`).
         kwargs:
             Additional keyword arguments passed along to the specific pipeline init (see the documentation for the
@@ -2845,17 +3257,19 @@ def pipeline(
         if isinstance(tokenizer, tuple):
             # For tuple we have (tokenizer name, {kwargs})
             use_fast = tokenizer[1].pop("use_fast", use_fast)
-            tokenizer = AutoTokenizer.from_pretrained(tokenizer[0], use_fast=use_fast, **tokenizer[1])
+            tokenizer = AutoTokenizer.from_pretrained(
+                tokenizer[0], use_fast=use_fast, revision=revision, **tokenizer[1]
+            )
         else:
-            tokenizer = AutoTokenizer.from_pretrained(tokenizer, use_fast=use_fast)
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer, revision=revision, use_fast=use_fast)
 
     # Instantiate config if needed
     if isinstance(config, str):
-        config = AutoConfig.from_pretrained(config)
+        config = AutoConfig.from_pretrained(config, revision=revision)
 
     # Instantiate modelcard if needed
     if isinstance(modelcard, str):
-        modelcard = ModelCard.from_pretrained(modelcard)
+        modelcard = ModelCard.from_pretrained(modelcard, revision=revision)
 
     # Instantiate model if needed
     if isinstance(model, str):
@@ -2873,7 +3287,13 @@ def pipeline(
                 "Model might be a PyTorch model (ending with `.bin`) but PyTorch is not available. "
                 "Trying to load the model with Tensorflow."
             )
-        model = model_class.from_pretrained(model, config=config, **model_kwargs)
+
+        if model_class is None:
+            raise ValueError(
+                f"Pipeline using {framework} framework, but this framework is not supported by this pipeline."
+            )
+
+        model = model_class.from_pretrained(model, config=config, revision=revision, **model_kwargs)
         if task == "translation" and model.config.task_specific_params:
             for key in model.config.task_specific_params:
                 if key.startswith("translation"):

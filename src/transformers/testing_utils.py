@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import inspect
 import logging
 import os
@@ -14,6 +28,8 @@ from .file_utils import (
     _datasets_available,
     _faiss_available,
     _flax_available,
+    _pandas_available,
+    _scatter_available,
     _sentencepiece_available,
     _tf_available,
     _tokenizers_available,
@@ -62,6 +78,7 @@ _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
 _run_pt_tf_cross_tests = parse_flag_from_env("RUN_PT_TF_CROSS_TESTS", default=False)
 _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=False)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=False)
+_run_git_lfs_tests = parse_flag_from_env("RUN_GIT_LFS_TESTS", default=False)
 _tf_gpu_memory_limit = parse_int_from_env("TF_GPU_MEMORY_LIMIT", default=None)
 
 
@@ -129,6 +146,19 @@ def custom_tokenizers(test_case):
         return test_case
 
 
+def require_git_lfs(test_case):
+    """
+    Decorator marking a test that requires git-lfs.
+
+    git-lfs requires additional dependencies, and tests are skipped by default. Set the RUN_GIT_LFS_TESTS environment
+    variable to a truthy value to run them.
+    """
+    if not _run_git_lfs_tests:
+        return unittest.skip("test of git lfs workflow")(test_case)
+    else:
+        return test_case
+
+
 def require_torch(test_case):
     """
     Decorator marking a test that requires PyTorch.
@@ -138,6 +168,19 @@ def require_torch(test_case):
     """
     if not _torch_available:
         return unittest.skip("test requires PyTorch")(test_case)
+    else:
+        return test_case
+
+
+def require_torch_scatter(test_case):
+    """
+    Decorator marking a test that requires PyTorch scatter.
+
+    These tests are skipped when PyTorch scatter isn't installed.
+
+    """
+    if not _scatter_available:
+        return unittest.skip("test requires PyTorch scatter")(test_case)
     else:
         return test_case
 
@@ -193,13 +236,34 @@ def require_tokenizers(test_case):
         return test_case
 
 
-def require_torch_multigpu(test_case):
+def require_pandas(test_case):
+    """
+    Decorator marking a test that requires pandas. These tests are skipped when pandas isn't installed.
+    """
+    if not _pandas_available:
+        return unittest.skip("test requires pandas")(test_case)
+    else:
+        return test_case
+
+
+def require_scatter(test_case):
+    """
+    Decorator marking a test that requires PyTorch Scatter. These tests are skipped when PyTorch Scatter isn't
+    installed.
+    """
+    if not _scatter_available:
+        return unittest.skip("test requires PyTorch Scatter")(test_case)
+    else:
+        return test_case
+
+
+def require_torch_multi_gpu(test_case):
     """
     Decorator marking a test that requires a multi-GPU setup (in PyTorch).
 
     These tests are skipped on a machine without multiple GPUs.
 
-    To run *only* the multigpu tests, assuming all test names contain multigpu: $ pytest -sv ./tests -k "multigpu"
+    To run *only* the multi_gpu tests, assuming all test names contain multi_gpu: $ pytest -sv ./tests -k "multi_gpu"
     """
     if not _torch_available:
         return unittest.skip("test requires PyTorch")(test_case)
@@ -212,7 +276,7 @@ def require_torch_multigpu(test_case):
         return test_case
 
 
-def require_torch_non_multigpu(test_case):
+def require_torch_non_multi_gpu(test_case):
     """
     Decorator marking a test that requires 0 or 1 GPU setup (in PyTorch).
     """
@@ -225,6 +289,12 @@ def require_torch_non_multigpu(test_case):
         return unittest.skip("test requires 0 or 1 GPU")(test_case)
     else:
         return test_case
+
+
+# this is a decorator identical to require_torch_non_multi_gpu, but is used as a quick band-aid to
+# allow all of examples to be run multi-gpu CI and it reminds us that tests decorated with this one
+# need to be ported and aren't so by design.
+require_torch_non_multi_gpu_but_fix_me = require_torch_non_multi_gpu
 
 
 def require_torch_tpu(test_case):
@@ -295,6 +365,22 @@ def require_ray(test_case):
         return unittest.skip("test requires Ray/tune")(test_case)
     else:
         return test_case
+
+
+def get_gpu_count():
+    """
+    Return the number of available gpus (regardless of whether torch or tf is used)
+    """
+    if _torch_available:
+        import torch
+
+        return torch.cuda.device_count()
+    elif _tf_available:
+        import tensorflow as tf
+
+        return len(tf.config.list_physical_devices("GPU"))
+    else:
+        return 0
 
 
 def get_tests_dir(append_path=None):
@@ -448,7 +534,7 @@ class CaptureLogger:
 
         >>> msg = "Testing 1, 2, 3"
         >>> logging.set_verbosity_info()
-        >>> logger = logging.get_logger("transformers.tokenization_bart")
+        >>> logger = logging.get_logger("transformers.models.bart.tokenization_bart")
         >>> with CaptureLogger(logger) as cl:
         ...     logger.info(msg)
         >>> assert cl.out, msg+"\n"
@@ -500,45 +586,47 @@ class TestCasePlus(unittest.TestCase):
        - ``repo_root_dir_str``
        - ``src_dir_str``
 
-    Feature 2: Flexible auto-removable temp dirs which are guaranteed to get removed at the end of test.
+    Feature 2: Flexible auto-removable temporary dirs which are guaranteed to get removed at the end of test.
 
-    In all the following scenarios the temp dir will be auto-removed at the end of test, unless `after=False`.
-
-    # 1. create a unique temp dir, `tmp_dir` will contain the path to the created temp dir
+    1. Create a unique temporary dir:
 
     ::
 
         def test_whatever(self):
             tmp_dir = self.get_auto_remove_tmp_dir()
 
-    # 2. create a temp dir of my choice and delete it at the end - useful for debug when you want to # monitor a
-    specific directory
+    ``tmp_dir`` will contain the path to the created temporary dir. It will be automatically removed at the end of the
+    test.
+
+
+    2. Create a temporary dir of my choice, ensure it's empty before the test starts and don't
+    empty it after the test.
 
     ::
 
         def test_whatever(self):
-            tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test")
+            tmp_dir = self.get_auto_remove_tmp_dir("./xxx")
 
-    # 3. create a temp dir of my choice and do not delete it at the end - useful for when you want # to look at the
-    temp results
+    This is useful for debug when you want to monitor a specific directory and want to make sure the previous tests
+    didn't leave any data in there.
 
-    ::
-        def test_whatever(self):
-            tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test", after=False)
+    3. You can override the first two options by directly overriding the ``before`` and ``after`` args, leading to the
+       following behavior:
 
-    # 4. create a temp dir of my choice and ensure to delete it right away - useful for when you # disabled deletion in
-    the previous test run and want to make sure the that tmp dir is empty # before the new test is run
+    ``before=True``: the temporary dir will always be cleared at the beginning of the test.
 
-    ::
+    ``before=False``: if the temporary dir already existed, any existing files will remain there.
 
-        def test_whatever(self):
-            tmp_dir = self.get_auto_remove_tmp_dir(tmp_dir="./tmp/run/test", before=True)
+    ``after=True``: the temporary dir will always be deleted at the end of the test.
 
-    Note 1: In order to run the equivalent of `rm -r` safely, only subdirs of the project repository checkout are
-    allowed if an explicit `tmp_dir` is used, so that by mistake no `/tmp` or similar important part of the filesystem
-    will get nuked. i.e. please always pass paths that start with `./`
+    ``after=False``: the temporary dir will always be left intact at the end of the test.
 
-    Note 2: Each test can register multiple temp dirs and they all will get auto-removed, unless requested otherwise.
+    Note 1: In order to run the equivalent of ``rm -r`` safely, only subdirs of the project repository checkout are
+    allowed if an explicit ``tmp_dir`` is used, so that by mistake no ``/tmp`` or similar important part of the
+    filesystem will get nuked. i.e. please always pass paths that start with ``./``
+
+    Note 2: Each test can register multiple temporary dirs and they all will get auto-removed, unless requested
+    otherwise.
 
     Feature 3: Get a copy of the ``os.environ`` object that sets up ``PYTHONPATH`` specific to the current test suite.
     This is useful for invoking external programs from the test suite - e.g. distributed training.
@@ -551,6 +639,7 @@ class TestCasePlus(unittest.TestCase):
     """
 
     def setUp(self):
+        # get_auto_remove_tmp_dir feature:
         self.teardown_tmp_dirs = []
 
         # figure out the resolved paths for repo_root, tests, examples, etc.
@@ -638,21 +727,42 @@ class TestCasePlus(unittest.TestCase):
         env["PYTHONPATH"] = ":".join(paths)
         return env
 
-    def get_auto_remove_tmp_dir(self, tmp_dir=None, after=True, before=False):
+    def get_auto_remove_tmp_dir(self, tmp_dir=None, before=None, after=None):
         """
         Args:
             tmp_dir (:obj:`string`, `optional`):
-                use this path, if None a unique path will be assigned
-            before (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                if `True` and tmp dir already exists make sure to empty it right away
-            after (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                delete the tmp dir at the end of the test
+                if :obj:`None`:
+
+                   - a unique temporary path will be created
+                   - sets ``before=True`` if ``before`` is :obj:`None`
+                   - sets ``after=True`` if ``after`` is :obj:`None`
+                else:
+
+                   - :obj:`tmp_dir` will be created
+                   - sets ``before=True`` if ``before`` is :obj:`None`
+                   - sets ``after=False`` if ``after`` is :obj:`None`
+            before (:obj:`bool`, `optional`):
+                If :obj:`True` and the :obj:`tmp_dir` already exists, make sure to empty it right away if :obj:`False`
+                and the :obj:`tmp_dir` already exists, any existing files will remain there.
+            after (:obj:`bool`, `optional`):
+                If :obj:`True`, delete the :obj:`tmp_dir` at the end of the test if :obj:`False`, leave the
+                :obj:`tmp_dir` and its contents intact at the end of the test.
 
         Returns:
-            tmp_dir(:obj:`string`): either the same value as passed via `tmp_dir` or the path to the auto-created tmp
+            tmp_dir(:obj:`string`): either the same value as passed via `tmp_dir` or the path to the auto-selected tmp
             dir
         """
         if tmp_dir is not None:
+
+            # defining the most likely desired behavior for when a custom path is provided.
+            # this most likely indicates the debug mode where we want an easily locatable dir that:
+            # 1. gets cleared out before the test (if it already exists)
+            # 2. is left intact after the test
+            if before is None:
+                before = True
+            if after is None:
+                after = False
+
             # using provided path
             path = Path(tmp_dir).resolve()
 
@@ -669,6 +779,15 @@ class TestCasePlus(unittest.TestCase):
             path.mkdir(parents=True, exist_ok=True)
 
         else:
+            # defining the most likely desired behavior for when a unique tmp path is auto generated
+            # (not a debug mode), here we require a unique tmp dir that:
+            # 1. is empty before the test (it will be empty in this situation anyway)
+            # 2. gets fully removed after the test
+            if before is None:
+                before = True
+            if after is None:
+                after = True
+
             # using unique tmp dir (always empty, regardless of `before`)
             tmp_dir = tempfile.mkdtemp()
 
@@ -679,7 +798,8 @@ class TestCasePlus(unittest.TestCase):
         return tmp_dir
 
     def tearDown(self):
-        # remove registered temp dirs
+
+        # get_auto_remove_tmp_dir feature: remove registered temp dirs
         for path in self.teardown_tmp_dirs:
             shutil.rmtree(path, ignore_errors=True)
         self.teardown_tmp_dirs = []

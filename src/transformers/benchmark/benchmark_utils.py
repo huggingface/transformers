@@ -1,5 +1,18 @@
 # This file is adapted from the AllenNLP library at https://github.com/allenai/allennlp
-# Copyright by the AllenNLP authors.
+
+# Copyright 2020 The HuggingFace Team and the AllenNLP authors. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """
 Utilities for working with the local dataset cache.
 """
@@ -327,7 +340,7 @@ def start_memory_tracing(
 
         - `modules_to_trace`: (None, string, list/tuple of string) if None, all events are recorded if string or list
           of strings: only events from the listed module/sub-module will be recorded (e.g. 'fairseq' or
-          'transformers.modeling_gpt2')
+          'transformers.models.gpt2.modeling_gpt2')
         - `modules_not_to_trace`: (None, string, list/tuple of string) if None, no module is avoided if string or list
           of strings: events from the listed module/sub-module will not be recorded (e.g. 'torch')
         - `events_to_trace`: string or list of string of events to be recorded (see official python doc for

@@ -50,7 +50,7 @@ _re_table = re.compile(r"(\+-+)+\+\s*$")
 # Matches a code block in rst `:: `.
 _re_code_block = re.compile(r"^\s*::\s*$")
 # Matches any block of the form `.. something::` or `.. something:: bla`.
-_re_ignore = re.compile(r"^\s*\.\.\s+(\S+)\s*::\s*\S*\s*$")
+_re_ignore = re.compile(r"^\s*\.\.\s+(.*?)\s*::\s*\S*\s*$")
 # Matches comment introduction in rst.
 _re_comment = re.compile(r"\s*\.\.\s*$")
 # Matches the special tag to ignore some paragraphs.
@@ -357,14 +357,14 @@ doc_styler = DocstringStyler()
 
 def style_rst_file(doc_file, max_len=119, check_only=False):
     """ Style one rst file `doc_file` to `max_len`."""
-    with open(doc_file, "r", encoding="utf-8") as f:
+    with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
         doc = f.read()
     clean_doc = rst_styler.style(doc, max_len=max_len)
 
     diff = clean_doc != doc
     if not check_only and diff:
         print(f"Overwriting content of {doc_file}.")
-        with open(doc_file, "w", encoding="utf-8") as f:
+        with open(doc_file, "w", encoding="utf-8", newline="\n") as f:
             f.write(clean_doc)
 
     return diff
@@ -404,7 +404,7 @@ def style_docstring(docstring, max_len=119):
 
 def style_file_docstrings(code_file, max_len=119, check_only=False):
     """Style all docstrings in `code_file` to `max_len`."""
-    with open(code_file, "r", encoding="utf-8") as f:
+    with open(code_file, "r", encoding="utf-8", newline="\n") as f:
         code = f.read()
     splits = code.split('"""')
     splits = [
@@ -416,7 +416,7 @@ def style_file_docstrings(code_file, max_len=119, check_only=False):
     diff = clean_code != code
     if not check_only and diff:
         print(f"Overwriting content of {code_file}.")
-        with open(code_file, "w", encoding="utf-8") as f:
+        with open(code_file, "w", encoding="utf-8", newline="\n") as f:
             f.write(clean_code)
 
     return diff

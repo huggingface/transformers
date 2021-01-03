@@ -8,6 +8,9 @@ on:
 jobs:
   torch_hub_integration:
     runs-on: ubuntu-latest
+    env:
+      # TODO quickfix but may need more investigation
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: True
     steps:
     # no checkout necessary here.
     - name: Extract branch name

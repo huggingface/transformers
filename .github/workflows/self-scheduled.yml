@@ -1,16 +1,18 @@
+# configuration notes:
+#
+# - `source .env/bin/activate` is currently needed to be run first thing first in each step. Otherwise
+# the step uses the system-wide python interpreter.
+
 name: Self-hosted runner (scheduled)
 
 on:
-  push:
-    branches:
-      - ci_*
   repository_dispatch:
   schedule:
     - cron: "0 0 * * *"
 
 jobs:
   run_all_tests_torch_gpu:
-    runs-on: [self-hosted, single-gpu]
+    runs-on: [self-hosted, gpu, single-gpu]
     steps:
       - uses: actions/checkout@v2
 
@@ -44,7 +46,7 @@ jobs:
         run: |
           source .env/bin/activate
           pip install --upgrade pip
-          pip install .[torch,sklearn,testing,onnxruntime]
+          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
           pip install git+https://github.com/huggingface/datasets
           pip list
 
@@ -104,7 +106,7 @@ jobs:
 
 
   run_all_tests_tf_gpu:
-    runs-on: [self-hosted, single-gpu]
+    runs-on: [self-hosted, gpu, single-gpu]
     steps:
       - uses: actions/checkout@v2
 
@@ -138,7 +140,7 @@ jobs:
         run: |
           source .env/bin/activate
           pip install --upgrade pip
-          pip install .[tf,sklearn,testing,onnxruntime]
+          pip install .[tf,sklearn,testing,onnxruntime,sentencepiece]
           pip install git+https://github.com/huggingface/datasets
           pip list
 
@@ -182,8 +184,8 @@ jobs:
           name: run_all_tests_tf_gpu_test_reports
           path: reports
           
-  run_all_tests_torch_multiple_gpu:
-    runs-on: [self-hosted, multi-gpu]
+  run_all_tests_torch_multi_gpu:
+    runs-on: [self-hosted, gpu, multi-gpu]
     steps:
       - uses: actions/checkout@v2
 
@@ -217,7 +219,7 @@ jobs:
         run: |
           source .env/bin/activate
           pip install --upgrade pip
-          pip install .[torch,sklearn,testing,onnxruntime]
+          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
           pip install git+https://github.com/huggingface/datasets
           pip list
 
@@ -227,19 +229,31 @@ jobs:
           python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
           python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
 
-      - name: Run all tests on GPU
+      - name: Run all tests on multi-GPU
         env:
           OMP_NUM_THREADS: 1
           RUN_SLOW: yes
         run: |
           source .env/bin/activate
-          python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_torch_multiple_gpu tests
+          python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_torch_multi_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/tests_torch_multiple_gpu_failures_short.txt
-        
-      - name: Run all pipeline tests on GPU
+        run: cat reports/tests_torch_multi_gpu_failures_short.txt
+
+      - name: Run examples tests on multi-GPU
+        env:
+          OMP_NUM_THREADS: 1
+          RUN_SLOW: yes
+        run: |
+          source .env/bin/activate
+          python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_torch_examples_multi_gpu examples
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_torch_examples_multi_gpu_failures_short.txt
+
+      - name: Run all pipeline tests on multi-GPU
         if: ${{ always() }}
         env:
           TF_FORCE_GPU_ALLOW_GROWTH: "true"
@@ -248,11 +262,11 @@ jobs:
           RUN_PIPELINE_TESTS: yes
         run: |
           source .env/bin/activate
-          python -m pytest -n 1 --dist=loadfile -s -m is_pipeline_test --make-reports=tests_torch_pipeline_multiple_gpu tests
+          python -m pytest -n 1 --dist=loadfile -s -m is_pipeline_test --make-reports=tests_torch_pipeline_multi_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/tests_torch_pipeline_multiple_gpu_failures_short.txt
+        run: cat reports/tests_torch_pipeline_multi_gpu_failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
@@ -261,8 +275,8 @@ jobs:
           name: run_all_tests_torch_multi_gpu_test_reports
           path: reports
 
-  run_all_tests_tf_multiple_gpu:
-    runs-on: [self-hosted, multi-gpu]
+  run_all_tests_tf_multi_gpu:
+    runs-on: [self-hosted, gpu, multi-gpu]
     steps:
       - uses: actions/checkout@v2
 
@@ -296,7 +310,7 @@ jobs:
         run: |
           source .env/bin/activate
           pip install --upgrade pip
-          pip install .[tf,sklearn,testing,onnxruntime]
+          pip install .[tf,sklearn,testing,onnxruntime,sentencepiece]
           pip install git+https://github.com/huggingface/datasets
           pip list
 
@@ -306,19 +320,19 @@ jobs:
           TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
           TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
 
-      - name: Run all tests on GPU
+      - name: Run all tests on multi-GPU
         env:
           OMP_NUM_THREADS: 1
           RUN_SLOW: yes
         run: |
           source .env/bin/activate
-          python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_tf_multiple_gpu tests
+          python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_tf_multi_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/tests_tf_multiple_gpu_failures_short.txt
+        run: cat reports/tests_tf_multi_gpu_failures_short.txt
 
-      - name: Run all pipeline tests on GPU
+      - name: Run all pipeline tests on multi-GPU
         if: ${{ always() }}
         env:
           TF_FORCE_GPU_ALLOW_GROWTH: "true"
@@ -327,11 +341,11 @@ jobs:
           RUN_PIPELINE_TESTS: yes
         run: |
           source .env/bin/activate
-          python -m pytest -n 1 --dist=loadfile -s -m is_pipeline_test --make-reports=tests_tf_pipelines_multiple_gpu tests
+          python -m pytest -n 1 --dist=loadfile -s -m is_pipeline_test --make-reports=tests_tf_pipeline_multi_gpu tests
           
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/tests_tf_multiple_gpu_pipelines_failures_short.txt
+        run: cat reports/tests_tf_pipeline_multi_gpu_failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}

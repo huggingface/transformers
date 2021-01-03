@@ -42,8 +42,11 @@ if is_torch_available():
         AutoModelForMaskedLM,
         AutoModelForSequenceClassification,
         DataCollatorForLanguageModeling,
+        EarlyStoppingCallback,
         GlueDataset,
         GlueDataTrainingArguments,
+        GPT2Config,
+        GPT2LMHeadModel,
         LineByLineTextDataset,
         PreTrainedModel,
         TextDataset,
@@ -71,6 +74,34 @@ class RegressionDataset:
         result = {name: y[i] for name, y in zip(self.label_names, self.ys)}
         result["input_x"] = self.x[i]
         return result
+
+
+class RepeatDataset:
+    def __init__(self, x, length=64):
+        self.x = x
+        self.length = length
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, i):
+        return {"input_ids": self.x, "labels": self.x}
+
+
+class DynamicShapesDataset:
+    def __init__(self, length=64, seed=42, batch_size=8):
+        self.length = length
+        np.random.seed(seed)
+        sizes = np.random.randint(1, 20, (length // batch_size,))
+        # For easy batching, we make every batch_size consecutive samples the same size.
+        self.xs = [np.random.normal(size=(s,)) for s in sizes.repeat(batch_size)]
+        self.ys = [np.random.normal(size=(s,)) for s in sizes.repeat(batch_size)]
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, i):
+        return {"input_x": self.xs[i], "labels": self.ys[i]}
 
 
 class AlmostAccuracy:
@@ -119,6 +150,20 @@ if is_torch_available():
                 return (y, y) if self.double_output else (y,)
             loss = torch.nn.functional.mse_loss(y, labels)
             return (loss, y, y) if self.double_output else (loss, y)
+
+    class RegressionDictModel(torch.nn.Module):
+        def __init__(self, a=0, b=0):
+            super().__init__()
+            self.a = torch.nn.Parameter(torch.tensor(a).float())
+            self.b = torch.nn.Parameter(torch.tensor(b).float())
+            self.config = None
+
+        def forward(self, input_x=None, labels=None, **kwargs):
+            y = input_x * self.a + self.b
+            result = {"output": y}
+            if labels is not None:
+                result["loss"] = torch.nn.functional.mse_loss(y, labels)
+            return result
 
     class RegressionPreTrainedModel(PreTrainedModel):
         config_class = RegressionModelConfig
@@ -220,6 +265,48 @@ class TrainerIntegrationTest(unittest.TestCase):
         metrics = trainer.evaluate()
         self.assertEqual(metrics[metric], best_value)
 
+    def check_trainer_state_are_the_same(self, trainer_state, trainer_state1):
+        # We'll pop things so operate on copies.
+        state = trainer_state.copy()
+        state1 = trainer_state1.copy()
+        # Log history main contain different logs for the time metrics (after resuming a training).
+        log_history = state.pop("log_history", None)
+        log_history1 = state1.pop("log_history", None)
+        self.assertEqual(state, state1)
+        for log, log1 in zip(log_history, log_history1):
+            _ = log.pop("train_runtime", None)
+            _ = log1.pop("train_runtime", None)
+            _ = log.pop("train_samples_per_second", None)
+            _ = log1.pop("train_samples_per_second", None)
+            self.assertEqual(log, log1)
+
+    def test_trainer_works_with_dict(self):
+        # Edge case because Apex with mode O2 will change our models to return dicts. This test checks it doesn't break
+        # anything.
+        train_dataset = RegressionDataset()
+        eval_dataset = RegressionDataset()
+        model = RegressionDictModel()
+        args = TrainingArguments("./regression")
+        trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+        trainer.train()
+        _ = trainer.evaluate()
+        _ = trainer.predict(eval_dataset)
+
+    def test_evaluation_with_keys_to_drop(self):
+        config = GPT2Config(vocab_size=100, n_positions=128, n_ctx=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+        x = torch.randint(0, 100, (128,))
+        eval_dataset = RepeatDataset(x)
+        args = TrainingArguments("./test")
+        trainer = Trainer(tiny_gpt2, args, eval_dataset=eval_dataset)
+        # By default the past_key_values are removed
+        result = trainer.predict(eval_dataset)
+        self.assertTrue(isinstance(result.predictions, np.ndarray))
+        # We can still get them by setting ignore_keys to []
+        result = trainer.predict(eval_dataset, ignore_keys=[])
+        self.assertTrue(isinstance(result.predictions, tuple))
+        self.assertEqual(len(result.predictions), 2)
+
     def test_training_arguments_are_left_untouched(self):
         trainer = get_regression_trainer()
         trainer.train()
@@ -282,7 +369,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         self.assertEqual(len(trainer.get_train_dataloader()), 66 // (16 * n_gpu))
         self.assertEqual(len(trainer.get_eval_dataloader()), 74 // (32 * n_gpu))
 
-        # Check passing a new dataset for evaluation wors
+        # Check passing a new dataset for evaluation works
         new_eval_dataset = RegressionDataset(length=128)
         self.assertEqual(len(trainer.get_eval_dataloader(new_eval_dataset)), 128 // (32 * n_gpu))
 
@@ -339,6 +426,42 @@ class TrainerIntegrationTest(unittest.TestCase):
         self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
         self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
         self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
+
+    def test_dynamic_shapes(self):
+        eval_dataset = DynamicShapesDataset(batch_size=self.batch_size)
+        model = RegressionModel(a=2, b=1)
+        args = TrainingArguments("./regression")
+        trainer = Trainer(model, args, eval_dataset=eval_dataset)
+
+        # Check evaluation can run to completion
+        _ = trainer.evaluate()
+
+        # Check predictions
+        preds = trainer.predict(eval_dataset)
+        for expected, seen in zip(eval_dataset.ys, preds.label_ids):
+            self.assertTrue(np.array_equal(expected, seen[: expected.shape[0]]))
+            self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
+
+        for expected, seen in zip(eval_dataset.xs, preds.predictions):
+            self.assertTrue(np.array_equal(2 * expected + 1, seen[: expected.shape[0]]))
+            self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
+
+        # Same tests with eval accumulation
+        args = TrainingArguments("./regression", eval_accumulation_steps=2)
+        trainer = Trainer(model, args, eval_dataset=eval_dataset)
+
+        # Check evaluation can run to completion
+        _ = trainer.evaluate()
+
+        # Check predictions
+        preds = trainer.predict(eval_dataset)
+        for expected, seen in zip(eval_dataset.ys, preds.label_ids):
+            self.assertTrue(np.array_equal(expected, seen[: expected.shape[0]]))
+            self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
+
+        for expected, seen in zip(eval_dataset.xs, preds.predictions):
+            self.assertTrue(np.array_equal(2 * expected + 1, seen[: expected.shape[0]]))
+            self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
 
     @require_datasets
     def test_trainer_with_datasets(self):
@@ -413,6 +536,14 @@ class TrainerIntegrationTest(unittest.TestCase):
             trainer.train()
             self.check_saved_checkpoints(tmpdir, 5, int(self.n_epochs * 64 / self.batch_size), False)
 
+    def test_gradient_accumulation(self):
+        # Training with half the batch size but accumulation steps as 2 should give the same results.
+        trainer = get_regression_trainer(
+            gradient_accumulation_steps=2, per_device_train_batch_size=4, learning_rate=0.1
+        )
+        trainer.train()
+        self.check_trained_model(trainer.model)
+
     def test_can_resume_training(self):
         if torch.cuda.device_count() > 2:
             # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
@@ -436,7 +567,21 @@ class TrainerIntegrationTest(unittest.TestCase):
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
-            self.assertEqual(state, state1)
+            self.check_trainer_state_are_the_same(state, state1)
+
+            # Now check with a later checkpoint that it also works when we span over one epoch
+            checkpoint = os.path.join(tmpdir, "checkpoint-15")
+
+            # Reinitialize trainer and load model
+            model = RegressionPreTrainedModel.from_pretrained(checkpoint)
+            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+
+            trainer.train(model_path=checkpoint)
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            state1 = dataclasses.asdict(trainer.state)
+            self.assertEqual(a, a1)
+            self.assertEqual(b, b1)
+            self.check_trainer_state_are_the_same(state, state1)
 
         # With a regular model that is not a PreTrainedModel
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -460,7 +605,55 @@ class TrainerIntegrationTest(unittest.TestCase):
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
-            self.assertEqual(state, state1)
+            self.check_trainer_state_are_the_same(state, state1)
+
+            # Now check with a later checkpoint that it also works when we span over one epoch
+            checkpoint = os.path.join(tmpdir, "checkpoint-15")
+
+            # Reinitialize trainer and load model
+            model = RegressionModel()
+            state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME))
+            model.load_state_dict(state_dict)
+            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+
+            trainer.train(model_path=checkpoint)
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            state1 = dataclasses.asdict(trainer.state)
+            self.assertEqual(a, a1)
+            self.assertEqual(b, b1)
+            self.check_trainer_state_are_the_same(state, state1)
+
+    def test_resume_training_with_gradient_accumulation(self):
+        if torch.cuda.device_count() > 2:
+            # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
+            # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
+            # won't be the same since the training dataloader is shuffled).
+            return
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                train_len=128,
+                gradient_accumulation_steps=2,
+                per_device_train_batch_size=4,
+                save_steps=5,
+                learning_rate=0.1,
+            )
+            trainer.train()
+            (a, b) = trainer.model.a.item(), trainer.model.b.item()
+            state = dataclasses.asdict(trainer.state)
+
+            checkpoint = os.path.join(tmpdir, "checkpoint-5")
+
+            # Reinitialize trainer and load model
+            model = RegressionPreTrainedModel.from_pretrained(checkpoint)
+            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+
+            trainer.train(model_path=checkpoint)
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            state1 = dataclasses.asdict(trainer.state)
+            self.assertEqual(a, a1)
+            self.assertEqual(b, b1)
+            self.check_trainer_state_are_the_same(state, state1)
 
     def test_load_best_model_at_end(self):
         total = int(self.n_epochs * 64 / self.batch_size)
@@ -617,6 +810,41 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer = get_regression_trainer(train_len=64, per_device_train_batch_size=16, gradient_accumulation_steps=5)
         train_output = trainer.train()
         self.assertEqual(train_output.global_step, int(self.n_epochs))
+
+    def test_early_stopping_callback(self):
+        # early stopping stops training before num_training_epochs
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                num_train_epochs=20,
+                gradient_accumulation_steps=1,
+                per_device_train_batch_size=16,
+                load_best_model_at_end=True,
+                evaluation_strategy=EvaluationStrategy.EPOCH,
+                compute_metrics=AlmostAccuracy(),
+                metric_for_best_model="accuracy",
+            )
+            trainer.add_callback(EarlyStoppingCallback(1, 0.0001))
+            train_output = trainer.train()
+            self.assertLess(train_output.global_step, 20 * 64 / 16)
+
+        # Invalid inputs to trainer with early stopping callback result in assertion error
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                num_train_epochs=20,
+                gradient_accumulation_steps=1,
+                per_device_train_batch_size=16,
+                evaluation_strategy=EvaluationStrategy.EPOCH,
+                compute_metrics=AlmostAccuracy(),
+                metric_for_best_model="accuracy",
+            )
+            trainer.add_callback(EarlyStoppingCallback(1))
+            self.assertEqual(trainer.state.global_step, 0)
+            try:
+                trainer.train()
+            except AssertionError:
+                self.assertEqual(trainer.state.global_step, 0)
 
     def test_flos_extraction(self):
         trainer = get_regression_trainer(learning_rate=0.1)
