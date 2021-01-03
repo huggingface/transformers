@@ -23,10 +23,10 @@ test.source
 test.target
 ```
 
-A sample finetuning command (run ` ./examples/rag/finetune_rag.py --help` to list all available options):
+A sample finetuning command (run ` ./examples/research_projects/rag/finetune_rag.py --help` to list all available options):
 
 ```bash
-python examples/rag/finetune_rag.py \
+python examples/research_projects/rag/finetune_rag.py \
     --data_dir $DATA_DIR \
     --output_dir $OUTPUT_DIR \
     --model_name_or_path $MODEL_NAME_OR_PATH \
@@ -42,7 +42,7 @@ The `base` models initialize the question encoder with [`facebook/dpr-question_e
 
 If you would like to initialize finetuning with a base model using different question encoder and generator architectures, you can build it with a consolidation script, e.g.:
 ```
-python examples/rag/consolidate_rag_checkpoint.py \
+python examples/research_projects/rag/consolidate_rag_checkpoint.py \
     --model_type rag_sequence \
     --generator_name_or_path facebook/bart-large-cnn \
     --question_encoder_name_or_path facebook/dpr-question_encoder-single-nq-base \
@@ -71,7 +71,7 @@ Also make sure to start the Ray cluster before running fine-tuning.
 # Start a single-node Ray cluster.
 ray start --head
 
-python examples/rag/finetune_rag.py \
+python examples/research_projects/rag/finetune_rag.py \
     --data_dir $DATA_DIR \
     --output_dir $OUTPUT_DIR \
     --model_name_or_path $MODEL_NAME_OR_PATH \
@@ -113,14 +113,14 @@ We demonstrate how to evaluate retrieval against DPR evaluation data. You can do
 2. Parse the unziped file using the `parse_dpr_relevance_data.py`
     ```bash
     mkdir output # or wherever you want to save this
-    python examples/rag/parse_dpr_relevance_data.py \
+    python examples/research_projects/rag/parse_dpr_relevance_data.py \
         --src_path biencoder-nq-dev.json \
         --evaluation_set output/biencoder-nq-dev.questions \
         --gold_data_path output/biencoder-nq-dev.pages
     ```
 3. Run evaluation:
     ```bash    
-    python examples/rag/eval_rag.py \
+    python examples/research_projects/rag/eval_rag.py \
         --model_name_or_path facebook/rag-sequence-nq \
         --model_type rag_sequence \
         --evaluation_set output/biencoder-nq-dev.questions \
@@ -131,7 +131,7 @@ We demonstrate how to evaluate retrieval against DPR evaluation data. You can do
     ```
    ```bash
    # EXPLANATION
-    python examples/rag/eval_rag.py \
+    python examples/research_projects/rag/eval_rag.py \
         --model_name_or_path facebook/rag-sequence-nq \ # model name or path of the model we're evaluating
         --model_type rag_sequence \ # RAG model type (rag_token or rag_sequence)
         --evaluation_set output/biencoder-nq-dev.questions \ # an input dataset for evaluation
@@ -159,7 +159,7 @@ Add `--recalculate` parameter to force the script to perform inference from scra
 
 An example e2e evaluation run could look as follows:
 ```bash
-python examples/rag/eval_rag.py \
+python examples/research_projects/rag/eval_rag.py \
     --model_name_or_path facebook/rag-sequence-nq \
     --model_type rag_sequence \
     --evaluation_set path/to/test.source \
@@ -179,14 +179,14 @@ With `use_custom_knowledge_dataset.py` you can build your own knowledge source, 
 
 For instance, if documents are serialized as tab-separated csv files with the columns "title" and "text", one can use `use_own_knowledge_dataset.py` as follows:
 ```bash
-python examples/rag/use_own_knowledge_dataset.py \
+python examples/research_projects/rag/use_own_knowledge_dataset.py \
     --csv_path path/to/my_csv \
     --output_dir path/to/my_knowledge_dataset \
 ```
 
 The created outputs in `path/to/my_knowledge_dataset` can then be used to finetune RAG as follows:
 ```bash
-python examples/rag/finetune_rag.py \
+python examples/research_projects/rag/finetune_rag.py \
     --data_dir $DATA_DIR \
     --output_dir $OUTPUT_DIR \
     --model_name_or_path $MODEL_NAME_OR_PATH \
