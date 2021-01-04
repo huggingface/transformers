@@ -488,7 +488,6 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
         else:
             # Notations from the paper, appending A.2.1, final formula (https://arxiv.org/abs/2006.03236)
             # Grab the proper positional encoding, shape max_rel_len x d_model
-            # shift = 2 if shape_list(q_head)[1] != context_len else 1
             if shape_list(q_head)[1] != context_len:
                 shift = 2
                 r = position_embeds[self.block_index][1]
