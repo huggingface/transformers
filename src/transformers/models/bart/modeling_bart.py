@@ -109,16 +109,6 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
-def BartLayerNorm(normalized_shape: torch.Size, eps: float = 1e-5, elementwise_affine: bool = True):
-    try:
-        from apex.normalization import FusedLayerNorm
-
-        return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
-    except ImportError:
-        pass
-    return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
-
-
 class BartLearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size. Padding ids are ignored by either offsetting
