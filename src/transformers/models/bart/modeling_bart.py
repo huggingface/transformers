@@ -22,7 +22,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, LayerNorm
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -329,13 +329,13 @@ class BartEncoderLayer(nn.Module):
             dropout=config.attention_dropout,
         )
         self.normalize_before = config.normalize_before
-        self.self_attn_layer_norm = BartLayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
         self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = BartLayerNorm(self.embed_dim)
+        self.final_layer_norm = LayerNorm(self.embed_dim)
 
     def forward(
         self,
@@ -397,17 +397,17 @@ class BartDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
         self.normalize_before = config.normalize_before
 
-        self.self_attn_layer_norm = BartLayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.encoder_attn = BartAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
         )
-        self.encoder_attn_layer_norm = BartLayerNorm(self.embed_dim)
+        self.encoder_attn_layer_norm = LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = BartLayerNorm(self.embed_dim)
+        self.final_layer_norm = LayerNorm(self.embed_dim)
 
     def forward(
         self,
@@ -709,9 +709,9 @@ class BartEncoder(BartPretrainedModel):
                 config.extra_pos_embeddings,
             )
         self.layers = nn.ModuleList([BartEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.layernorm_embedding = BartLayerNorm(embed_dim) if config.normalize_embedding else nn.Identity()
+        self.layernorm_embedding = LayerNorm(embed_dim) if config.normalize_embedding else nn.Identity()
         # mbart has one extra layer_norm
-        self.layer_norm = BartLayerNorm(config.d_model) if config.add_final_layer_norm else None
+        self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else None
 
         self.init_weights()
 
@@ -866,8 +866,8 @@ class BartDecoder(BartPretrainedModel):
                 config.extra_pos_embeddings,
             )
         self.layers = nn.ModuleList([BartDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.layernorm_embedding = BartLayerNorm(config.d_model) if config.normalize_embedding else nn.Identity()
-        self.layer_norm = BartLayerNorm(config.d_model) if config.add_final_layer_norm else None
+        self.layernorm_embedding = LayerNorm(config.d_model) if config.normalize_embedding else nn.Identity()
+        self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else None
 
         self.init_weights()
 
