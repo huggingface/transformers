@@ -513,16 +513,20 @@ PEGASUS_START_DOCSTRING = r"""
 PEGASUS_GENERATION_EXAMPLE = r"""
     Summarization example::
 
-        >>> from transformers import PegasusTokenizer, PegasusForConditionalGeneration, PegasusConfig
+        >>> from transformers import PegasusTokenizer, PegasusForConditionalGeneration
 
-        >>> model = PegasusForConditionalGeneration.from_pretrained('google/pegasus-large')
-        >>> tokenizer = PegasusTokenizer.from_pretrained('google/pegasus-large')
+        >>> model = PegasusForConditionalGeneration.from_pretrained('google/pegasus-xsum')
+        >>> tokenizer = PegasusTokenizer.from_pretrained('google/pegasus-xsum')
 
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
+        >>> ARTICLE_TO_SUMMARIZE = (
+        ... "PG&E stated it scheduled the blackouts in response to forecasts for high winds "
+        ... "amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were "
+        ... "scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."
+        ... )
         >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
 
         >>> # Generate Summary
-        >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
+        >>> summary_ids = model.generate(inputs['input_ids'])
         >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
 """
 
@@ -1004,12 +1008,7 @@ class PegasusModel(PegasusPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(PEGASUS_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/pegasus-large",
-        output_type=Seq2SeqModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -1025,6 +1024,23 @@ class PegasusModel(PegasusPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        Returns:
+
+        Example::
+
+            >>> from transformers import PegasusTokenizer, PegasusModel
+
+            >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-large")
+            >>> model = PegasusModel.from_pretrained("google/pegasus-large")
+
+            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
+            >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+
+            >>> last_hidden_states = outputs.last_hidden_state
+        """
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1152,21 +1168,6 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel):
 
         Returns:
 
-        Conditional generation example::
-
-            >>> from transformers import PegasusTokenizer, PegasusForConditionalGeneration
-            >>> tokenizer = PegasusTokenizer.from_pretrained('google/pegasus-large')
-            >>> TXT = "My friends are <mask> but they eat too many carbs."
-
-            >>> model = PegasusForConditionalGeneration.from_pretrained('google/pegasus-large')
-            >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
-            >>> logits = model(input_ids).logits
-
-            >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-            >>> probs = logits[0, masked_index].softmax(dim=0)
-            >>> values, predictions = probs.topk(5)
-
-            >>> tokenizer.decode(predictions).split()
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
