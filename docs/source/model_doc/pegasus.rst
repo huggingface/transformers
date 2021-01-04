@@ -66,7 +66,6 @@ Implementation Notes
 - Some key configuration differences:
 
     - static, sinusoidal position embeddings
-    - no :obj:`layernorm_embedding` (:obj:`PegasusConfig.normalize_embedding=False`)
     - the model starts generating with pad_token_id (which has 0 token_embedding) as the prefix.
     - more beams are used (:obj:`num_beams=8`)
 - All pretrained pegasus checkpoints are the same besides three attributes: :obj:`tokenizer.model_max_length` (maximum
@@ -123,24 +122,28 @@ PegasusModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.PegasusModel
+    :members: forward
 
 
 PegasusForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.PegasusForConditionalGeneration
+    :members: forward
 
 
 PegasusForQuestionAnswering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.PegasusForQuestionAnswering
+    :members: forward
 
 
 PegasusForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.PegasusForSequenceClassification
+    :members: forward
 
 
 TFPegasusForConditionalGeneration
