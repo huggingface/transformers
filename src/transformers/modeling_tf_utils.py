@@ -1332,7 +1332,6 @@ class WordEmbeddings(tf.keras.layers.Layer):
             name="weight",
             shape=[self.vocab_size, self.hidden_size],
             initializer=get_initializer(initializer_range=self.initializer_range),
-            dtype=tf.float32,
         )
 
         super().build(input_shape=input_shape)
@@ -1370,7 +1369,6 @@ class TokenTypeEmbeddings(tf.keras.layers.Layer):
             name="embeddings",
             shape=[self.type_vocab_size, self.hidden_size],
             initializer=get_initializer(initializer_range=self.initializer_range),
-            dtype=tf.float32,
         )
 
         super().build(input_shape=input_shape)

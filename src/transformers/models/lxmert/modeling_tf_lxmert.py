@@ -30,7 +30,16 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, input_processing, keras_serializable, shape_list
+from ...modeling_tf_utils import (
+    TFPreTrainedModel,
+    get_initializer,
+    input_processing,
+    keras_serializable,
+    shape_list,
+    WordEmbeddings,
+    TokenTypeEmbeddings,
+    PositionEmbeddings
+)
 from ...utils import logging
 from .configuration_lxmert import LxmertConfig
 
@@ -182,107 +191,38 @@ class TFLxmertEmbeddings(tf.keras.layers.Layer):
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
-        self.vocab_size = config.vocab_size
-        self.hidden_size = config.hidden_size
-        self.initializer_range = config.initializer_range
 
-        self.position_embeddings = tf.keras.layers.Embedding(
-            config.max_position_embeddings,
-            config.hidden_size,
-            embeddings_initializer=get_initializer(self.initializer_range),
-            name="position_embeddings",
-        )
-        self.token_type_embeddings = tf.keras.layers.Embedding(
-            config.type_vocab_size,
-            config.hidden_size,
-            embeddings_initializer=get_initializer(self.initializer_range),
-            name="token_type_embeddings",
-        )
-
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
+        self.word_embeddings = WordEmbeddings(vocab_size=config.vocab_size, hidden_size=config.hidden_size, initializer_range=config.initializer_range, name="word_embeddings")
+        self.position_embeddings = PositionEmbeddings(max_position_embeddings=config.max_position_embeddings, hidden_size=config.hidden_size, initializer_range=config.initializer_range, name="position_embeddings")
+        self.token_type_embeddings = TokenTypeEmbeddings(type_vocab_size=config.type_vocab_size, hidden_size=config.hidden_size, initializer_range=config.initializer_range, name="token_type_embeddings")
+        self.embeddings = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def build(self, input_shape):
-        """Build shared word embedding layer """
-        with tf.name_scope("word_embeddings"):
-            # Create and initialize weights. The random normal initializer was chosen
-            # arbitrarily, and works well.
-            self.word_embeddings = self.add_weight(
-                "weight",
-                shape=[self.vocab_size, self.hidden_size],
-                initializer=get_initializer(self.initializer_range),
-            )
-        super().build(input_shape)
-
-    def call(self, inputs, mode="embedding", training=False):
+    def call(self, input_ids=None, token_type_ids=None, inputs_embeds=None, training=False):
         """
-        Get token embeddings of inputs.
-
-        Args:
-            inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
-            mode: string, a valid value is one of "embedding" and "linear".
+        Applies embedding based on inputs tensor.
 
         Returns:
-            outputs: If mode == "embedding", output embedding tensor, float32 with shape [batch_size, length,
-            embedding_size]; if mode == "linear", output linear tensor, float32 with shape [batch_size, length,
-            vocab_size].
-
-        Raises:
-            ValueError: if mode is not valid.
-
-        Shared weights logic adapted from
-        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
+            final_embeddings (:obj:`tf.Tensor`):
+                output embedding tensor.
         """
-        if mode == "embedding":
-            return self._embedding(inputs, training=training)
-        elif mode == "linear":
-            return self._linear(inputs)
-        else:
-            raise ValueError("mode {} is not valid.".format(mode))
-
-    def _embedding(self, inputs, training=False):
-        """Applies embedding based on inputs tensor."""
-        input_ids, token_type_ids, inputs_embeds = inputs
+        assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
-            input_shape = shape_list(input_ids)
-        else:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            inputs_embeds = self.word_embeddings(input_ids=input_ids)
 
-        seq_length = input_shape[1]
-        position_ids = tf.range(seq_length, dtype=tf.int32)[tf.newaxis, :]
         if token_type_ids is None:
-            token_type_ids = tf.fill(input_shape, 0)
+            input_shape = shape_list(tensor=inputs_embeds)[:-1]
+            token_type_ids = tf.fill(dims=input_shape, value=0)
 
-        if inputs_embeds is None:
-            inputs_embeds = tf.gather(self.word_embeddings, input_ids)
-        position_embeddings = self.position_embeddings(position_ids)
-        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+        position_embeds = self.position_embeddings(position_ids=inputs_embeds)
+        token_type_embeds = self.token_type_embeddings(token_type_ids=token_type_ids)
+        final_embeddings = self.embeddings(inputs=[inputs_embeds, position_embeds, token_type_embeds])
+        final_embeddings = self.LayerNorm(inputs=final_embeddings)
+        final_embeddings = self.dropout(inputs=final_embeddings, training=training)
 
-        embeddings = inputs_embeds + position_embeddings + token_type_embeddings
-        embeddings = self.LayerNorm(embeddings)
-        embeddings = self.dropout(embeddings, training=training)
-        return embeddings
-
-    def _linear(self, inputs):
-        """
-        Computes logits by running inputs through a linear layer.
-
-        Args:
-            inputs: A float32 tensor with shape [batch_size, length, hidden_size]
-
-        Returns:
-            float32 tensor with shape [batch_size, length, vocab_size].
-        """
-        batch_size = shape_list(inputs)[0]
-        length = shape_list(inputs)[1]
-
-        x = tf.reshape(inputs, [-1, self.hidden_size])
-        logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
-
-        return tf.reshape(logits, [batch_size, length, self.vocab_size])
+        return final_embeddings
 
 
 class TFLxmertAttention(tf.keras.layers.Layer):
@@ -703,7 +643,7 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
         self.config = config
 
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
@@ -787,7 +727,7 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
 
         # Positional Word Embeddings
         embedding_output = self.embeddings(
-            [inputs["input_ids"], inputs["token_type_ids"], inputs["inputs_embeds"]], training=inputs["training"]
+            inputs["input_ids"], inputs["token_type_ids"], inputs["inputs_embeds"], training=inputs["training"]
         )
 
         # Run Lxmert encoder
@@ -1066,31 +1006,37 @@ class TFLxmertPooler(tf.keras.layers.Layer):
         return pooled_output
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert->Lxmert
 class TFLxmertPredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.dense = tf.keras.layers.Dense(
-            config.hidden_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="dense",
+            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
+
         if isinstance(config.hidden_act, str):
             self.transform_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.transform_act_fn = config.hidden_act
+
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
 
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.transform_act_fn(hidden_states)
         hidden_states = self.LayerNorm(hidden_states)
+
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert->Lxmert
 class TFLxmertLMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
+
         self.vocab_size = config.vocab_size
+        self.hidden_size = config.hidden_size
         self.transform = TFLxmertPredictionHeadTransform(config, name="transform")
 
         # The output weights are the same as the input embeddings, but there is
@@ -1099,6 +1045,7 @@ class TFLxmertLMPredictionHead(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+
         super().build(input_shape)
 
     def get_output_embeddings(self):
@@ -1116,12 +1063,17 @@ class TFLxmertLMPredictionHead(tf.keras.layers.Layer):
         self.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states):
-        hidden_states = self.transform(hidden_states)
-        hidden_states = self.input_embeddings(hidden_states, mode="linear")
-        hidden_states = hidden_states + self.bias
+        hidden_states = self.transform(hidden_states=hidden_states)
+        seq_length = shape_list(tensor=hidden_states)[1]
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
+        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.word_embeddings, transpose_b=True)
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
+        hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
+
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertMLMHead with Bert->Lxmert
 class TFLxmertMLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
@@ -1229,7 +1181,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
         self.lxmert = TFLxmertMainLayer(config, name="lxmert")
 
         # Pre-training heads
-        self.cls = TFLxmertPreTrainingHeads(config, self.lxmert.embeddings, name="cls")
+        self.cls = TFLxmertPreTrainingHeads(config, self.lxmert.embeddings.word_embeddings, name="cls")
         if self.task_obj_predict:
             self.obj_predict_head = TFLxmertVisualObjHead(config, name="obj_predict_head")
         if self.task_qa:

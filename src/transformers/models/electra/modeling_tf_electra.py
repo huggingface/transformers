@@ -436,16 +436,8 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
         return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
-<<<<<<< HEAD
         self.embeddings.word_embeddings = value
         self.embeddings.vocab_size = shape_list(value)[0]
-=======
-        self.embeddings.word_embeddings.word_embeddings = value
-        self.embeddings.word_embeddings.vocab_size = value.shape[0]
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
->>>>>>> fb170a58a... Add Albert + Electra + Funnel
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -844,7 +836,6 @@ class TFElectraMaskedLMHead(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
-<<<<<<< HEAD
     def get_output_embeddings(self):
         return self.input_embeddings
 
@@ -862,14 +853,6 @@ class TFElectraMaskedLMHead(tf.keras.layers.Layer):
     def call(self, hidden_states, training=False):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
         hidden_states = hidden_states + self.bias
-=======
-    def call(self, hidden_states):
-        seq_length = shape_list(tensor=hidden_states)[1]
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.embedding_size])
-        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.word_embeddings, transpose_b=True)
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
-        hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
->>>>>>> fb170a58a... Add Albert + Electra + Funnel
 
         return hidden_states
 
@@ -898,14 +881,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
 
         self.generator_lm_head = TFElectraMaskedLMHead(config, self.electra.embeddings.word_embeddings, name="generator_lm_head")
 
-<<<<<<< HEAD
     def get_lm_head(self):
-=======
-    def get_output_embeddings(self):
-        return self.electra.embeddings.word_embeddings
-
-    def get_output_layer_with_bias(self):
->>>>>>> fb170a58a... Add Albert + Electra + Funnel
         return self.generator_lm_head
 
     def get_prefix_bias_name(self):
