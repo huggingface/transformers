@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright Iz Beltagy, Matthew E. Peters, Arman Cohan and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 Iz Beltagy, Matthew E. Peters, Arman Cohan and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "allenai/led-base-16384": 1024,
+    "allenai/led-base-16384": 16384,
 }
 
 

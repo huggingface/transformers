@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright Iz Beltagy, Matthew E. Peters, Arman Cohan and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 Iz Beltagy, Matthew E. Peters, Arman Cohan and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,8 +18,6 @@
 import copy
 import tempfile
 import unittest
-
-import timeout_decorator  # noqa
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
@@ -493,11 +491,6 @@ class LEDModelIntegrationTests(unittest.TestCase):
             padding="max_length",
             return_tensors="pt",
         )
-
-        with torch.no_grad():
-            hf.model.encoder(
-                input_ids=dct["input_ids"].to(torch_device), attention_mask=dct["attention_mask"].to(torch_device)
-            )
 
         hypotheses_batch = hf.generate(
             input_ids=dct["input_ids"].to(torch_device),

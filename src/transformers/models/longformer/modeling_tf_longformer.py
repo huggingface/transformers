@@ -1141,6 +1141,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         shift every row 1 step right, converting columns into diagonals.
 
         Example::
+
               chunked_hidden_states: [ 0.4983,  2.6918, -0.0071,  1.0492,
                                        -1.8348,  0.7672,  0.2986,  0.0285,
                                        -0.7584,  0.4206, -0.0405,  0.1599,

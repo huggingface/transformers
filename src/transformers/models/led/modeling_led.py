@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright Iz Beltagy, Matthew E. Peters, Arman Cohan and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 Iz Beltagy, Matthew E. Peters, Arman Cohan and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -66,7 +66,7 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
     shifted_input_ids[:, 0] = decoder_start_token_id
 
-    assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+    assert pad_token_id is not None, "config.pad_token_id has to be defined."
     # replace possible -100 values in labels by `pad_token_id`
     shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
@@ -104,17 +104,6 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     expanded_attention_mask = expanded_attention_mask * inverted_mask
 
     return expanded_attention_mask
-
-
-def LEDLayerNorm(normalized_shape: torch.Size, eps: float = 1e-5, elementwise_affine: bool = True):
-    if torch.cuda.is_available():
-        try:
-            from apex.normalization import FusedLayerNorm
-
-            return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
-        except ImportError:
-            pass
-    return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
 
 
 class LEDLearnedPositionalEmbedding(nn.Embedding):
@@ -180,10 +169,10 @@ class LEDEncoderSelfAttention(nn.Module):
         output_attentions=False,
     ):
         """
-        LEDEncoderSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`. Padding to
-        `attention_window` happens in LEDEncoderModel.forward to avoid redoing the padding on each layer.
+        :class:`LEDEncoderSelfAttention` expects `len(hidden_states)` to be multiple of `attention_window`. Padding to
+        `attention_window` happens in :meth:`LEDEncoderModel.forward` to avoid redoing the padding on each layer.
 
-        The `attention_mask` is changed in `BertModel.forward` from 0, 1, 2 to -ve: no attention
+        The `attention_mask` is changed in :meth:`BertModel.forward` from 0, 1, 2 to -ve: no attention
 
               0: local attention
             +ve: global attention
@@ -342,6 +331,7 @@ class LEDEncoderSelfAttention(nn.Module):
         shift every row 1 step right, converting columns into diagonals.
 
         Example::
+
               chunked_hidden_states: [ 0.4983,  2.6918, -0.0071,  1.0492,
                                        -1.8348,  0.7672,  0.2986,  0.0285,
                                        -0.7584,  0.4206, -0.0405,  0.1599,
@@ -359,13 +349,13 @@ class LEDEncoderSelfAttention(nn.Module):
         )  # total_num_heads x num_chunks x window_overlap x (hidden_dim+window_overlap+1). Padding value is not important because it'll be overwritten
         chunked_hidden_states = chunked_hidden_states.view(
             total_num_heads, num_chunks, -1
-        )  # total_num_heads x num_chunks x window_overlapL+window_overlapwindow_overlap+window_overlap
+        )  # total_num_heads x num_chunks x window_overlap*window_overlap+window_overlap
         chunked_hidden_states = chunked_hidden_states[
             :, :, :-window_overlap
-        ]  # total_num_heads x num_chunks x window_overlapL+window_overlapwindow_overlap
+        ]  # total_num_heads x num_chunks x window_overlap*window_overlap
         chunked_hidden_states = chunked_hidden_states.view(
             total_num_heads, num_chunks, window_overlap, window_overlap + hidden_dim
-        )  # total_num_heads x num_chunks, window_overlap x hidden_dim+window_overlap
+        )
         chunked_hidden_states = chunked_hidden_states[:, :, :, :-1]
         return chunked_hidden_states
 
@@ -856,13 +846,13 @@ class LEDEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = LEDEncoderAttention(config, layer_id)
-        self.self_attn_layer_norm = LEDLayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
         self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = LEDLayerNorm(self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
     def forward(
         self,
@@ -922,17 +912,17 @@ class LEDDecoderLayer(nn.Module):
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = LEDLayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.encoder_attn = LEDDecoderAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
         )
-        self.encoder_attn_layer_norm = LEDLayerNorm(self.embed_dim)
+        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = LEDLayerNorm(self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
     def forward(
         self,
@@ -1040,7 +1030,7 @@ class LEDClassificationHead(nn.Module):
 
 class LEDPreTrainedModel(PreTrainedModel):
     config_class = LEDConfig
-    base_model_prefix = "model"
+    base_model_prefix = "led"
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1529,7 +1519,7 @@ class LEDEncoder(LEDPreTrainedModel):
             self.padding_idx,
         )
         self.layers = nn.ModuleList([LEDEncoderLayer(config, i) for i in range(config.encoder_layers)])
-        self.layernorm_embedding = LEDLayerNorm(embed_dim)
+        self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
         self.init_weights()
 
@@ -1781,7 +1771,7 @@ class LEDDecoder(LEDPreTrainedModel):
             self.padding_idx,
         )
         self.layers = nn.ModuleList([LEDDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.layernorm_embedding = LEDLayerNorm(config.d_model)
+        self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         self.init_weights()
 
@@ -1928,7 +1918,7 @@ class LEDDecoder(LEDPreTrainedModel):
             if getattr(self.config, "gradient_checkpointing", False):
                 if use_cache:
                     raise ValueError(
-                        "When using `gradient_checkpointing, make sure that `use_cache=False` and `config.use_cache=False`."
+                        "When using `gradient_checkpointing`, make sure that `use_cache=False` and `config.use_cache=False`."
                     )
 
                 def create_custom_forward(module):
@@ -2099,7 +2089,7 @@ class LEDModel(LEDPreTrainedModel):
     "The LED Model with a language modeling head. Can be used for summarization.", LED_START_DOCSTRING
 )
 class LEDForConditionalGeneration(LEDPreTrainedModel):
-    base_model_prefix = "model"
+    base_model_prefix = "led"
     _keys_to_ignore_on_load_missing = [
         r"final_logits_bias",
         r"encoder\.version",
@@ -2109,17 +2099,17 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
 
     def __init__(self, config: LEDConfig):
         super().__init__(config)
-        self.model = LEDModel(config)
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
-        self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
+        self.led = LEDModel(config)
+        self.register_buffer("final_logits_bias", torch.zeros((1, self.led.shared.num_embeddings)))
+        self.lm_head = nn.Linear(config.d_model, self.led.shared.num_embeddings, bias=False)
 
         self.init_weights()
 
     def get_encoder(self):
-        return self.model.get_encoder()
+        return self.led.get_encoder()
 
     def get_decoder(self):
-        return self.model.get_decoder()
+        return self.led.get_decoder()
 
     def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
         new_embeddings = super().resize_token_embeddings(new_num_tokens)
@@ -2193,7 +2183,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
 
-        outputs = self.model(
+        outputs = self.led(
             input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
@@ -2269,15 +2259,15 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
 class LEDForSequenceClassification(LEDPreTrainedModel):
     def __init__(self, config: LEDConfig, **kwargs):
         super().__init__(config, **kwargs)
-        self.model = LEDModel(config)
+        self.led = LEDModel(config)
         self.classification_head = LEDClassificationHead(
             config.d_model,
             config.d_model,
             config.num_labels,
             config.classifier_dropout,
         )
-        self.model._init_weights(self.classification_head.dense)
-        self.model._init_weights(self.classification_head.out_proj)
+        self.led._init_weights(self.classification_head.dense)
+        self.led._init_weights(self.classification_head.out_proj)
 
     @add_start_docstrings_to_model_forward(LED_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -2316,7 +2306,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
                 f"Passing input embeddings is currently not supported for {self.__class__.__name__}"
             )
 
-        outputs = self.model(
+        outputs = self.led(
             input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
@@ -2378,10 +2368,10 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
         config.num_labels = 2
         self.num_labels = config.num_labels
 
-        self.model = LEDModel(config)
+        self.led = LEDModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-        self.model._init_weights(self.qa_outputs)
+        self.led._init_weights(self.qa_outputs)
 
     @add_start_docstrings_to_model_forward(LED_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -2421,7 +2411,7 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
         if start_positions is not None and end_positions is not None:
             use_cache = False
 
-        outputs = self.model(
+        outputs = self.led(
             input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,

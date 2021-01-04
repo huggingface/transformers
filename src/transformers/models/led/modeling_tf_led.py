@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright Iz Beltagy, Matthew E. Peters, Arman Cohan and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 Iz Beltagy, Matthew E. Peters, Arman Cohan and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -563,6 +563,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         shift every row 1 step right, converting columns into diagonals.
 
         Example::
+
               chunked_hidden_states: [ 0.4983,  2.6918, -0.0071,  1.0492,
                                        -1.8348,  0.7672,  0.2986,  0.0285,
                                        -0.7584,  0.4206, -0.0405,  0.1599,
@@ -1165,7 +1166,7 @@ class TFLEDDecoderLayer(tf.keras.layers.Layer):
 
 class TFLEDPreTrainedModel(TFPreTrainedModel):
     config_class = LEDConfig
-    base_model_prefix = "model"
+    base_model_prefix = "led"
 
     @property
     def dummy_inputs(self):
@@ -1903,13 +1904,13 @@ class TFLEDDecoder(tf.keras.layers.Layer):
 )
 @keras_serializable
 class TFLEDModel(TFLEDPreTrainedModel):
-    base_model_prefix = "model"
+    base_model_prefix = "led"
 
     def __init__(self, config: LEDConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, config.pad_token_id, name="model.shared")
+        self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, config.pad_token_id, name="led.shared")
 
-        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
+        with tf.compat.v1.variable_scope("led.shared") as shared_abs_scope_name:
             pass
 
         # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
@@ -2043,13 +2044,13 @@ class TFLEDModel(TFLEDPreTrainedModel):
 )
 class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [
-        r"model.encoder.embed_tokens.weight",
-        r"model.decoder.embed_tokens.weight",
+        r"led.encoder.embed_tokens.weight",
+        r"led.decoder.embed_tokens.weight",
     ]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.model = TFLEDModel(config, name="model")
+        self.led = TFLEDModel(config, name="led")
         self.use_cache = config.use_cache
         # final_bias_logits is registered as a buffer in pytorch, so not trainable for the the sake of consistency.
         self.final_logits_bias = self.add_weight(
@@ -2057,7 +2058,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         )
 
     def get_decoder(self):
-        return self.model.decoder
+        return self.led.decoder
 
     def resize_token_embeddings(self, new_num_tokens):
         super().resize_token_embeddings(new_num_tokens=new_num_tokens)
@@ -2141,7 +2142,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
                     inputs["labels"], self.config.pad_token_id, self.config.decoder_start_token_id
                 )
 
-        outputs = self.model(
+        outputs = self.led(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             decoder_input_ids=inputs["decoder_input_ids"],
@@ -2157,7 +2158,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-        lm_logits = self.model.shared(outputs[0], mode="linear")
+        lm_logits = self.led.shared(outputs[0], mode="linear")
         lm_logits = lm_logits + self.final_logits_bias
         masked_lm_loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], lm_logits)
 
@@ -2228,10 +2229,10 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         return (past[0], reordered_past)
 
     def get_output_embeddings(self):
-        return self.model.shared
+        return self.led.shared
 
     def get_encoder(self):
-        return self.model.encoder
+        return self.led.encoder
 
     def compute_loss(self, labels, logits):
         """CrossEntropyLoss that ignores pad tokens"""

@@ -558,10 +558,10 @@ class LongformerSelfAttention(nn.Module):
         output_attentions=False,
     ):
         """
-        LongformerSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`. Padding to
-        `attention_window` happens in LongformerModel.forward to avoid redoing the padding on each layer.
+        :class:`LongformerSelfAttention` expects `len(hidden_states)` to be multiple of `attention_window`. Padding to
+        `attention_window` happens in :meth:`LongformerModel.forward` to avoid redoing the padding on each layer.
 
-        The `attention_mask` is changed in `BertModel.forward` from 0, 1, 2 to -ve: no attention
+        The `attention_mask` is changed in :meth:`BertModel.forward` from 0, 1, 2 to -ve: no attention
 
               0: local attention
             +ve: global attention
@@ -720,6 +720,7 @@ class LongformerSelfAttention(nn.Module):
         shift every row 1 step right, converting columns into diagonals.
 
         Example::
+
               chunked_hidden_states: [ 0.4983,  2.6918, -0.0071,  1.0492,
                                        -1.8348,  0.7672,  0.2986,  0.0285,
                                        -0.7584,  0.4206, -0.0405,  0.1599,
@@ -737,13 +738,13 @@ class LongformerSelfAttention(nn.Module):
         )  # total_num_heads x num_chunks x window_overlap x (hidden_dim+window_overlap+1). Padding value is not important because it'll be overwritten
         chunked_hidden_states = chunked_hidden_states.view(
             total_num_heads, num_chunks, -1
-        )  # total_num_heads x num_chunks x window_overlapL+window_overlapwindow_overlap+window_overlap
+        )  # total_num_heads x num_chunks x window_overlap*window_overlap+window_overlap
         chunked_hidden_states = chunked_hidden_states[
             :, :, :-window_overlap
-        ]  # total_num_heads x num_chunks x window_overlapL+window_overlapwindow_overlap
+        ]  # total_num_heads x num_chunks x window_overlap*window_overlap
         chunked_hidden_states = chunked_hidden_states.view(
             total_num_heads, num_chunks, window_overlap, window_overlap + hidden_dim
-        )  # total_num_heads x num_chunks, window_overlap x hidden_dim+window_overlap
+        )
         chunked_hidden_states = chunked_hidden_states[:, :, :, :-1]
         return chunked_hidden_states
 
