@@ -98,7 +98,7 @@ class BlenderbotSmallConfig(PretrainedConfig):
         >>> # Accessing the model configuration
         >>> configuration = model.config
     """
-    model_type = "blenderbot_small"
+    model_type = "blenderbot-small"
 
     def __init__(
         self,
