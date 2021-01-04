@@ -382,8 +382,6 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "BertJapaneseTokenizer",
     "CharacterTokenizer",
     "MecabTokenizer",
-    # Bertweet
-    "BertweetTokenizer",
     # Herbert
     "HerbertTokenizer",
     "HerbertTokenizerFast",
