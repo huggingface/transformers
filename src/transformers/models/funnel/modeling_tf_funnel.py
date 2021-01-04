@@ -87,7 +87,6 @@ class TFFunnelEmbeddings(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout)
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings.call
     def call(self, input_ids=None, position_ids=None, token_type_ids=None, inputs_embeds=None, training=False):
         """
         Applies embedding based on inputs tensor.

@@ -417,20 +417,20 @@ def _compute_global_attention_mask(input_ids_shape, sep_token_indices, before_se
     return attention_mask
 
 
-# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaLMHead
+# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaLMHead with Roberta->Longformer
 class TFLongformerLMHead(tf.keras.layers.Layer):
-    """Roberta Head for masked language modeling."""
+    """Longformer Head for masked language modeling."""
 
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
 
         self.vocab_size = config.vocab_size
+        self.hidden_size = config.hidden_size
         self.dense = tf.keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.act = get_tf_activation("gelu")
-        self.hidden_size = config.hidden_size
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
@@ -470,6 +470,7 @@ class TFLongformerLMHead(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaEmbeddings with Roberta->Longformer
 class TFLongformerEmbeddings(tf.keras.layers.Layer):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
@@ -521,10 +522,10 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
 
         Returns: tf.Tensor
         """
-        seq_length = shape_list(tensor=inputs_embeds)[1]
+        bsz, seq_length = shape_list(tensor=inputs_embeds)[:2]
         position_ids = tf.range(start=self.padding_idx + 1, limit=seq_length + self.padding_idx + 1)[tf.newaxis, :]
 
-        return position_ids
+        return tf.tile(input=position_ids, multiples=(bsz, 1))
 
     def call(self, input_ids=None, position_ids=None, token_type_ids=None, inputs_embeds=None, training=False):
         """

@@ -328,10 +328,10 @@ class TFElectraPooler(tf.keras.layers.Layer):
         return pooled_output
 
 
-# Copied from transformers.models.bert.modeling_tf_albert.TFAlbertEmbeddings with Albert->Electra
 class TFElectraEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
+    # Copied from transformers.models.albert.modeling_tf_albert.TFAlbertEmbeddings.__init__ with Albert->Electra
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -342,6 +342,7 @@ class TFElectraEmbeddings(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
+    # Copied from transformers.models.albert.modeling_tf_albert.TFAlbertEmbeddings.call with Albert->Electra
     def call(self, input_ids=None, position_ids=None, token_type_ids=None, inputs_embeds=None, training=False):
         """
         Applies embedding based on inputs tensor.

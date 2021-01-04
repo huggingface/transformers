@@ -756,31 +756,6 @@ class TFModelTesterMixin:
                 model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
             )
 
-    def _get_embeds(self, wte, input_ids):
-        # ^^ In our TF models, the input_embeddings can take slightly different forms,
-        # so we try a few of them.
-        # We used to fall back to just synthetically creating a dummy tensor of ones:
-        try:
-            x = wte(input_ids, mode="embedding")
-        except Exception:
-            try:
-                x = wte([input_ids], mode="embedding")
-            except Exception:
-                try:
-                    x = wte([input_ids, None, None, None], mode="embedding")
-                except Exception:
-                    if hasattr(self.model_tester, "embedding_size"):
-                        x = tf.ones(
-                            input_ids.shape + [self.model_tester.embedding_size],
-                            dtype=tf.dtypes.float32,
-                        )
-                    else:
-                        x = tf.ones(
-                            input_ids.shape + [self.model_tester.hidden_size],
-                            dtype=tf.dtypes.float32,
-                        )
-        return x
-
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -797,12 +772,11 @@ class TFModelTesterMixin:
                 del inputs["input_ids"]
                 inputs.pop("decoder_input_ids", None)
 
-            wte = model.get_input_embeddings()
             if not self.is_encoder_decoder:
-                inputs["inputs_embeds"] = self._get_embeds(wte, input_ids)
+                inputs["inputs_embeds"] = model.get_input_embeddings()(input_ids)
             else:
-                inputs["inputs_embeds"] = self._get_embeds(wte, encoder_input_ids)
-                inputs["decoder_inputs_embeds"] = self._get_embeds(wte, decoder_input_ids)
+                inputs["inputs_embeds"] = model.get_input_embeddings()(encoder_input_ids)
+                inputs["decoder_inputs_embeds"] = model.get_input_embeddings()(decoder_input_ids)
 
             model(inputs)
 
