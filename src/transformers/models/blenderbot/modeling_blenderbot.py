@@ -54,6 +54,7 @@ BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
     Shift input ids one token to the right.
@@ -69,6 +70,7 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
     return shifted_input_ids
 
 
+# Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
     """
     Make causal mask used for bi-directional self-attention.
@@ -84,6 +86,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
+# Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
@@ -98,14 +101,14 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
+# Copied from transformers.models.bart.modeling_bart.BartLayerNorm with Bart->Blenderbot
 def BlenderbotLayerNorm(normalized_shape: torch.Size, eps: float = 1e-5, elementwise_affine: bool = True):
-    if torch.cuda.is_available():
-        try:
-            from apex.normalization import FusedLayerNorm
+    try:
+        from apex.normalization import FusedLayerNorm
 
-            return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
-        except ImportError:
-            pass
+        return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
+    except ImportError:
+        pass
     return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
 
 
@@ -128,6 +131,7 @@ class BlenderbotLearnedPositionalEmbedding(nn.Embedding):
         return super().forward(positions)
 
 
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Blenderbot
 class BlenderbotAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -262,6 +266,7 @@ class BlenderbotAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
+# Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Blenderbot
 class BlenderbotEncoderLayer(nn.Module):
     def __init__(self, config: BlenderbotConfig):
         super().__init__()
@@ -316,6 +321,7 @@ class BlenderbotEncoderLayer(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->Blenderbot
 class BlenderbotDecoderLayer(nn.Module):
     def __init__(self, config: BlenderbotConfig):
         super().__init__()
@@ -445,6 +451,7 @@ class BlenderbotPreTrainedModel(PreTrainedModel):
         dummy_inputs = {
             "attention_mask": input_ids.ne(pad_token),
             "input_ids": input_ids,
+            "decoder_input_ids": input_ids,
         }
         return dummy_inputs
 
