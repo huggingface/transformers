@@ -316,7 +316,7 @@ TOLERANCE = 1e-4
 @require_tf
 class TFLEDModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head(self):
-        model = TFLEDForConditionalGeneration.from_pretrained("allenai/led-base-16384").model
+        model = TFLEDForConditionalGeneration.from_pretrained("allenai/led-base-16384").led
 
         # change to intended input here
         input_ids = _long_tensor([512 * [0, 31414, 232, 328, 740, 1140, 12695, 69]])
