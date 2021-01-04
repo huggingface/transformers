@@ -141,7 +141,7 @@ def is_run_on_sagemaker():
 
 
 # Should be moved to transformers/src/transformers/file_utils.py or transformers/src/transformers/hf_argparser.py
-def parse_sagemaker_args(argv):
+def parse_sagemaker_env_into_args(argv):
     ## add output_dir
     argv.extend(["--output_dir", os.environ["SM_OUTPUT_DATA_DIR"]])
     # if datafiles add them as args
@@ -173,7 +173,6 @@ def main():
     # ##### $custom ####
     if is_run_on_sagemaker():
         sys.argv = parse_sagemaker_args(sys.argv)
-        print(sys.argv)
     ####  $custom end ####
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
 
@@ -391,6 +390,8 @@ def main():
         train_result = trainer.train(
             model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
         )
+        metrics = train_result.metrics
+
         ##### $custom ####
         if is_run_on_sagemaker():
             trainer.save_model(os.environ["SM_MODEL_DIR"])  # Saves the tokenizer too for easy upload
@@ -402,7 +403,7 @@ def main():
         if trainer.is_world_process_zero():
             with open(output_train_file, "w") as writer:
                 logger.info("***** Train results *****")
-                for key, value in sorted(train_result._asdict().items()):
+                key, value in sorted(metrics.items()):
                     logger.info(f"  {key} = {value}")
                     writer.write(f"{key} = {value}\n")
 
