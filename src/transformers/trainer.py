@@ -278,8 +278,7 @@ class Trainer:
         self.tokenizer = tokenizer
 
         if args.deepspeed:
-            num_training_steps = self.get_num_training_steps()
-            model, optimizer, lr_scheduler = self._init_deepspeed(model, num_training_steps)
+            model, optimizer, lr_scheduler = self._init_deepspeed(model)
             self.optimizer = optimizer
             self.lr_scheduler = lr_scheduler
         else:
@@ -416,7 +415,7 @@ class Trainer:
                 "can't figure out the number of training steps, either set --max_steps or fix the dataloader so that it returns the length of the dataset"
             )
 
-    def _init_deepspeed(self, model, num_training_steps):
+    def _init_deepspeed(self, model):
         args = self.args
 
         # for clarity extract what args are being passed to deepspeed
@@ -476,35 +475,35 @@ class Trainer:
         # OneCycle     | na                   | na                                | 1CLR
         # WarmupLR     | constant_with_warmup | get_constant_schedule_with_warmup | w/ warmup_min_lr=0
         # WarmupDecayLR| linear               | get_linear_schedule_with_warmup   |
-        hf2ds_remap = {
-            SchedulerType.LINEAR: "WarmupDecayLR",
-            SchedulerType.CONSTANT_WITH_WARMUP: "WarmupLR",
-        }
-        scheduler_configs = {
-            "WarmupLR": {
-                "warmup_min_lr": 0,
-                "warmup_max_lr": args.learning_rate,
-                "warmup_num_steps": args.warmup_steps,
-            },
-            "WarmupDecayLR": {  #
-                "last_batch_iteration": -1,
-                "total_num_steps": num_training_steps,
-                "warmup_min_lr": 0,
-                "warmup_max_lr": args.learning_rate,
-                "warmup_num_steps": args.warmup_steps,
-            },
-        }
-        if args.lr_scheduler_type not in hf2ds_remap:
-            raise ValueError(f"{args.lr_scheduler_type} scheduler type is not supported by DeepSpeed")
-        scheduler = hf2ds_remap[args.lr_scheduler_type]
 
         # override only if the ds config doesn't already have this section
         if "scheduler" in config:
-            logger.info("Keeping the scheduler config from the config file intact")
+            logger.info(
+                "Keeping the scheduler config from the config file intact, ignoring any scheduler-specific cl args"
+            )
         else:
+            if args.lr_scheduler_type == SchedulerType.LINEAR:
+                scheduler = "WarmupDecayLR"
+                params = {
+                    "last_batch_iteration": -1,
+                    "total_num_steps": self.get_num_training_steps(),
+                    "warmup_min_lr": 0,
+                    "warmup_max_lr": args.learning_rate,
+                    "warmup_num_steps": args.warmup_steps,
+                }
+            elif args.lr_scheduler_type == SchedulerType.CONSTANT_WITH_WARMUP:
+                scheduler = "WarmupLR"
+                params = {
+                    "warmup_min_lr": 0,
+                    "warmup_max_lr": args.learning_rate,
+                    "warmup_num_steps": args.warmup_steps,
+                }
+            else:
+                raise ValueError(f"{args.lr_scheduler_type} scheduler type is not supported by DeepSpeed")
+
             config["scheduler"] = {
                 "type": scheduler,
-                "params": scheduler_configs[scheduler],
+                "params": params,
             }
 
         # init that takes some config via `args`, and the bulk of it via `config_params`
