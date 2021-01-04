@@ -109,13 +109,12 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
 # Copied from transformers.models.bart.modeling_bart.BartLayerNorm with Bart->MBart
 def MBartLayerNorm(normalized_shape: torch.Size, eps: float = 1e-5, elementwise_affine: bool = True):
-    if torch.cuda.is_available():
-        try:
-            from apex.normalization import FusedLayerNorm
+    try:
+        from apex.normalization import FusedLayerNorm
 
-            return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
-        except ImportError:
-            pass
+        return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
+    except ImportError:
+        pass
     return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
 
 
@@ -128,7 +127,7 @@ class MBartLearnedPositionalEmbedding(nn.Embedding):
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int):
         assert padding_idx is not None, "`padding_idx` should not be None, but of type int"
         num_embeddings
-        # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
+        # MBart is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models dont have this hack
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim, padding_idx=padding_idx)
@@ -463,7 +462,6 @@ class MBartClassificationHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel with Bart->MBart
 class MBartPreTrainedModel(PreTrainedModel):
     config_class = MBartConfig
     base_model_prefix = "model"
