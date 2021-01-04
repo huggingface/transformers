@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/blenderbot-90M": "https://huggingface.co/facebook/blenderbot-90M/resolve/main/config.json",
+    "facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/config.json",
     # See all Blenderbot models at https://huggingface.co/models?filter=blenderbot
 }
 
@@ -31,7 +31,7 @@ class BlenderbotConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a :class:`~transformers.BlenderbotModel`. It is used
     to instantiate an Blenderbot model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Blenderbot
-    `facebook/blenderbot-90M <https://huggingface.co/facebook/blenderbot-90M>`__ architecture.
+    `facebook/blenderbot-3B <https://huggingface.co/facebook/blenderbot-3B>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -85,10 +85,10 @@ class BlenderbotConfig(PretrainedConfig):
 
         >>> from transformers import BlenderbotModel, BlenderbotConfig
 
-        >>> # Initializing a Blenderbot facebook/blenderbot-90M style configuration
+        >>> # Initializing a Blenderbot facebook/blenderbot-3B style configuration
         >>> configuration = BlenderbotConfig()
 
-        >>> # Initializing a model from the facebook/blenderbot-90M style configuration
+        >>> # Initializing a model from the facebook/blenderbot-3B style configuration
         >>> model = BlenderbotModel(configuration)
 
         >>> # Accessing the model configuration
@@ -98,20 +98,20 @@ class BlenderbotConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50265,
-        max_position_embeddings=1024,
-        encoder_layers=12,
-        encoder_ffn_dim=4096,
-        encoder_attention_heads=16,
-        decoder_layers=12,
-        decoder_ffn_dim=4096,
-        decoder_attention_heads=16,
+        vocab_size=8008,
+        max_position_embeddings=128,
+        encoder_layers=2,
+        encoder_ffn_dim=10240,
+        encoder_attention_heads=32,
+        decoder_layers=24,
+        decoder_ffn_dim=10240,
+        decoder_attention_heads=32,
         encoder_layerdrop=0.0,
         decoder_layerdrop=0.0,
         use_cache=True,
         is_encoder_decoder=True,
         activation_function="gelu",
-        d_model=1024,
+        d_model=2560,
         dropout=0.1,
         attention_dropout=0.0,
         activation_dropout=0.0,
@@ -120,8 +120,8 @@ class BlenderbotConfig(PretrainedConfig):
         classifier_dropout=0.0,
         scale_embedding=False,
         gradient_checkpointing=False,
-        pad_token_id=1,
-        bos_token_id=0,
+        pad_token_id=0,
+        bos_token_id=1,
         eos_token_id=2,
         **kwargs
     ):

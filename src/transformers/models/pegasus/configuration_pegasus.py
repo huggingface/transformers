@@ -120,14 +120,12 @@ class PegasusConfig(PretrainedConfig):
         classifier_dropout=0.0,
         scale_embedding=False,
         gradient_checkpointing=False,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
+        pad_token_id=0,
+        eos_token_id=1,
         **kwargs
     ):
         super().__init__(
             pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,

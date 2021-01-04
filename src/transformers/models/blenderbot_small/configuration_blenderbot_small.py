@@ -116,12 +116,12 @@ class BlenderbotSmallConfig(PretrainedConfig):
         attention_dropout=0.0,
         activation_dropout=0.0,
         init_std=0.02,
-        decoder_start_token_id=2,
+        decoder_start_token_id=1,
         classifier_dropout=0.0,
         scale_embedding=False,
         gradient_checkpointing=False,
-        pad_token_id=1,
-        bos_token_id=0,
+        pad_token_id=0,
+        bos_token_id=1,
         eos_token_id=2,
         **kwargs
     ):
