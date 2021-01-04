@@ -138,12 +138,7 @@ from ..mpnet.modeling_mpnet import (
 )
 from ..mt5.modeling_mt5 import MT5ForConditionalGeneration, MT5Model
 from ..openai.modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
-from ..pegasus.modeling_pegasus import (
-    PegasusForConditionalGeneration,
-    PegasusForQuestionAnswering,
-    PegasusForSequenceClassification,
-    PegasusModel,
-)
+from ..pegasus.modeling_pegasus import PegasusForConditionalGeneration, PegasusModel
 from ..prophetnet.modeling_prophetnet import ProphetNetForCausalLM, ProphetNetForConditionalGeneration, ProphetNetModel
 from ..rag.modeling_rag import (  # noqa: F401 - need to import all RagModels to be in globals() function
     RagModel,
@@ -464,7 +459,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (TransfoXLConfig, TransfoXLForSequenceClassification),
         (MPNetConfig, MPNetForSequenceClassification),
         (TapasConfig, TapasForSequenceClassification),
-        (PegasusConfig, PegasusForSequenceClassification),
     ]
 )
 
@@ -490,7 +484,6 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForQuestionAnswering),
         (LxmertConfig, LxmertForQuestionAnswering),
         (MPNetConfig, MPNetForQuestionAnswering),
-        (PegasusConfig, PegasusForQuestionAnswering),
     ]
 )
 

@@ -575,12 +575,7 @@ if is_torch_available():
         OpenAIGPTPreTrainedModel,
         load_tf_weights_in_openai_gpt,
     )
-    from .models.pegasus import (
-        PegasusForConditionalGeneration,
-        PegasusForQuestionAnswering,
-        PegasusForSequenceClassification,
-        PegasusModel,
-    )
+    from .models.pegasus import PegasusForConditionalGeneration, PegasusModel
     from .models.prophetnet import (
         PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
         ProphetNetDecoder,
