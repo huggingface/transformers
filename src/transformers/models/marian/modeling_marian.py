@@ -104,13 +104,12 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
 # Copied from transformers.models.bart.modeling_bart.BartLayerNorm with Bart->Marian
 def MarianLayerNorm(normalized_shape: torch.Size, eps: float = 1e-5, elementwise_affine: bool = True):
-    if torch.cuda.is_available():
-        try:
-            from apex.normalization import FusedLayerNorm
+    try:
+        from apex.normalization import FusedLayerNorm
 
-            return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
-        except ImportError:
-            pass
+        return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
+    except ImportError:
+        pass
     return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
 
 
@@ -619,7 +618,6 @@ class MarianEncoder(MarianPreTrainedModel):
         self.layers = nn.ModuleList([MarianEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.init_weights()
 
-    # Copied from transformers.models.bart.modeling_bart.BartEncoder.forward
     def forward(
         self,
         input_ids=None,
@@ -761,7 +759,6 @@ class MarianDecoder(MarianPreTrainedModel):
         self.layers = nn.ModuleList([MarianDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.init_weights()
 
-    # Copied from transformers.models.bart.modeling_bart.BartDecoder.forward
     def forward(
         self,
         input_ids=None,
