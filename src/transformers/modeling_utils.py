@@ -404,6 +404,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.
+        - **_is_parallelizable** (:obj:`bool`) -- A flag indicating whether this model supports model parallelization.
     """
     config_class = None
     base_model_prefix = ""
@@ -416,6 +417,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
     # a list of of tensor names to ignore when saving the model (useful for keys that aren't
     # trained, but which are deterministic)
     _keys_to_ignore_on_save = None
+
+    _is_parallelizable = False
+
+    @property
+    def is_parallelizable(self) -> bool:
+        return self._is_parallelizable
 
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
