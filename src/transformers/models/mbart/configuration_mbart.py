@@ -78,6 +78,10 @@ class MBartConfig(PretrainedConfig):
         decoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
             The LayerDrop probability for the decoder. See the `LayerDrop paper <see
             https://arxiv.org/abs/1909.11556>`__ for more details.
+        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+        scale_embedding (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Scale embeddings by diving by sqrt(d_model).
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models)
 

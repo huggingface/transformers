@@ -72,12 +72,19 @@ class BartConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         init_std (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        force_bos_token_to_be_generated (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to force BOS token to be generated at step 1 (after ``decoder_start_token_id``), only
+            :obj:`True` for `bart-large-cnn`.
         encoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
             The LayerDrop probability for the encoder. See the `LayerDrop paper <see
             https://arxiv.org/abs/1909.11556>`__ for more details.
         decoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
             The LayerDrop probability for the decoder. See the `LayerDrop paper <see
             https://arxiv.org/abs/1909.11556>`__ for more details.
+        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+        scale_embedding (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Scale embeddings by diving by sqrt(d_model).
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         num_labels: (:obj:`int`, `optional`, defaults to 3):
@@ -110,23 +117,23 @@ class BartConfig(PretrainedConfig):
         decoder_attention_heads=16,
         encoder_layerdrop=0.0,
         decoder_layerdrop=0.0,
-        use_cache=True,
-        is_encoder_decoder=True,
         activation_function="gelu",
         d_model=1024,
         dropout=0.1,
         attention_dropout=0.0,
         activation_dropout=0.0,
         init_std=0.02,
-        decoder_start_token_id=2,
         classifier_dropout=0.0,
         scale_embedding=False,
         gradient_checkpointing=False,
         force_bos_token_to_be_generated=False,
+        use_cache=True,
+        num_labels=3,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        num_labels=3,
+        is_encoder_decoder=True,
+        decoder_start_token_id=2,
         **kwargs
     ):
         super().__init__(
