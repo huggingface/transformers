@@ -21,11 +21,11 @@ The BERTweet model was proposed in `BERTweet: A pre-trained language model for E
 
 The abstract from the paper is the following:
 
-*We present BERTweet, the first public large-scale pre-trained language model for English Tweets. Our BERTweet, having
-the same architecture as BERT-base (Devlin et al., 2019), is trained using the RoBERTa pre-training procedure
-(Liu et al., 2019). Experiments show that BERTweet outperforms strong baselines RoBERTa-base and XLM-R-base
-(Conneau et al., 2020), producing better performance results than the previous state-of-the-art models on three Tweet
-NLP tasks: Part-of-speech tagging, Named-entity recognition and text classification.*
+*We present BERTweet, the first public large-scale pre-trained language model for English Tweets. Our BERTweet,
+having the same architecture as BERT-base (Devlin et al., 2019), is trained using the RoBERTa pre-training
+procedure (Liu et al., 2019). Experiments show that BERTweet outperforms strong baselines RoBERTa-base and
+XLM-R-base (Conneau et al., 2020), producing better performance results than the previous state-of-the-art 
+models on three Tweet NLP tasks: Part-of-speech tagging, Named-entity recognition and text classification.*
 
 .. code-block::
 
