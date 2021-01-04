@@ -104,13 +104,12 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
 # Copied from transformers.models.bart.modeling_bart.BartLayerNorm with Bart->Pegasus
 def PegasusLayerNorm(normalized_shape: torch.Size, eps: float = 1e-5, elementwise_affine: bool = True):
-    if torch.cuda.is_available():
-        try:
-            from apex.normalization import FusedLayerNorm
+    try:
+        from apex.normalization import FusedLayerNorm
 
-            return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
-        except ImportError:
-            pass
+        return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
+    except ImportError:
+        pass
     return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
 
 
