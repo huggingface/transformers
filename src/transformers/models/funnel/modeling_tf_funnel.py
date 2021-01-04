@@ -389,7 +389,6 @@ class TFFunnelAttentionStructure:
         attention_inputs = (position_embeds, token_type_mat, attention_mask, cls_mask)
         return output, attention_inputs
 
-
     def post_attention_pooling(self, attention_inputs):
         """ Pool the proper parts of `attention_inputs` after the attention layer. """
         position_embeds, token_type_mat, attention_mask, cls_mask = attention_inputs
@@ -659,7 +658,7 @@ class TFFunnelEncoder(tf.keras.layers.Layer):
         for block_index, block in enumerate(self.blocks):
             pooling_flag = shape_list(hidden)[1] > (2 if self.separate_cls else 1)
             pooling_flag = pooling_flag and block_index > 0
-            pooled_hidden = tf.zeros((1))
+            pooled_hidden = tf.zeros(shape_list(hidden))
 
             if pooling_flag:
                 pooled_hidden, attention_inputs = self.attention_structure.pre_attention_pooling(
