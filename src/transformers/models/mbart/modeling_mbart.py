@@ -76,6 +76,7 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
     return prev_output_tokens
 
 
+# Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
     """
     Make causal mask used for bi-directional self-attention.
@@ -91,6 +92,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
+# Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
@@ -105,6 +107,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
+# Copied from transformers.models.bart.modeling_bart.BartLayerNorm with Bart->MBart
 def MBartLayerNorm(normalized_shape: torch.Size, eps: float = 1e-5, elementwise_affine: bool = True):
     if torch.cuda.is_available():
         try:
@@ -116,6 +119,7 @@ def MBartLayerNorm(normalized_shape: torch.Size, eps: float = 1e-5, elementwise_
     return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
 
 
+# Copied from transformers.models.bart.modeling_bart.BartLearnedPositionalEmbedding with Bart->MBart
 class MBartLearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -138,6 +142,7 @@ class MBartLearnedPositionalEmbedding(nn.Embedding):
         return super().forward(positions + self.offset)
 
 
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->MBart
 class MBartAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -433,6 +438,7 @@ class MBartDecoderLayer(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bart.modeling_bart.BartClassificationHead with Bart->MBart
 class MBartClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
@@ -457,6 +463,7 @@ class MBartClassificationHead(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel with Bart->MBart
 class MBartPreTrainedModel(PreTrainedModel):
     config_class = MBartConfig
     base_model_prefix = "model"
@@ -1281,6 +1288,7 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
+    # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.forward
     def forward(
         self,
         input_ids=None,
@@ -1382,6 +1390,7 @@ class MBartForQuestionAnswering(MBartPreTrainedModel):
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
+    # Copied from transformers.models.bart.modeling_bart.BartForQuestionAnswering.forward
     def forward(
         self,
         input_ids=None,
