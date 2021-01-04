@@ -394,8 +394,11 @@ class Trainer:
 
     def get_num_training_steps(self):
         """
-        number of training steps is either 1. args.max_steps if --max_steps > 1 2. else derive from dataset if we can
-        get its size
+        number of training steps is either
+
+        1. args.max_steps if --max_steps > 1
+
+        2. else derive from dataset if we can get its size
         """
         if self.args.max_steps > 0:
             return self.args.max_steps
