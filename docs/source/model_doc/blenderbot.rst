@@ -44,7 +44,8 @@ Implementation Notes
 
 - Blenderbot uses a standard `seq2seq model transformer <https://arxiv.org/pdf/1706.03762.pdf>`__ based architecture.
 - Available checkpoints can be found in the `model hub <https://huggingface.co/models?search=blenderbot>`__.
-- Note that :class:`~transformers.BlenderbotModel` has a different architecture than :class:`~transformers.BlenderbotModelSmall`. :class:`~transformers.BlenderbotSmall` should be used for the checkpoint
+- Note that :class:`~transformers.BlenderbotModel` has a different architecture than
+  :class:`~transformers.BlenderbotModelSmall`. :class:`~transformers.BlenderbotSmall` should be used for the checkpoint
   ``facebook/blenderbot-90M``.
 
 
