@@ -1626,24 +1626,6 @@ class PegasusForConditionalGeneration:
         requires_pytorch(self)
 
 
-class PegasusForQuestionAnswering:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
-class PegasusForSequenceClassification:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
 class PegasusModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)

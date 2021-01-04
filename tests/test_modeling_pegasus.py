@@ -15,7 +15,6 @@
 """ Testing suite for the PyTorch PEGASUS model. """
 
 
-import copy
 import tempfile
 import unittest
 
@@ -34,14 +33,7 @@ from .test_modeling_mbart import AbstractSeq2SeqIntegrationTest
 if is_torch_available():
     import torch
 
-    from transformers import (
-        AutoModelForSeq2SeqLM,
-        PegasusConfig,
-        PegasusForConditionalGeneration,
-        PegasusForQuestionAnswering,
-        PegasusForSequenceClassification,
-        PegasusModel,
-    )
+    from transformers import AutoModelForSeq2SeqLM, PegasusConfig, PegasusForConditionalGeneration, PegasusModel
     from transformers.models.pegasus.modeling_pegasus import PegasusDecoder, PegasusEncoder
 
 
@@ -204,11 +196,7 @@ class PegasusModelTester:
 
 @require_torch
 class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (PegasusModel, PegasusForConditionalGeneration, PegasusForSequenceClassification, PegasusForQuestionAnswering)
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (PegasusModel, PegasusForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (PegasusForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
@@ -239,36 +227,6 @@ class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
-
-    # PegasusForSequenceClassification does not support inputs_embeds
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in (PegasusModel, PegasusForConditionalGeneration, PegasusForQuestionAnswering):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-
-            if not self.is_encoder_decoder:
-                input_ids = inputs["input_ids"]
-                del inputs["input_ids"]
-            else:
-                encoder_input_ids = inputs["input_ids"]
-                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
-                del inputs["input_ids"]
-                inputs.pop("decoder_input_ids", None)
-
-            wte = model.get_input_embeddings()
-            if not self.is_encoder_decoder:
-                inputs["inputs_embeds"] = wte(input_ids)
-            else:
-                inputs["inputs_embeds"] = wte(encoder_input_ids)
-                inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
-
-            with torch.no_grad():
-                model(**inputs)[0]
 
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()

@@ -29,8 +29,6 @@ if is_torch_available():
     from .modeling_pegasus import (
         PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST,
         PegasusForConditionalGeneration,
-        PegasusForQuestionAnswering,
-        PegasusForSequenceClassification,
         PegasusModel,
         PegasusPreTrainedModel,
     )
