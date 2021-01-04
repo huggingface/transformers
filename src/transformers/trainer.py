@@ -242,7 +242,7 @@ class Trainer:
         if model is None and model_init is not None:
             model = self.call_model_init()
 
-        if not model.is_parallelizable:
+        if self.args.model_parallel and not model.is_parallelizable:
             raise ValueError(
                 f"{model.__class__.__name__} implementation currently doesn't support model parallelism, therefore --model_parallel cl arg cannot be used"
             )
