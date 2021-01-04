@@ -261,7 +261,11 @@ class Trainer:
                 raise RuntimeError("`Trainer` requires either a `model` or `model_init` argument")
         else:
             if model_init is not None:
-                raise RuntimeError("`Trainer` requires either a `model` or `model_init` argument, but not both")
+                warnings.warn(
+                    "`Trainer` requires either a `model` or `model_init` argument, but not both. "
+                    "Ignoring `model_init`. This will become a fatal error in the next release",
+                    FutureWarning,
+                )
             self.model_init = None
 
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
