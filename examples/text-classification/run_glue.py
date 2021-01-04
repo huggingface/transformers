@@ -172,7 +172,7 @@ def main():
     # We now keep distinct sets of args, for a cleaner separation of concerns.
     # ##### $custom ####
     if is_run_on_sagemaker():
-        sys.argv = parse_sagemaker_args(sys.argv)
+        sys.argv = parse_sagemaker_env_into_args(sys.argv)
     ####  $custom end ####
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
 
