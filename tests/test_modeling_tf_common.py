@@ -163,20 +163,25 @@ class TFModelTesterMixin:
             else:
                 expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
-    @slow
+
     def test_saved_model_creation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
 
-        for model_class in self.all_model_classes:
-            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config)
+        if hasattr(config, "use_cache"):
+            config.use_cache = True
+        model_class = self.all_model_classes[0]
 
-            model(class_inputs_dict)
+        class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+        model = model_class(config)
 
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                saved_model_dir = os.path.join(tmpdirname, "saved_model")
-                self.assertTrue(os.path.exists(saved_model_dir))
+        model(class_inputs_dict)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            saved_model_dir = os.path.join(tmpdirname, "saved_model")
+            self.assertTrue(os.path.exists(saved_model_dir))
     
     @slow
     def test_saved_model_creation_extended(self):
@@ -188,7 +193,6 @@ class TFModelTesterMixin:
             config.use_cache = True
         
         for model_class in self.all_model_classes:
-            print(model_class)
             class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config)
 
