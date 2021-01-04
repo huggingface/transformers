@@ -369,7 +369,7 @@ class TFFunnelAttentionStructure:
 
         return tf.squeeze(tensor, 2) if ndim == 2 else tensor
 
-    def pre_attention_pooling(self, attention_inputs):
+    def pre_attention_pooling(self, output, attention_inputs):
         """ Pool `output` and the proper parts of `attention_inputs` before the attention layer. """
         position_embeds, token_type_mat, attention_mask, cls_mask = attention_inputs
         if self.pool_q_only:
@@ -377,6 +377,7 @@ class TFFunnelAttentionStructure:
                 position_embeds = self.stride_pool(position_embeds[:2], 0) + position_embeds[2:]
             token_type_mat = self.stride_pool(token_type_mat, 1)
             cls_mask = self.stride_pool(cls_mask, 0)
+            output = self.pool_tensor(output, mode=self.pooling_type)
         else:
             self.pooling_mult *= 2
             if self.attention_type == "factorized":
@@ -384,9 +385,10 @@ class TFFunnelAttentionStructure:
             token_type_mat = self.stride_pool(token_type_mat, [1, 2])
             cls_mask = self.stride_pool(cls_mask, [1, 2])
             attention_mask = self.pool_tensor(attention_mask, mode="min")
-
+            output = self.pool_tensor(output, mode=self.pooling_type)
         attention_inputs = (position_embeds, token_type_mat, attention_mask, cls_mask)
-        return attention_inputs
+        return output, attention_inputs
+
 
     def post_attention_pooling(self, attention_inputs):
         """ Pool the proper parts of `attention_inputs` after the attention layer. """
@@ -657,10 +659,12 @@ class TFFunnelEncoder(tf.keras.layers.Layer):
         for block_index, block in enumerate(self.blocks):
             pooling_flag = shape_list(hidden)[1] > (2 if self.separate_cls else 1)
             pooling_flag = pooling_flag and block_index > 0
-            pooled_hidden = self.attention_structure.pool_tensor(hidden, mode=self.attention_structure.pooling_type)
+            pooled_hidden = tf.zeros((1))
 
             if pooling_flag:
-                attention_inputs = self.attention_structure.pre_attention_pooling(attention_inputs)
+                pooled_hidden, attention_inputs = self.attention_structure.pre_attention_pooling(
+                    hidden, attention_inputs
+                )
 
             for (layer_index, layer) in enumerate(block):
                 for repeat_index in range(self.block_repeats[block_index]):
