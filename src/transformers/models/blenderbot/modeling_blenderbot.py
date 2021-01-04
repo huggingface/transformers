@@ -26,7 +26,6 @@ from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
-    add_code_sample_docstrings,
     add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -50,7 +49,7 @@ _TOKENIZER_FOR_DOC = "BlenderbotTokenizer"
 
 
 BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/blenderbot-90M",
+    "facebook/blenderbot-3B",
     # See all Blenderbot models at https://huggingface.co/models?filter=blenderbot
 ]
 
@@ -467,19 +466,28 @@ BLENDERBOT_START_DOCSTRING = r"""
 """
 
 BLENDERBOT_GENERATION_EXAMPLE = r"""
-    Summarization example::
+    Conversation example::
 
-        >>> from transformers import BlenderbotTokenizer, BlenderbotForConditionalGeneration, BlenderbotConfig
+        >>> from transformers import BlenderbotTokenizer, BlenderbotForConditionalGeneration
+        >>> mname = 'facebook/blenderbot-400M-distill'
+        >>> model = BlenderbotForConditionalGeneration.from_pretrained(mname)
+        >>> tokenizer = BlenderbotTokenizer.from_pretrained(mname)
+        >>> UTTERANCE = "My friends are cool but they eat too many carbs."
+        >>> print("Human: ", UTTERANCE)
+        >>> inputs = tokenizer([UTTERANCE], return_tensors='pt')
+        >>> reply_ids = model.generate(**inputs)
+        >>> print("Bot: ", tokenizer.batch_decode(reply_ids, skip_special_tokens=True)[0])
 
-        >>> model = BlenderbotForConditionalGeneration.from_pretrained('facebook/blenderbot-90M')
-        >>> tokenizer = BlenderbotTokenizer.from_pretrained('facebook/blenderbot-90M')
-
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
-
-        >>> # Generate Summary
-        >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
-        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
+        >>> REPLY = "I'm not sure"
+        >>> print("Human: ", REPLY)
+        >>> NEXT_UTTERANCE = (
+        ... "My friends are cool but they eat too many carbs.</s> <s>That's unfortunate. "
+        ... "Are they trying to lose weight or are they just trying to be healthier?</s> "
+        ... "<s> I'm not sure."
+        ... )
+        >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors='pt')
+        >>> next_reply_ids = model.generate(**inputs)
+        >>> print("Bot: ", tokenizer.batch_decode(next_reply_ids, skip_special_tokens=True)[0])
 """
 
 BLENDERBOT_INPUTS_DOCSTRING = r"""
@@ -501,8 +509,17 @@ BLENDERBOT_INPUTS_DOCSTRING = r"""
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Provide for translation and summarization training. By default, the model will create this tensor by
-            shifting the :obj:`input_ids` to the right, following the paper.
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`~transformers.MarianTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+
+            Blenderbot uses the :obj:`bos_token_id` as the starting token for :obj:`decoder_input_ids` generation. If
+            :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
+            :obj:`past_key_values`).
         decoder_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
@@ -953,12 +970,7 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(BLENDERBOT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="facebook/blenderbot-90M",
-        output_type=Seq2SeqModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -974,6 +986,22 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        Returns:
+
+        Example::
+
+            >>> from transformers import BlenderbotTokenizer, BlenderbotModel
+
+            >>> model = BlenderbotModel.from_pretrained("facebook/blenderbot-400M-distill")
+            >>> tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
+
+            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
+            >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+
+            >>> last_hidden_states = outputs.last_hidden_state
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1099,22 +1127,6 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel):
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
 
         Returns:
-
-        Conditional generation example::
-
-            >>> from transformers import BlenderbotTokenizer, BlenderbotForConditionalGeneration
-            >>> tokenizer = BlenderbotTokenizer.from_pretrained('facebook/blenderbot-90M')
-            >>> TXT = "My friends are <mask> but they eat too many carbs."
-
-            >>> model = BlenderbotForConditionalGeneration.from_pretrained('facebook/blenderbot-90M')
-            >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
-            >>> logits = model(input_ids).logits
-
-            >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-            >>> probs = logits[0, masked_index].softmax(dim=0)
-            >>> values, predictions = probs.topk(5)
-
-            >>> tokenizer.decode(predictions).split()
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

@@ -83,7 +83,7 @@ class BartConfig(PretrainedConfig):
         num_labels: (:obj:`int`, `optional`, defaults to 3):
             The number of labels to use in :class:`~transformers.BartForSequenceClassification`.
 
-        Example::
+    Example::
 
         >>> from transformers import BartModel, BartConfig
 

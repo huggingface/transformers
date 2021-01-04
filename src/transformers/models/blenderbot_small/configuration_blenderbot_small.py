@@ -81,7 +81,7 @@ class BlenderbotSmallConfig(PretrainedConfig):
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models)
 
-        Example::
+    Example::
 
         >>> from transformers import BlenderbotSmallModel, BlenderbotSmallConfig
 
