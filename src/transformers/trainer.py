@@ -223,12 +223,13 @@ class Trainer:
 
     Important accessors:
 
-        ``self.model`` - always points to the core model. If using a transformers model, it will be a :class:`PreTrainedModel` subclass.
+        ``self.model`` - always points to the core model. If using a transformers model, it will be a
+        :class:`PreTrainedModel` subclass.
 
         ``self.model_wrapped`` - always points to the most external model in case one or more other modules wrap the
-        original model. This is the model that should be used for the forward pass. For example, under ``DeepSpeed``, the inner model is wrapped in ``DeepSpeed`` and then again in
-        ``DistributedDataParallel``. If the inner model hasn't been wrapped, then ``self.model_wrapped`` is the same as
-        ``self.model``.
+        original model. This is the model that should be used for the forward pass. For example, under ``DeepSpeed``,
+        the inner model is wrapped in ``DeepSpeed`` and then again in ``DistributedDataParallel``. If the inner model
+        hasn't been wrapped, then ``self.model_wrapped`` is the same as ``self.model``.
     """
 
     def __init__(
