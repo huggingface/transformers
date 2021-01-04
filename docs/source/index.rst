@@ -356,6 +356,7 @@ TensorFlow and/or Flax.
     model_doc/bart
     model_doc/barthez
     model_doc/bert
+    model_doc/bertweet
     model_doc/bertgeneration
     model_doc/blenderbot
     model_doc/camembert
