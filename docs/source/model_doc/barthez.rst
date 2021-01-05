@@ -41,8 +41,8 @@ The Authors' code can be found `here <https://github.com/moussaKam/BARThez>`__.
 Examples
 _______________________________________________________________________________________________________________________
 
-- BARThez can be fine-tuned on sequence-to-sequence tasks in a similar way as BART, check: `examples/seq2seq/
-  <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`__.
+- BARThez can be fine-tuned on sequence-to-sequence tasks in a similar way as BART, check:
+  :prefix_link:`examples/seq2seq/ <examples/seq2seq/README.md>`.
 
 
 BarthezTokenizer

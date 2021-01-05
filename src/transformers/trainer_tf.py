@@ -27,7 +27,6 @@ from .integrations import (  # isort: split
 
 import numpy as np
 import tensorflow as tf
-from packaging.version import parse
 from tensorflow.python.distribute.values import PerReplica
 
 from .modeling_tf_utils import TFPreTrainedModel
@@ -93,11 +92,6 @@ class TFTrainer:
             None,
         ),
     ):
-        assert parse(tf.__version__).release >= (2, 2, 0), (
-            "You need to run the TensorFlow trainer with at least the version 2.2.0, your version is %r "
-            % tf.__version__
-        )
-
         self.model = model
         self.args = args
         self.train_dataset = train_dataset
@@ -141,7 +135,7 @@ class TFTrainer:
             raise ValueError("Trainer: training requires a train_dataset.")
 
         self.total_train_batch_size = self.args.train_batch_size * self.args.gradient_accumulation_steps
-        self.num_train_examples = tf.data.experimental.cardinality(self.train_dataset).numpy()
+        self.num_train_examples = self.train_dataset.cardinality(self.train_dataset).numpy()
 
         if self.num_train_examples < 0:
             raise ValueError("The training dataset must have an asserted cardinality")
@@ -173,7 +167,7 @@ class TFTrainer:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
 
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
-        num_examples = tf.data.experimental.cardinality(eval_dataset).numpy()
+        num_examples = eval_dataset.cardinality(eval_dataset).numpy()
 
         if num_examples < 0:
             raise ValueError("The training dataset must have an asserted cardinality")
@@ -203,7 +197,7 @@ class TFTrainer:
         Subclass and override this method if you want to inject some custom behavior.
         """
 
-        num_examples = tf.data.experimental.cardinality(test_dataset).numpy()
+        num_examples = test_dataset.cardinality(test_dataset).numpy()
 
         if num_examples < 0:
             raise ValueError("The training dataset must have an asserted cardinality")
