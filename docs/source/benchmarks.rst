@@ -15,7 +15,8 @@ Benchmarks
 
 Let's take a look at how 🤗 Transformer models can be benchmarked, best practices, and already available benchmarks.
 
-A notebook explaining in more detail how to benchmark 🤗 Transformer models can be found :prefix_link:`here <notebooks/05-benchmark.ipynb>`.
+A notebook explaining in more detail how to benchmark 🤗 Transformer models can be found :prefix_link:`here
+<notebooks/05-benchmark.ipynb>`.
 
 How to benchmark 🤗 Transformer models
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -352,4 +353,5 @@ The approach is detailed in the `following blogpost
 available `here
 <https://docs.google.com/spreadsheets/d/1sryqufw2D0XlUH4sq3e9Wnxu5EAQkaohzrJbd5HdQ_w/edit?usp=sharing>`__.
 
-With the new `benchmark` tools, it is easier than ever to share your benchmark results with the community :prefix_link:`here <examples/benchmarking/README.md>`.
+With the new `benchmark` tools, it is easier than ever to share your benchmark results with the community
+:prefix_link:`here <examples/benchmarking/README.md>`.
