@@ -13,21 +13,21 @@
 Utilities for Generation
 -----------------------------------------------------------------------------------------------------------------------
 
-This page lists all the utility functions used by :meth:`~transformers.PretrainedModel.generate`,
-:meth:`~transformers.PretrainedModel.greedy_search`, :meth:`~transformers.PretrainedModel.sample`,
-:meth:`~transformers.PretrainedModel.beam_search`, :meth:`~transformers.PretrainedModel.beam_sample`, and
-:meth:`~transformers.PretrainedModel.group_beam_search`.
+This page lists all the utility functions used by :meth:`~transformers.PreTrainedModel.generate`,
+:meth:`~transformers.PreTrainedModel.greedy_search`, :meth:`~transformers.PreTrainedModel.sample`,
+:meth:`~transformers.PreTrainedModel.beam_search`, :meth:`~transformers.PreTrainedModel.beam_sample`, and
+:meth:`~transformers.PreTrainedModel.group_beam_search`.
 
 Most of those are only useful if you are studying the code of the generate methods in the library.
 
 Generate Outputs
------------------------------------------------------------------------------------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The output of :meth:`~transformers.PretrainedModel.generate` is an instance of a subclass of
-:class:`~transformers.file_utils.ModelOutput`. This output is a data structures containing all the information returned
-by :meth:`~transformers.PretrainedModel.generate`, but that can also be used as tuples or dictionaries.
+The output of :meth:`~transformers.PreTrainedModel.generate` is an instance of a subclass of
+:class:`~transformers.file_utils.ModelOutput`. This output is a data structure containing all the information returned
+by :meth:`~transformers.PreTrainedModel.generate`, but that can also be used as tuple or dictionary.
 
-Let's see of this looks on an example:
+Here's an example:
 
 .. code-block::
 
@@ -37,35 +37,40 @@ Let's see of this looks on an example:
     model = GPT2LMHeadModel.from_pretrained('gpt2')
 
     inputs = tokenizer("Hello, my dog is cute and ", return_tensors="pt")
-    sequences = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
+    generation_output = model.generate(**inputs, return_dict_in_generate=True, output_scores=True)
 
-The ``sequences`` object is a :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput`, as we can see in
-the documentation of that class below, it means it has a ``sequences`` an optional ``scores``, an optional
-``hidden_states`` and an optional ``attentions`` attribute. Here we have the ``scores`` since we passed along
-``output_scores=True``, but we don't have ``hidden_states`` and ``attentions`` because we didn't pass
-``output_hidden_states=True`` or ``output_attentions=True``.
+The ``generation_output`` object is a :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput`, as we can
+see in the documentation of that class below, it means it has the following attributes:
+
+- ``sequences``: the generated sequences of tokens
+- ``scores`` (optional): the prediction scores of the language modelling head, for each generation step
+- ``hidden_states`` (optional): the hidden states of the model, for each generation step
+- ``attentions`` (optional): the attention weights of the model, for each generation step
+
+Here we have the ``scores`` since we passed along ``output_scores=True``, but we don't have ``hidden_states`` and
+``attentions`` because we didn't pass ``output_hidden_states=True`` or ``output_attentions=True``.
 
 You can access each attribute as you would usually do, and if that attribute has not been returned by the model, you
-will get ``None``. Here for instance ``sequences.scores`` are all the generated prediction scores of the language
-modeling head, and ``sequences.attentions`` is ``None``.
+will get ``None``. Here for instance ``generation_output.scores`` are all the generated prediction scores of the
+language modeling head, and ``generation_output.attentions`` is ``None``.
 
-When considering our ``sequences`` object as tuple, it only considers the attributes that don't have ``None`` values.
-Here for instance, it has two elements, ``loss`` then ``logits``, so
+When using our ``generation_output`` object as a tuple, it only keeps the attributes that don't have ``None`` values.
+Here, for instance, it has two elements, ``loss`` then ``logits``, so
 
 .. code-block::
 
-    sequences[:2]
+    generation_output[:2]
 
-will return the tuple ``(sequences.sequences, sequences.scores)`` for instance.
+will return the tuple ``(generation_output.sequences, generation_output.scores)`` for instance.
 
-When considering our ``sequences`` object as dictionary, it only considers the attributes that don't have ``None``
-values. Here for instance, it has two keys that are ``sequences`` and ``scores``.
+When using our ``generation_output`` object as a dictionary, it only keeps the attributes that don't have ``None``
+values. Here, for instance, it has two keys that are ``sequences`` and ``scores``.
 
-We document here all generation sequences.
+We document here all output types.
 
 
 GreedySearchOutput
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: transformers.generation_utils.GreedySearchDecoderOnlyOutput
     :members:
@@ -75,7 +80,7 @@ GreedySearchOutput
 
 
 SampleOutput
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: transformers.generation_utils.SampleDecoderOnlyOutput
     :members:
@@ -85,7 +90,7 @@ SampleOutput
 
 
 BeamSearchOutput
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: transformers.generation_utils.BeamSearchDecoderOnlyOutput
     :members:
@@ -95,7 +100,7 @@ BeamSearchOutput
 
 
 BeamSampleOutput
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: transformers.generation_utils.BeamSampleDecoderOnlyOutput
     :members:

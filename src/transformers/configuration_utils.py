@@ -127,8 +127,7 @@ class PretrainedConfig(object):
         - **output_scores** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether the model should return the
           logits when used for generation
         - **return_dict_in_generate** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether the model should
-          return a :class:`~transformers.generation_utils.GreedySearchOutput` instead of a :obj:`torch.LongTensor` when
-          generation method is `greedy_search`.
+          return a :class:`~transformers.file_utils.ModelOutput` instead of a :obj:`torch.LongTensor`
 
 
     Parameters for fine-tuning tasks
@@ -492,7 +491,6 @@ class PretrainedConfig(object):
         """
         Instantiates a :class:`~transformers.PretrainedConfig` from the path to a JSON file of parameters.
 
-
         Args:
             json_file (:obj:`str` or :obj:`os.PathLike`):
                 Path to the JSON file containing the parameters.
@@ -521,7 +519,6 @@ class PretrainedConfig(object):
         """
         Removes all attributes from config which correspond to the default config attributes for better readability and
         serializes to a Python dictionary.
-
 
         Returns:
             :obj:`Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance,
