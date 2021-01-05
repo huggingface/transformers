@@ -31,7 +31,6 @@ from tensorflow.python.keras.saving import hdf5_format
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
     DUMMY_INPUTS,
-    DUMMY_MASK,
     TF2_WEIGHTS_NAME,
     WEIGHTS_NAME,
     ModelOutput,
