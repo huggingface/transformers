@@ -179,6 +179,8 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
 # - PreTrainedModel for the models (it-self a sub-class of torch.nn.Module)
 ####################################################
 PARALLELIZE_DOCSTRING = r"""
+    This is an experimental feature and is a subject to change at a moment's notice.
+
     Uses a device map to distribute attention modules of the model across several devices. If no device map is given,
     it will evenly distribute blocks across all devices.
 
