@@ -22,7 +22,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, LayerNorm
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -95,9 +95,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-def _expand_mask(
-    mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None, past_key_values_length: int = 0
-):
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -106,30 +104,9 @@ def _expand_mask(
 
     expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
 
-    if past_key_values_length > 0:
-        # concat fully attendend attention_mask to the beginning if `past_key_values` are used
-        expanded_mask = torch.cat(
-            [
-                torch.ones(bsz, 1, tgt_len, past_key_values_length, device=expanded_mask.device, dtype=dtype),
-                expanded_mask,
-            ],
-            dim=-1,
-        )
-
     inverted_mask = 1.0 - expanded_mask
 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
-
-
-def BartLayerNorm(normalized_shape: torch.Size, eps: float = 1e-5, elementwise_affine: bool = True):
-    if torch.cuda.is_available():
-        try:
-            from apex.normalization import FusedLayerNorm
-
-            return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
-        except ImportError:
-            pass
-    return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
 
 
 class BartLearnedPositionalEmbedding(nn.Embedding):
@@ -334,13 +311,13 @@ class BartEncoderLayer(nn.Module):
             dropout=config.attention_dropout,
         )
         self.normalize_before = config.normalize_before
-        self.self_attn_layer_norm = BartLayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
         self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = BartLayerNorm(self.embed_dim)
+        self.final_layer_norm = LayerNorm(self.embed_dim)
 
     def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, output_attentions: bool = False):
         """
@@ -393,17 +370,17 @@ class BartDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
         self.normalize_before = config.normalize_before
 
-        self.self_attn_layer_norm = BartLayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = LayerNorm(self.embed_dim)
         self.encoder_attn = BartAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
         )
-        self.encoder_attn_layer_norm = BartLayerNorm(self.embed_dim)
+        self.encoder_attn_layer_norm = LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = BartLayerNorm(self.embed_dim)
+        self.final_layer_norm = LayerNorm(self.embed_dim)
 
     def forward(
         self,
@@ -685,9 +662,9 @@ class BartEncoder(BartPretrainedModel):
                 config.extra_pos_embeddings,
             )
         self.layers = nn.ModuleList([BartEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.layernorm_embedding = BartLayerNorm(embed_dim) if config.normalize_embedding else nn.Identity()
+        self.layernorm_embedding = LayerNorm(embed_dim) if config.normalize_embedding else nn.Identity()
         # mbart has one extra layer_norm
-        self.layer_norm = BartLayerNorm(config.d_model) if config.add_final_layer_norm else None
+        self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else None
 
         self.init_weights()
 
@@ -825,8 +802,8 @@ class BartDecoder(BartPretrainedModel):
                 config.extra_pos_embeddings,
             )
         self.layers = nn.ModuleList([BartDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.layernorm_embedding = BartLayerNorm(config.d_model) if config.normalize_embedding else nn.Identity()
-        self.layer_norm = BartLayerNorm(config.d_model) if config.add_final_layer_norm else None
+        self.layernorm_embedding = LayerNorm(config.d_model) if config.normalize_embedding else nn.Identity()
+        self.layer_norm = LayerNorm(config.d_model) if config.add_final_layer_norm else None
 
         self.init_weights()
 
@@ -941,11 +918,21 @@ class BartDecoder(BartPretrainedModel):
             attention_mask = input_ids.ne(self.config.pad_token_id).to(torch.long)
             # never mask leading token, even if it is pad
             attention_mask[:, 0] = attention_mask[:, 1]
+            if past_key_values_length > 0:
+                attention_mask = torch.cat(
+                    [
+                        torch.ones(
+                            (input_shape[0], past_key_values_length), dtype=torch.long, device=input_ids.device
+                        ),
+                        attention_mask,
+                    ],
+                    dim=-1,
+                )
 
         if attention_mask is not None and combined_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             combined_attention_mask = combined_attention_mask + _expand_mask(
-                attention_mask, inputs_embeds.dtype, past_key_values_length=past_key_values_length
+                attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
             )
 
         # expand encoder attention mask

@@ -23,10 +23,10 @@ test.source
 test.target
 ```
 
-A sample finetuning command (run ` ./examples/rag/finetune_rag.py --help` to list all available options):
+A sample finetuning command (run ` ./examples/research_projects/rag/finetune_rag.py --help` to list all available options):
 
 ```bash
-python examples/rag/finetune_rag.py \
+python examples/research_projects/rag/finetune_rag.py \
     --data_dir $DATA_DIR \
     --output_dir $OUTPUT_DIR \
     --model_name_or_path $MODEL_NAME_OR_PATH \
@@ -42,7 +42,7 @@ The `base` models initialize the question encoder with [`facebook/dpr-question_e
 
 If you would like to initialize finetuning with a base model using different question encoder and generator architectures, you can build it with a consolidation script, e.g.:
 ```
-python examples/rag/consolidate_rag_checkpoint.py \
+python examples/research_projects/rag/consolidate_rag_checkpoint.py \
     --model_type rag_sequence \
     --generator_name_or_path facebook/bart-large-cnn \
     --question_encoder_name_or_path facebook/dpr-question_encoder-single-nq-base \
@@ -50,6 +50,44 @@ python examples/rag/consolidate_rag_checkpoint.py \
 ```
 You will then be able to pass `path/to/checkpoint` as `model_name_or_path` to the `finetune_rag.py` script.
 
+## Document Retrieval
+When running distributed fine-tuning, each training worker needs to retrieve contextual documents
+for its input by querying a index loaded into memory. RAG provides two implementations for document retrieval, 
+one with [`torch.distributed`](https://pytorch.org/docs/stable/distributed.html) communication package and the other 
+with [`Ray`](https://docs.ray.io/en/master/).
+
+This option can be configured with the `--distributed_retriever` flag which can either be set to `pytorch` or `ray`.
+By default this flag is set to `pytorch`.
+
+For the Pytorch implementation, only training worker 0 loads the index into CPU memory, and a gather/scatter pattern is used
+to collect the inputs from the other training workers and send back the corresponding document embeddings.
+
+For the Ray implementation, the index is loaded in *separate* process(es). The training workers randomly select which 
+retriever worker to query. To use Ray for distributed retrieval, you have to set the `--distributed_retriever` arg to `ray`.
+To configure the number of retrieval workers (the number of processes that load the index), you can set the `num_retrieval_workers` flag.
+Also make sure to start the Ray cluster before running fine-tuning.
+
+```bash
+# Start a single-node Ray cluster.
+ray start --head
+
+python examples/research_projects/rag/finetune_rag.py \
+    --data_dir $DATA_DIR \
+    --output_dir $OUTPUT_DIR \
+    --model_name_or_path $MODEL_NAME_OR_PATH \
+    --model_type rag_sequence \
+    --fp16 \
+    --gpus 8
+    --distributed_retriever ray \
+    --num_retrieval_workers 4
+
+# Stop the ray cluster once fine-tuning has finished.
+ray stop
+```
+
+Using Ray can lead to retrieval speedups on multi-GPU settings since multiple processes load the index rather than
+just the rank 0 training worker. Using Ray also allows you to load the index on GPU since the index is loaded on a separate
+processes than the model, while with pytorch distributed retrieval, both are loaded in the same process potentially leading to GPU OOM.
 
 # Evaluation
 Our evaluation script enables two modes of evaluation (controlled by the `eval_mode` argument): `e2e` - end2end evaluation, returns EM (exact match) and F1 scores calculated for the downstream task and `retrieval` - which returns precision@k of the documents retrieved for provided inputs.
@@ -75,14 +113,14 @@ We demonstrate how to evaluate retrieval against DPR evaluation data. You can do
 2. Parse the unziped file using the `parse_dpr_relevance_data.py`
     ```bash
     mkdir output # or wherever you want to save this
-    python examples/rag/parse_dpr_relevance_data.py \
+    python examples/research_projects/rag/parse_dpr_relevance_data.py \
         --src_path biencoder-nq-dev.json \
         --evaluation_set output/biencoder-nq-dev.questions \
         --gold_data_path output/biencoder-nq-dev.pages
     ```
 3. Run evaluation:
     ```bash    
-    python examples/rag/eval_rag.py \
+    python examples/research_projects/rag/eval_rag.py \
         --model_name_or_path facebook/rag-sequence-nq \
         --model_type rag_sequence \
         --evaluation_set output/biencoder-nq-dev.questions \
@@ -93,7 +131,7 @@ We demonstrate how to evaluate retrieval against DPR evaluation data. You can do
     ```
    ```bash
    # EXPLANATION
-    python examples/rag/eval_rag.py \
+    python examples/research_projects/rag/eval_rag.py \
         --model_name_or_path facebook/rag-sequence-nq \ # model name or path of the model we're evaluating
         --model_type rag_sequence \ # RAG model type (rag_token or rag_sequence)
         --evaluation_set output/biencoder-nq-dev.questions \ # an input dataset for evaluation
@@ -121,7 +159,7 @@ Add `--recalculate` parameter to force the script to perform inference from scra
 
 An example e2e evaluation run could look as follows:
 ```bash
-python examples/rag/eval_rag.py \
+python examples/research_projects/rag/eval_rag.py \
     --model_name_or_path facebook/rag-sequence-nq \
     --model_type rag_sequence \
     --evaluation_set path/to/test.source \
@@ -141,14 +179,14 @@ With `use_custom_knowledge_dataset.py` you can build your own knowledge source, 
 
 For instance, if documents are serialized as tab-separated csv files with the columns "title" and "text", one can use `use_own_knowledge_dataset.py` as follows:
 ```bash
-python examples/rag/use_own_knowledge_dataset.py \
+python examples/research_projects/rag/use_own_knowledge_dataset.py \
     --csv_path path/to/my_csv \
     --output_dir path/to/my_knowledge_dataset \
 ```
 
 The created outputs in `path/to/my_knowledge_dataset` can then be used to finetune RAG as follows:
 ```bash
-python examples/rag/finetune_rag.py \
+python examples/research_projects/rag/finetune_rag.py \
     --data_dir $DATA_DIR \
     --output_dir $OUTPUT_DIR \
     --model_name_or_path $MODEL_NAME_OR_PATH \

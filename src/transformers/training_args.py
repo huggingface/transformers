@@ -19,7 +19,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 from .file_utils import cached_property, is_torch_available, is_torch_tpu_available, torch_required
-from .trainer_utils import EvaluationStrategy
+from .trainer_utils import EvaluationStrategy, SchedulerType
 from .utils import logging
 
 
@@ -121,6 +121,9 @@ class TrainingArguments:
         max_steps (:obj:`int`, `optional`, defaults to -1):
             If set to a positive number, the total number of training steps to perform. Overrides
             :obj:`num_train_epochs`.
+        lr_scheduler_type (:obj:`str` or :class:`~transformers.SchedulerType`, `optional`, defaults to :obj:`"linear"`):
+            The scheduler type to use. See the documentation of :class:`~transformers.SchedulerType` for all possible
+            values.
         warmup_steps (:obj:`int`, `optional`, defaults to 0):
             Number of steps used for a linear warmup from 0 to :obj:`learning_rate`.
         logging_dir (:obj:`str`, `optional`):
@@ -144,6 +147,10 @@ class TrainingArguments:
         fp16_opt_level (:obj:`str`, `optional`, defaults to 'O1'):
             For :obj:`fp16` training, Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
             on the `Apex documentation <https://nvidia.github.io/apex/amp.html>`__.
+        fp16_backend (:obj:`str`, `optional`, defaults to :obj:`"auto"`):
+            The backend to use for mixed precision training. Must be one of :obj:`"auto"`, :obj:`"amp"` or
+            :obj:`"apex"`. :obj:`"auto"` will use AMP or APEX depending on the PyTorch version detected, while the
+            other choices will force the requested backend.
         local_rank (:obj:`int`, `optional`, defaults to -1):
             Rank of the process during distributed training.
         tpu_num_cores (:obj:`int`, `optional`):
@@ -210,13 +217,16 @@ class TrainingArguments:
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to :obj:`True`, the training will begin faster (as that skipping
             step can take a long time) but will not yield the same results as the interrupted training would have.
-        fp16_backend (:obj:`str`, `optional`, defaults to :obj:`"auto"`):
-            The backend to use for mixed precision training. Must be one of :obj:`"auto"`, :obj:`"amp"` or
-            :obj:`"apex"`. :obj:`"auto"` will use AMP or APEX depending on the PyTorch version detected, while the
-            other choices will force the requested backend.
         sharded_ddp (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Use Sharded DDP training from `FairScale <https://github.com/facebookresearch/fairscale>`__ (in distributed
             training only). This is an experimental feature.
+        label_smoothing_factor (:obj:`float`, `optional`, defaults to 0.0):
+            The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
+            labels are changed from 0s and 1s to :obj:`label_smoothing_factor/num_labels` and :obj:`1 -
+            label_smoothing_factor + label_smoothing_factor/num_labels` respectively.
+        adafactor (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use the :class:`~transformers.Adafactor` optimizer instead of
+            :class:`~transformers.AdamW`.
     """
 
     output_dir: str = field(
@@ -246,7 +256,7 @@ class TrainingArguments:
     )
     evaluation_strategy: EvaluationStrategy = field(
         default="no",
-        metadata={"help": "Run evaluation during training at each logging step."},
+        metadata={"help": "The evaluation strategy to use."},
     )
     prediction_loss_only: bool = field(
         default=False,
@@ -296,6 +306,10 @@ class TrainingArguments:
         default=-1,
         metadata={"help": "If > 0: set total number of training steps to perform. Override num_train_epochs."},
     )
+    lr_scheduler_type: SchedulerType = field(
+        default="linear",
+        metadata={"help": "The scheduler type to use."},
+    )
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
     logging_dir: Optional[str] = field(default_factory=default_logdir, metadata={"help": "Tensorboard log dir."})
@@ -327,6 +341,10 @@ class TrainingArguments:
             )
         },
     )
+    fp16_backend: str = field(
+        default="auto",
+        metadata={"help": "The backend to be used for mixed precision.", "choices": ["auto", "amp", "apex"]},
+    )        
     local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
 
     tpu_num_cores: Optional[int] = field(
@@ -384,19 +402,20 @@ class TrainingArguments:
             "help": "When resuming training, whether or not to skip the first epochs and batches to get to the same training data."
         },
     )
-    fp16_backend: str = field(
-        default="auto",
-        metadata={"help": "The backend to be used for mixed precision.", "choices": ["auto", "amp", "apex"]},
-    )
     sharded_ddp: bool = field(
         default=False,
         metadata={"help": "Whether or not to use sharded DDP training (in distributed training only)."},
     )
+    label_smoothing_factor: float = field(
+        default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
+    )
+    adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace Adam by Adafactor."})
 
     def __post_init__(self):
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
         self.evaluation_strategy = EvaluationStrategy(self.evaluation_strategy)
+        self.lr_scheduler_type = SchedulerType(self.lr_scheduler_type)
         if self.do_eval is False and self.evaluation_strategy != EvaluationStrategy.NO:
             self.do_eval = True
         if self.eval_steps is None:

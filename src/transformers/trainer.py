@@ -37,7 +37,7 @@ from .integrations import (  # isort: split
     is_fairscale_available,
     is_mlflow_available,
     is_optuna_available,
-    is_ray_available,
+    is_ray_tune_available,
     is_tensorboard_available,
     is_wandb_available,
     run_hp_search_optuna,
@@ -57,7 +57,7 @@ from .data.data_collator import DataCollator, DataCollatorWithPadding, default_d
 from .file_utils import WEIGHTS_NAME, is_apex_available, is_datasets_available, is_in_notebook, is_torch_tpu_available
 from .modeling_utils import PreTrainedModel
 from .models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
-from .optimization import AdamW, get_linear_schedule_with_warmup
+from .optimization import Adafactor, AdamW, get_scheduler
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -70,6 +70,7 @@ from .trainer_callback import (
 )
 from .trainer_pt_utils import (
     DistributedTensorGatherer,
+    LabelSmoother,
     SequentialDistributedSampler,
     distributed_broadcast_scalars,
     distributed_concat,
@@ -145,7 +146,7 @@ if is_mlflow_available():
 if is_optuna_available():
     import optuna
 
-if is_ray_available():
+if is_ray_tune_available():
     from ray import tune
 
 if is_azureml_available():
@@ -227,8 +228,9 @@ class Trainer:
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
     ):
         if args is None:
-            logger.info("No `TrainingArguments` passed, using the current path as `output_dir`.")
-            args = TrainingArguments("tmp_trainer")
+            output_dir = "tmp_trainer"
+            logger.info(f"No `TrainingArguments` passed, using `output_dir={output_dir}`.")
+            args = TrainingArguments(output_dir=output_dir)
         self.args = args
         # Seed must be set before instantiating the model when using model
         set_seed(self.args.seed)
@@ -319,6 +321,12 @@ class Trainer:
                         "Using FP16 with APEX but APEX is not installed, please refer to https://www.github.com/nvidia/apex."
                     )
                 self.use_apex = True
+
+        # Label smoothing
+        if self.args.label_smoothing_factor != 0:
+            self.label_smoother = LabelSmoother(epsilon=self.args.label_smoothing_factor)
+        else:
+            self.label_smoother = None
 
         self.state = TrainerState()
         self.control = TrainerControl()
@@ -507,24 +515,32 @@ class Trainer:
                     "weight_decay": 0.0,
                 },
             ]
+            optimizer_cls = Adafactor if self.args.adafactor else AdamW
+            if self.args.adafactor:
+                optimizer_cls = Adafactor
+                optimizer_kwargs = {"scale_parameter": False, "relative_step": False}
+            else:
+                optimizer_cls = AdamW
+                optimizer_kwargs = {
+                    "betas": (self.args.adam_beta1, self.args.adam_beta2),
+                    "eps": self.args.adam_epsilon,
+                }
+            optimizer_kwargs["lr"] = self.args.learning_rate
             if self.sharded_dpp:
                 self.optimizer = OSS(
                     params=optimizer_grouped_parameters,
-                    optim=AdamW,
-                    lr=self.args.learning_rate,
-                    betas=(self.args.adam_beta1, self.args.adam_beta2),
-                    eps=self.args.adam_epsilon,
+                    optim=optimizer_cls,
+                    **optimizer_kwargs,
                 )
             else:
-                self.optimizer = AdamW(
-                    optimizer_grouped_parameters,
-                    lr=self.args.learning_rate,
-                    betas=(self.args.adam_beta1, self.args.adam_beta2),
-                    eps=self.args.adam_epsilon,
-                )
+                self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
+
         if self.lr_scheduler is None:
-            self.lr_scheduler = get_linear_schedule_with_warmup(
-                self.optimizer, num_warmup_steps=self.args.warmup_steps, num_training_steps=num_training_steps
+            self.lr_scheduler = get_scheduler(
+                self.args.lr_scheduler_type,
+                self.optimizer,
+                num_warmup_steps=self.args.warmup_steps,
+                num_training_steps=num_training_steps,
             )
 
     def num_examples(self, dataloader: DataLoader) -> int:
@@ -1062,7 +1078,7 @@ class Trainer:
         backend = HPSearchBackend(backend)
         if backend == HPSearchBackend.OPTUNA and not is_optuna_available():
             raise RuntimeError("You picked the optuna backend, but it is not installed. Use `pip install optuna`.")
-        if backend == HPSearchBackend.RAY and not is_ray_available():
+        if backend == HPSearchBackend.RAY and not is_ray_tune_available():
             raise RuntimeError(
                 "You picked the Ray Tune backend, but it is not installed. Use `pip install 'ray[tune]'`."
             )
@@ -1168,8 +1184,12 @@ class Trainer:
         # TODO: this needs to be fixed and made cleaner later.
         if self.args.past_index >= 0:
             self._past = outputs[self.args.past_index]
-        # We don't use .loss here since the model may return tuples instead of ModelOutput.
-        return outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+
+        if self.label_smoother is not None and "labels" in inputs:
+            return self.label_smoother(outputs, inputs["labels"])
+        else:
+            # We don't use .loss here since the model may return tuples instead of ModelOutput.
+            return outputs["loss"] if isinstance(outputs, dict) else outputs[0]
 
     def is_local_process_zero(self) -> bool:
         """
@@ -1556,11 +1576,13 @@ class Trainer:
             else:
                 outputs = model(**inputs)
             if has_labels:
+                if self.label_smoother is not None and "labels" in inputs:
+                    loss = self.label_smoother(outputs, inputs["labels"]).mean().detach()
+                else:
+                    loss = (outputs["loss"] if isinstance(outputs, dict) else outputs[0]).mean().detach()
                 if isinstance(outputs, dict):
-                    loss = outputs["loss"].mean().detach()
                     logits = tuple(v for k, v in outputs.items() if k not in ignore_keys + ["loss"])
                 else:
-                    loss = outputs[0].mean().detach()
                     logits = outputs[1:]
             else:
                 loss = None

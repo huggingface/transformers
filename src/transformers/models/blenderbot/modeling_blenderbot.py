@@ -19,7 +19,7 @@
 import torch
 
 from ...file_utils import add_start_docstrings
-from ..bart.modeling_bart import BartForConditionalGeneration
+from ..bart.modeling_bart import BartForConditionalGeneration, BartModel
 from .configuration_blenderbot import BlenderbotConfig
 
 
@@ -39,7 +39,20 @@ BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = ["facebook/blenderbot-3B", "facebook/
 
 
 @add_start_docstrings(
-    "The BART Model with a language modeling head. Can be used for summarization.", BLENDER_START_DOCSTRING
+    "The bare BlenderBot Model transformer outputting raw hidden-states without any specific head on top.",
+    BLENDER_START_DOCSTRING,
+)
+class BlenderbotModel(BartModel):
+    r"""
+    This class overrides :class:`~transformers.BartModel`. Please check the superclass for the appropriate
+    documentation alongside usage examples.
+    """
+
+    config_class = BlenderbotConfig
+
+
+@add_start_docstrings(
+    "The BlenderBot Model with a language modeling head. Can be used for summarization.", BLENDER_START_DOCSTRING
 )
 class BlenderbotForConditionalGeneration(BartForConditionalGeneration):
     """

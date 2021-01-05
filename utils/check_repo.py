@@ -24,11 +24,12 @@ from pathlib import Path
 # python utils/check_repo.py
 PATH_TO_TRANSFORMERS = "src/transformers"
 PATH_TO_TESTS = "tests"
-PATH_TO_DOC = "docs/source/model_doc"
+PATH_TO_DOC = "docs/source"
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = [
+    # models to ignore for not tested
     "BartDecoder",  # Building part of bigger (tested) model.
     "BartEncoder",  # Building part of bigger (tested) model.
     "BertLMHeadModel",  # Needs to be setup as decoder.
@@ -62,6 +63,7 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = [
+    # models to ignore for model xxx mapping
     "BartDecoder",
     "BartEncoder",
     "DPRContextEncoder",
@@ -313,7 +315,7 @@ def find_all_documented_objects():
     """ Parse the content of all doc files to detect which classes and functions it documents"""
     documented_obj = []
     for doc_file in Path(PATH_TO_DOC).glob("**/*.rst"):
-        with open(doc_file) as f:
+        with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
             content = f.read()
         raw_doc_objs = re.findall(r"(?:autoclass|autofunction):: transformers.(\S+)\s+", content)
         documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
@@ -323,6 +325,7 @@ def find_all_documented_objects():
 # One good reason for not being documented is to be deprecated. Put in this list deprecated objects.
 DEPRECATED_OBJECTS = [
     "AutoModelWithLMHead",
+    "BartPretrainedModel",
     "GlueDataset",
     "GlueDataTrainingArguments",
     "LineByLineTextDataset",
@@ -338,6 +341,7 @@ DEPRECATED_OBJECTS = [
     "SquadV1Processor",
     "SquadV2Processor",
     "TFAutoModelWithLMHead",
+    "TFBartPretrainedModel",
     "TextDataset",
     "TextDatasetForNextSentencePrediction",
     "glue_compute_metrics",
@@ -378,8 +382,6 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "BertJapaneseTokenizer",
     "CharacterTokenizer",
     "MecabTokenizer",
-    # Bertweet
-    "BertweetTokenizer",
     # Herbert
     "HerbertTokenizer",
     "HerbertTokenizerFast",
@@ -456,7 +458,7 @@ def check_repo_quality():
     check_all_decorator_order()
     check_all_models_are_tested()
     print("Checking all objects are properly documented.")
-    check_all_objects_are_documented
+    check_all_objects_are_documented()
     print("Checking all models are in at least one auto class.")
     check_all_models_are_auto_configured()
 

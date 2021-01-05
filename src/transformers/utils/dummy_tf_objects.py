@@ -1302,6 +1302,15 @@ class TFAdaptiveEmbedding:
         requires_tf(self)
 
 
+class TFTransfoXLForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
 class TFTransfoXLLMHeadModel:
     def __init__(self, *args, **kwargs):
         requires_tf(self)

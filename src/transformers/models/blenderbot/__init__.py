@@ -22,7 +22,11 @@ from .tokenization_blenderbot import BlenderbotSmallTokenizer, BlenderbotTokeniz
 
 
 if is_torch_available():
-    from .modeling_blenderbot import BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST, BlenderbotForConditionalGeneration
+    from .modeling_blenderbot import (
+        BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        BlenderbotForConditionalGeneration,
+        BlenderbotModel,
+    )
 
 if is_tf_available():
     from .modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration

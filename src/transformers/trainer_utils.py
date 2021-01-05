@@ -132,9 +132,9 @@ def default_hp_space_optuna(trial) -> Dict[str, float]:
 
 
 def default_hp_space_ray(trial) -> Dict[str, float]:
-    from .integrations import is_ray_available
+    from .integrations import is_ray_tune_available
 
-    assert is_ray_available(), "This function needs ray installed: `pip install ray[tune]`"
+    assert is_ray_tune_available(), "This function needs ray installed: `pip " "install ray[tune]`"
     from ray import tune
 
     return {
@@ -201,3 +201,12 @@ def speed_metrics(split, start_time, num_samples=None):
         samples_per_second = 1 / (runtime / num_samples)
         result[f"{split}_samples_per_second"] = round(samples_per_second, 3)
     return result
+
+
+class SchedulerType(ExplicitEnum):
+    LINEAR = "linear"
+    COSINE = "cosine"
+    COSINE_WITH_RESTARTS = "cosine_with_restarts"
+    POLYNOMIAL = "polynomial"
+    CONSTANT = "constant"
+    CONSTANT_WITH_WARMUP = "constant_with_warmup"

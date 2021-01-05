@@ -219,20 +219,26 @@ class TFGPT2ModelTester:
         model = TFGPT2Model(config=config)
 
         # first forward pass
-        outputs = model(input_ids, token_type_ids=token_type_ids, use_cache=True)
+        outputs = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, use_cache=True)
 
         output, past = outputs.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
         next_token_types = ids_tensor((self.batch_size, 3), self.type_vocab_size)
+        next_attn_mask = ids_tensor((self.batch_size, 3), 2)
 
         # append to next input_ids and token_type_ids
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
         next_token_type_ids = tf.concat([token_type_ids, next_token_types], axis=-1)
+        next_attention_mask = tf.concat([input_mask, next_attn_mask], axis=-1)
 
-        output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, token_type_ids=next_token_types, past=past)["last_hidden_state"]
+        output_from_no_past = model(
+            next_input_ids, token_type_ids=next_token_type_ids, attention_mask=next_attention_mask
+        )["last_hidden_state"]
+        output_from_past = model(
+            next_tokens, token_type_ids=next_token_types, attention_mask=next_attention_mask, past=past
+        )["last_hidden_state"]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
         # select random slice
@@ -241,7 +247,7 @@ class TFGPT2ModelTester:
         output_from_past_slice = output_from_past[:, :, random_slice_idx]
 
         # test that outputs are equal for slice
-        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-6)
+        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
     def create_and_check_gpt2_lm_head(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = TFGPT2LMHeadModel(config=config)
