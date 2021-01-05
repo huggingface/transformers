@@ -18,7 +18,10 @@ import json
 import os
 import unittest
 
-from transformers.models.blenderbot.tokenization_blenderbot import VOCAB_FILES_NAMES, BlenderbotSmallTokenizer
+from transformers.models.blenderbot_small.tokenization_blenderbot_small import (
+    VOCAB_FILES_NAMES,
+    BlenderbotSmallTokenizer,
+)
 
 from .test_tokenization_common import TokenizerTesterMixin
 
