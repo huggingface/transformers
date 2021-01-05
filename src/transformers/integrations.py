@@ -15,8 +15,13 @@
 Integrations with other Python libraries.
 """
 import math
+import numbers
 import os
+import re
+import tempfile
+from pathlib import Path
 
+from .file_utils import ENV_VARS_TRUE_VALUES
 from .trainer_utils import EvaluationStrategy
 from .utils import logging
 
@@ -369,6 +374,8 @@ class WandbCallback(TrainerCallback):
         <https://docs.wandb.com/huggingface>`__. You can also override the following environment variables:
 
         Environment:
+            WANDB_LOG_MODEL (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to log model as artifact at the end of training.
             WANDB_WATCH (:obj:`str`, `optional` defaults to :obj:`"gradients"`):
                 Can be :obj:`"gradients"`, :obj:`"all"` or :obj:`"false"`. Set to :obj:`"false"` to disable gradient
                 logging or :obj:`"all"` to log gradients and parameters.
@@ -407,11 +414,43 @@ class WandbCallback(TrainerCallback):
             if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false":
                 wandb.watch(model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, args.logging_steps))
 
+            # log outputs
+            self._log_model = os.getenv("WANDB_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
+
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         hp_search = state.is_hyper_param_search
         if not self._initialized or hp_search:
-            print(args.run_name)
             self.setup(args, state, model, reinit=hp_search, **kwargs)
+
+    def on_train_end(self, args, state, control, model=None, tokenizer=None, **kwargs):
+        # commit last step
+        wandb.log({})
+        if self._log_model and self._initialized and state.is_world_process_zero:
+            from .trainer import Trainer
+
+            fake_trainer = Trainer(args=args, model=model, tokenizer=tokenizer)
+            with tempfile.TemporaryDirectory() as temp_dir:
+                fake_trainer.save_model(temp_dir)
+                # use run name and ensure it's a valid Artifact name
+                artifact_name = re.sub(r"[^a-zA-Z0-9_\.\-]", "", wandb.run.name)
+                metadata = (
+                    {
+                        k: v
+                        for k, v in dict(wandb.summary).items()
+                        if isinstance(v, numbers.Number) and not k.startswith("_")
+                    }
+                    if not args.load_best_model_at_end
+                    else {
+                        f"eval/{args.metric_for_best_model}": state.best_metric,
+                        "train/total_floss": state.total_flos,
+                    }
+                )
+                artifact = wandb.Artifact(name=f"run-{artifact_name}", type="model", metadata=metadata)
+                for f in Path(temp_dir).glob("*"):
+                    if f.is_file():
+                        with artifact.new_file(f.name, mode="wb") as fa:
+                            fa.write(f.read_bytes())
+                wandb.run.log_artifact(artifact)
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
         if not self._initialized:
