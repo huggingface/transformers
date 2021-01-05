@@ -609,6 +609,27 @@ class BlenderbotModel:
         requires_pytorch(self)
 
 
+BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class BlenderbotSmallForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BlenderbotSmallModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -1327,6 +1348,15 @@ class LxmertXLayer:
         requires_pytorch(self)
 
 
+class MarianModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class MarianMTModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -1337,6 +1367,24 @@ class MarianMTModel:
 
 
 class MBartForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MBartForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MBartForSequenceClassification:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 

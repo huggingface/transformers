@@ -15,20 +15,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...file_utils import is_sentencepiece_available, is_tf_available, is_tokenizers_available, is_torch_available
-from .configuration_marian import MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP, MarianConfig
+from ...file_utils import is_torch_available
+from .configuration_blenderbot_small import BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotSmallConfig
+from .tokenization_blenderbot_small import BlenderbotSmallTokenizer
 
-
-if is_sentencepiece_available():
-    from .tokenization_marian import MarianTokenizer
 
 if is_torch_available():
-    from .modeling_marian import (
-        MARIAN_PRETRAINED_MODEL_ARCHIVE_LIST,
-        MarianModel,
-        MarianMTModel,
-        MarianPreTrainedModel,
+    from .modeling_blenderbot_small import (
+        BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        BlenderbotSmallForConditionalGeneration,
+        BlenderbotSmallModel,
+        BlenderbotSmallPreTrainedModel,
     )
-
-if is_tf_available():
-    from .modeling_tf_marian import TFMarianMTModel

@@ -135,6 +135,10 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         >>> configuration = model.config
     """
     model_type = "{{cookiecutter.lowercase_modelname}}"
+    {% if cookiecutter.is_encoder_decoder_model == "False" -%}
+    {% else -%}
+    keys_to_ignore_at_inference = ["past_key_values"]
+    {% endif -%}
 
     def __init__(
         self,

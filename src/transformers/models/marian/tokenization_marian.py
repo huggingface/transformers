@@ -84,7 +84,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         >>> tok = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
         >>> src_texts = [ "I am a small frog.", "Tom asked his teacher for advice."]
         >>> tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
-        >>> batch_enc: BatchEncoding = tok.prepare_seq2seq_batch(src_texts, tgt_texts=tgt_texts, return_tensors="pt")
+        >>> batch_enc = tok.prepare_seq2seq_batch(src_texts, tgt_texts=tgt_texts, return_tensors="pt")
         >>> # keys  [input_ids, attention_mask, labels].
         >>> # model(**batch) should work
     """

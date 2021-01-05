@@ -64,7 +64,6 @@ Implementation Notes
   summarization, see the example in that docstrings.
 - Models that load the `facebook/bart-large-cnn` weights will not have a :obj:`mask_token_id`, or be able to perform
   mask-filling tasks.
-- For training/forward passes that don't involve beam search, pass :obj:`use_cache=False`.
 
 Mask Filling
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -1601,17 +1601,6 @@ def _expand_mask(
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
-def {{cookiecutter.camelcase_modelname}}LayerNorm(normalized_shape: torch.Size, eps: float = 1e-5, elementwise_affine: bool = True):
-    if torch.cuda.is_available():
-        try:
-            from apex.normalization import FusedLayerNorm
-
-            return FusedLayerNorm(normalized_shape, eps, elementwise_affine)
-        except ImportError:
-            pass
-    return torch.nn.LayerNorm(normalized_shape, eps, elementwise_affine)
-
-
 class {{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size. 
@@ -1619,7 +1608,6 @@ class {{cookiecutter.camelcase_modelname}}LearnedPositionalEmbedding(nn.Embeddin
 
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int):
         assert padding_idx is not None, "`padding_idx` should not be None, but of type int"
-        num_embeddings
         super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
 
     def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
@@ -1774,13 +1762,13 @@ class {{cookiecutter.camelcase_modelname}}EncoderLayer(nn.Module):
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
         )
-        self.self_attn_layer_norm = {{cookiecutter.camelcase_modelname}}LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
         self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = {{cookiecutter.camelcase_modelname}}LayerNorm(self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
     def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, output_attentions: bool = False):
         """
@@ -1788,8 +1776,9 @@ class {{cookiecutter.camelcase_modelname}}EncoderLayer(nn.Module):
             hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (:obj:`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            output_attentions (:obj:`bool`): Whether the base model outputs attentions.
-                This requires the attentions tensor to be reshaped in this function.
+            output_attentions (:obj:`bool`, `optional`):
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more detail.
         """
         residual = hidden_states
         hidden_states, attn_weights, _ = self.self_attn(
@@ -1834,17 +1823,17 @@ class {{cookiecutter.camelcase_modelname}}DecoderLayer(nn.Module):
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = {{cookiecutter.camelcase_modelname}}LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.encoder_attn = {{cookiecutter.camelcase_modelname}}Attention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
         )
-        self.encoder_attn_layer_norm = {{cookiecutter.camelcase_modelname}}LayerNorm(self.embed_dim)
+        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = {{cookiecutter.camelcase_modelname}}LayerNorm(self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
     def forward(
         self,
@@ -1865,8 +1854,9 @@ class {{cookiecutter.camelcase_modelname}}DecoderLayer(nn.Module):
             encoder_attention_mask (:obj:`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             past_key_value (:obj:`Tuple(torch.FloatTensor)`): cached past key and value projection states
-            output_attentions (:obj:`bool`): Whether the base model outputs attentions.
-                This requires the attentions tensor to be reshaped in this function.
+            output_attentions (:obj:`bool`, `optional`):
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more detail.
         """
         residual = hidden_states
 
@@ -2031,7 +2021,7 @@ class {{cookiecutter.camelcase_modelname}}PreTrainedModel(PreTrainedModel):
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Provide for translation and summarization training. By default, the model will create this tensor by
             shifting the :obj:`input_ids` to the right, following the paper.
-        decoder_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
+        decoder_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
 
@@ -2094,7 +2084,7 @@ class {{cookiecutter.camelcase_modelname}}Encoder({{cookiecutter.camelcase_model
         embed_dim = config.d_model
         self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
         if embed_tokens is not None:
             self.embed_tokens = embed_tokens
@@ -2107,7 +2097,7 @@ class {{cookiecutter.camelcase_modelname}}Encoder({{cookiecutter.camelcase_model
             self.padding_idx,
         )
         self.layers = nn.ModuleList([{{cookiecutter.camelcase_modelname}}EncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.layernorm_embedding = {{cookiecutter.camelcase_modelname}}LayerNorm(embed_dim)
+        self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
         self.init_weights()
 
@@ -2251,7 +2241,7 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
             self.padding_idx,
         )
         self.layers = nn.ModuleList([{{cookiecutter.camelcase_modelname}}DecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.layernorm_embedding = {{cookiecutter.camelcase_modelname}}LayerNorm(config.d_model)
+        self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         self.init_weights()
 
@@ -2513,7 +2503,7 @@ class {{cookiecutter.camelcase_modelname}}Model({{cookiecutter.camelcase_modelna
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=False
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
