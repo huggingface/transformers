@@ -33,6 +33,6 @@ help people access the inner representations, mainly adapted from the great work
 * retrieving heads output values and gradients to be able to compute head importance score and prune head as explained
   in https://arxiv.org/abs/1905.10650.
 
-To help you understand and use these features, we have added a specific example script: `bertology.py
-<https://github.com/huggingface/transformers/blob/master/examples/research_projects/bertology/run_bertology.py>`_ while
-extract information and prune a model pre-trained on GLUE.
+To help you understand and use these features, we have added a specific example script: :prefix_link:`bertology.py
+<examples/research_projects/bertology/run_bertology.py>` while extract information and prune a model pre-trained on
+GLUE.
