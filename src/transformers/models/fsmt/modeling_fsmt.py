@@ -34,7 +34,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, LayerNorm
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -262,16 +262,6 @@ FSMT_INPUTS_DOCSTRING = r"""
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
-
-
-have_fused_layer_norm = False
-try:
-    from apex.normalization import FusedLayerNorm
-
-    have_fused_layer_norm = True
-except ImportError:
-    pass
-LayerNorm = FusedLayerNorm if have_fused_layer_norm else torch.nn.LayerNorm
 
 
 def invert_mask(attention_mask):

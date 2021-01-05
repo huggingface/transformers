@@ -240,6 +240,8 @@ TensorFlow and/or Flax.
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |     Funnel Transformer      |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
+|             LED             |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
++-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |           LXMERT            |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |          LayoutLM           |       ✅       |       ✅       |       ✅        |         ❌         |      ❌      |
@@ -356,6 +358,7 @@ TensorFlow and/or Flax.
     model_doc/bart
     model_doc/barthez
     model_doc/bert
+    model_doc/bertweet
     model_doc/bertgeneration
     model_doc/blenderbot
     model_doc/camembert
@@ -370,6 +373,7 @@ TensorFlow and/or Flax.
     model_doc/fsmt
     model_doc/funnel
     model_doc/layoutlm
+    model_doc/led
     model_doc/longformer
     model_doc/lxmert
     model_doc/marian

@@ -30,6 +30,8 @@ PATH_TO_DOC = "docs/source"
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = [
     # models to ignore for not tested
+    "LEDEncoder",  # Building part of bigger (tested) model.
+    "LEDDecoder",  # Building part of bigger (tested) model.
     "BartDecoder",  # Building part of bigger (tested) model.
     "BartEncoder",  # Building part of bigger (tested) model.
     "BertLMHeadModel",  # Needs to be setup as decoder.
@@ -64,6 +66,8 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = [
     # models to ignore for model xxx mapping
+    "LEDEncoder",
+    "LEDDecoder",
     "BartDecoder",
     "BartEncoder",
     "DPRContextEncoder",
@@ -315,7 +319,7 @@ def find_all_documented_objects():
     """ Parse the content of all doc files to detect which classes and functions it documents"""
     documented_obj = []
     for doc_file in Path(PATH_TO_DOC).glob("**/*.rst"):
-        with open(doc_file) as f:
+        with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
             content = f.read()
         raw_doc_objs = re.findall(r"(?:autoclass|autofunction):: transformers.(\S+)\s+", content)
         documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
@@ -382,8 +386,6 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "BertJapaneseTokenizer",
     "CharacterTokenizer",
     "MecabTokenizer",
-    # Bertweet
-    "BertweetTokenizer",
     # Herbert
     "HerbertTokenizer",
     "HerbertTokenizerFast",
