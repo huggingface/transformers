@@ -263,10 +263,10 @@ class Trainer:
             if model_init is not None:
                 warnings.warn(
                     "`Trainer` requires either a `model` or `model_init` argument, but not both. "
-                    "Ignoring `model_init`. This will become a fatal error in the next release",
+                    "`model_init` will overwrite your model when calling the `train` method. This will become a fatal error in the next release.",
                     FutureWarning,
                 )
-            self.model_init = None
+            self.model_init = model_init
 
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
