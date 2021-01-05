@@ -55,10 +55,14 @@ Examples
 
 - Since Marian models are smaller than many other translation models available in the library, they can be useful for
   fine-tuning experiments and integration tests.
-- `Fine-tune on GPU
-  <https://github.com/huggingface/transformers/blob/master/examples/research_projects/seq2seq-distillation/train_distil_marian_enro_teacher.sh>`__
+<<<<<<< HEAD - `Fine-tune on GPU
+<https://github.com/huggingface/transformers/blob/master/examples/research_projects/seq2seq-distillation/train_distil_marian_enro_teacher.sh>`__
 - `Fine-tune on GPU with pytorch-lightning
-  <https://github.com/huggingface/transformers/blob/master/examples/research_projects/seq2seq-distillation/train_distil_marian_no_teacher.sh>`__
+<https://github.com/huggingface/transformers/blob/master/examples/research_projects/seq2seq-distillation/train_distil_marian_no_teacher.sh>`__
+======= - :prefix_link:`Fine-tune on TPU <examples/seq2seq/builtin_trainer/train_distil_marian_enro_tpu.sh>` -
+:prefix_link:`Fine-tune on GPU <examples/seq2seq/builtin_trainer/train_distil_marian_enro.sh>` -
+:prefix_link:`Fine-tune on GPU with pytorch-lightning <examples/seq2seq/distil_marian_no_teacher.sh>` >>>>>>>
+main/master
 
 Multilingual Models
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

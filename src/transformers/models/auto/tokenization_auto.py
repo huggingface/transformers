@@ -36,6 +36,7 @@ from ..funnel.tokenization_funnel import FunnelTokenizer
 from ..gpt2.tokenization_gpt2 import GPT2Tokenizer
 from ..herbert.tokenization_herbert import HerbertTokenizer
 from ..layoutlm.tokenization_layoutlm import LayoutLMTokenizer
+from ..led.tokenization_led import LEDTokenizer
 from ..longformer.tokenization_longformer import LongformerTokenizer
 from ..lxmert.tokenization_lxmert import LxmertTokenizer
 from ..mobilebert.tokenization_mobilebert import MobileBertTokenizer
@@ -69,6 +70,7 @@ from .configuration_auto import (
     FunnelConfig,
     GPT2Config,
     LayoutLMConfig,
+    LEDConfig,
     LongformerConfig,
     LxmertConfig,
     MarianConfig,
@@ -137,6 +139,7 @@ if is_tokenizers_available():
     from ..gpt2.tokenization_gpt2_fast import GPT2TokenizerFast
     from ..herbert.tokenization_herbert_fast import HerbertTokenizerFast
     from ..layoutlm.tokenization_layoutlm_fast import LayoutLMTokenizerFast
+    from ..led.tokenization_led_fast import LEDTokenizerFast
     from ..longformer.tokenization_longformer_fast import LongformerTokenizerFast
     from ..lxmert.tokenization_lxmert_fast import LxmertTokenizerFast
     from ..mbart.tokenization_mbart_fast import MBartTokenizerFast
@@ -226,6 +229,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (ProphetNetConfig, (ProphetNetTokenizer, None)),
         (MPNetConfig, (MPNetTokenizer, MPNetTokenizerFast)),
         (TapasConfig, (TapasTokenizer, None)),
+        (LEDConfig, (LEDTokenizer, LEDTokenizerFast)),
     ]
 )
 
