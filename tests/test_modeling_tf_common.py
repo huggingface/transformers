@@ -166,11 +166,12 @@ class TFModelTesterMixin:
 
     def test_saved_model_creation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = True
-        config.output_attentions = True
+        config.output_hidden_states = False
+        config.output_attentions = False
 
         if hasattr(config, "use_cache"):
-            config.use_cache = True
+            config.use_cache = False
+
         model_class = self.all_model_classes[0]
 
         class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
