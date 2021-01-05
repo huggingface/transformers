@@ -10,11 +10,14 @@
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
     specific language governing permissions and limitations under the License.
 
-Blenderbot
+Blenderbot Small
 -----------------------------------------------------------------------------------------------------------------------
 
-**DISCLAIMER:** If you see something strange, file a `Github Issue
-<https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title>`__ .
+Note that :class:`~transformers.BlenderbotSmallModel` and
+:class:`~transformers.BlenderbotSmallForConditionalGeneration` are only used in combination with the checkpoint
+`facebook/blenderbot-90M <https://huggingface.co/facebook/blenderbot-90M>`__. Larger Blenderbot checkpoints should
+instead be used with :class:`~transformers.BlenderbotModel` and
+:class:`~transformers.BlenderbotForConditionalGeneration`
 
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -38,70 +41,30 @@ failure cases of our models.*
 
 The authors' code can be found `here <https://github.com/facebookresearch/ParlAI>`__ .
 
-
-Implementation Notes
+BlenderbotSmallConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- Blenderbot uses a standard `seq2seq model transformer <https://arxiv.org/pdf/1706.03762.pdf>`__ based architecture.
-- Available checkpoints can be found in the `model hub <https://huggingface.co/models?search=blenderbot>`__.
-- This is the `default` Blenderbot model class. However, some smaller checkpoints, such as
-  ``facebook/blenderbot_small_90M``, have a different architecture and consequently should be used with
-  `BlenderbotSmall <https://huggingface.co/transformers/master/model_doc/blenderbot_small.html>`__.
-
-
-Usage
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Here is an example of model usage:
-
-.. code-block::
-
-        >>> from transformers import BlenderbotTokenizer, BlenderbotForConditionalGeneration
-        >>> mname = 'facebook/blenderbot-400M-distill'
-        >>> model = BlenderbotForConditionalGeneration.from_pretrained(mname)
-        >>> tokenizer = BlenderbotTokenizer.from_pretrained(mname)
-        >>> UTTERANCE = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer([UTTERANCE], return_tensors='pt')
-        >>> reply_ids = model.generate(**inputs)
-        >>> print(tokenizer.batch_decode(reply_ids))
-        ["<s> That's unfortunate. Are they trying to lose weight or are they just trying to be healthier?</s>"]
-
-
-BlenderbotConfig
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.BlenderbotConfig
+.. autoclass:: transformers.BlenderbotSmallConfig
     :members:
 
-BlenderbotTokenizer
+
+BlenderbotSmallTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.BlenderbotTokenizer
-    :members: build_inputs_with_special_tokens
+.. autoclass:: transformers.BlenderbotSmallTokenizer
+    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
+        create_token_type_ids_from_sequences, save_vocabulary
 
 
-BlenderbotModel
+BlenderbotSmallModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-See :obj:`transformers.BartModel` for arguments to `forward` and `generate`
-
-.. autoclass:: transformers.BlenderbotModel
+.. autoclass:: transformers.BlenderbotSmallModel
     :members: forward
 
 
-BlenderbotForConditionalGeneration
+BlenderbotSmallForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-See :obj:`transformers.BartForConditionalGeneration` for arguments to `forward` and `generate`
-
-.. autoclass:: transformers.BlenderbotForConditionalGeneration
+.. autoclass:: transformers.BlenderbotSmallForConditionalGeneration
     :members: forward
-
-
-TFBlenderbotForConditionalGeneration
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-See :obj:`transformers.TFBartForConditionalGeneration` for arguments to `forward` and `generate`
-
-.. autoclass:: transformers.TFBlenderbotForConditionalGeneration
-    :members:

@@ -35,6 +35,14 @@ IGNORE_NON_TESTED = [
     "BartDecoder",  # Building part of bigger (tested) model.
     "BartEncoder",  # Building part of bigger (tested) model.
     "BertLMHeadModel",  # Needs to be setup as decoder.
+    "BlenderbotSmallEncoder",  # Building part of bigger (tested) model.
+    "BlenderbotSmallDecoder",  # Building part of bigger (tested) model.
+    "BlenderbotEncoder",  # Building part of bigger (tested) model.
+    "BlenderbotDecoder",  # Building part of bigger (tested) model.
+    "MBartEncoder",  # Building part of bigger (tested) model.
+    "MBartDecoder",  # Building part of bigger (tested) model.
+    "PegasusEncoder",  # Building part of bigger (tested) model.
+    "PegasusDecoder",  # Building part of bigger (tested) model.
     "DPREncoder",  # Building part of bigger (tested) model.
     "DPRSpanPredictor",  # Building part of bigger (tested) model.
     "ProphetNetDecoderWrapper",  # Building part of bigger (tested) model.
@@ -70,6 +78,10 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "LEDDecoder",
     "BartDecoder",
     "BartEncoder",
+    "BlenderbotSmallEncoder",
+    "BlenderbotSmallDecoder",
+    "BlenderbotEncoder",
+    "BlenderbotDecoder",
     "DPRContextEncoder",
     "DPREncoder",
     "DPRReader",
@@ -78,7 +90,11 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "FunnelBaseModel",
     "GPT2DoubleHeadsModel",
     "MT5EncoderModel",
+    "MBartEncoder",
+    "MBartDecoder",
     "OpenAIGPTDoubleHeadsModel",
+    "PegasusEncoder",
+    "PegasusDecoder",
     "ProphetNetDecoder",
     "ProphetNetEncoder",
     "ProphetNetDecoderWrapper",
