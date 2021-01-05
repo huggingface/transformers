@@ -252,7 +252,7 @@ def main():
     elif model_args.model_name_or_path:
         config = AutoConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
     else:
-        config = CONFIG_MAPPING[model_args.model_type]()
+        config = XLNetConfig()
         logger.warning("You are instantiating a new config instance from scratch.")
 
     tokenizer_kwargs = {
