@@ -51,6 +51,7 @@ from ..bert.modeling_bert import (
 )
 from ..bert_generation.modeling_bert_generation import BertGenerationDecoder, BertGenerationEncoder
 from ..blenderbot.modeling_blenderbot import BlenderbotForConditionalGeneration, BlenderbotModel
+from ..blenderbot_small.modeling_blenderbot_small import BlenderbotSmallForConditionalGeneration, BlenderbotSmallModel
 from ..camembert.modeling_camembert import (
     CamembertForCausalLM,
     CamembertForMaskedLM,
@@ -116,8 +117,13 @@ from ..longformer.modeling_longformer import (
     LongformerModel,
 )
 from ..lxmert.modeling_lxmert import LxmertForPreTraining, LxmertForQuestionAnswering, LxmertModel
-from ..marian.modeling_marian import MarianMTModel
-from ..mbart.modeling_mbart import MBartForConditionalGeneration, MBartModel
+from ..marian.modeling_marian import MarianModel, MarianMTModel
+from ..mbart.modeling_mbart import (
+    MBartForConditionalGeneration,
+    MBartForQuestionAnswering,
+    MBartForSequenceClassification,
+    MBartModel,
+)
 from ..mobilebert.modeling_mobilebert import (
     MobileBertForMaskedLM,
     MobileBertForMultipleChoice,
@@ -215,6 +221,7 @@ from .configuration_auto import (
     BertConfig,
     BertGenerationConfig,
     BlenderbotConfig,
+    BlenderbotSmallConfig,
     CamembertConfig,
     CTRLConfig,
     DebertaConfig,
@@ -260,6 +267,7 @@ MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
         (LEDConfig, LEDModel),
+        (BlenderbotSmallConfig, BlenderbotSmallModel),
         (RetriBertConfig, RetriBertModel),
         (MT5Config, MT5Model),
         (T5Config, T5Model),
@@ -297,6 +305,7 @@ MODEL_MAPPING = OrderedDict(
         (ProphetNetConfig, ProphetNetModel),
         (MPNetConfig, MPNetModel),
         (TapasConfig, TapasModel),
+        (MarianConfig, MarianModel),
     ]
 )
 
@@ -336,6 +345,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
         (LEDConfig, LEDForConditionalGeneration),
+        (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
         (LayoutLMConfig, LayoutLMForMaskedLM),
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
@@ -417,6 +427,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
         (LEDConfig, LEDForConditionalGeneration),
+        (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
         (MT5Config, MT5ForConditionalGeneration),
         (T5Config, T5ForConditionalGeneration),
         (PegasusConfig, PegasusForConditionalGeneration),
@@ -439,6 +450,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (AlbertConfig, AlbertForSequenceClassification),
         (CamembertConfig, CamembertForSequenceClassification),
         (XLMRobertaConfig, XLMRobertaForSequenceClassification),
+        (MBartConfig, MBartForSequenceClassification),
         (BartConfig, BartForSequenceClassification),
         (LongformerConfig, LongformerForSequenceClassification),
         (RobertaConfig, RobertaForSequenceClassification),
@@ -469,6 +481,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (AlbertConfig, AlbertForQuestionAnswering),
         (CamembertConfig, CamembertForQuestionAnswering),
         (BartConfig, BartForQuestionAnswering),
+        (MBartConfig, MBartForQuestionAnswering),
         (LongformerConfig, LongformerForQuestionAnswering),
         (XLMRobertaConfig, XLMRobertaForQuestionAnswering),
         (RobertaConfig, RobertaForQuestionAnswering),

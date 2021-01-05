@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch PEGASUS model. """
+""" Testing suite for the PyTorch BlenderbotSmall model. """
 
 
 import tempfile
@@ -20,22 +20,29 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
 from .test_modeling_common import ModelTesterMixin, ids_tensor
-from .test_modeling_mbart import AbstractSeq2SeqIntegrationTest
 
 
 if is_torch_available():
     import torch
 
-    from transformers import AutoModelForSeq2SeqLM, PegasusConfig, PegasusForConditionalGeneration, PegasusModel
-    from transformers.models.pegasus.modeling_pegasus import PegasusDecoder, PegasusEncoder
+    from transformers import (
+        BlenderbotSmallConfig,
+        BlenderbotSmallForConditionalGeneration,
+        BlenderbotSmallModel,
+        BlenderbotSmallTokenizer,
+    )
+    from transformers.models.blenderbot_small.modeling_blenderbot_small import (
+        BlenderbotSmallDecoder,
+        BlenderbotSmallEncoder,
+    )
 
 
-def prepare_pegasus_inputs_dict(
+def prepare_blenderbot_small_inputs_dict(
     config,
     input_ids,
     decoder_input_ids,
@@ -55,7 +62,7 @@ def prepare_pegasus_inputs_dict(
 
 
 @require_torch
-class PegasusModelTester:
+class BlenderbotSmallModelTester:
     def __init__(
         self,
         parent,
@@ -103,7 +110,7 @@ class PegasusModelTester:
 
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        config = PegasusConfig(
+        config = BlenderbotSmallConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -119,7 +126,7 @@ class PegasusModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
         )
-        inputs_dict = prepare_pegasus_inputs_dict(config, input_ids, decoder_input_ids)
+        inputs_dict = prepare_blenderbot_small_inputs_dict(config, input_ids, decoder_input_ids)
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
@@ -127,7 +134,7 @@ class PegasusModelTester:
         return config, inputs_dict
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
-        model = PegasusModel(config=config).get_decoder().to(torch_device).eval()
+        model = BlenderbotSmallModel(config=config).get_decoder().to(torch_device).eval()
         input_ids = inputs_dict["input_ids"]
         attention_mask = inputs_dict["attention_mask"]
 
@@ -160,7 +167,7 @@ class PegasusModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
 
     def check_encoder_decoder_model_standalone(self, config, inputs_dict):
-        model = PegasusModel(config=config).to(torch_device).eval()
+        model = BlenderbotSmallModel(config=config).to(torch_device).eval()
         outputs = model(**inputs_dict)
 
         encoder_last_hidden_state = outputs.encoder_last_hidden_state
@@ -169,7 +176,7 @@ class PegasusModelTester:
         with tempfile.TemporaryDirectory() as tmpdirname:
             encoder = model.get_encoder()
             encoder.save_pretrained(tmpdirname)
-            encoder = PegasusEncoder.from_pretrained(tmpdirname).to(torch_device)
+            encoder = BlenderbotSmallEncoder.from_pretrained(tmpdirname).to(torch_device)
 
         encoder_last_hidden_state_2 = encoder(inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"])[
             0
@@ -180,7 +187,7 @@ class PegasusModelTester:
         with tempfile.TemporaryDirectory() as tmpdirname:
             decoder = model.get_decoder()
             decoder.save_pretrained(tmpdirname)
-            decoder = PegasusDecoder.from_pretrained(tmpdirname).to(torch_device)
+            decoder = BlenderbotSmallDecoder.from_pretrained(tmpdirname).to(torch_device)
 
         last_hidden_state_2 = decoder(
             input_ids=inputs_dict["decoder_input_ids"],
@@ -193,17 +200,17 @@ class PegasusModelTester:
 
 
 @require_torch
-class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (PegasusModel, PegasusForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (PegasusForConditionalGeneration,) if is_torch_available() else ()
+class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (BlenderbotSmallModel, BlenderbotSmallForConditionalGeneration) if is_torch_available() else ()
+    all_generative_model_classes = (BlenderbotSmallForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
 
     def setUp(self):
-        self.model_tester = PegasusModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PegasusConfig)
+        self.model_tester = BlenderbotSmallModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=BlenderbotSmallConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -230,7 +237,7 @@ class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_ids = input_dict["input_ids"]
         attention_mask = input_ids.ne(1).to(torch_device)
-        model = PegasusForConditionalGeneration(config).eval().to(torch_device)
+        model = BlenderbotSmallForConditionalGeneration(config).eval().to(torch_device)
         if torch_device == "cuda":
             model.half()
         model.generate(input_ids, attention_mask=attention_mask)
@@ -256,47 +263,53 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
         raise AssertionError(msg)
 
 
-def _long_tensor(tok_lst):
-    return torch.tensor(tok_lst, dtype=torch.long, device=torch_device)
-
-
 @require_torch
-@require_sentencepiece
-@require_tokenizers
-class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
-    checkpoint_name = "google/pegasus-xsum"
-    src_text = [
-        """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow.""",
-        """ The London trio are up for best UK act and best album, as well as getting two nominations in the best song category."We got told like this morning 'Oh I think you're nominated'", said Dappy."And I was like 'Oh yeah, which one?' And now we've got nominated for four awards. I mean, wow!"Bandmate Fazer added: "We thought it's best of us to come down and mingle with everyone and say hello to the cameras. And now we find we've got four nominations."The band have two shots at the best song prize, getting the nod for their Tynchy Stryder collaboration Number One, and single Strong Again.Their album Uncle B will also go up against records by the likes of Beyonce and Kanye West.N-Dubz picked up the best newcomer Mobo in 2007, but female member Tulisa said they wouldn't be too disappointed if they didn't win this time around."At the end of the day we're grateful to be where we are in our careers."If it don't happen then it don't happen - live to fight another day and keep on making albums and hits for the fans."Dappy also revealed they could be performing live several times on the night.The group will be doing Number One and also a possible rendition of the War Child single, I Got Soul.The charity song is a  re-working of The Killers' All These Things That I've Done and is set to feature artists like Chipmunk, Ironik and Pixie Lott.This year's Mobos will be held outside of London for the first time, in Glasgow on 30 September.N-Dubz said they were looking forward to performing for their Scottish fans and boasted about their recent shows north of the border."We just done Edinburgh the other day," said Dappy."We smashed up an N-Dubz show over there. We done Aberdeen about three or four months ago - we smashed up that show over there! Everywhere we go we smash it up!" """,
-    ]
-
-    tgt_text = [
-        "California's largest electricity provider has turned off power to hundreds of thousands of customers.",
-        "Pop group N-Dubz have revealed they were surprised to get four nominations for this year's Mobo Awards.",
-    ]
+class Blenderbot90MIntegrationTests(unittest.TestCase):
+    ckpt = "facebook/blenderbot-90M"
 
     @cached_property
     def model(self):
-        return AutoModelForSeq2SeqLM.from_pretrained(self.checkpoint_name).to(torch_device)
+        model = BlenderbotSmallForConditionalGeneration.from_pretrained(self.ckpt).to(torch_device)
+        if torch_device == "cuda":
+            model = model.half()
+        return model
+
+    @cached_property
+    def tokenizer(self):
+        return BlenderbotSmallTokenizer.from_pretrained(self.ckpt)
 
     @slow
-    def test_pegasus_xsum_summary(self):
-        assert self.tokenizer.model_max_length == 512
-        inputs = self.tokenizer(self.src_text, return_tensors="pt", truncation=True, max_length=512, padding=True).to(
-            torch_device
-        )
-        assert inputs.input_ids.shape == (2, 421)
-        translated_tokens = self.model.generate(**inputs, num_beams=2)
-        decoded = self.tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)
-        assert self.tgt_text == decoded
+    def test_90_generation_from_long_input(self):
 
-        if "cuda" not in torch_device:
-            return
-        # Demonstrate fp16 issue, Contributions welcome!
-        self.model.half()
-        translated_tokens_fp16 = self.model.generate(**inputs, max_length=10)
-        decoded_fp16 = self.tokenizer.batch_decode(translated_tokens_fp16, skip_special_tokens=True)
-        assert decoded_fp16 == [
-            "California's largest electricity provider has begun",
-            "N-Dubz have revealed they were",
+        src_text = [
+            "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like\
+       i'm going to throw up.\nand why is that?"
         ]
+
+        model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
+
+        # model does not have "token_type_ids"
+        model_inputs.pop("token_type_ids")
+        assert isinstance(self.tokenizer, BlenderbotSmallTokenizer)
+        generated_ids = self.model.generate(**model_inputs)[0]
+        reply = self.tokenizer.decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
+
+        assert reply in (
+            "i don't know. i just feel like i'm going to throw up. it's not fun.",
+            "i'm not sure. i just feel like i've been feeling like i have to be in a certain place",
+        )
+
+    def test_90_generation_from_short_input(self):
+        model_inputs = self.tokenizer(["sam"], return_tensors="pt").to(torch_device)
+
+        # model does not have "token_type_ids"
+        model_inputs.pop("token_type_ids")
+        generated_utterances = self.model.generate(**model_inputs)
+
+        clean_txt = self.tokenizer.decode(
+            generated_utterances[0], skip_special_tokens=True, clean_up_tokenization_spaces=True
+        )
+        assert clean_txt in (
+            "have you ever been to a sam club? it's a great club in the south.",
+            "have you ever heard of sam harris? he's an american singer, songwriter, and actor.",
+        )

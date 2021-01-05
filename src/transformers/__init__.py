@@ -120,11 +120,11 @@ from .models.bert import (
 from .models.bert_generation import BertGenerationConfig
 from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .models.bertweet import BertweetTokenizer
-from .models.blenderbot import (
-    BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    BlenderbotConfig,
+from .models.blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig, BlenderbotTokenizer
+from .models.blenderbot_small import (
+    BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    BlenderbotSmallConfig,
     BlenderbotSmallTokenizer,
-    BlenderbotTokenizer,
 )
 from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
@@ -415,6 +415,11 @@ if is_torch_available():
         BlenderbotForConditionalGeneration,
         BlenderbotModel,
     )
+    from .models.blenderbot_small import (
+        BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        BlenderbotSmallForConditionalGeneration,
+        BlenderbotSmallModel,
+    )
     from .models.camembert import (
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         CamembertForCausalLM,
@@ -536,8 +541,13 @@ if is_torch_available():
         LxmertVisualFeatureEncoder,
         LxmertXLayer,
     )
-    from .models.marian import MarianMTModel
-    from .models.mbart import MBartForConditionalGeneration, MBartModel
+    from .models.marian import MarianModel, MarianMTModel
+    from .models.mbart import (
+        MBartForConditionalGeneration,
+        MBartForQuestionAnswering,
+        MBartForSequenceClassification,
+        MBartModel,
+    )
     from .models.mmbt import MMBTForClassification, MMBTModel, ModalEmbeddings
     from .models.mobilebert import (
         MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

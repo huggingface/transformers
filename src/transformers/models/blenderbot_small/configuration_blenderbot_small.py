@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021, Google and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The Facebook, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PEGASUS model configuration """
+""" BlenderbotSmall model configuration """
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -20,18 +20,18 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/pegasus-large": "https://huggingface.co/google/pegasus-large/resolve/main/config.json",
-    # See all PEGASUS models at https://huggingface.co/models?filter=pegasus
+BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/config.json",
+    # See all BlenderbotSmall models at https://huggingface.co/models?filter=blenderbot_small
 }
 
 
-class PegasusConfig(PretrainedConfig):
+class BlenderbotSmallConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.PegasusModel`. It is used to
-    instantiate an PEGASUS model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the PEGASUS `google/pegasus-large
-    <https://huggingface.co/google/pegasus-large>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.BlenderbotSmallModel`. It is
+    used to instantiate an BlenderbotSmall model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the BlenderbotSmall
+    `facebook/blenderbot_small-90M <https://huggingface.co/facebook/blenderbot_small-90M>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -39,22 +39,22 @@ class PegasusConfig(PretrainedConfig):
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50265):
-            Vocabulary size of the PEGASUS model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.PegasusModel` or
-            :class:`~transformers.TFPegasusModel`.
-        d_model (:obj:`int`, `optional`, defaults to 1024):
+            Vocabulary size of the BlenderbotSmall model. Defines the number of different tokens that can be
+            represented by the :obj:`inputs_ids` passed when calling :class:`~transformers.BlenderbotSmallModel` or
+            :class:`~transformers.TFBlenderbotSmallModel`.
+        d_model (:obj:`int`, `optional`, defaults to 512):
             Dimensionality of the layers and the pooler layer.
-        encoder_layers (:obj:`int`, `optional`, defaults to 12):
+        encoder_layers (:obj:`int`, `optional`, defaults to 8):
             Number of encoder layers.
-        decoder_layers (:obj:`int`, `optional`, defaults to 12):
+        decoder_layers (:obj:`int`, `optional`, defaults to 8):
             Number of decoder layers.
         encoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         decoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
+        decoder_ffn_dim (:obj:`int`, `optional`, defaults to 2048):
             Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
+        encoder_ffn_dim (:obj:`int`, `optional`, defaults to 2048):
             Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
         activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
@@ -67,7 +67,7 @@ class PegasusConfig(PretrainedConfig):
             The dropout ratio for activations inside the fully connected layer.
         classifier_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout ratio for classifier.
-        max_position_embeddings (:obj:`int`, `optional`, defaults to 1024):
+        max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         init_std (:obj:`float`, `optional`, defaults to 0.02):
@@ -87,50 +87,52 @@ class PegasusConfig(PretrainedConfig):
 
     Example::
 
-        >>> from transformers import PegasusModel, PegasusConfig
+        >>> from transformers import BlenderbotSmallModel, BlenderbotSmallConfig
 
-        >>> # Initializing a PEGASUS google/pegasus-large style configuration
-        >>> configuration = PegasusConfig()
+        >>> # Initializing a BlenderbotSmall facebook/blenderbot_small-90M style configuration
+        >>> configuration = BlenderbotSmallConfig()
 
-        >>> # Initializing a model from the google/pegasus-large style configuration
-        >>> model = PegasusModel(configuration)
+        >>> # Initializing a model from the facebook/blenderbot_small-90M style configuration
+        >>> model = BlenderbotSmallModel(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config
     """
-    model_type = "pegasus"
+    model_type = "blenderbot-small"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
         vocab_size=50265,
-        max_position_embeddings=1024,
-        encoder_layers=12,
-        encoder_ffn_dim=4096,
+        max_position_embeddings=512,
+        encoder_layers=8,
+        encoder_ffn_dim=2048,
         encoder_attention_heads=16,
-        decoder_layers=12,
-        decoder_ffn_dim=4096,
+        decoder_layers=8,
+        decoder_ffn_dim=2048,
         decoder_attention_heads=16,
         encoder_layerdrop=0.0,
         decoder_layerdrop=0.0,
         use_cache=True,
         is_encoder_decoder=True,
         activation_function="gelu",
-        d_model=1024,
+        d_model=512,
         dropout=0.1,
         attention_dropout=0.0,
         activation_dropout=0.0,
         init_std=0.02,
-        decoder_start_token_id=0,
+        decoder_start_token_id=1,
         classifier_dropout=0.0,
         scale_embedding=False,
         gradient_checkpointing=False,
         pad_token_id=0,
-        eos_token_id=1,
+        bos_token_id=1,
+        eos_token_id=2,
         **kwargs
     ):
         super().__init__(
             pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
@@ -158,17 +160,6 @@ class PegasusConfig(PretrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-
-        # IMPORTANT
-        # DELETE ALL OF THE FOLLOWING LINES AS SOON AS TF IS READY
-        self.extra_pos_embeddings = 0
-        self.normalize_before = True
-        self.add_final_layer_norm = True
-        self.do_blenderbot_90_layernorm = False
-        self.normalize_embedding = False
-        self.static_position_embeddings = True
-        self.add_bias_logits = False
-        self.force_bos_token_to_be_generated = False
 
     @property
     def num_attention_heads(self) -> int:

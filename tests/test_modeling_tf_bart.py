@@ -246,16 +246,16 @@ TOLERANCE = 1e-4
 class TFBartModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head(self):
         model = TFBartModel.from_pretrained("facebook/bart-large", from_pt=True)
+
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        inputs_dict = prepare_bart_inputs_dict(model.config, input_ids)
-        # with torch.no_grad():
-        output = model(**inputs_dict)[0]
+        attention_mask = tf.cast(tf.math.not_equal(input_ids, model.config.pad_token_id), tf.int8)
+        output = model(input_ids=input_ids, attention_mask=attention_mask)[0]
         expected_shape = (1, 11, 1024)
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = tf.Tensor(
+        expected_slice = tf.convert_to_tensor(
             [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],
         )
-        self.assertTrue(tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE)
 
     def test_cnn_summarization_same_as_fairseq_hard(self):
         hf = TFBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn", from_pt=True)
