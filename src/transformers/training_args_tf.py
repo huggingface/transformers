@@ -188,7 +188,7 @@ class TFTrainingArguments(TrainingArguments):
                 tf.config.experimental_connect_to_cluster(tpu)
                 tf.tpu.experimental.initialize_tpu_system(tpu)
 
-                strategy = tf.distribute.experimental.TPUStrategy(tpu)
+                strategy = tf.distribute.TPUStrategy(tpu)
 
             elif len(gpus) == 0:
                 strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
