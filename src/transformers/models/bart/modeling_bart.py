@@ -332,7 +332,7 @@ class BartEncoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         layer_head_mask: torch.Tensor,
-        output_attentions: bool = False
+        output_attentions: bool = False,
     ):
         """
         Args:
@@ -350,7 +350,7 @@ class BartEncoderLayer(nn.Module):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
-            output_attentions=output_attentions
+            output_attentions=output_attentions,
         )
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -805,7 +805,7 @@ class BartEncoder(BartPretrainedModel):
                     hidden_states,
                     attention_mask,
                     layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    output_attentions=output_attentions
+                    output_attentions=output_attentions,
                 )
 
             if output_attentions:
