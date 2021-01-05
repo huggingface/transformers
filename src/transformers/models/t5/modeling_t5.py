@@ -683,6 +683,7 @@ class T5PreTrainedModel(PreTrainedModel):
     config_class = T5Config
     load_tf_weights = load_tf_weights_in_t5
     base_model_prefix = "transformer"
+    is_parallelizable = True
 
     @property
     def dummy_inputs(self):
