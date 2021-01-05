@@ -348,13 +348,7 @@ class Trainer:
         self.use_amp = False
 
         # deepspeed manages its own fp16, so don't interfere
-        if args.deepspeed and args.fp16:
-            ds_config_file = args.deepspeed if args.deepspeed is not None else ""
-            raise ValueError(
-                f"Please use deepspeed's json configuration file {ds_config_file} to enable fp16 and not via --fp16 cl arg"
-            )
-
-        if args.fp16:
+        if args.fp16 and not args.deepspeed:
             if args.fp16_backend == "auto":
                 backend = "amp" if _is_native_amp_available else "apex"
             else:
@@ -507,6 +501,16 @@ class Trainer:
             config["scheduler"] = {
                 "type": scheduler,
                 "params": params,
+            }
+
+        # fp16
+        if "fp16" in config:
+            logger.info("Keeping the fp16 config from the config file intact, ignoring any fp16-specific cl args")
+        elif args.fp16:
+            # XXX: not sure what to do with args.fp16_backend
+            config["fp16"] = {
+                "enabled": True,
+                "opt_level": args.fp16_opt_level,
             }
 
         # init that takes some config via `args`, and the bulk of it via `config_params`
