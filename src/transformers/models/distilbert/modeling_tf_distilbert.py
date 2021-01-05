@@ -43,7 +43,6 @@ from ...modeling_tf_utils import (
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
-    TokenTypeEmbeddings,
     WordEmbeddings,
     get_initializer,
     input_processing,
