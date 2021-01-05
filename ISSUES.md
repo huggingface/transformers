@@ -20,7 +20,7 @@ This is an Open Source Project so please be mindful that like in any other proje
 
 This document's main purpose is to provide guidelines at how you can formulate your requests to increase your chances to be understood and to get supported.
 
-There are two main venues to receive support: [the forums](https://discuss.huggingface.co/) and [the github issues](https://github.com/huggingface/transformers/issues).
+There are two main venues to receive support: [the forums](https://discuss.huggingface.co/) and [the GitHub issues](https://github.com/huggingface/transformers/issues).
 
 ## The Forums
 
@@ -39,7 +39,7 @@ In particular all "Please explain" questions or objectively very user-specific f
 * "How to train T5 on De->En translation?"
 
 
-## The github Issues
+## The GitHub Issues
 
 Everything which hints at a bug should be opened as an [Issue](https://github.com/huggingface/transformers/issues).
 
@@ -55,7 +55,7 @@ You are not required to read the following guidelines before opening an issue. H
     
     The first two quoted words tell Google to limit the search to the context of the Huggingface Transformers. The remainder is your query - most commonly this would be an assert line if the software fails with an assert. 
     
-    The results of such a query will typically match GitHub issues, Hugging Face forums, StackExchange, and other user's blogs.
+    The results of such a query will typically match GitHub issues, Hugging Face forums, StackExchange, and blogs.
     
     If you find relevant hints, you may choose to continue the discussion there if you have follow up questions. 
     
@@ -218,6 +218,6 @@ You are not required to read the following guidelines before opening an issue. H
 
 In general the best way to figure out what works the best is learn from Issues posted by other people - see which Issues get great responses and which get little to no response - observe what the posters who received great responses did differently from those who did not. 
 
-Thank you for reading this somewhat lengthy document. We would like to conclude that these are not absolute rules, but friendly advice that will help maximize the chances for us to understand what you are trying to communicate, reproduce the problem then resolve it to your satisfaction and the benefit of the whole community.
+Thank you for reading this somewhat lengthy document. We would like to conclude that these are not absolute rules, but a friendly advice that will help maximize the chances for us to understand what you are trying to communicate, reproduce the problem then resolve it to your satisfaction and the benefit of the whole community.
 
 If after reading this document there are remaining questions on how and why or there is a need for further elucidation, please, don't hesitate to ask "How do I?" type of questions in the following sub-section of the forums: [XXX: @sgugger].
