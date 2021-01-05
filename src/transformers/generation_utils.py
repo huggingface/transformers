@@ -705,11 +705,11 @@ class GenerationMixin:
                 argument is useful for constrained generation conditioned on the prefix, as described in
                 `Autoregressive Entity Retrieval <https://arxiv.org/abs/2010.00904>`__.
             output_attentions (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-                tensors for more details.
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more details.
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors for
-                more details.
+                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
+                for more details.
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
@@ -722,15 +722,19 @@ class GenerationMixin:
 
 
         Return:
-            :class:`~transformers.file_utils.ModelOutput` or :obj:`torch.LongTensor`: A :class:`~transformers.file_utils.ModelOutput` (if ``return_dict_in_generate=True`` or when ``config.return_dict_in_generate=True``) or a :obj:`torch.FloatTensor`.
+            :class:`~transformers.file_utils.ModelOutput` or :obj:`torch.LongTensor`:
+                A :class:`~transformers.file_utils.ModelOutput` (if ``return_dict_in_generate=True`` or when
+                ``config.return_dict_in_generate=True``) or a :obj:`torch.FloatTensor`.
 
-                If the model is `not` an encoder-decoder model (``model.config.is_encoder_decoder=False``), the possible :class:`~transformers.file_utils.ModelOutput` types are:
+                If the model is `not` an encoder-decoder model (``model.config.is_encoder_decoder=False``), the
+                possible :class:`~transformers.file_utils.ModelOutput` types are:
                     - :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput`,
                     - :class:`~transformers.generation_utils.SampleDecoderOnlyOutput`,
                     - :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput`,
                     - :class:`~transformers.generation_utils.BeamSampleDecoderOnlyOutput`
 
-                If the model is an encoder-decoder model (``model.config.is_encoder_decoder=True``), the possible :class:`~transformers.file_utils.ModelOutput` types are:
+                If the model is an encoder-decoder model (``model.config.is_encoder_decoder=True``), the possible
+                :class:`~transformers.file_utils.ModelOutput` types are:
                     - :class:`~transformers.generation_utils.GreedySearchEncoderDecoderOutput`,
                     - :class:`~transformers.generation_utils.SampleEncoderDecoderOutput`,
                     - :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput`,
@@ -1057,11 +1061,11 @@ class GenerationMixin:
             eos_token_id (:obj:`int`, `optional`):
                 The id of the `end-of-sequence` token.
             output_attentions (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-                tensors for more details.
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more details.
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors for
-                more details.
+                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
+                for more details.
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
@@ -1073,10 +1077,12 @@ class GenerationMixin:
 
 
         Return:
-            :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput`, :class:`~transformers.generation_utils.GreedySearchEncoderDecoderOutput` or obj:`torch.LongTensor`: A :obj:`torch.LongTensor` containing the generated tokens (default behaviour) or a :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput` if
-            ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
-            :class:`~transformers.generation_utils.GreedySearchEncoderDecoderOutput` if
-            ``model.config.is_encoder_decoder=True``.
+            :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput`, :class:`~transformers.generation_utils.GreedySearchEncoderDecoderOutput` or obj:`torch.LongTensor`:
+                A :obj:`torch.LongTensor` containing the generated tokens (default behaviour) or a
+                :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput` if
+                ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
+                :class:`~transformers.generation_utils.GreedySearchEncoderDecoderOutput` if
+                ``model.config.is_encoder_decoder=True``.
 
         Examples::
 
@@ -1255,11 +1261,11 @@ class GenerationMixin:
             eos_token_id (:obj:`int`, `optional`):
                 The id of the `end-of-sequence` token.
             output_attentions (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-                tensors for more details.
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more details.
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors for
-                more details.
+                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
+                for more details.
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
@@ -1270,10 +1276,12 @@ class GenerationMixin:
 
 
         Return:
-            :class:`~transformers.generation_utils.SampleDecoderOnlyOutput`, :class:`~transformers.generation_utils.SampleEncoderDecoderOutput` or obj:`torch.LongTensor`: A :obj:`torch.LongTensor` containing the generated tokens (default behaviour) or a :class:`~transformers.generation_utils.SampleDecoderOnlyOutput` if
-            ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
-            :class:`~transformers.generation_utils.SampleEncoderDecoderOutput` if
-            ``model.config.is_encoder_decoder=True``.
+            :class:`~transformers.generation_utils.SampleDecoderOnlyOutput`, :class:`~transformers.generation_utils.SampleEncoderDecoderOutput` or obj:`torch.LongTensor`:
+                A :obj:`torch.LongTensor` containing the generated tokens (default behaviour)
+                or a :class:`~transformers.generation_utils.SampleDecoderOnlyOutput` if
+                ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
+                :class:`~transformers.generation_utils.SampleEncoderDecoderOutput` if
+                ``model.config.is_encoder_decoder=True``.
 
         Examples::
 
@@ -1462,11 +1470,11 @@ class GenerationMixin:
             eos_token_id (:obj:`int`, `optional`):
                 The id of the `end-of-sequence` token.
             output_attentions (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-                tensors for more details.
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more details.
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors for
-                more details.
+                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
+                for more details.
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
@@ -1476,10 +1484,12 @@ class GenerationMixin:
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
 
         Return:
-            :class:`~transformers.generation_utilsBeamSearchDecoderOnlyOutput`, :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput` or obj:`torch.LongTensor`: A :obj:`torch.LongTensor` containing the generated tokens (default behaviour) or a :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput` if
-            ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
-            :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput` if
-            ``model.config.is_encoder_decoder=True``.
+            :class:`~transformers.generation_utilsBeamSearchDecoderOnlyOutput`, :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput` or obj:`torch.LongTensor`:
+                A :obj:`torch.LongTensor` containing the generated tokens (default behaviour)
+                or a :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput` if
+                ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
+                :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput` if
+                ``model.config.is_encoder_decoder=True``.
 
         Examples::
 
@@ -1711,11 +1721,11 @@ class GenerationMixin:
             eos_token_id (:obj:`int`, `optional`):
                 The id of the `end-of-sequence` token.
             output_attentions (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-                tensors for more details.
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more details.
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors for
-                more details.
+                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
+                for more details.
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
@@ -1726,10 +1736,12 @@ class GenerationMixin:
 
 
         Return:
-            :class:`~transformers.generation_utils.BeamSampleDecoderOnlyOutput`, :class:`~transformers.generation_utils.BeamSampleEncoderDecoderOutput` or obj:`torch.LongTensor`: A :obj:`torch.LongTensor` containing the generated tokens (default behaviour) or a :class:`~transformers.generation_utils.BeamSampleDecoderOnlyOutput` if
-            ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
-            :class:`~transformers.generation_utils.BeamSampleEncoderDecoderOutput` if
-            ``model.config.is_encoder_decoder=True``.
+            :class:`~transformers.generation_utils.BeamSampleDecoderOnlyOutput`, :class:`~transformers.generation_utils.BeamSampleEncoderDecoderOutput` or obj:`torch.LongTensor`:
+                A :obj:`torch.LongTensor` containing the generated tokens (default behaviour)
+                or a :class:`~transformers.generation_utils.BeamSampleDecoderOnlyOutput` if
+                ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
+                :class:`~transformers.generation_utils.BeamSampleEncoderDecoderOutput` if
+                ``model.config.is_encoder_decoder=True``.
 
 
         Examples::
@@ -1964,11 +1976,11 @@ class GenerationMixin:
             eos_token_id (:obj:`int`, `optional`):
                 The id of the `end-of-sequence` token.
             output_attentions (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-                tensors for more details.
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more details.
             output_hidden_states (:obj:`bool`, `optional`, defaults to `False`):
-                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors for
-                more details.
+                Whether or not to return trhe hidden states of all layers. See ``hidden_states`` under returned tensors
+                for more details.
             output_scores (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
@@ -1979,11 +1991,13 @@ class GenerationMixin:
 
 
         Return:
-            :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput`, :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput` or obj:`torch.LongTensor`: A :obj:`torch.LongTensor` containing the generated tokens (default behaviour) or a :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput` if
-            :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput` if
-            ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
-            :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput` if
-            ``model.config.is_encoder_decoder=True``.
+            :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput`, :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput` or obj:`torch.LongTensor`:
+                A :obj:`torch.LongTensor` containing the generated tokens (default behaviour) or a
+                :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput` if
+                :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput` if
+                ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
+                :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput` if
+                ``model.config.is_encoder_decoder=True``.
 
 
         Examples::
