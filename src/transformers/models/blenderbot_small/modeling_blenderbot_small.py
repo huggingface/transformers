@@ -49,7 +49,7 @@ _TOKENIZER_FOR_DOC = "BlenderbotSmallTokenizer"
 
 
 BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/blenderbot-90M",
+    "facebook/blenderbot_small-90M",
     # See all BlenderbotSmall models at https://huggingface.co/models?filter=blenderbot_small
 ]
 
@@ -467,7 +467,7 @@ BLENDERBOT_SMALL_GENERATION_EXAMPLE = r"""
     Conversation example::
 
         >>> from transformers import BlenderbotSmallTokenizer, BlenderbotSmallForConditionalGeneration
-        >>> mname = 'facebook/blenderbot-90M'
+        >>> mname = 'facebook/blenderbot_small-90M'
         >>> model = BlenderbotSmallForConditionalGeneration.from_pretrained(mname)
         >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained(mname)
         >>> UTTERANCE = "My friends are cool but they eat too many carbs."
@@ -991,8 +991,8 @@ class BlenderbotSmallModel(BlenderbotSmallPreTrainedModel):
 
             >>> from transformers import BlenderbotSmallTokenizer, BlenderbotSmallModel
 
-            >>> model = BlenderbotSmallModel.from_pretrained("facebook/blenderbot-90M")
-            >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot-90M")
+            >>> model = BlenderbotSmallModel.from_pretrained("facebook/blenderbot_small-90M")
+            >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot_small-90M")
 
             >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt").input_ids  # Batch size 1
             >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1

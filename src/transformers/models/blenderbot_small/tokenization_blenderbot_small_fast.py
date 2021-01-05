@@ -29,7 +29,7 @@ VOCAB_FILES_NAMES = {}
 PRETRAINED_VOCAB_FILES_MAP = {}
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/blenderbot-90M": 512,
+    "facebook/blenderbot_small-90M": 512,
 }
 
 
