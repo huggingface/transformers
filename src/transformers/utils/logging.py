@@ -16,6 +16,7 @@
 
 import logging
 import os
+import sys
 import threading
 from logging import CRITICAL  # NOQA
 from logging import DEBUG  # NOQA
@@ -78,6 +79,7 @@ def _configure_library_root_logger() -> None:
             # This library has already configured the library root logger.
             return
         _default_handler = logging.StreamHandler()  # Set sys.stderr as stream.
+        _default_handler.flush = sys.stderr.flush
 
         # Apply our default configuration to the library root logger.
         library_root_logger = _get_library_root_logger()
