@@ -355,10 +355,31 @@ rst_styler = CodeStyler()
 doc_styler = DocstringStyler()
 
 
+def _add_new_lines_before_list(text):
+    """Add a new empty line before a list begins."""
+    lines = text.split("\n")
+    new_lines = []
+    in_list = False
+    for idx, line in enumerate(lines):
+        # If the line appears to be the start of a list, the line before is non empty and the line after is also in a
+        # list, add an extra new line. 
+        if _re_list.search(line) is not None and not in_list and idx > 0 and len(lines[idx-1]) != 0 and idx < len(lines) - 1 and _re_list.search(lines[idx+1]) is not None:
+            in_list = True
+            new_lines.append("")
+        if in_list and _re_list.search(line) is None:
+            in_list = False
+        new_lines.append(line)
+    return "\n".join(new_lines)
+
+
 def style_rst_file(doc_file, max_len=119, check_only=False):
     """ Style one rst file `doc_file` to `max_len`."""
     with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
         doc = f.read()
+
+    # Add missing new lines before lists
+    doc = _add_new_lines_before_list(doc)
+    # Style
     clean_doc = rst_styler.style(doc, max_len=max_len)
 
     diff = clean_doc != doc
@@ -391,6 +412,8 @@ def style_docstring(docstring, max_len=119):
 
     # Add missing new lines before Args/Returns etc.
     docstring = _re_any_doc_special_word.sub(r"\n\n\1\2\3\n", docstring)
+    # Add missing new lines before lists
+    docstring = _add_new_lines_before_list(docstring)
     # Style
     styled_doc = doc_styler.style(docstring, max_len=max_len, min_indent=indent)
 
