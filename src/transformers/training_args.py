@@ -344,7 +344,7 @@ class TrainingArguments:
     fp16_backend: str = field(
         default="auto",
         metadata={"help": "The backend to be used for mixed precision.", "choices": ["auto", "amp", "apex"]},
-    )        
+    )
     local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
 
     tpu_num_cores: Optional[int] = field(
