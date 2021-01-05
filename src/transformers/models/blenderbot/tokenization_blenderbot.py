@@ -14,13 +14,8 @@
 # limitations under the License.
 """Tokenization class for Blenderbot."""
 
-import json
-import os
-from typing import Dict, List, Optional, Tuple
+from typing import List
 
-import regex as re
-
-from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 from ..roberta.tokenization_roberta import RobertaTokenizer
 
