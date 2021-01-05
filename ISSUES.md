@@ -43,9 +43,7 @@ In particular all "Please explain" questions or objectively very user-specific f
 
 Everything which hints at a bug should be opened as an [Issue](https://github.com/huggingface/transformers/issues).
 
-You are not required to read the following guidelines before opening an Issue. However, if you notice that your issue is not being addressed, chances are that the developers have one or several difficulties with the quality of that Issue. In which case please read the following guidelines and adjust your Issue accordingly.
-
-The guidelines:
+You are not required to read the following guidelines before opening an issue. However, if you notice that your issue doesn't get any replies, chances are that the developers have one or several difficulties with its quality. In this case, reading the following points and adjusting your issue accordingly could help.
 
 1. Before posting an Issue, first search for already posted issues, since chances are someone has already asked a similar question before you. 
 
@@ -57,7 +55,7 @@ The guidelines:
     
     The first two quoted words tell Google to limit the search to the context of the Huggingface Transformers. The remainder is your query - most commonly this would be an assert line if the software fails with an assert. 
     
-    The results of such query will typically match github Issues, huggingface forums and StackExchange and people's blogs.
+    The results of such a query will typically match GitHub issues, Hugging Face forums, StackExchange, and other user's blogs.
     
     If you find relevant hints, you may choose to continue the discussion there if you have follow up questions. 
     
@@ -80,7 +78,7 @@ The guidelines:
    ModuleNotFoundError: No module named 'tqdm.auto'
    ```
    
-   As compared to providing just the assert message, e.g.:
+   As compared to providing just the last line of the error message, e.g.:
    ```python
    ModuleNotFoundError: No module named 'tqdm.auto'
    ```
@@ -175,7 +173,7 @@ The guidelines:
    
    We currently don't have a triage service and we trust your capacity to identify the right domain and thus the persons to tag in your Issue. If you are not sure, please use the forums to ask for guidance.
    
-   If you tag multiple people out of context or permission don't be surprised if you get no response at all. Please remember that every time you tag someone, they get a notification and you're taking their time without their permission. Please be sensitive to that.
+   When in doubt, err on the side of not tagging a given person. If you tag multiple people out of context or permission don't be surprised if you get no response at all. Please remember that every time you tag someone, they get a notification and you're taking their time without their permission. Please be sensitive to that.
 
    If you got helped by one of the developers in the past please don't tag them in future Issues, unless they are listed in the Issue template for the domain you are asking about or that developer gave you an explicit permission to tag them in future Issues.
    
@@ -211,15 +209,15 @@ The guidelines:
     But if you're replying to a comment that happened some comments back it's always a good practice to quote just the relevant lines you're replying it. The `>` is used for quoting, or you can always use the menu to do so. For example your editor box will look like:
 
     ```
-    > How big is your gpu cluster
+    > How big is your gpu cluster?
     
-    Our cluster is made of 256 gpus
+    Our cluster is made of 256 gpus.
     ```
     
     If you are addressing multiple comments, quote the relevant parts of each before your answer. Some people use the same comment to do multiple replies, others separate them into separate comments. Either way works. The latter approach helps for linking to a specific comment.
 
 In general the best way to figure out what works the best is learn from Issues posted by other people - see which Issues get great responses and which get little to no response - observe what the posters who received great responses did differently from those who did not. 
 
-Thank you for reading this somewhat lengthy document. We would like to conclude that these are not rules, but guidelines that will help maximize the chances for us to understand what you are trying to communicate, reproduce the problem and resolve it to your satisfaction and the benefit of the whole community.
+Thank you for reading this somewhat lengthy document. We would like to conclude that these are not absolute rules, but friendly advice that will help maximize the chances for us to understand what you are trying to communicate, reproduce the problem then resolve it to your satisfaction and the benefit of the whole community.
 
 If after reading this document there are remaining questions on how and why or there is a need for further elucidation, please, don't hesitate to ask "How do I?" type of questions in the following sub-section of the forums: [XXX: @sgugger].
