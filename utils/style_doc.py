@@ -42,7 +42,7 @@ DOC_SPECIAL_WORD = [
 # Matches any declaration of textual block, like `.. note::`. (ignore case to avoid writing all versions in the list)
 _re_textual_blocks = re.compile(r"^\s*\.\.\s+(" + "|".join(TEXTUAL_BLOCKS) + r")\s*::\s*$", re.IGNORECASE)
 # Matches list introduction in rst.
-_re_list = re.compile(r"^(\s*-\s+|\s*\*\s+|\s*\d+.\s+)")
+_re_list = re.compile(r"^(\s*-\s+|\s*\*\s+|\s*\d+\.\s+)")
 # Matches the indent in a line.
 _re_indent = re.compile(r"^(\s*)\S")
 # Matches a table declaration in rst.
@@ -361,12 +361,15 @@ def _add_new_lines_before_list(text):
     new_lines = []
     in_list = False
     for idx, line in enumerate(lines):
-        # If the line appears to be the start of a list, the line before is non empty and the line after is also in a
-        # list, add an extra new line. 
-        if _re_list.search(line) is not None and not in_list and idx > 0 and len(lines[idx-1]) != 0 and idx < len(lines) - 1 and _re_list.search(lines[idx+1]) is not None:
+        # Detect if the line is the start of a new list.
+        if _re_list.search(line) is not None and not in_list:
+            current_indent = get_indent(line)
             in_list = True
-            new_lines.append("")
-        if in_list and _re_list.search(line) is None:
+            # If the line before is non empty, add an extra new line.
+            if idx > 0 and len(lines[idx - 1]) != 0:
+                new_lines.append("")
+        # Detect if we're out of the current list.
+        if in_list and not line.startswith(current_indent) and _re_list.search(line) is None:
             in_list = False
         new_lines.append(line)
     return "\n".join(new_lines)

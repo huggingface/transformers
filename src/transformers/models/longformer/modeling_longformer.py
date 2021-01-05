@@ -563,8 +563,7 @@ class LongformerSelfAttention(nn.Module):
 
         The `attention_mask` is changed in :meth:`BertModel.forward` from 0, 1, 2 to -ve: no attention
 
-              0: local attention
-            +ve: global attention
+              0: local attention +ve: global attention
 
         """
         hidden_states = hidden_states.transpose(0, 1)

@@ -443,16 +443,22 @@ TF_DPR_START_DOCSTRING = r"""
 
     .. note::
 
-        TF 2.0 models accepts two formats as inputs: - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments. This second option is useful
-        when using :meth:`tf.keras.Model.fit` method which currently requires having all the tensors in the first
-        argument of the model call function: :obj:`model(inputs)`. If you choose this second option, there are three
-        possibilities you can use to gather all the input Tensors in the first positional argument : - a single Tensor
-        with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)` - a list of varying length with one or
-        several input Tensors IN THE ORDER given in the docstring: :obj:`model([input_ids, attention_mask])` or
-        :obj:`model([input_ids, attention_mask, token_type_ids])` - a dictionary with one or several input Tensors
-        associated to the input names given in the docstring: :obj:`model({"input_ids": input_ids, "token_type_ids":
-        token_type_ids})`
+        TF 2.0 models accepts two formats as inputs:
+
+        - having all inputs as keyword arguments (like PyTorch models), or
+        - having all inputs as a list, tuple or dict in the first positional arguments.
+
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
+        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
+        the first positional argument :
+
+        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
+        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
+        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
 
     Parameters:
         config (:class:`~transformers.DPRConfig`): Model configuration class with all the parameters of the model.

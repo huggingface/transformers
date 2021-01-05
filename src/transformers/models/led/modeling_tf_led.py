@@ -192,8 +192,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
 
         The `attention_mask` is changed in `BertModel.forward` from 0, 1, 2 to -ve: no attention
 
-              0: local attention
-            +ve: global attention
+              0: local attention +ve: global attention
 
         """
         # retrieve input args
