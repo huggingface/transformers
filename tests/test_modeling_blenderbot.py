@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright Facebook, Inc. and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,8 +17,6 @@
 
 import tempfile
 import unittest
-
-import timeout_decorator  # noqa
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property

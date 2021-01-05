@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright Facebook, Inc. and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021, The Facebook, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for BlenderbotSmall."""
+"""Fast tokenization class for BlenderbotSmall."""
 from typing import List, Optional
 
 from tokenizers import ByteLevelBPETokenizer
@@ -29,7 +29,7 @@ VOCAB_FILES_NAMES = {}
 PRETRAINED_VOCAB_FILES_MAP = {}
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "facebook/blenderbot-90M": 1024,
+    "facebook/blenderbot-90M": 512,
 }
 
 

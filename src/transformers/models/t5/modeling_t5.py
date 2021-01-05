@@ -1040,7 +1040,7 @@ T5_INPUTS_DOCSTRING = r"""
             To know more on how to prepare :obj:`decoder_input_ids` for pretraining take a look at `T5 Training
             <./t5.html#training>`__. If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both unset,
             :obj:`decoder_input_ids` takes the value of :obj:`input_ids`.
-        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
+        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
         encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ BART_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class BartConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.BartModel`. It is used to
-    instantiate an BART model according to the specified arguments, defining the model architecture. Instantiating a
+    instantiate a BART model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the BART `facebook/bart-large
     <https://huggingface.co/facebook/bart-large>`__ architecture.
 
@@ -104,6 +104,7 @@ class BartConfig(PretrainedConfig):
         >>> configuration = model.config
     """
     model_type = "bart"
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,

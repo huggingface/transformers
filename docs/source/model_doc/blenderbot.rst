@@ -44,9 +44,9 @@ Implementation Notes
 
 - Blenderbot uses a standard `seq2seq model transformer <https://arxiv.org/pdf/1706.03762.pdf>`__ based architecture.
 - Available checkpoints can be found in the `model hub <https://huggingface.co/models?search=blenderbot>`__.
-- Note that :class:`~transformers.BlenderbotModel` has a different architecture than
-  :class:`~transformers.BlenderbotModelSmall`. :class:`~transformers.BlenderbotSmall` should be used for the checkpoint
-  ``facebook/blenderbot-90M``.
+- This is the `default` Blenderbot model class. However, some smaller checkpoints, such as
+  ``facebook/blenderbot_small_90M``, have a different architecture and consequently should be used with
+  `BlenderbotSmall <./blenderbot_small.rst>`.
 
 
 Usage
@@ -64,7 +64,7 @@ Here is an example of model usage:
         >>> inputs = tokenizer([UTTERANCE], return_tensors='pt')
         >>> reply_ids = model.generate(**inputs)
         >>> print(tokenizer.batch_decode(reply_ids))
-        >>> # should return ["<s> That's unfortunate. Are they trying to lose weight or are they just trying to be healthier?</s>"]
+        ["<s> That's unfortunate. Are they trying to lose weight or are they just trying to be healthier?</s>"]
 
 
 BlenderbotConfig

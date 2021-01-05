@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright Facebook, Inc. and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The Facebook, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -99,6 +99,7 @@ class BlenderbotConfig(PretrainedConfig):
         >>> configuration = model.config
     """
     model_type = "blenderbot"
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
