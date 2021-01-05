@@ -337,6 +337,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
     config_class = GPT2Config
     load_tf_weights = load_tf_weights_in_gpt2
     base_model_prefix = "transformer"
+    is_parallelizable = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
