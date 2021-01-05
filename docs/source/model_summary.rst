@@ -1,10 +1,22 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Summary of the models
 =======================================================================================================================
 
 This is a summary of the models available in 🤗 Transformers. It assumes you’re familiar with the original `transformer
 model <https://arxiv.org/abs/1706.03762>`_. For a gentle introduction check the `annotated transformer
 <http://nlp.seas.harvard.edu/2018/04/03/attention.html>`_. Here we focus on the high-level differences between the
-models. You can check them more in detail in their respective documentation. Also checkout the :doc:`pretrained model
+models. You can check them more in detail in their respective documentation. Also check out the :doc:`pretrained model
 page </pretrained_models>` to see the checkpoints available for each type of model and all `the community models
 <https://huggingface.co/models>`_.
 
@@ -18,7 +30,7 @@ Each one of the models in the library falls into one of the following categories
 
 Autoregressive models are pretrained on the classic language modeling task: guess the next token having read all the
 previous ones. They correspond to the decoder of the original transformer model, and a mask is used on top of the full
-sentence so that the attention heads can only see what was before in the next, and not what’s after. Although those
+sentence so that the attention heads can only see what was before in the text, and not what’s after. Although those
 models can be fine-tuned and achieve great results on many tasks, the most natural application is text generation. A
 typical example of such models is GPT.
 
@@ -500,8 +512,8 @@ BART
 <https://arxiv.org/abs/1910.13461>`_, Mike Lewis et al.
 
 Sequence-to-sequence model with an encoder and a decoder. Encoder is fed a corrupted version of the tokens, decoder is
-fed the original tokens (but has a mask to hide the future words like a regular transformers decoder). For the encoder
-, on the pretraining tasks, a composition of the following transformations are applied:
+fed the original tokens (but has a mask to hide the future words like a regular transformers decoder). A composition of
+the following transformations are applied on the pretraining tasks for the encoder:
 
   * mask random tokens (like in BERT)
   * delete random tokens
@@ -527,10 +539,10 @@ Pegasus
 <https://arxiv.org/pdf/1912.08777.pdf>`_, Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu on Dec 18, 2019.
 
 Sequence-to-sequence model with the same encoder-decoder model architecture as BART. Pegasus is pre-trained jointly on
-two self-supervised objective functions: Masked Language Modeling (MLM) and a novel summarization specific pre-training
+two self-supervised objective functions: Masked Language Modeling (MLM) and a novel summarization specific pretraining
 objective, called Gap Sentence Generation (GSG).
 
-  * MLM: encoder input tokens are randomely replaced by a mask tokens and have to be predicted by the encoder (like in
+  * MLM: encoder input tokens are randomly replaced by a mask tokens and have to be predicted by the encoder (like in
     BERT)
   * GSG: whole encoder input sentences are replaced by a second mask token and fed to the decoder, but which has a
     causal mask to hide the future words like a regular auto-regressive transformer decoder.
@@ -609,7 +621,7 @@ MT5
 `mT5: A massively multilingual pre-trained text-to-text transformer <https://arxiv.org/abs/2010.11934>`_, Linting Xue
 et al.
 
-The model architecture is same as T5. mT5's pre-training objective includes T5's self-supervised training, but not T5's
+The model architecture is same as T5. mT5's pretraining objective includes T5's self-supervised training, but not T5's
 supervised training. mT5 is trained on 101 languages.
 
 The library provides a version of this model for conditional generation.
@@ -630,8 +642,8 @@ MBart
 `Multilingual Denoising Pre-training for Neural Machine Translation <https://arxiv.org/abs/2001.08210>`_ by Yinhan Liu,
 Jiatao Gu, Naman Goyal, Xian Li, Sergey Edunov Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.
 
-The model architecture and pre-training objective is same as BART, but MBart is trained on 25 languages and is intended
-for supervised and unsupervised machine translation. MBart is one of the first methods for pre-training a complete
+The model architecture and pretraining objective is same as BART, but MBart is trained on 25 languages and is intended
+for supervised and unsupervised machine translation. MBart is one of the first methods for pretraining a complete
 sequence-to-sequence model by denoising full texts in multiple languages,
 
 The library provides a version of this model for conditional generation.
@@ -658,7 +670,7 @@ ProphetNet
 `ProphetNet: Predicting Future N-gram for Sequence-to-Sequence Pre-training, <https://arxiv.org/abs/2001.04063>`__ by
 Yu Yan, Weizhen Qi, Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang, Ming Zhou.
 
-ProphetNet introduces a novel *sequence-to-sequence* pre-training objective, called *future n-gram prediction*. In
+ProphetNet introduces a novel *sequence-to-sequence* pretraining objective, called *future n-gram prediction*. In
 future n-gram prediction, the model predicts the next n tokens simultaneously based on previous context tokens at each
 time step instead instead of just the single next token. The future n-gram prediction explicitly encourages the model
 to plan for the future tokens and prevent overfitting on strong local correlations. The model architecture is based on
@@ -683,8 +695,8 @@ XLM-ProphetNet
 `ProphetNet: Predicting Future N-gram for Sequence-to-Sequence Pre-training, <https://arxiv.org/abs/2001.04063>`__ by
 Yu Yan, Weizhen Qi, Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang, Ming Zhou.
 
-XLM-ProphetNet's model architecture and pre-training objective is same as ProphetNet, but XLM-ProphetNet was
-pre-trained on the cross-lingual dataset `XGLUE <https://arxiv.org/abs/2004.01401>`__.
+XLM-ProphetNet's model architecture and pretraining objective is same as ProphetNet, but XLM-ProphetNet was pre-trained
+on the cross-lingual dataset `XGLUE <https://arxiv.org/abs/2004.01401>`__.
 
 The library provides a pre-trained version of this model for multi-lingual conditional generation and fine-tuned
 versions for headline generation and question generation, respectively.

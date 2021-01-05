@@ -250,20 +250,21 @@ def convert_to_rst(model_list, max_per_line=None):
     return "\n".join(result)
 
 
-def check_model_list_copy(overwrite=False, max_per_line=119):
-    """ Check the model lists in the README and index.rst are consistent and maybe `overwrite`. """
-    _start_prompt = "    This list is updated automatically from the README"
-    _end_prompt = ".. toctree::"
-    with open(os.path.join(PATH_TO_DOCS, "index.rst"), "r", encoding="utf-8", newline="\n") as f:
+def _find_text_in_file(filename, start_prompt, end_prompt):
+    """
+    Find the text in `filename` between a line beginning with `start_prompt` and before `end_prompt`, removing empty
+    lines.
+    """
+    with open(filename, "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
-    # Find the start of the list.
+    # Find the start prompt.
     start_index = 0
-    while not lines[start_index].startswith(_start_prompt):
+    while not lines[start_index].startswith(start_prompt):
         start_index += 1
     start_index += 1
 
     end_index = start_index
-    while not lines[end_index].startswith(_end_prompt):
+    while not lines[end_index].startswith(end_prompt):
         end_index += 1
     end_index -= 1
 
@@ -272,8 +273,16 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
     while len(lines[end_index]) <= 1:
         end_index -= 1
     end_index += 1
+    return "".join(lines[start_index:end_index]), start_index, end_index, lines
 
-    rst_list = "".join(lines[start_index:end_index])
+
+def check_model_list_copy(overwrite=False, max_per_line=119):
+    """ Check the model lists in the README and index.rst are consistent and maybe `overwrite`. """
+    rst_list, start_index, end_index, lines = _find_text_in_file(
+        filename=os.path.join(PATH_TO_DOCS, "index.rst"),
+        start_prompt="    This list is updated automatically from the README",
+        end_prompt=".. _bigtable:",
+    )
     md_list = get_model_list()
     converted_list = convert_to_rst(md_list, max_per_line=max_per_line)
 
@@ -283,7 +292,8 @@ def check_model_list_copy(overwrite=False, max_per_line=119):
                 f.writelines(lines[:start_index] + [converted_list] + lines[end_index:])
         else:
             raise ValueError(
-                "The model list in the README changed and the list in `index.rst` has not been updated. Run `make fix-copies` to fix this."
+                "The model list in the README changed and the list in `index.rst` has not been updated. Run "
+                "`make fix-copies` to fix this."
             )
 
 

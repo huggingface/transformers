@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 MBart
 -----------------------------------------------------------------------------------------------------------------------
 
@@ -13,7 +25,7 @@ The MBart model was presented in `Multilingual Denoising Pre-training for Neural
 Ghazvininejad, Mike Lewis, Luke Zettlemoyer.
 
 According to the abstract, MBART is a sequence-to-sequence denoising auto-encoder pretrained on large-scale monolingual
-corpora in many languages using the BART objective. mBART is one of the first methods for pre-training a complete
+corpora in many languages using the BART objective. mBART is one of the first methods for pretraining a complete
 sequence-to-sequence model by denoising full texts in multiple languages, while previous approaches have focused only
 on the encoder, decoder, or reconstructing parts of the text.
 
@@ -76,6 +88,20 @@ MBartTokenizer
 
 .. autoclass:: transformers.MBartTokenizer
     :members: build_inputs_with_special_tokens, prepare_seq2seq_batch
+
+
+MBartTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.MBartTokenizerFast
+    :members:
+
+
+MBartModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.MBartModel
+    :members:
 
 
 MBartForConditionalGeneration

@@ -16,8 +16,32 @@
 
 
 from ...file_utils import add_start_docstrings
-from ..bart.modeling_bart import BART_START_DOCSTRING, BartForConditionalGeneration
+from ..bart.modeling_bart import BART_START_DOCSTRING, BartForConditionalGeneration, BartModel
 from .configuration_pegasus import PegasusConfig
+
+
+@add_start_docstrings(
+    "The bare Pegasus Model transformer outputting raw hidden-states without any specific head on top.",
+    BART_START_DOCSTRING,
+)
+class PegasusModel(BartModel):
+    r"""
+    This class overrides :class:`~transformers.BartModel`. Please check the superclass for the appropriate
+    documentation alongside usage examples.
+    """
+
+    config_class = PegasusConfig
+    _keys_to_ignore_on_load_missing = [
+        r"final_logits_bias",
+        r"encoder\.version",
+        r"decoder\.version",
+        "encoder.embed_positions",
+        "decoder.embed_positions",
+    ]
+    _keys_to_ignore_on_save = [
+        "encoder.embed_positions.weight",
+        "decoder.embed_positions.weight",
+    ]
 
 
 @add_start_docstrings("The Pegasus Model for summarization ", BART_START_DOCSTRING)
@@ -46,14 +70,14 @@ class PegasusForConditionalGeneration(BartForConditionalGeneration):
     """
     # All the code is in src/transformers/models/bart/modeling_bart.py
     config_class = PegasusConfig
-    authorized_missing_keys = [
+    _keys_to_ignore_on_load_missing = [
         r"final_logits_bias",
         r"encoder\.version",
         r"decoder\.version",
         "model.encoder.embed_positions",
         "model.decoder.embed_positions",
     ]
-    keys_to_never_save = [
+    _keys_to_ignore_on_save = [
         "model.encoder.embed_positions.weight",
         "model.decoder.embed_positions.weight",
     ]

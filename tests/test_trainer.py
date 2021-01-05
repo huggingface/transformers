@@ -42,6 +42,7 @@ if is_torch_available():
         AutoModelForMaskedLM,
         AutoModelForSequenceClassification,
         DataCollatorForLanguageModeling,
+        EarlyStoppingCallback,
         GlueDataset,
         GlueDataTrainingArguments,
         GPT2Config,
@@ -263,6 +264,21 @@ class TrainerIntegrationTest(unittest.TestCase):
 
         metrics = trainer.evaluate()
         self.assertEqual(metrics[metric], best_value)
+
+    def check_trainer_state_are_the_same(self, trainer_state, trainer_state1):
+        # We'll pop things so operate on copies.
+        state = trainer_state.copy()
+        state1 = trainer_state1.copy()
+        # Log history main contain different logs for the time metrics (after resuming a training).
+        log_history = state.pop("log_history", None)
+        log_history1 = state1.pop("log_history", None)
+        self.assertEqual(state, state1)
+        for log, log1 in zip(log_history, log_history1):
+            _ = log.pop("train_runtime", None)
+            _ = log1.pop("train_runtime", None)
+            _ = log.pop("train_samples_per_second", None)
+            _ = log1.pop("train_samples_per_second", None)
+            self.assertEqual(log, log1)
 
     def test_trainer_works_with_dict(self):
         # Edge case because Apex with mode O2 will change our models to return dicts. This test checks it doesn't break
@@ -551,7 +567,21 @@ class TrainerIntegrationTest(unittest.TestCase):
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
-            self.assertEqual(state, state1)
+            self.check_trainer_state_are_the_same(state, state1)
+
+            # Now check with a later checkpoint that it also works when we span over one epoch
+            checkpoint = os.path.join(tmpdir, "checkpoint-15")
+
+            # Reinitialize trainer and load model
+            model = RegressionPreTrainedModel.from_pretrained(checkpoint)
+            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+
+            trainer.train(model_path=checkpoint)
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            state1 = dataclasses.asdict(trainer.state)
+            self.assertEqual(a, a1)
+            self.assertEqual(b, b1)
+            self.check_trainer_state_are_the_same(state, state1)
 
         # With a regular model that is not a PreTrainedModel
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -575,7 +605,23 @@ class TrainerIntegrationTest(unittest.TestCase):
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
-            self.assertEqual(state, state1)
+            self.check_trainer_state_are_the_same(state, state1)
+
+            # Now check with a later checkpoint that it also works when we span over one epoch
+            checkpoint = os.path.join(tmpdir, "checkpoint-15")
+
+            # Reinitialize trainer and load model
+            model = RegressionModel()
+            state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME))
+            model.load_state_dict(state_dict)
+            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+
+            trainer.train(model_path=checkpoint)
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            state1 = dataclasses.asdict(trainer.state)
+            self.assertEqual(a, a1)
+            self.assertEqual(b, b1)
+            self.check_trainer_state_are_the_same(state, state1)
 
     def test_resume_training_with_gradient_accumulation(self):
         if torch.cuda.device_count() > 2:
@@ -607,7 +653,7 @@ class TrainerIntegrationTest(unittest.TestCase):
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
-            self.assertEqual(state, state1)
+            self.check_trainer_state_are_the_same(state, state1)
 
     def test_load_best_model_at_end(self):
         total = int(self.n_epochs * 64 / self.batch_size)
@@ -764,6 +810,41 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer = get_regression_trainer(train_len=64, per_device_train_batch_size=16, gradient_accumulation_steps=5)
         train_output = trainer.train()
         self.assertEqual(train_output.global_step, int(self.n_epochs))
+
+    def test_early_stopping_callback(self):
+        # early stopping stops training before num_training_epochs
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                num_train_epochs=20,
+                gradient_accumulation_steps=1,
+                per_device_train_batch_size=16,
+                load_best_model_at_end=True,
+                evaluation_strategy=EvaluationStrategy.EPOCH,
+                compute_metrics=AlmostAccuracy(),
+                metric_for_best_model="accuracy",
+            )
+            trainer.add_callback(EarlyStoppingCallback(1, 0.0001))
+            train_output = trainer.train()
+            self.assertLess(train_output.global_step, 20 * 64 / 16)
+
+        # Invalid inputs to trainer with early stopping callback result in assertion error
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                num_train_epochs=20,
+                gradient_accumulation_steps=1,
+                per_device_train_batch_size=16,
+                evaluation_strategy=EvaluationStrategy.EPOCH,
+                compute_metrics=AlmostAccuracy(),
+                metric_for_best_model="accuracy",
+            )
+            trainer.add_callback(EarlyStoppingCallback(1))
+            self.assertEqual(trainer.state.global_step, 0)
+            try:
+                trainer.train()
+            except AssertionError:
+                self.assertEqual(trainer.state.global_step, 0)
 
     def test_flos_extraction(self):
         trainer = get_regression_trainer(learning_rate=0.1)

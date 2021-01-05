@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 BART
 -----------------------------------------------------------------------------------------------------------------------
 
@@ -43,9 +55,8 @@ Implementation Notes
 
 - Bart doesn't use :obj:`token_type_ids` for sequence classification. Use :class:`~transformers.BartTokenizer` or
   :meth:`~transformers.BartTokenizer.encode` to get the proper splitting.
-- The forward pass of :class:`~transformers.BartModel` will create decoder inputs (using the helper function
-  :func:`transformers.models.bart.modeling_bart._prepare_bart_decoder_inputs`) if they are not passed. This is
-  different than some other modeling APIs.
+- The forward pass of :class:`~transformers.BartModel` will create the ``decoder_input_ids`` if they are not passed.
+  This is different than some other modeling APIs. A typical use case of this feature is mask filling.
 - Model predictions are intended to be identical to the original implementation when
   :obj:`force_bos_token_to_be_generated=True`. This only works, however, if the string you pass to
   :func:`fairseq.encode` starts with a space.
@@ -86,14 +97,18 @@ BartTokenizer
     :members:
 
 
+BartTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BartTokenizerFast
+    :members:
+
 
 BartModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.BartModel
     :members: forward
-
-.. autofunction:: transformers.models.bart.modeling_bart._prepare_bart_decoder_inputs
 
 
 BartForConditionalGeneration

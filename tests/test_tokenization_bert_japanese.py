@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ import os
 import pickle
 import unittest
 
+from transformers import AutoTokenizer
 from transformers.models.bert_japanese.tokenization_bert_japanese import (
     VOCAB_FILES_NAMES,
     BertJapaneseTokenizer,
@@ -267,3 +268,11 @@ class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestC
         # 2 is for "[CLS]", 3 is for "[SEP]"
         assert encoded_sentence == [2] + text + [3]
         assert encoded_pair == [2] + text + [3] + text_2 + [3]
+
+
+@custom_tokenizers
+class AutoTokenizerCustomTest(unittest.TestCase):
+    def test_tokenizer_bert_japanese(self):
+        EXAMPLE_BERT_JAPANESE_ID = "cl-tohoku/bert-base-japanese"
+        tokenizer = AutoTokenizer.from_pretrained(EXAMPLE_BERT_JAPANESE_ID)
+        self.assertIsInstance(tokenizer, BertJapaneseTokenizer)

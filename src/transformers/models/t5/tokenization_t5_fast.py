@@ -75,8 +75,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class T5TokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" T5 tokenizer (backed by HuggingFace's `tokenizers` library). Based on `SentencePiece
-    <https://github.com/google/sentencepiece>`__ .
+    Construct a "fast" T5 tokenizer (backed by HuggingFace's `tokenizers` library). Based on `Unigram
+    <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models>`__.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
     methods. Users should refer to this superclass for more information regarding those methods.

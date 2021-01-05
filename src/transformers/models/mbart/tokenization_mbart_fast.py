@@ -67,7 +67,8 @@ FAIRSEQ_LANGUAGE_CODES = [
 
 class MBartTokenizerFast(XLMRobertaTokenizerFast):
     """
-    Construct a "fast" MBART tokenizer (backed by HuggingFace's `tokenizers` library).
+    Construct a "fast" MBART tokenizer (backed by HuggingFace's `tokenizers` library). Based on `BPE
+    <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models>`__.
 
     :class:`~transformers.MBartTokenizerFast` is a subclass of :class:`~transformers.XLMRobertaTokenizerFast` and adds
     a new :meth:`~transformers.MBartTokenizerFast.prepare_seq2seq_batch`.
@@ -151,7 +152,7 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
         An MBART sequence has the following format, where ``X`` represents the sequence:
 
         - ``input_ids`` (for encoder) ``X [eos, src_lang_code]``
-        - ``decoder_input_ids``: (for decoder) ``[tgt_lang_code] X [eos]``
+        - ``decoder_input_ids``: (for decoder) ``X [eos, tgt_lang_code]``
 
         BOS is never used. Pairs of sequences are not the expected use case, but they will be handled without a
         separator.
@@ -217,7 +218,7 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
         return model_inputs
 
     def set_src_lang_special_tokens(self, src_lang) -> None:
-        """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, cur_lang_code]."""
+        """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, src_lang_code]."""
         self.cur_lang_code = self.convert_tokens_to_ids(src_lang)
         self.prefix_tokens = []
         self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]
@@ -232,7 +233,7 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
         )
 
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
-        """Reset the special tokens to the target language setting. Prefix [tgt_lang_code], suffix =[eos]."""
+        """Reset the special tokens to the target language setting. No prefix and suffix=[eos, tgt_lang_code]."""
         self.cur_lang_code = self.convert_tokens_to_ids(lang)
         self.prefix_tokens = []
         self.suffix_tokens = [self.eos_token_id, self.cur_lang_code]

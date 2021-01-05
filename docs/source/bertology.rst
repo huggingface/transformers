@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 BERTology
 -----------------------------------------------------------------------------------------------------------------------
 
@@ -22,5 +34,5 @@ help people access the inner representations, mainly adapted from the great work
   in https://arxiv.org/abs/1905.10650.
 
 To help you understand and use these features, we have added a specific example script: `bertology.py
-<https://github.com/huggingface/transformers/blob/master/examples/bertology/run_bertology.py>`_ while extract
-information and prune a model pre-trained on GLUE.
+<https://github.com/huggingface/transformers/blob/master/examples/research_projects/bertology/run_bertology.py>`_ while
+extract information and prune a model pre-trained on GLUE.

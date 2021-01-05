@@ -15,7 +15,7 @@
 """ PyTorch mT5 model. """
 
 from ...utils import logging
-from ..t5.modeling_t5 import T5ForConditionalGeneration, T5Model
+from ..t5.modeling_t5 import T5EncoderModel, T5ForConditionalGeneration, T5Model
 from .configuration_mt5 import MT5Config
 
 
@@ -42,12 +42,12 @@ class MT5Model(T5Model):
     """
     model_type = "mt5"
     config_class = MT5Config
-    authorized_missing_keys = [
+    _keys_to_ignore_on_load_missing = [
         r"encoder\.embed_tokens\.weight",
         r"decoder\.embed_tokens\.weight",
         r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
     ]
-    keys_to_never_save = [
+    _keys_to_ignore_on_save = [
         r"encoder\.embed_tokens\.weight",
         r"decoder\.embed_tokens\.weight",
     ]
@@ -71,13 +71,35 @@ class MT5ForConditionalGeneration(T5ForConditionalGeneration):
 
     model_type = "mt5"
     config_class = MT5Config
-    authorized_missing_keys = [
+    _keys_to_ignore_on_load_missing = [
         r"encoder\.embed_tokens\.weight",
-        r"decoder\.embed_tokens\.weight",
-        r"lm_head\.weight",
-        r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
     ]
-    keys_to_never_save = [
+    _keys_to_ignore_on_save = [
         r"encoder\.embed_tokens\.weight",
-        r"decoder\.embed_tokens\.weight",
+    ]
+
+
+class MT5EncoderModel(T5EncoderModel):
+    r"""
+    This class overrides :class:`~transformers.T5EncoderModel`. Please check the superclass for the appropriate
+    documentation alongside usage examples.
+
+    Examples::
+
+        >>> from transformers import MT5EncoderModel, T5Tokenizer
+        >>> model = MT5EncoderModel.from_pretrained("google/mt5-small")
+        >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
+        >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
+        >>> input_ids = tokenizer(article, return_tensors="pt").input_ids
+        >>> outputs = model(input_ids)
+        >>> hidden_state = outputs.last_hidden_state
+    """
+
+    model_type = "mt5"
+    config_class = MT5Config
+    _keys_to_ignore_on_load_missing = [
+        r"encoder\.embed_tokens\.weight",
+    ]
+    _keys_to_ignore_on_save = [
+        r"encoder\.embed_tokens\.weight",
     ]

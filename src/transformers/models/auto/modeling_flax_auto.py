@@ -27,16 +27,7 @@ from .configuration_auto import AutoConfig, BertConfig, RobertaConfig
 logger = logging.get_logger(__name__)
 
 
-ALL_PRETRAINED_MODEL_ARCHIVE_MAP = dict(
-    (key, value)
-    for pretrained_map in [
-        FlaxBertModel.pretrained_model_archive_map,
-        FlaxRobertaModel.pretrained_model_archive_map,
-    ]
-    for key, value, in pretrained_map.items()
-)
-
-MODEL_MAPPING = OrderedDict(
+FLAX_MODEL_MAPPING = OrderedDict(
     [
         (RobertaConfig, FlaxRobertaModel),
         (BertConfig, FlaxBertModel),
@@ -79,13 +70,13 @@ class FlaxAutoModel(object):
             model = FlaxAutoModel.from_config(config)
             # E.g. model was saved using `save_pretrained('./test/saved_model/')`
         """
-        for config_class, model_class in MODEL_MAPPING.items():
+        for config_class, model_class in FLAX_MODEL_MAPPING.items():
             if isinstance(config, config_class):
                 return model_class(config)
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} "
             f"for this kind of FlaxAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_MAPPING.keys())}."
+            f"Model type should be one of {', '.join(c.__name__ for c in FLAX_MODEL_MAPPING.keys())}."
         )
 
     @classmethod
@@ -114,10 +105,9 @@ class FlaxAutoModel(object):
                   organization name, like ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing model weights saved using
                   :func:`~transformers.FlaxPreTrainedModel.save_pretrained`, e.g.: ``./my_model_directory/``.
-                - a path or url to a `tensorflow index checkpoint file` (e.g. `./tf_model/model.ckpt.index`). In this
-                  case, ``from_tf`` should be set to True and a configuration object should be provided as ``config``
-                  argument. This loading path is slower than converting the TensorFlow checkpoint in a PyTorch model
-                  using the provided conversion scripts and loading the PyTorch model afterwards.
+                - a path or url to a `pytorch index checkpoint file` (e.g. `./pt_model/pytorch_model.bin`). In this
+                  case, ``from_pt`` should be set to True and a configuration object should be provided as ``config``
+                  argument.
 
             model_args: (`optional`) Sequence of positional arguments:
                 All remaining positional arguments will be passed to the underlying model's ``__init__`` method
@@ -132,13 +122,6 @@ class FlaxAutoModel(object):
                   by supplying the save directory.
                 - the model is loaded by supplying a local directory as ``pretrained_model_name_or_path`` and a
                   configuration JSON file named `config.json` is found in the directory.
-
-            state_dict: (`optional`) dict:
-                an optional state dictionary for the model to use instead of a state dictionary loaded from saved
-                weights file. This option can be used if you want to create a model from a pretrained configuration but
-                load your own weights. In this case though, you should check if using
-                :func:`~transformers.FlaxPreTrainedModel.save_pretrained` and
-                :func:`~transformers.FlaxPreTrainedModel.from_pretrained` is not a simpler option.
 
             cache_dir: (`optional`) string:
                 Path to a directory in which a downloaded pre-trained model configuration should be cached if the
@@ -173,11 +156,11 @@ class FlaxAutoModel(object):
         if not isinstance(config, PretrainedConfig):
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-        for config_class, model_class in MODEL_MAPPING.items():
+        for config_class, model_class in FLAX_MODEL_MAPPING.items():
             if isinstance(config, config_class):
                 return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} "
             f"for this kind of FlaxAutoModel: {cls.__name__}.\n"
-            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_MAPPING.keys())}"
+            f"Model type should be one of {', '.join(c.__name__ for c in FLAX_MODEL_MAPPING.keys())}"
         )
