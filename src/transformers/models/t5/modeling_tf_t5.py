@@ -824,16 +824,20 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
             "decoder_attention_mask": input_mask,
         }
         return dummy_inputs
-    
-    @tf.function(input_signature=[{
-        "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-        "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-        "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
-        "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
-    }])
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
+            }
+        ]
+    )
     def serving(self, inputs):
         output = self.call(inputs)
-        
+
         return self.serving_output(output)
 
     def _shift_right(self, input_ids):
@@ -1175,13 +1179,11 @@ class TFT5Model(TFT5PreTrainedModel):
             encoder_hidden_states=inputs["encoder_outputs"].hidden_states,
             encoder_attentions=inputs["encoder_outputs"].attentions,
         )
-    
+
     def serving_output(self, output):
         return TFSeq2SeqModelOutput(
             last_hidden_state=output.last_hidden_state,
-            past_key_values=tf.convert_to_tensor(output.past_key_values[1:])
-            if self.config.use_cache
-            else None,
+            past_key_values=tf.convert_to_tensor(output.past_key_values[1:]) if self.config.use_cache else None,
             decoder_hidden_states=tf.convert_to_tensor(output.decoder_hidden_states)
             if self.config.output_hidden_states
             else None,
@@ -1403,14 +1405,12 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             encoder_hidden_states=inputs["encoder_outputs"].hidden_states,
             encoder_attentions=inputs["encoder_outputs"].attentions,
         )
-    
+
     def serving_output(self, output):
         return TFSeq2SeqLMOutput(
             loss=None,
             logits=output.logits,
-            past_key_values=tf.convert_to_tensor(output.past_key_values[1:])
-            if self.config.use_cache
-            else None,
+            past_key_values=tf.convert_to_tensor(output.past_key_values[1:]) if self.config.use_cache else None,
             decoder_hidden_states=tf.convert_to_tensor(output.decoder_hidden_states)
             if self.config.output_hidden_states
             else None,
@@ -1576,14 +1576,10 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-    
+
     def serving_output(self, output):
         return TFBaseModelOutput(
             last_hidden_state=output.last_hidden_state,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )

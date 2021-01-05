@@ -850,15 +850,19 @@ class TFLxmertPreTrainedModel(TFPreTrainedModel):
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
         return getattr(self, self.base_model_prefix).dummy_inputs
-    
-    @tf.function(input_signature=[{
-        "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-        "visual_feats": tf.TensorSpec((None, None, None), tf.float32, name="visual_feats"),
-        "visual_pos": tf.TensorSpec((None, None, 4), tf.float32, name="visual_pos"),
-    }])
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "visual_feats": tf.TensorSpec((None, None, None), tf.float32, name="visual_feats"),
+                "visual_pos": tf.TensorSpec((None, None, 4), tf.float32, name="visual_pos"),
+            }
+        ]
+    )
     def serving(self, inputs):
         output = self.call(inputs)
-        
+
         return self.serving_output(output)
 
 
@@ -1023,7 +1027,7 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
         )
 
         return outputs
-    
+
     def serving_output(self, output):
         return TFLxmertModelOutput(
             pooled_output=output.pooled_output,
@@ -1463,7 +1467,7 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             vision_attentions=lxmert_output.vision_attentions,
             cross_encoder_attentions=lxmert_output.cross_encoder_attentions,
         )
-    
+
     def serving_output(self, output):
         return TFLxmertForPreTrainingOutput(
             loss=None,

@@ -642,16 +642,12 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         return TFDPRContextEncoderOutput(
             pooler_output=outputs.pooler_output, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
-    
+
     def serving_output(self, output):
         return TFDPRContextEncoderOutput(
             pooler_output=output.pooler_output,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -740,16 +736,12 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         return TFDPRQuestionEncoderOutput(
             pooler_output=outputs.pooler_output, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
-    
+
     def serving_output(self, output):
         return TFDPRQuestionEncoderOutput(
             pooler_output=output.pooler_output,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -838,16 +830,12 @@ class TFDPRReader(TFDPRPretrainedReader):
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-    
+
     def serving_output(self, output):
         return TFDPRReaderOutput(
             start_logits=output.start_logits,
             end_logits=output.end_logits,
             relevance_logits=output.relevance_logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )

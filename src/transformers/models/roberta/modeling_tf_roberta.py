@@ -628,13 +628,17 @@ class TFRobertaPreTrainedModel(TFPreTrainedModel):
     config_class = RobertaConfig
     base_model_prefix = "roberta"
 
-    @tf.function(input_signature=[{
-        "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-        "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-    }])
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            }
+        ]
+    )
     def serving(self, inputs):
         output = self.call(inputs)
-        
+
         return self.serving_output(output)
 
 
@@ -787,17 +791,13 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
         )
 
         return outputs
-    
+
     def serving_output(self, output):
         return TFBaseModelOutputWithPooling(
             last_hidden_state=output.last_hidden_state,
             pooler_output=output.pooler_output,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -926,17 +926,13 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
     def serving_output(self, output):
         return TFMaskedLMOutput(
             loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1054,17 +1050,13 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
     def serving_output(self, output):
         return TFSequenceClassifierOutput(
             loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1190,26 +1182,26 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
-    @tf.function(input_signature=[{
-        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-    }])
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+            }
+        ]
+    )
     def serving(self, inputs):
         output = self.call(inputs)
-        
+
         return self.serving_output(output)
-    
+
     def serving_output(self, output):
         return TFMultipleChoiceModelOutput(
             loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1307,17 +1299,13 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
     def serving_output(self, output):
         return TFTokenClassifierOutput(
             loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1427,16 +1415,12 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
     def serving_output(self, output):
         return TFQuestionAnsweringModelOutput(
             loss=None,
             start_logits=output.start_logits,
             end_logits=output.end_logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )

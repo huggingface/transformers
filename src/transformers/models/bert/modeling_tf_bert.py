@@ -887,17 +887,13 @@ class TFBertModel(TFBertPreTrainedModel):
         )
 
         return outputs
-    
+
     def serving_output(self, output):
         return TFBaseModelOutputWithPooling(
             last_hidden_state=output.last_hidden_state,
             pooler_output=output.pooler_output,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1010,18 +1006,14 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
     def serving_output(self, output):
         return TFBertForPreTrainingOutput(
             loss=None,
             prediction_logits=output.prediction_logits,
             seq_relationship_logits=output.seq_relationship_logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1126,17 +1118,13 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
     def serving_output(self, output):
         return TFMaskedLMOutput(
             loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1241,17 +1229,13 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
     def serving_output(self, output):
         return TFCausalLMOutput(
             loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1350,17 +1334,13 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
     def serving_output(self, output):
         return TFNextSentencePredictorOutput(
             loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1457,17 +1437,13 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
     def serving_output(self, output):
         return TFSequenceClassifierOutput(
             loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1597,27 +1573,27 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
-    @tf.function(input_signature=[{
-        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-        "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
-    }])
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
+            }
+        ]
+    )
     def serving(self, inputs):
         output = self.call(inputs)
-        
+
         return self.serving_output(output)
-    
+
     def serving_output(self, output):
         return TFMultipleChoiceModelOutput(
             loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1719,17 +1695,13 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
     def serving_output(self, output):
         return TFTokenClassifierOutput(
             loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1844,16 +1816,12 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
     def serving_output(self, output):
         return TFQuestionAnsweringModelOutput(
             loss=None,
             start_logits=output.start_logits,
             end_logits=output.end_logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )

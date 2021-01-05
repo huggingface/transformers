@@ -30,7 +30,8 @@ from tensorflow.python.keras.saving import hdf5_format
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import (
-    DUMMY_INPUTS, DUMMY_MASK,
+    DUMMY_INPUTS,
+    DUMMY_MASK,
     TF2_WEIGHTS_NAME,
     WEIGHTS_NAME,
     ModelOutput,
@@ -278,7 +279,7 @@ def booleans_processing(config, **kwargs):
 
         if "use_cache" in kwargs:
             final_booleans["use_cache"] = kwargs["use_cache"] if kwargs["use_cache"] is not None else config.use_cache
-        
+
     else:
         if (
             kwargs["output_attentions"] is not None
@@ -294,9 +295,7 @@ def booleans_processing(config, **kwargs):
         final_booleans["output_hidden_states"] = config.output_hidden_states
 
         if kwargs["return_dict"] is not None:
-            logger.warning(
-                "The parameter `return_dict` cannot be set in graph mode and will always be set to `True`."
-            )
+            logger.warning("The parameter `return_dict` cannot be set in graph mode and will always be set to `True`.")
         final_booleans["return_dict"] = True
 
         if "use_cache" in kwargs:
@@ -568,8 +567,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         """
         return {
             "input_ids": tf.constant(DUMMY_INPUTS),
-            #"attention_mask": tf.constant(DUMMY_MASK),
-            #"token_type_ids": tf.constant(DUMMY_TOKEN_TYPE_IDS),
+            # "attention_mask": tf.constant(DUMMY_MASK),
+            # "token_type_ids": tf.constant(DUMMY_TOKEN_TYPE_IDS),
         }
 
     def __init__(self, config, *inputs, **kwargs):
@@ -585,12 +584,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
-    
-    @tf.function(input_signature=[{
-        "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-        "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-        "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
-    }])
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
+            }
+        ]
+    )
     def serving(self, inputs):
         """
         Method used for serving the model.
@@ -602,7 +605,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         output = self.call(inputs)
 
         return self.serving_output(output)
-    
+
     def serving_output(output):
         """
         Prepare the output of the saved model.

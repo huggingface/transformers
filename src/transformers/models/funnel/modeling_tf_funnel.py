@@ -72,6 +72,7 @@ TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 INF = 1e6
 
+
 class TFFunnelEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word embeddings."""
 
@@ -1187,16 +1188,12 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-    
+
     def serving_output(self, output):
         return TFBaseModelOutput(
             last_hidden_state=output.last_hidden_state,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1252,16 +1249,12 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-    
+
     def serving_output(self, output):
         return TFBaseModelOutput(
             last_hidden_state=output.last_hidden_state,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1340,16 +1333,12 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
             hidden_states=discriminator_hidden_states.hidden_states,
             attentions=discriminator_hidden_states.attentions,
         )
-    
+
     def serving_output(self, output):
         return TFFunnelForPreTrainingOutput(
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1435,17 +1424,13 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
     def serving_output(self, output):
         return TFMaskedLMOutput(
             loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1530,17 +1515,13 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
     def serving_output(self, output):
         return TFSequenceClassifierOutput(
             loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1657,27 +1638,27 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
-    @tf.function(input_signature=[{
-        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-        "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
-    }])
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
+            }
+        ]
+    )
     def serving(self, inputs):
         output = self.call(inputs)
-        
+
         return self.serving_output(output)
-    
+
     def serving_output(self, output):
         return TFMultipleChoiceModelOutput(
             loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1765,17 +1746,13 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
     def serving_output(self, output):
         return TFTokenClassifierOutput(
             loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1875,16 +1852,12 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
     def serving_output(self, output):
         return TFQuestionAnsweringModelOutput(
             loss=None,
             start_logits=output.start_logits,
             end_logits=output.end_logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )

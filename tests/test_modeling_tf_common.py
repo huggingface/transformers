@@ -182,7 +182,7 @@ class TFModelTesterMixin:
             model.save_pretrained(tmpdirname)
             saved_model_dir = os.path.join(tmpdirname, "saved_model")
             self.assertTrue(os.path.exists(saved_model_dir))
-    
+
     @slow
     def test_saved_model_creation_extended(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -191,7 +191,7 @@ class TFModelTesterMixin:
 
         if hasattr(config, "use_cache"):
             config.use_cache = True
-        
+
         for model_class in self.all_model_classes:
             class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config)
@@ -202,7 +202,7 @@ class TFModelTesterMixin:
                 model.save_pretrained(tmpdirname)
                 saved_model_dir = os.path.join(tmpdirname, "saved_model")
                 self.assertTrue(os.path.exists(saved_model_dir))
-    
+
     @slow
     def test_saved_model_with_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

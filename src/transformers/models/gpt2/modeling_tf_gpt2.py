@@ -416,13 +416,17 @@ class TFGPT2PreTrainedModel(TFPreTrainedModel):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"h.\d+.attn.bias"]
 
-    @tf.function(input_signature=[{
-        "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-        "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-    }])
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            }
+        ]
+    )
     def serving(self, inputs):
         output = self.call(inputs)
-        
+
         return self.serving_output(output)
 
 
@@ -625,19 +629,13 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
         )
 
         return outputs
-    
+
     def serving_output(self, output):
         return TFBaseModelOutputWithPast(
             last_hidden_state=output.last_hidden_state,
-            past_key_values=tf.convert_to_tensor(output.past_key_values)
-            if self.config.use_cache
-            else None,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            past_key_values=tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -745,20 +743,14 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
-    
+
     def serving_output(self, output):
         return TFCausalLMOutputWithPast(
             loss=None,
             logits=output.logits,
-            past_key_values=tf.convert_to_tensor(output.past_key_values)
-            if self.config.use_cache
-            else None,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            past_key_values=tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -898,30 +890,28 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
-    
-    @tf.function(input_signature=[{
-        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-        "mc_token_ids": tf.TensorSpec((None, None), tf.int32, name="mc_token_ids"),
-    }])
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+                "mc_token_ids": tf.TensorSpec((None, None), tf.int32, name="mc_token_ids"),
+            }
+        ]
+    )
     def serving(self, inputs):
         output = self.call(inputs)
-        
+
         return self.serving_output(output)
-    
+
     def serving_output(self, output):
         return TFGPT2DoubleHeadsModelOutput(
             logits=output.logits,
             mc_logits=output.mc_logits,
-            past_key_values=tf.convert_to_tensor(output.past_key_values)
-            if self.config.use_cache
-            else None,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            past_key_values=tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
 
 
@@ -1078,18 +1068,12 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
-    
+
     def serving_output(self, output):
         return TFSequenceClassifierOutputWithPast(
             loss=None,
             logits=output.logits,
-            past_key_values=tf.convert_to_tensor(output.past_key_values)
-            if self.config.use_cache
-            else None,
-            hidden_states=tf.convert_to_tensor(output.hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            attentions=tf.convert_to_tensor(output.attentions)
-            if self.config.output_attentions
-            else None,
+            past_key_values=tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None,
+            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
+            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
         )
