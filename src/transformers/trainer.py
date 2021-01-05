@@ -424,7 +424,7 @@ class Trainer:
         # for clarity extract what args are being passed to deepspeed
         # XXX: we shouldn't need to pass deepspeed_config anymore, since we handle it ourselves, but
         # currently ds won't work without this argument present in args
-        ds_args = dict(local_rank=args.local_rank, deepspeed_config=args.deepspeed)
+        ds_args = dict(local_rank=args.local_rank)
 
         with io.open(args.deepspeed, "r", encoding="utf-8") as f:
             config = json.load(f)
