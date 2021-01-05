@@ -16,8 +16,10 @@
 
 
 import math
+import os
 import random
-from typing import Optional, Tuple
+import warnings
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -39,6 +41,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
+from ..blenderbot_small import BlenderbotSmallForConditionalGeneration, BlenderbotSmallModel
 from .configuration_blenderbot import BlenderbotConfig
 
 
@@ -955,6 +958,17 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
 
         self.init_weights()
 
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
+        if pretrained_model_name_or_path == "facebook/blenderbot-90M":
+            warnings.warn(
+                "The checkpoint `facebook/blenderbot-90M` is deprecated. In the future, please use the identical checkpoint `facebook/small_blenderbot-90M` with `BlenderbotSmallModel.from_pretrained('facebook/small_blenderbot-90M')` instead.",
+                FutureWarning,
+            )
+            return BlenderbotSmallModel.from_pretrained(pretrained_model_name_or_path)
+
+        return super(BlenderbotModel, cls).from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
     def get_input_embeddings(self):
         return self.shared
 
@@ -1074,6 +1088,19 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel):
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
         self.init_weights()
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
+        if pretrained_model_name_or_path == "facebook/blenderbot-90M":
+            warnings.warn(
+                "The checkpoint `facebook/blenderbot-90M` is deprecated. In the future, please use the identical checkpoint `facebook/small_blenderbot-90M` with `BlenderbotSmallForConditionalGeneration.from_pretrained('facebook/small_blenderbot-90M')` instead.",
+                FutureWarning,
+            )
+            return BlenderbotSmallForConditionalGeneration.from_pretrained(pretrained_model_name_or_path)
+
+        return super(BlenderbotForConditionalGeneration, cls).from_pretrained(
+            pretrained_model_name_or_path, *model_args, **kwargs
+        )
 
     def get_encoder(self):
         return self.model.get_encoder()
