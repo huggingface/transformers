@@ -41,6 +41,7 @@ from ...modeling_tf_outputs import (
     TFTokenClassifierOutput,
 )
 from ...modeling_tf_utils import (
+    PositionEmbeddings,
     TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
     TFNextSentencePredictionLoss,
@@ -48,13 +49,12 @@ from ...modeling_tf_utils import (
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
+    TokenTypeEmbeddings,
+    WordEmbeddings,
     get_initializer,
     input_processing,
     keras_serializable,
     shape_list,
-    WordEmbeddings,
-    PositionEmbeddings,
-    TokenTypeEmbeddings,
 )
 from ...utils import logging
 from .configuration_mobilebert import MobileBertConfig
@@ -119,9 +119,24 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
         self.trigram_input = config.trigram_input
         self.embedding_size = config.embedding_size
         self.hidden_size = config.hidden_size
-        self.word_embeddings = WordEmbeddings(vocab_size=config.vocab_size, hidden_size=config.embedding_size, initializer_range=config.initializer_range, name="word_embeddings")
-        self.position_embeddings = PositionEmbeddings(max_position_embeddings=config.max_position_embeddings, hidden_size=config.hidden_size, initializer_range=config.initializer_range, name="position_embeddings")
-        self.token_type_embeddings = TokenTypeEmbeddings(type_vocab_size=config.type_vocab_size, hidden_size=config.hidden_size, initializer_range=config.initializer_range, name="token_type_embeddings")
+        self.word_embeddings = WordEmbeddings(
+            vocab_size=config.vocab_size,
+            hidden_size=config.embedding_size,
+            initializer_range=config.initializer_range,
+            name="word_embeddings",
+        )
+        self.position_embeddings = PositionEmbeddings(
+            max_position_embeddings=config.max_position_embeddings,
+            hidden_size=config.hidden_size,
+            initializer_range=config.initializer_range,
+            name="position_embeddings",
+        )
+        self.token_type_embeddings = TokenTypeEmbeddings(
+            type_vocab_size=config.type_vocab_size,
+            hidden_size=config.hidden_size,
+            initializer_range=config.initializer_range,
+            name="token_type_embeddings",
+        )
         self.embeddings = tf.keras.layers.Add()
         self.embedding_transformation = tf.keras.layers.Dense(config.hidden_size, name="embedding_transformation")
 
@@ -137,8 +152,7 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
         Applies embedding based on inputs tensor.
 
         Returns:
-            final_embeddings (:obj:`tf.Tensor`):
-                output embedding tensor.
+            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
         """
         assert not (input_ids is None and inputs_embeds is None)
 
@@ -148,7 +162,7 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
         if token_type_ids is None:
             input_shape = shape_list(tensor=inputs_embeds)[:-1]
             token_type_ids = tf.fill(dims=input_shape, value=0)
-        
+
         if self.trigram_input:
             # From the paper MobileBERT: a Compact Task-Agnostic BERT for Resource-Limited
             # Devices (https://arxiv.org/abs/2004.02984)

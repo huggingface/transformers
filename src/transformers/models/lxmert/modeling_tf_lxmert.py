@@ -31,14 +31,14 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_tf_utils import (
+    PositionEmbeddings,
     TFPreTrainedModel,
+    TokenTypeEmbeddings,
+    WordEmbeddings,
     get_initializer,
     input_processing,
     keras_serializable,
     shape_list,
-    WordEmbeddings,
-    TokenTypeEmbeddings,
-    PositionEmbeddings
 )
 from ...utils import logging
 from .configuration_lxmert import LxmertConfig
@@ -192,9 +192,24 @@ class TFLxmertEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.word_embeddings = WordEmbeddings(vocab_size=config.vocab_size, hidden_size=config.hidden_size, initializer_range=config.initializer_range, name="word_embeddings")
-        self.position_embeddings = PositionEmbeddings(max_position_embeddings=config.max_position_embeddings, hidden_size=config.hidden_size, initializer_range=config.initializer_range, name="position_embeddings")
-        self.token_type_embeddings = TokenTypeEmbeddings(type_vocab_size=config.type_vocab_size, hidden_size=config.hidden_size, initializer_range=config.initializer_range, name="token_type_embeddings")
+        self.word_embeddings = WordEmbeddings(
+            vocab_size=config.vocab_size,
+            hidden_size=config.hidden_size,
+            initializer_range=config.initializer_range,
+            name="word_embeddings",
+        )
+        self.position_embeddings = PositionEmbeddings(
+            max_position_embeddings=config.max_position_embeddings,
+            hidden_size=config.hidden_size,
+            initializer_range=config.initializer_range,
+            name="position_embeddings",
+        )
+        self.token_type_embeddings = TokenTypeEmbeddings(
+            type_vocab_size=config.type_vocab_size,
+            hidden_size=config.hidden_size,
+            initializer_range=config.initializer_range,
+            name="token_type_embeddings",
+        )
         self.embeddings = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
@@ -204,8 +219,7 @@ class TFLxmertEmbeddings(tf.keras.layers.Layer):
         Applies embedding based on inputs tensor.
 
         Returns:
-            final_embeddings (:obj:`tf.Tensor`):
-                output embedding tensor.
+            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
         """
         assert not (input_ids is None and inputs_embeds is None)
 

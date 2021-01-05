@@ -44,11 +44,11 @@ from ...modeling_tf_utils import (
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
+    WordEmbeddings,
     get_initializer,
     input_processing,
     keras_serializable,
     shape_list,
-    WordEmbeddings,
 )
 from ...utils import logging
 from .configuration_mpnet import MPNetConfig
@@ -94,7 +94,12 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.padding_idx = 1
-        self.word_embeddings = WordEmbeddings(vocab_size=config.vocab_size, hidden_size=config.hidden_size, initializer_range=config.initializer_range, name="word_embeddings")
+        self.word_embeddings = WordEmbeddings(
+            vocab_size=config.vocab_size,
+            hidden_size=config.hidden_size,
+            initializer_range=config.initializer_range,
+            name="word_embeddings",
+        )
         self.position_embeddings = tf.keras.layers.Embedding(
             config.max_position_embeddings,
             config.hidden_size,
@@ -119,13 +124,15 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
 
         # multiple choice has 3 dimensions
         if len(input_ids_shape) == 3:
-            input_ids = tf.reshape(tensor=input_ids, shape=(input_ids_shape[0] * input_ids_shape[1], input_ids_shape[2]))
+            input_ids = tf.reshape(
+                tensor=input_ids, shape=(input_ids_shape[0] * input_ids_shape[1], input_ids_shape[2])
+            )
 
         mask = tf.cast(x=tf.math.not_equal(x=input_ids, y=self.padding_idx), dtype=input_ids.dtype)
         incremental_indices = tf.math.cumsum(x=mask, axis=1) * mask
 
         return incremental_indices + self.padding_idx
-    
+
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
         """
         We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
@@ -145,8 +152,7 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
         Applies embedding based on inputs tensor.
 
         Returns:
-            final_embeddings (:obj:`tf.Tensor`):
-                output embedding tensor.
+            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
         """
         assert not (input_ids is None and inputs_embeds is None)
 

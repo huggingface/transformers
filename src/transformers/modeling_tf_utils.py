@@ -1335,7 +1335,7 @@ class WordEmbeddings(tf.keras.layers.Layer):
         )
 
         super().build(input_shape=input_shape)
-    
+
     def get_config(self):
         config = {
             "vocab_size": self.vocab_size,
@@ -1349,7 +1349,9 @@ class WordEmbeddings(tf.keras.layers.Layer):
     def call(self, input_ids):
         flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
         embeddings = tf.gather(params=self.word_embeddings, indices=flat_input_ids)
-        embeddings = tf.reshape(tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=input_ids), [self.hidden_size]], axis=0))
+        embeddings = tf.reshape(
+            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=input_ids), [self.hidden_size]], axis=0)
+        )
 
         embeddings.set_shape(shape=input_ids.shape.as_list() + [self.hidden_size])
 
@@ -1372,7 +1374,7 @@ class TokenTypeEmbeddings(tf.keras.layers.Layer):
         )
 
         super().build(input_shape=input_shape)
-    
+
     def get_config(self):
         config = {
             "type_vocab_size": self.type_vocab_size,
@@ -1412,7 +1414,7 @@ class PositionEmbeddings(tf.keras.layers.Layer):
         )
 
         super().build(input_shape)
-    
+
     def get_config(self):
         config = {
             "max_position_embeddings": self.max_position_embeddings,

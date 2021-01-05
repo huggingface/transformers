@@ -42,12 +42,12 @@ from ...modeling_tf_utils import (
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
+    TokenTypeEmbeddings,
+    WordEmbeddings,
     get_initializer,
     input_processing,
     keras_serializable,
     shape_list,
-    WordEmbeddings,
-    TokenTypeEmbeddings,
 )
 from ...utils import logging
 from .configuration_roberta import RobertaConfig
@@ -76,18 +76,28 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.padding_idx = 1
-        self.word_embeddings = WordEmbeddings(vocab_size=config.vocab_size, hidden_size=config.hidden_size, initializer_range=config.initializer_range, name="word_embeddings")
+        self.word_embeddings = WordEmbeddings(
+            vocab_size=config.vocab_size,
+            hidden_size=config.hidden_size,
+            initializer_range=config.initializer_range,
+            name="word_embeddings",
+        )
         self.position_embeddings = tf.keras.layers.Embedding(
             config.max_position_embeddings,
             config.hidden_size,
             embeddings_initializer=get_initializer(config.initializer_range),
             name="position_embeddings",
         )
-        self.token_type_embeddings = TokenTypeEmbeddings(type_vocab_size=config.type_vocab_size, hidden_size=config.hidden_size, initializer_range=config.initializer_range, name="token_type_embeddings")
+        self.token_type_embeddings = TokenTypeEmbeddings(
+            type_vocab_size=config.type_vocab_size,
+            hidden_size=config.hidden_size,
+            initializer_range=config.initializer_range,
+            name="token_type_embeddings",
+        )
         self.embeddings = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
-    
+
     def create_position_ids_from_input_ids(self, input_ids):
         """
         Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
@@ -102,13 +112,15 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
 
         # multiple choice has 3 dimensions
         if len(input_ids_shape) == 3:
-            input_ids = tf.reshape(tensor=input_ids, shape=(input_ids_shape[0] * input_ids_shape[1], input_ids_shape[2]))
+            input_ids = tf.reshape(
+                tensor=input_ids, shape=(input_ids_shape[0] * input_ids_shape[1], input_ids_shape[2])
+            )
 
         mask = tf.cast(x=tf.math.not_equal(x=input_ids, y=self.padding_idx), dtype=input_ids.dtype)
         incremental_indices = tf.math.cumsum(x=mask, axis=1) * mask
 
         return incremental_indices + self.padding_idx
-    
+
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
         """
         We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
@@ -128,8 +140,7 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
         Applies embedding based on inputs tensor.
 
         Returns:
-            final_embeddings (:obj:`tf.Tensor`):
-                output embedding tensor.
+            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
         """
         assert not (input_ids is None and inputs_embeds is None)
 
@@ -139,14 +150,14 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
         if token_type_ids is None:
             input_shape = shape_list(tensor=inputs_embeds)[:-1]
             token_type_ids = tf.fill(dims=input_shape, value=0)
-        
+
         if position_ids is None:
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
                 position_ids = self.create_position_ids_from_input_ids(input_ids=input_ids)
             else:
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds=inputs_embeds)
-        
+
         position_embeds = self.position_embeddings(inputs=position_ids)
         token_type_embeds = self.token_type_embeddings(token_type_ids=token_type_ids)
         final_embeddings = self.embeddings(inputs=[inputs_embeds, position_embeds, token_type_embeds])

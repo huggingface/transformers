@@ -36,19 +36,19 @@ from ...modeling_tf_outputs import (
     TFTokenClassifierOutput,
 )
 from ...modeling_tf_utils import (
+    PositionEmbeddings,
     TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
+    TokenTypeEmbeddings,
+    WordEmbeddings,
     get_initializer,
     input_processing,
     keras_serializable,
     shape_list,
-    WordEmbeddings,
-    PositionEmbeddings,
-    TokenTypeEmbeddings,
 )
 from ...utils import logging
 from .configuration_distilbert import DistilBertConfig
@@ -85,8 +85,18 @@ class TFEmbeddings(tf.keras.layers.Layer):
             name="position_embeddings",
         )
 
-        self.word_embeddings = WordEmbeddings(vocab_size=config.vocab_size, hidden_size=config.dim, initializer_range=config.initializer_range, name="word_embeddings")
-        self.position_embeddings = PositionEmbeddings(max_position_embeddings=config.max_position_embeddings, hidden_size=config.dim, initializer_range=config.initializer_range, name="position_embeddings")
+        self.word_embeddings = WordEmbeddings(
+            vocab_size=config.vocab_size,
+            hidden_size=config.dim,
+            initializer_range=config.initializer_range,
+            name="word_embeddings",
+        )
+        self.position_embeddings = PositionEmbeddings(
+            max_position_embeddings=config.max_position_embeddings,
+            hidden_size=config.dim,
+            initializer_range=config.initializer_range,
+            name="position_embeddings",
+        )
         self.embeddings = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.dropout)
@@ -96,8 +106,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
         Applies embedding based on inputs tensor.
 
         Returns:
-            final_embeddings (:obj:`tf.Tensor`):
-                output embedding tensor.
+            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
         """
         assert not (input_ids is None and inputs_embeds is None)
 
@@ -595,7 +604,7 @@ class TFDistilBertLMHead(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
-        
+
         super().build(input_shape)
 
     def get_output_embeddings(self):
@@ -637,7 +646,9 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         )
         self.act = get_tf_activation("gelu")
         self.vocab_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="vocab_layer_norm")
-        self.vocab_projector = TFDistilBertLMHead(config, self.distilbert.embeddings.word_embeddings, name="vocab_projector")
+        self.vocab_projector = TFDistilBertLMHead(
+            config, self.distilbert.embeddings.word_embeddings, name="vocab_projector"
+        )
 
     def get_lm_head(self):
         return self.vocab_projector
