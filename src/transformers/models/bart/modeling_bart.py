@@ -203,7 +203,7 @@ class BartAttention(nn.Module):
         key_value_states: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask_layer: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -271,11 +271,11 @@ class BartAttention(nn.Module):
 
         attn_weights = F.softmax(attn_weights, dim=-1)
 
-        if head_mask_layer is not None:
-            assert head_mask_layer.size() == (
+        if layer_head_mask is not None:
+            assert layer_head_mask.size() == (
                 self.num_heads,
-            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {head_mask_layer.size()}"
-            attn_weights = head_mask_layer.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
@@ -331,7 +331,7 @@ class BartEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        head_mask_layer: torch.Tensor,
+        layer_head_mask: torch.Tensor,
         output_attentions: bool = False
     ):
         """
@@ -339,7 +339,7 @@ class BartEncoderLayer(nn.Module):
             hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (:obj:`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            head_mask_layer (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
+            layer_head_mask (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
                 `(config.encoder_attention_heads,)`.
             output_attentions (:obj:`bool`): Whether the base model outputs attentions. This requires the attentions tensor to be reshaped in this function.
         """
@@ -347,8 +347,10 @@ class BartEncoderLayer(nn.Module):
         if self.normalize_before:
             hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, attn_weights, _ = self.self_attn(
-            hidden_states=hidden_states, attention_mask=attention_mask,
-            head_mask_layer=head_mask_layer, output_attentions=output_attentions
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            layer_head_mask=layer_head_mask,
+            output_attentions=output_attentions
         )
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
@@ -403,10 +405,10 @@ class BartDecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask_layer: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
-        encoder_head_mask_layer: Optional[torch.Tensor] = None,
+        encoder_layer_head_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[torch.Tensor] = False,
     ):
@@ -415,12 +417,12 @@ class BartDecoderLayer(nn.Module):
             hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (:obj:`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            head_mask_layer (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
+            layer_head_mask (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
                 `(config.encoder_attention_heads,)`.
             encoder_hidden_states (:obj:`torch.FloatTensor`): cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
             encoder_attention_mask (:obj:`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            encoder_head_mask_layer (:obj:`torch.FloatTensor`): mask for encoder attention heads in a given layer of
+            encoder_layer_head_mask (:obj:`torch.FloatTensor`): mask for encoder attention heads in a given layer of
             size `(config.encoder_attention_heads,)`.
             past_key_value (:obj:`Tuple(torch.FloatTensor)`): cached past key and value projection states
             output_attentions (:obj:`bool`): Whether the base model outputs attentions. This requires the attentions tensor to be reshaped in this function.
@@ -437,7 +439,7 @@ class BartDecoderLayer(nn.Module):
             hidden_states=hidden_states,
             past_key_value=self_attn_past_key_value,
             attention_mask=attention_mask,
-            head_mask_layer=head_mask_layer,
+            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -459,7 +461,7 @@ class BartDecoderLayer(nn.Module):
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                head_mask_layer=encoder_head_mask_layer,
+                layer_head_mask=encoder_layer_head_mask,
                 past_key_value=cross_attn_past_key_value,
                 output_attentions=output_attentions,
             )
@@ -800,8 +802,9 @@ class BartEncoder(BartPretrainedModel):
                 attn = None
             else:
                 hidden_states, attn = encoder_layer(
-                    hidden_states, attention_mask,
-                    head_mask_layer=(head_mask[idx] if head_mask is not None else None),
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                     output_attentions=output_attentions
                 )
 
@@ -1044,10 +1047,10 @@ class BartDecoder(BartPretrainedModel):
             hidden_states, layer_self_attn, present_key_value, layer_cross_attn = decoder_layer(
                 hidden_states,
                 attention_mask=combined_attention_mask,
-                head_mask_layer=(head_mask[idx] if head_mask is not None else None),
+                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
-                encoder_head_mask_layer=(encoder_head_mask[idx] if encoder_head_mask is not None else None),
+                encoder_layer_head_mask=(encoder_head_mask[idx] if encoder_head_mask is not None else None),
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
             )
