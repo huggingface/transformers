@@ -1179,7 +1179,7 @@ class TFT5Model(TFT5PreTrainedModel):
     def serving_output(self, output):
         return TFSeq2SeqModelOutput(
             last_hidden_state=output.last_hidden_state,
-            past_key_values=tf.tuple(output.past_key_values)[1]
+            past_key_values=tf.convert_to_tensor(output.past_key_values[1:])
             if self.config.use_cache
             else None,
             decoder_hidden_states=tf.convert_to_tensor(output.decoder_hidden_states)
@@ -1408,7 +1408,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         return TFSeq2SeqLMOutput(
             loss=None,
             logits=output.logits,
-            past_key_values=tf.tuple(output.past_key_values)[1]
+            past_key_values=tf.convert_to_tensor(output.past_key_values[1:])
             if self.config.use_cache
             else None,
             decoder_hidden_states=tf.convert_to_tensor(output.decoder_hidden_states)
