@@ -14,6 +14,7 @@
 """
 Integrations with other Python libraries.
 """
+import importlib.util
 import math
 import numbers
 import os
@@ -21,107 +22,38 @@ import re
 import tempfile
 from pathlib import Path
 
-from .file_utils import ENV_VARS_TRUE_VALUES
-from .trainer_utils import EvaluationStrategy
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-# Import 3rd-party integrations before ML frameworks:
+# comet_ml requires to be imported before any ML frameworks
+_has_comet = importlib.util.find_spec("comet_ml") and os.getenv("COMET_MODE", "").upper() != "DISABLED"
+if _has_comet:
+    try:
+        import comet_ml  # noqa: F401
 
-try:
-    # Comet needs to be imported before any ML frameworks
-    import comet_ml  # noqa: F401
-
-    if hasattr(comet_ml, "config") and comet_ml.config.get_config("comet.api_key"):
-        _has_comet = True
-    else:
-        if os.getenv("COMET_MODE", "").upper() != "DISABLED":
-            logger.warning("comet_ml is installed but `COMET_API_KEY` is not set.")
+        if hasattr(comet_ml, "config") and comet_ml.config.get_config("comet.api_key"):
+            _has_comet = True
+        else:
+            if os.getenv("COMET_MODE", "").upper() != "DISABLED":
+                logger.warning("comet_ml is installed but `COMET_API_KEY` is not set.")
+            _has_comet = False
+    except (ImportError, ValueError):
         _has_comet = False
-except (ImportError, ValueError):
-    _has_comet = False
 
-try:
-    import wandb
 
-    wandb.ensure_configured()
-    if wandb.api.api_key is None:
-        _has_wandb = False
-        if os.getenv("WANDB_DISABLED"):
-            logger.warning("W&B installed but not logged in. Run `wandb login` or set the WANDB_API_KEY env variable.")
-    else:
-        _has_wandb = False if os.getenv("WANDB_DISABLED") else True
-except (ImportError, AttributeError):
-    _has_wandb = False
-
-try:
-    import optuna  # noqa: F401
-
-    _has_optuna = True
-except (ImportError):
-    _has_optuna = False
-
-try:
-    import ray  # noqa: F401
-
-    _has_ray = True
-    try:
-        # Ray Tune has additional dependencies.
-        from ray import tune  # noqa: F401
-
-        _has_ray_tune = True
-    except (ImportError):
-        _has_ray_tune = False
-except (ImportError):
-    _has_ray = False
-    _has_ray_tune = False
-
-try:
-    from torch.utils.tensorboard import SummaryWriter  # noqa: F401
-
-    _has_tensorboard = True
-except ImportError:
-    try:
-        from tensorboardX import SummaryWriter  # noqa: F401
-
-        _has_tensorboard = True
-    except ImportError:
-        _has_tensorboard = False
-
-try:
-    from azureml.core.run import Run  # noqa: F401
-
-    _has_azureml = True
-except ImportError:
-    _has_azureml = False
-
-try:
-    import mlflow  # noqa: F401
-
-    _has_mlflow = True
-except ImportError:
-    _has_mlflow = False
-
-try:
-    import fairscale  # noqa: F401
-
-    _has_fairscale = True
-except ImportError:
-    _has_fairscale = False
-
-# No transformer imports above this point
-
-from .file_utils import is_torch_tpu_available  # noqa: E402
+from .file_utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
 from .trainer_callback import TrainerCallback  # noqa: E402
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun  # noqa: E402
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, EvaluationStrategy  # noqa: E402
 
 
 # Integration functions:
 def is_wandb_available():
-    return _has_wandb
+    if os.getenv("WANDB_DISABLED"):
+        return False
+    return importlib.util.find_spec("wandb") is not None
 
 
 def is_comet_available():
@@ -129,35 +61,43 @@ def is_comet_available():
 
 
 def is_tensorboard_available():
-    return _has_tensorboard
+    return importlib.util.find_spec("tensorboard") is not None or importlib.util.find_spec("tensorboardX") is not None
 
 
 def is_optuna_available():
-    return _has_optuna
+    return importlib.util.find_spec("optuna") is not None
 
 
 def is_ray_available():
-    return _has_ray
+    return importlib.util.find_spec("ray") is not None
 
 
 def is_ray_tune_available():
-    return _has_ray_tune
+    if not is_ray_available():
+        return False
+    return importlib.util.find_spec("ray.tune") is not None
 
 
 def is_azureml_available():
-    return _has_azureml
+    if importlib.util.find_spec("azureml") is None:
+        return False
+    if importlib.util.find_spec("azureml.core") is None:
+        return False
+    return importlib.util.find_spec("azureml.core.run") is not None
 
 
 def is_mlflow_available():
-    return _has_mlflow
+    return importlib.util.find_spec("mlflow") is not None
 
 
 def is_fairscale_available():
-    return _has_fairscale
+    return importlib.util.find_spec("fairscale") is not None
 
 
 def hp_params(trial):
     if is_optuna_available():
+        import optuna
+
         if isinstance(trial, optuna.Trial):
             return trial.params
     if is_ray_tune_available():
@@ -175,6 +115,8 @@ def default_hp_search_backend():
 
 
 def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
+    import optuna
+
     def _objective(trial, checkpoint_dir=None):
         model_path = None
         if checkpoint_dir:
@@ -198,6 +140,8 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
 
 
 def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
+    import ray
+
     def _objective(trial, checkpoint_dir=None):
         model_path = None
         if checkpoint_dir:
@@ -297,14 +241,29 @@ class TensorBoardCallback(TrainerCallback):
     """
 
     def __init__(self, tb_writer=None):
+        has_tensorboard = is_tensorboard_available()
         assert (
-            _has_tensorboard
+            has_tensorboard
         ), "TensorBoardCallback requires tensorboard to be installed. Either update your PyTorch version or install tensorboardX."
+        if has_tensorboard:
+            try:
+                from torch.utils.tensorboard import SummaryWriter  # noqa: F401
+
+                self._SummaryWriter = SummaryWriter
+            except ImportError:
+                try:
+                    from tensorboardX import SummaryWriter
+
+                    self._SummaryWriter = SummaryWriter
+                except ImportError:
+                    self._SummaryWriter = None
         self.tb_writer = tb_writer
+        self._SummaryWriter = SummaryWriter
 
     def _init_summary_writer(self, args, log_dir=None):
         log_dir = log_dir or args.logging_dir
-        self.tb_writer = SummaryWriter(log_dir=log_dir)
+        if self._SummaryWriter is not None:
+            self.tb_writer = self._SummaryWriter(log_dir=log_dir)
 
     def on_train_begin(self, args, state, control, **kwargs):
         if not state.is_world_process_zero:
@@ -335,7 +294,7 @@ class TensorBoardCallback(TrainerCallback):
             if self.tb_writer is None:
                 self._init_summary_writer(args)
 
-        if self.tb_writer:
+        if self.tb_writer is not None:
             logs = rewrite_logs(logs)
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
@@ -363,7 +322,20 @@ class WandbCallback(TrainerCallback):
     """
 
     def __init__(self):
-        assert _has_wandb, "WandbCallback requires wandb to be installed. Run `pip install wandb`."
+        has_wandb = is_wandb_available()
+        assert has_wandb, "WandbCallback requires wandb to be installed. Run `pip install wandb`."
+        if has_wandb:
+            import wandb
+
+            wandb.ensure_configured()
+            if wandb.api.api_key is None:
+                has_wandb = False
+                logger.warning(
+                    "W&B installed but not logged in. Run `wandb login` or set the WANDB_API_KEY env variable."
+                )
+                self._wandb = wandb
+            else:
+                self._wandb = None
         self._initialized = False
 
     def setup(self, args, state, model, reinit, **kwargs):
@@ -384,6 +356,8 @@ class WandbCallback(TrainerCallback):
             WANDB_DISABLED (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to disable wandb entirely.
         """
+        if self._wandb is None:
+            return
         self._initialized = True
         if state.is_world_process_zero:
             logger.info(
@@ -402,7 +376,7 @@ class WandbCallback(TrainerCallback):
             else:
                 run_name = args.run_name
 
-            wandb.init(
+            self._wandb.init(
                 project=os.getenv("WANDB_PROJECT", "huggingface"),
                 config=combined_dict,
                 name=run_name,
@@ -412,19 +386,25 @@ class WandbCallback(TrainerCallback):
 
             # keep track of model topology and gradients, unsupported on TPU
             if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false":
-                wandb.watch(model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, args.logging_steps))
+                self._wandb.watch(
+                    model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, args.logging_steps)
+                )
 
             # log outputs
             self._log_model = os.getenv("WANDB_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
+        if self._wandb is None:
+            return
         hp_search = state.is_hyper_param_search
         if not self._initialized or hp_search:
             self.setup(args, state, model, reinit=hp_search, **kwargs)
 
     def on_train_end(self, args, state, control, model=None, tokenizer=None, **kwargs):
+        if self._wandb is None:
+            return
         # commit last step
-        wandb.log({})
+        self._wandb.log({})
         if self._log_model and self._initialized and state.is_world_process_zero:
             from .trainer import Trainer
 
@@ -432,11 +412,11 @@ class WandbCallback(TrainerCallback):
             with tempfile.TemporaryDirectory() as temp_dir:
                 fake_trainer.save_model(temp_dir)
                 # use run name and ensure it's a valid Artifact name
-                artifact_name = re.sub(r"[^a-zA-Z0-9_\.\-]", "", wandb.run.name)
+                artifact_name = re.sub(r"[^a-zA-Z0-9_\.\-]", "", self._wandb.run.name)
                 metadata = (
                     {
                         k: v
-                        for k, v in dict(wandb.summary).items()
+                        for k, v in dict(self._wandb.summary).items()
                         if isinstance(v, numbers.Number) and not k.startswith("_")
                     }
                     if not args.load_best_model_at_end
@@ -445,19 +425,21 @@ class WandbCallback(TrainerCallback):
                         "train/total_floss": state.total_flos,
                     }
                 )
-                artifact = wandb.Artifact(name=f"run-{artifact_name}", type="model", metadata=metadata)
+                artifact = self._wandb.Artifact(name=f"run-{artifact_name}", type="model", metadata=metadata)
                 for f in Path(temp_dir).glob("*"):
                     if f.is_file():
                         with artifact.new_file(f.name, mode="wb") as fa:
                             fa.write(f.read_bytes())
-                wandb.run.log_artifact(artifact)
+                self._wandb.run.log_artifact(artifact)
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
+        if self._wandb is None:
+            return
         if not self._initialized:
             self.setup(args, state, model, reinit=False)
         if state.is_world_process_zero:
             logs = rewrite_logs(logs)
-            wandb.log(logs, step=state.global_step)
+            self._wandb.log(logs, step=state.global_step)
 
 
 class CometCallback(TrainerCallback):
@@ -522,10 +504,14 @@ class AzureMLCallback(TrainerCallback):
     """
 
     def __init__(self, azureml_run=None):
-        assert _has_azureml, "AzureMLCallback requires azureml to be installed. Run `pip install azureml-sdk`."
+        assert (
+            is_azureml_available()
+        ), "AzureMLCallback requires azureml to be installed. Run `pip install azureml-sdk`."
         self.azureml_run = azureml_run
 
     def on_init_end(self, args, state, control, **kwargs):
+        from azureml.core.run import Run
+
         if self.azureml_run is None and state.is_world_process_zero:
             self.azureml_run = Run.get_context()
 
@@ -544,9 +530,12 @@ class MLflowCallback(TrainerCallback):
     MAX_LOG_SIZE = 100
 
     def __init__(self):
-        assert _has_mlflow, "MLflowCallback requires mlflow to be installed. Run `pip install mlflow`."
+        assert is_mlflow_available(), "MLflowCallback requires mlflow to be installed. Run `pip install mlflow`."
+        import mlflow
+
         self._initialized = False
         self._log_artifacts = False
+        self._ml_flow = mlflow
 
     def setup(self, args, state, model):
         """
@@ -564,7 +553,7 @@ class MLflowCallback(TrainerCallback):
         if log_artifacts in {"TRUE", "1"}:
             self._log_artifacts = True
         if state.is_world_process_zero:
-            mlflow.start_run()
+            self._ml_flow.start_run()
             combined_dict = args.to_dict()
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config.to_dict()
@@ -572,7 +561,7 @@ class MLflowCallback(TrainerCallback):
             # MLflow cannot log more than 100 values in one go, so we have to split it
             combined_dict_items = list(combined_dict.items())
             for i in range(0, len(combined_dict_items), MLflowCallback.MAX_LOG_SIZE):
-                mlflow.log_params(dict(combined_dict_items[i : i + MLflowCallback.MAX_LOG_SIZE]))
+                self._ml_flow.log_params(dict(combined_dict_items[i : i + MLflowCallback.MAX_LOG_SIZE]))
         self._initialized = True
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
@@ -585,7 +574,7 @@ class MLflowCallback(TrainerCallback):
         if state.is_world_process_zero:
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
-                    mlflow.log_metric(k, v, step=state.global_step)
+                    self._ml_flow.log_metric(k, v, step=state.global_step)
                 else:
                     logger.warning(
                         "Trainer is attempting to log a value of "
@@ -601,11 +590,11 @@ class MLflowCallback(TrainerCallback):
         if self._initialized and state.is_world_process_zero:
             if self._log_artifacts:
                 logger.info("Logging artifacts. This may take time.")
-                mlflow.log_artifacts(args.output_dir)
-            mlflow.end_run()
+                self._ml_flow.log_artifacts(args.output_dir)
+            self._ml_flow.end_run()
 
     def __del__(self):
         # if the previous run is not terminated correctly, the fluent API will
         # not let you start a new run before the previous one is killed
-        if mlflow.active_run is not None:
-            mlflow.end_run(status="KILLED")
+        if self._ml_flow.active_run is not None:
+            self._ml_flow.end_run(status="KILLED")
