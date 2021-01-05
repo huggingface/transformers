@@ -90,6 +90,7 @@ from ..funnel.modeling_tf_funnel import (
     TFFunnelModel,
 )
 from ..gpt2.modeling_tf_gpt2 import TFGPT2ForSequenceClassification, TFGPT2LMHeadModel, TFGPT2Model
+from ..led.modeling_tf_led import TFLEDForConditionalGeneration, TFLEDModel
 from ..longformer.modeling_tf_longformer import (
     TFLongformerForMaskedLM,
     TFLongformerForMultipleChoice,
@@ -174,6 +175,7 @@ from .configuration_auto import (
     FlaubertConfig,
     FunnelConfig,
     GPT2Config,
+    LEDConfig,
     LongformerConfig,
     LxmertConfig,
     MarianConfig,
@@ -199,6 +201,7 @@ logger = logging.get_logger(__name__)
 TF_MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
+        (LEDConfig, TFLEDModel),
         (LxmertConfig, TFLxmertModel),
         (MT5Config, TFMT5Model),
         (T5Config, TFT5Model),
@@ -254,6 +257,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
+        (LEDConfig, TFLEDForConditionalGeneration),
         (T5Config, TFT5ForConditionalGeneration),
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForMaskedLM),
@@ -317,6 +321,7 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
 TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        (LEDConfig, TFLEDForConditionalGeneration),
         (MT5Config, TFMT5ForConditionalGeneration),
         (T5Config, TFT5ForConditionalGeneration),
         (MarianConfig, TFMarianMTModel),

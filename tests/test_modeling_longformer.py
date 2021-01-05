@@ -488,13 +488,13 @@ class LongformerModelIntegrationTest(unittest.TestCase):
         is_index_global_attn = attention_mask > 0
         is_global_attn = is_index_global_attn.flatten().any().item()
 
-        output_hidden_states, _ = layer(
+        output_hidden_states = layer(
             hidden_states,
             attention_mask=attention_mask,
             is_index_masked=is_index_masked,
             is_index_global_attn=is_index_global_attn,
             is_global_attn=is_global_attn,
-        )
+        )[0]
 
         self.assertTrue(output_hidden_states.shape, (1, 4, 8))
         self.assertTrue(
@@ -526,13 +526,13 @@ class LongformerModelIntegrationTest(unittest.TestCase):
         is_index_global_attn = attention_mask > 0
         is_global_attn = is_index_global_attn.flatten().any().item()
 
-        output_hidden_states, _, _ = layer(
+        output_hidden_states = layer(
             hidden_states,
             attention_mask=attention_mask,
             is_index_masked=is_index_masked,
             is_index_global_attn=is_index_global_attn,
             is_global_attn=is_global_attn,
-        )
+        )[0]
 
         self.assertTrue(output_hidden_states.shape, (2, 4, 8))
 
@@ -583,6 +583,7 @@ class LongformerModelIntegrationTest(unittest.TestCase):
             is_index_masked=is_index_masked,
             is_index_global_attn=is_index_global_attn,
             is_global_attn=is_global_attn,
+            output_attentions=True,
         )
 
         self.assertEqual(local_attentions.shape, (2, 4, 2, 8))

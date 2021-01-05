@@ -615,6 +615,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "HerbertTokenizer": HerbertConverter,
     "LayoutLMTokenizer": BertConverter,
     "LongformerTokenizer": RobertaConverter,
+    "LEDTokenizer": RobertaConverter,
     "LxmertTokenizer": BertConverter,
     "MBartTokenizer": MBartConverter,
     "MPNetTokenizer": MPNetConverter,

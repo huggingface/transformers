@@ -128,6 +128,15 @@ class LayoutLMTokenizerFast:
         requires_tokenizers(self)
 
 
+class LEDTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+
 class LongformerTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_tokenizers(self)

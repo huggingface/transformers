@@ -796,7 +796,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         )
 
         # normalize query
-        query_vectors /= tf.math.sqrt(tf.constant(self.head_dim, dtype=tf.dtypes.float32))
+        query_vectors /= tf.math.sqrt(tf.convert_to_tensor(self.head_dim, dtype=tf.dtypes.float32))
         query_vectors = tf.reshape(query_vectors, (batch_size, seq_len, self.num_heads, self.head_dim))
         key_vectors = tf.reshape(key_vectors, (batch_size, seq_len, self.num_heads, self.head_dim))
 
@@ -945,7 +945,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         chunked_attention_scores = tf.einsum("bcxd,bcyd->bcxy", chunked_query, chunked_key)  # multiply
 
         # convert diagonals into columns
-        paddings = tf.constant([[0, 0], [0, 0], [0, 1], [0, 0]], dtype=tf.dtypes.int32)
+        paddings = tf.convert_to_tensor([[0, 0], [0, 0], [0, 1], [0, 0]], dtype=tf.dtypes.int32)
         diagonal_chunked_attention_scores = self._pad_and_transpose_last_two_dims(chunked_attention_scores, paddings)
 
         # allocate space for the overall attention matrix where the chunks are combined. The last dimension
@@ -1093,7 +1093,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         )
 
         # pad seq_len with w at the beginning of the sequence and another window overlap at the end
-        paddings = tf.constant([[0, 0], [window_overlap, window_overlap], [0, 0]], dtype=tf.dtypes.int32)
+        paddings = tf.convert_to_tensor([[0, 0], [window_overlap, window_overlap], [0, 0]], dtype=tf.dtypes.int32)
         padded_value = tf.pad(value, paddings, constant_values=-1)
 
         # chunk padded_value into chunks of size 3 window overlap and an overlap of size window overlap
@@ -1141,6 +1141,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         shift every row 1 step right, converting columns into diagonals.
 
         Example::
+
               chunked_hidden_states: [ 0.4983,  2.6918, -0.0071,  1.0492,
                                        -1.8348,  0.7672,  0.2986,  0.0285,
                                        -0.7584,  0.4206, -0.0405,  0.1599,
@@ -1153,7 +1154,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
                0.0000,  0.0000,  0.0000, 2.0514, -1.1600,  0.5372,  0.2629 ]
         """
         total_num_heads, num_chunks, window_overlap, hidden_dim = shape_list(chunked_hidden_states)
-        paddings = tf.constant([[0, 0], [0, 0], [0, 0], [0, window_overlap + 1]])
+        paddings = tf.convert_to_tensor([[0, 0], [0, 0], [0, 0], [0, window_overlap + 1]])
         chunked_hidden_states = tf.pad(
             chunked_hidden_states, paddings
         )  # total_num_heads x num_chunks x window_overlap x (hidden_dim+window_overlap+1). Padding value is not important because it'll be overwritten
@@ -1349,7 +1350,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         global_value_vectors = self.value_global(hidden_states)
 
         # normalize
-        global_query_vectors_only_global /= tf.math.sqrt(tf.constant(self.head_dim, dtype=tf.dtypes.float32))
+        global_query_vectors_only_global /= tf.math.sqrt(tf.convert_to_tensor(self.head_dim, dtype=tf.dtypes.float32))
         global_query_vectors_only_global = self.reshape_and_transpose(global_query_vectors_only_global, batch_size)
         global_key_vectors = self.reshape_and_transpose(global_key_vectors, batch_size)
         global_value_vectors = self.reshape_and_transpose(global_value_vectors, batch_size)
@@ -1820,10 +1821,10 @@ class TFLongformerPreTrainedModel(TFPreTrainedModel):
 
     @property
     def dummy_inputs(self):
-        input_ids = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
+        input_ids = tf.convert_to_tensor([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
         # make sure global layers are initialized
-        attention_mask = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
-        global_attention_mask = tf.constant([[0, 0, 0, 0, 1], [0, 0, 1, 0, 0], [0, 0, 0, 0, 1]])
+        attention_mask = tf.convert_to_tensor([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
+        global_attention_mask = tf.convert_to_tensor([[0, 0, 0, 0, 1], [0, 0, 1, 0, 0], [0, 0, 0, 0, 1]])
         return {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
@@ -2371,9 +2372,9 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
 
     @property
     def dummy_inputs(self):
-        input_ids = tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)
+        input_ids = tf.convert_to_tensor(MULTIPLE_CHOICE_DUMMY_INPUTS)
         # make sure global layers are initialized
-        global_attention_mask = tf.constant([[[0, 0, 0, 1], [0, 0, 0, 1]]] * 2)
+        global_attention_mask = tf.convert_to_tensor([[[0, 0, 0, 1], [0, 0, 0, 1]]] * 2)
         return {"input_ids": input_ids, "global_attention_mask": global_attention_mask}
 
     @add_start_docstrings_to_model_forward(

@@ -339,6 +339,8 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_saved_model_with_attentions_output(self):
+        # longformer has special attentions which are not
+        # compatible in graph mode
         pass
 
 
