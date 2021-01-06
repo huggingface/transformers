@@ -375,6 +375,7 @@ TensorFlow and/or Flax.
     model_doc/flaubert
     model_doc/fsmt
     model_doc/funnel
+    model_doc/herbert
     model_doc/layoutlm
     model_doc/led
     model_doc/longformer
