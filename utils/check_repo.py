@@ -389,8 +389,6 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     # Herbert
     "HerbertTokenizer",
     "HerbertTokenizerFast",
-    # Phoebus
-    "PhobertTokenizer",
     # Benchmarks
     "PyTorchBenchmark",
     "PyTorchBenchmarkArguments",
