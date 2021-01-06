@@ -50,7 +50,7 @@ class TextGenerationPipeline(Pipeline):
         self.check_model_type(self.ALLOWED_MODELS)
 
     # overriding _parse_and_tokenize to allow for unusual language-modeling tokenizer arguments
-    def _parse_and_tokenize(self, **kwargs):
+    def _parse_and_tokenize(self, *args, **kwargs):
         """
         Parse arguments and tokenize
         """
@@ -58,7 +58,7 @@ class TextGenerationPipeline(Pipeline):
         if self.model.__class__.__name__ in ["TransfoXLLMHeadModel"]:
             kwargs.update({"add_space_before_punct_symbol": True})
 
-        return super()._parse_and_tokenize(**kwargs)
+        return super()._parse_and_tokenize(*args, **kwargs)
 
     def __call__(
         self,
