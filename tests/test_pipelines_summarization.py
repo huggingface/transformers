@@ -14,46 +14,13 @@
 
 import unittest
 
-from transformers import TruncationStrategy, is_torch_available, pipeline
+from transformers import pipeline
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from .test_pipelines_common import DummyTok, MonoInputPipelineCommonMixin
-
-
-if is_torch_available():
-    from transformers import BartConfig, BartForConditionalGeneration
+from .test_pipelines_common import MonoInputPipelineCommonMixin
 
 
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
-
-
-class SimpleSummarizationPipelineTests(unittest.TestCase):
-    @require_torch
-    def test_input_too_long(self):
-        config = BartConfig(
-            vocab_size=257,
-            d_model=32,
-            encoder_layers=1,
-            decoder_layers=1,
-            encoder_ffn_dim=32,
-            decoder_ffn_dim=32,
-            # So any text > 4 should raise an exception
-            max_position_embeddings=4,
-            encoder_attention_heads=1,
-            decoder_attention_heads=1,
-            max_length=4,
-            min_length=1,
-        )
-        model = BartForConditionalGeneration(config)
-        tokenizer = DummyTok(model_max_length=4)
-        nlp = pipeline(task="summarization", model=model, tokenizer=tokenizer)
-
-        with self.assertRaises(IndexError):
-            _ = nlp("This is a test")
-
-        output = nlp("This is a test", truncation=TruncationStrategy.ONLY_FIRST)
-
-        self.assertEqual(output, [{"summary_text": "abcd"}])
 
 
 class SummarizationPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
