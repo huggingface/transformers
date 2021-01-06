@@ -373,7 +373,7 @@ class ConversationalPipeline(Pipeline):
                         break
                     else:
                         logger.warning(
-                            "Cutting history off because it's too long ({len(new_input)} > {max_length - self.min_length_for_response}) for underlying model"
+                            f"Cutting history off because it's too long ({len(new_input)} > {max_length - self.min_length_for_response}) for underlying model"
                         )
                         new_input = new_input[cutoff_eos_index + 1 :]
             outputs.append(new_input)
