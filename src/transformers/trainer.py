@@ -242,6 +242,11 @@ class Trainer:
         if model is None and model_init is not None:
             model = self.call_model_init()
 
+        if self.args.model_parallel and not model.is_parallelizable:
+            raise ValueError(
+                f"{model.__class__.__name__} implementation currently doesn't support model parallelism, therefore --model_parallel cl arg cannot be used"
+            )
+
         # Model parallel
         if model is not None and not self.args.model_parallel:
             model = model.to(args.device)
@@ -261,7 +266,9 @@ class Trainer:
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
         callbacks = DEFAULT_CALLBACKS if callbacks is None else DEFAULT_CALLBACKS + callbacks
-        self.callback_handler = CallbackHandler(callbacks, self.model, self.optimizer, self.lr_scheduler)
+        self.callback_handler = CallbackHandler(
+            callbacks, self.model, self.tokenizer, self.optimizer, self.lr_scheduler
+        )
         self.add_callback(PrinterCallback if self.args.disable_tqdm else DEFAULT_PROGRESS_CALLBACK)
 
         # Will be set to True by `self._setup_loggers()` on first call to `self.log()`.
