@@ -839,7 +839,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         """
         raise NotImplementedError
 
-    def save_pretrained(self, save_directory, saved_model=True, version=1):
+    def save_pretrained(self, save_directory, saved_model=False, version=1):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
         :func:`~transformers.TFPreTrainedModel.from_pretrained` class method.
