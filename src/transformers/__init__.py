@@ -2078,6 +2078,12 @@ else:
 
         def _get_module(self, module_name: str):
             return importlib.import_module("." + module_name, self.__name__)
+        
+        def __getattr__(self, name: str):
+            # Special handling for the version, which is a constant from this module and not imported in a submodule.
+            if name == "__version__":
+                return __version__
+            return super().__getattr__(name)
 
     sys.modules[__name__] = _LazyModule(__name__, _import_structure)
 
