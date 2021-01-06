@@ -39,8 +39,8 @@ class Conversation:
             :obj:`generated_responses` with equal length lists of strings
         generated_responses (:obj:`List[str]`, `optional`):
             Eventual past history of the conversation of the model. You don't need to pass it manually if you use the
-            pipeline interactively but if you want to recreate history you need to set both `past_user_inputs` and
-            `generated_responses` with equal length lists of strings
+            pipeline interactively but if you want to recreate history you need to set both :obj:`past_user_inputs` and
+            :obj:`generated_responses` with equal length lists of strings
 
     Usage::
 
