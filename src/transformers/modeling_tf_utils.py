@@ -675,17 +675,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             value (:obj:`tf.Variable`):
                 The new weights mapping hidden states to vocabulary.
         """
-        if value is not None:
-            main_layer = getattr(self, self.base_model_prefix, self)
+        main_layer = getattr(self, self.base_model_prefix)
 
-            if main_layer is not self:
-                try:
-                    main_layer.set_input_embeddings(value)
-                except AttributeError:
-                    self(self.dummy_inputs)
-                    main_layer.set_input_embeddings(value)
-            else:
-                raise NotImplementedError
+        if main_layer is None:
+            raise NotImplementedError("The model does not implements the base_model_prefix attribute.")
+
+        try:
+            main_layer.set_input_embeddings(value)
+        except AttributeError:
+            logger.info("Building the model")
+            self(self.dummy_inputs)
+            main_layer.set_input_embeddings(value)
 
     def get_output_embeddings(self) -> Union[None, tf.keras.layers.Layer]:
         """
@@ -709,11 +709,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             value (:obj:`tf.Variable`):
                 The new weights mapping hidden states to vocabulary.
         """
-        if value is not None and self.get_lm_head() is not None:
+        if self.get_lm_head() is not None:
             lm_head = self.get_lm_head()
             try:
                 lm_head.set_output_embeddings(value)
             except AttributeError:
+                logger.info("Building the model")
                 self(self.dummy_inputs)
                 lm_head.set_output_embeddings(value)
 
@@ -765,7 +766,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             value (:obj:`Dict[tf.Variable]`):
                 All the new bias attached to an LM head.
         """
-        if value is not None and self.get_lm_head() is not None:
+        if self.get_lm_head() is not None:
             lm_head = self.get_lm_head()
             try:
                 lm_head.set_bias(value)
@@ -775,7 +776,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
     def get_lm_head(self) -> tf.keras.layers.Layer:
         """
-        The LM Head layer.
+        The LM Head layer. This method must be overwritten by all the models that have a lm head.
 
         Return:
             :obj:`tf.keras.layers.Layer`: The LM head layer if the model has one, None if not.

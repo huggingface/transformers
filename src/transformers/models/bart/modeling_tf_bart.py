@@ -487,23 +487,28 @@ class TFBartPretrainedModel(TFPreTrainedModel):
         return base_model.shared
 
     def set_input_embeddings(self, value):
-        if value is not None:
-            base_model = getattr(self, self.base_model_prefix, self)
+        base_model = getattr(self, self.base_model_prefix, self)
 
-            try:
-                base_model.shared.weight = value
-            except AttributeError:
-                self(self.dummy_inputs)
-                base_model.shared.weight = value
+        try:
+            base_model.shared.weight = value
+        except AttributeError:
+            self(self.dummy_inputs)
+            base_model.shared.weight = value
 
-            base_model.shared.vocab_size = shape_list(base_model.shared.weight)[0]
+        base_model.shared.vocab_size = shape_list(base_model.shared.weight)[0]
 
-            with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
-                pass
+        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
+            pass
 
-            embed_tokens = TFWrappedEmbeddings(base_model.shared, abs_scope_name=shared_abs_scope_name)
-            base_model.encoder.set_embed_tokens(embed_tokens)
-            base_model.decoder.set_embed_tokens(embed_tokens)
+        embed_tokens = TFWrappedEmbeddings(base_model.shared, abs_scope_name=shared_abs_scope_name)
+        base_model.encoder.set_embed_tokens(embed_tokens)
+        base_model.decoder.set_embed_tokens(embed_tokens)
+
+    def get_output_embeddings(self):
+        return self.get_input_embeddings()
+
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
 
     def get_output_embeddings(self):
         return self.get_input_embeddings()
@@ -1198,12 +1203,6 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel):
 
     def get_encoder(self):
         return self.model.encoder
-
-    def get_output_embeddings(self):
-        return self.get_input_embeddings()
-
-    def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
 
     def get_bias(self):
         return {"final_logits_bias": self.final_logits_bias}

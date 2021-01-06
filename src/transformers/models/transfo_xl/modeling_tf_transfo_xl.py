@@ -927,7 +927,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         )
 
     def _resize_token_embeddings(self, new_num_tokens):
-        return None
+        raise NotImplementedError()
 
     def get_output_embeddings(self):
         """Double-check if you are using adaptive softmax."""

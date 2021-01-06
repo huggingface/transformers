@@ -1182,6 +1182,35 @@ class TFLEDPreTrainedModel(TFPreTrainedModel):
         }
         return dummy_inputs
 
+    def get_input_embeddings(self):
+        base_model = getattr(self, self.base_model_prefix, self)
+
+        return base_model.shared
+
+    def set_input_embeddings(self, value):
+        base_model = getattr(self, self.base_model_prefix, self)
+
+        try:
+            base_model.shared.weight = value
+        except AttributeError:
+            self(self.dummy_inputs)
+            base_model.shared.weight = value
+
+        base_model.shared.vocab_size = shape_list(base_model.shared.weight)[0]
+
+        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
+            pass
+
+        embed_tokens = TFWrappedEmbeddings(base_model.shared, abs_scope_name=shared_abs_scope_name)
+        base_model.encoder.set_embed_tokens(embed_tokens)
+        base_model.decoder.set_embed_tokens(embed_tokens)
+
+    def get_output_embeddings(self):
+        return self.get_input_embeddings()
+
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
+
 
 @dataclass
 # Copied from transformers.models.longformer.modeling_tf_longformer.TFLongformerBaseModelOutput with TFLongformer->TFLEDEncoder
@@ -1921,6 +1950,9 @@ class TFLEDModel(TFLEDPreTrainedModel):
         self.encoder = TFLEDEncoder(config, embed_tokens, name="encoder")
         self.decoder = TFLEDDecoder(config, embed_tokens, name="decoder")
 
+    def get_encoder(self):
+        return self.encoder
+
     def get_decoder(self):
         return self.decoder
 
@@ -2077,24 +2109,16 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         )
 
     def get_decoder(self):
-        return self.led.decoder
+        return self.model.decoder
 
-    def resize_token_embeddings(self, new_num_tokens):
-        super().resize_token_embeddings(new_num_tokens=new_num_tokens)
+    def get_encoder(self):
+        return self.model.encoder
 
-        # LED is a special case where the bias has two dimensions
-        # and not named just `bias`
-        if new_num_tokens is not None:
-            num_tokens_to_copy = min(shape_list(self.final_logits_bias), new_num_tokens)
-            init_bias = tf.zeros((new_num_tokens,))
-            init_bias[:num_tokens_to_copy] = self.final_logits_bias.value()[:num_tokens_to_copy]
-            self.final_logits_bias = self.add_weight(
-                shape=(1, new_num_tokens),
-                initializer="zeros",
-                trainable=False,
-                name="final_logits_bias",
-            )
-            self.final_logits_bias.assign(init_bias)
+    def get_bias(self):
+        return {"final_logits_bias": self.final_logits_bias}
+
+    def set_bias(self, value):
+        self.final_logits_bias = value["final_logits_bias"]
 
     @add_start_docstrings_to_model_forward(LED_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFLEDSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -2265,12 +2289,6 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
                 + layer_past_key_values[2:],
             )
         return (past[0], reordered_past)
-
-    def get_output_embeddings(self):
-        return self.led.shared
-
-    def get_encoder(self):
-        return self.led.encoder
 
     def compute_loss(self, labels, logits):
         """CrossEntropyLoss that ignores pad tokens"""
