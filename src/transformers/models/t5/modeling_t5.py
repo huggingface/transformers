@@ -949,7 +949,7 @@ class T5Stack(T5PreTrainedModel):
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[3],)
-                if self.is_decoder:
+                if self.is_decoder and self.config.is_encoder_decoder:
                     all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
 
             # Model Parallel: If it's the last layer for that device, put things on the next device
