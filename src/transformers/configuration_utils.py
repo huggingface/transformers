@@ -22,7 +22,6 @@ import os
 from typing import Any, Dict, Tuple, Union
 
 from . import __version__
-
 from .file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_remote_url
 from .utils import logging
 
