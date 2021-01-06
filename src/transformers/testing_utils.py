@@ -36,7 +36,7 @@ from .file_utils import (
     is_torch_available,
     is_torch_tpu_available,
 )
-from .integrations import _has_optuna, _has_ray
+from .integrations import is_optuna_available, is_ray_available
 
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
@@ -348,7 +348,7 @@ def require_optuna(test_case):
     These tests are skipped when optuna isn't installed.
 
     """
-    if not _has_optuna:
+    if not is_optuna_available():
         return unittest.skip("test requires optuna")(test_case)
     else:
         return test_case
@@ -361,7 +361,7 @@ def require_ray(test_case):
     These tests are skipped when Ray/tune isn't installed.
 
     """
-    if not _has_ray:
+    if not is_ray_available():
         return unittest.skip("test requires Ray/tune")(test_case)
     else:
         return test_case
