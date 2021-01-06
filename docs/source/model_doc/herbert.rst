@@ -40,9 +40,9 @@ Examples of use:
 
 .. code-block::
 
-  from transformers import XLMTokenizer, RobertaModel
+  from transformers import HerbertTokenizer, RobertaModel
 
-  tokenizer = XLMTokenizer.from_pretrained("allegro/herbert-klej-cased-tokenizer-v1")
+  tokenizer = HerbertTokenizer.from_pretrained("allegro/herbert-klej-cased-tokenizer-v1")
   model = RobertaModel.from_pretrained("allegro/herbert-klej-cased-v1")
 
   encoded_input = tokenizer.encode("Kto ma lepszą sztukę, ma lepszy rząd – to jasne.", return_tensors='pt')
