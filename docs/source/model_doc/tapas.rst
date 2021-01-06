@@ -265,7 +265,7 @@ conversational**. In case your dataset involves conversational questions (such a
 together the ``queries``, ``answer_coordinates`` and ``answer_text`` per table (in the order of their ``position``
 index) and batch encode each table with its questions. This will make sure that the ``prev_labels`` token types (see
 docs of :class:`~transformers.TapasTokenizer`) are set correctly. See `this notebook
-<https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb>`__
+<https://github.com/NielsRogge/Transformers-Tutorials/blob/master/TAPAS/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb>`__
 for more info.
 
 **STEP 4: Train (fine-tune) TapasForQuestionAnswering**
@@ -382,7 +382,7 @@ of that:
 In case of a conversational set-up, then each table-question pair must be provided **sequentially** to the model, such
 that the ``prev_labels`` token types can be overwritten by the predicted ``labels`` of the previous table-question
 pair. Again, more info can be found in `this notebook
-<https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb>`__.
+<https://github.com/NielsRogge/Transformers-Tutorials/blob/master/TAPAS/Fine_tuning_TapasForQuestionAnswering_on_SQA.ipynb>`__.
 
 
 Tapas specific outputs
