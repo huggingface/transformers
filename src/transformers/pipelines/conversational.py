@@ -201,17 +201,22 @@ class ConversationalPipeline(Pipeline):
         Returns:
             :obj:`List[int]`: The list of tokens for the past input of that conversation.
         """
-        history = conversation._history[:]
+        # Make a copy to prevent messing cache up if there's an error
+        # within this function
+        history = conversation._history.copy()
         index = conversation._index
+        new_index = index
         for i, (past_user_input, generated_response) in enumerate(
             zip(conversation.past_user_inputs[index:], conversation.generated_responses[index:])
         ):
             for el in (past_user_input, generated_response):
                 new_history = self._parse_and_tokenize([el])[0]
                 history.extend(new_history)
-            conversation._index = i + index + 1
+            new_index = i + index + 1
+        conversation._index = new_index
         conversation._history = history
-        return history[:]
+        # Hand back a copy to caller so they can't accidently modify our cache.
+        return history.copy()
 
     def __call__(
         self,
