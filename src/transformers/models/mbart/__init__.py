@@ -15,9 +15,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from ...file_utils import is_sentencepiece_available, is_tf_available, is_tokenizers_available, is_torch_available
-from .configuration_mbart import MBartConfig
+from .configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig
 
 
 if is_sentencepiece_available():
@@ -27,7 +26,14 @@ if is_tokenizers_available():
     from .tokenization_mbart_fast import MBartTokenizerFast
 
 if is_torch_available():
-    from .modeling_mbart import MBartForConditionalGeneration, MBartModel
+    from .modeling_mbart import (
+        MBART_PRETRAINED_MODEL_ARCHIVE_LIST,
+        MBartForConditionalGeneration,
+        MBartForQuestionAnswering,
+        MBartForSequenceClassification,
+        MBartModel,
+        MBartPreTrainedModel,
+    )
 
 if is_tf_available():
     from .modeling_tf_mbart import TFMBartForConditionalGeneration

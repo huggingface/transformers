@@ -49,7 +49,7 @@ limitations under the License.
 
 ## Online demos
 
-You can test most of our models directly on their pages from the [model hub](https://huggingface.co/models). We also offer an [inference API](https://huggingface.co/pricing) to use those models.
+You can test most of our models directly on their pages from the [model hub](https://huggingface.co/models). We also offer [private model hosting, versioning, & an inference API](https://huggingface.co/pricing) to use those models.
 
 Here are a few examples:
 - [Masked word completion with BERT](https://huggingface.co/bert-base-uncased?text=Paris+is+the+%5BMASK%5D+of+France)
