@@ -34,6 +34,7 @@ if is_torch_available():
         RobertaForSequenceClassification,
         RobertaForTokenClassification,
         RobertaModel,
+        RobertaPreTrainedModel,
     )
 
 if is_tf_available():
