@@ -23,6 +23,8 @@ import unittest
 from importlib import import_module
 from typing import List, Tuple
 
+from tensorflow._api.v2 import saved_model
+
 from transformers import is_tf_available
 from transformers.testing_utils import _tf_gpu_memory_limit, is_pt_tf_cross_test, require_tf, slow
 
@@ -164,6 +166,26 @@ class TFModelTesterMixin:
                 expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    def test_saved_model_creation(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = False
+        config.output_attentions = False
+
+        if hasattr(config, "use_cache"):
+            config.use_cache = False
+
+        model_class = self.all_model_classes[0]
+
+        class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+        model = model_class(config)
+
+        model(class_inputs_dict)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname, saved_model=True)
+            saved_model_dir = os.path.join(tmpdirname, "saved_model")
+            self.assertTrue(os.path.exists(saved_model_dir))
+
     @slow
     def test_saved_model_creation_extended(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -180,7 +202,7 @@ class TFModelTesterMixin:
             model(class_inputs_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
+                model.save_pretrained(tmpdirname, saved_model=True)
                 saved_model_dir = os.path.join(tmpdirname, "saved_model")
                 self.assertTrue(os.path.exists(saved_model_dir))
 
