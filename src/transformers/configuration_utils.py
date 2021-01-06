@@ -46,8 +46,6 @@ class PretrainedConfig(object):
         - **keys_to_ignore_at_inference** (:obj:`List[str]`): A list of keys to ignore by default when looking at
           dictionary outputs of the model during inference.
 
-
-
     Args:
         name_or_path (:obj:`str`, `optional`, defaults to :obj:`""`):
             Store the string that was passed to :func:`~transformers.PreTrainedModel.from_pretrained` or
@@ -284,8 +282,6 @@ class PretrainedConfig(object):
         Save a configuration object to the directory ``save_directory``, so that it can be re-loaded using the
         :func:`~transformers.PretrainedConfig.from_pretrained` class method.
 
-
-
         Args:
             save_directory (:obj:`str` or :obj:`os.PathLike`):
                 Directory where the configuration JSON file will be saved (will be created if it does not exist).
@@ -304,8 +300,6 @@ class PretrainedConfig(object):
         r"""
         Instantiate a :class:`~transformers.PretrainedConfig` (or a derived class) from a pretrained model
         configuration.
-
-
 
         Args:
             pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
@@ -348,7 +342,6 @@ class PretrainedConfig(object):
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
                 by the ``return_unused_kwargs`` keyword parameter.
 
-
         .. note::
 
             Passing :obj:`use_auth_token=True` is required when you want to use a private model.
@@ -356,8 +349,6 @@ class PretrainedConfig(object):
 
         Returns:
             :class:`PretrainedConfig`: The configuration object instantiated from this pretrained model.
-
-
 
         Examples::
 
@@ -390,8 +381,6 @@ class PretrainedConfig(object):
         Parameters:
             pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
                 The identifier of the pre-trained checkpoint from which we want the dictionary of parameters.
-
-
 
         Returns:
             :obj:`Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the configuration object.
@@ -458,8 +447,6 @@ class PretrainedConfig(object):
         """
         Instantiates a :class:`~transformers.PretrainedConfig` from a Python dictionary of parameters.
 
-
-
         Args:
             config_dict (:obj:`Dict[str, Any]`):
                 Dictionary that will be used to instantiate the configuration object. Such a dictionary can be
@@ -467,8 +454,6 @@ class PretrainedConfig(object):
                 :func:`~transformers.PretrainedConfig.get_config_dict` method.
             kwargs (:obj:`Dict[str, Any]`):
                 Additional parameters from which to initialize the configuration object.
-
-
 
         Returns:
             :class:`PretrainedConfig`: The configuration object instantiated from those parameters.
@@ -500,12 +485,9 @@ class PretrainedConfig(object):
         """
         Instantiates a :class:`~transformers.PretrainedConfig` from the path to a JSON file of parameters.
 
-
         Args:
             json_file (:obj:`str` or :obj:`os.PathLike`):
                 Path to the JSON file containing the parameters.
-
-
 
         Returns:
             :class:`PretrainedConfig`: The configuration object instantiated from that JSON file.
@@ -530,7 +512,6 @@ class PretrainedConfig(object):
         """
         Removes all attributes from config which correspond to the default config attributes for better readability and
         serializes to a Python dictionary.
-
 
         Returns:
             :obj:`Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance,
@@ -560,8 +541,6 @@ class PretrainedConfig(object):
         """
         Serializes this instance to a Python dictionary.
 
-
-
         Returns:
             :obj:`Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
@@ -574,14 +553,10 @@ class PretrainedConfig(object):
         """
         Serializes this instance to a JSON string.
 
-
-
         Args:
             use_diff (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 If set to ``True``, only the difference between the config instance and the default
                 ``PretrainedConfig()`` is serialized to JSON string.
-
-
 
         Returns:
             :obj:`str`: String containing all the attributes that make up this configuration instance in JSON format.
@@ -596,8 +571,6 @@ class PretrainedConfig(object):
         """
         Save this instance to a JSON file.
 
-
-
         Args:
             json_file_path (:obj:`str` or :obj:`os.PathLike`):
                 Path to the JSON file in which this configuration instance's parameters will be saved.
@@ -611,8 +584,6 @@ class PretrainedConfig(object):
     def update(self, config_dict: Dict[str, Any]):
         """
         Updates attributes of this class with attributes from ``config_dict``.
-
-
 
         Args:
             config_dict (:obj:`Dict[str, Any]`): Dictionary of attributes that shall be updated for this class.
