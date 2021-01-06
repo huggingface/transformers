@@ -855,8 +855,11 @@ class TFLxmertPreTrainedModel(TFPreTrainedModel):
         input_signature=[
             {
                 "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
                 "visual_feats": tf.TensorSpec((None, None, None), tf.float32, name="visual_feats"),
-                "visual_pos": tf.TensorSpec((None, None, 4), tf.float32, name="visual_pos"),
+                "visual_pos": tf.TensorSpec((None, None, None), tf.float32, name="visual_pos"),
+                "visual_attention_mask": tf.TensorSpec((None, None), tf.int32, name="visual_attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
             }
         ]
     )

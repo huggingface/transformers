@@ -240,7 +240,6 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
         self,
         input_ids: tf.Tensor = None,
         attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -257,7 +256,6 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
             config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -424,6 +422,19 @@ class TFDPRPretrainedReader(TFPreTrainedModel):
 
     config_class = DPRConfig
     base_model_prefix = "reader"
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
 
 
 ###############
@@ -763,7 +774,6 @@ class TFDPRReader(TFDPRPretrainedReader):
         self,
         input_ids=None,
         attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
         output_attentions: bool = None,
         output_hidden_states: bool = None,
@@ -796,7 +806,6 @@ class TFDPRReader(TFDPRPretrainedReader):
             config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -817,13 +826,9 @@ class TFDPRReader(TFDPRPretrainedReader):
         if inputs["attention_mask"] is None:
             inputs["attention_mask"] = tf.ones(input_shape, dtype=tf.dtypes.int32)
 
-        if inputs["token_type_ids"] is None:
-            inputs["token_type_ids"] = tf.zeros(input_shape, dtype=tf.dtypes.int32)
-
         return self.span_predictor(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],

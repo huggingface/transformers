@@ -1836,7 +1836,6 @@ class TFLongformerPreTrainedModel(TFPreTrainedModel):
             {
                 "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
                 "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "global_attention_mask": tf.TensorSpec((None, None), tf.int32, name="global_attention_mask"),
             }
         ]
     )
@@ -2548,7 +2547,6 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
             {
                 "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
                 "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-                "global_attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="global_attention_mask"),
             }
         ]
     )
