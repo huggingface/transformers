@@ -75,17 +75,21 @@ else:
 if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VALUES:
     _tf_available = importlib.util.find_spec("tensorflow") is not None
     if _tf_available:
+        # For the metadata, we have to look for both tensorflow and tensorflow-cpu
         try:
             _tf_version = importlib_metadata.version("tensorflow")
-            if version.parse(_tf_version) < version.parse("2"):
-                logger.info(
-                    f"TensorFlow found but with version {_tf_version}. Transformers requires version 2 minimum."
-                )
-                _tf_available = False
-            else:
-                logger.info(f"TensorFlow version {_tf_version} available.")
         except importlib_metadata.PackageNotFoundError:
+            try:
+                _tf_version = importlib_metadata.version("tensorflow-cpu")
+            except importlib_metadata.PackageNotFoundError:
+                _tf_version = None
+                _tf_available = False
+    if _tf_available:
+        if version.parse(_tf_version) < version.parse("2"):
+            logger.info(f"TensorFlow found but with version {_tf_version}. Transformers requires version 2 minimum.")
             _tf_available = False
+        else:
+            logger.info(f"TensorFlow version {_tf_version} available.")
 else:
     logger.info("Disabling Tensorflow because USE_TORCH is set")
     _tf_available = False
@@ -1082,9 +1086,9 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
     """
     ua = "transformers/{}; python/{}".format(__version__, sys.version.split()[0])
     if is_torch_available():
-        ua += f"; torch/{importlib_metadata.version('torch')}"
+        ua += f"; torch/{_torch_version}"
     if is_tf_available():
-        ua += f"; tensorflow/{importlib_metadata.version('tensorflow')}"
+        ua += f"; tensorflow/{_tf_version}"
     if isinstance(user_agent, dict):
         ua += "; " + "; ".join("{}/{}".format(k, v) for k, v in user_agent.items())
     elif isinstance(user_agent, str):
