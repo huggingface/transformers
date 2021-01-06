@@ -561,11 +561,11 @@ class LongformerSelfAttention(nn.Module):
         :class:`LongformerSelfAttention` expects `len(hidden_states)` to be multiple of `attention_window`. Padding to
         `attention_window` happens in :meth:`LongformerModel.forward` to avoid redoing the padding on each layer.
 
-        The `attention_mask` is changed in :meth:`BertModel.forward` from 0, 1, 2 to -ve: no attention
+        The `attention_mask` is changed in :meth:`LongformerModel.forward` from 0, 1, 2 to:
 
-              0: local attention
-            +ve: global attention
-
+            * -10000: no attention
+            * 0: local attention
+            * +10000: global attention
         """
         hidden_states = hidden_states.transpose(0, 1)
 
