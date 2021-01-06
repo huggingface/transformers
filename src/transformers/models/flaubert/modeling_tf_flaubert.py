@@ -289,10 +289,13 @@ class TFFlaubertModel(TFFlaubertPreTrainedModel):
         return outputs
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
         return TFBaseModelOutput(
             last_hidden_state=output.last_hidden_state,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -858,10 +861,13 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
         )
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
         return TFFlaubertWithLMHeadModelOutput(
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 

@@ -655,10 +655,13 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         )
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
         return TFDPRContextEncoderOutput(
             pooler_output=output.pooler_output,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -749,10 +752,13 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         )
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
         return TFDPRQuestionEncoderOutput(
             pooler_output=output.pooler_output,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -837,10 +843,13 @@ class TFDPRReader(TFDPRPretrainedReader):
         )
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
         return TFDPRReaderOutput(
             start_logits=output.start_logits,
             end_logits=output.end_logits,
             relevance_logits=output.relevance_logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            hidden_states=hs,
+            attentions=attns,
         )

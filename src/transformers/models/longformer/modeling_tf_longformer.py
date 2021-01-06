@@ -2013,14 +2013,16 @@ class TFLongformerModel(TFLongformerPreTrainedModel):
         return outputs
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        g_attns = tf.convert_to_tensor(output.global_attentions) if self.config.output_attentions else None
+
         return TFLongformerBaseModelOutputWithPooling(
             last_hidden_state=output.last_hidden_state,
             pooler_output=output.pooler_output,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
-            global_attentions=tf.convert_to_tensor(output.global_attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=hs,
+            attentions=attns,
+            global_attentions=g_attns,
         )
 
 
@@ -2121,14 +2123,16 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
         )
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        g_attns = tf.convert_to_tensor(output.global_attentions) if self.config.output_attentions else None
+
         return TFLongformerMaskedLMOutput(
             loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
-            global_attentions=tf.convert_to_tensor(output.global_attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=hs,
+            attentions=attns,
+            global_attentions=g_attns,
         )
 
 
@@ -2262,15 +2266,16 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
         )
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        g_attns = tf.convert_to_tensor(output.global_attentions) if self.config.output_attentions else None
+
         return TFLongformerQuestionAnsweringModelOutput(
-            loss=None,
             start_logits=output.start_logits,
             end_logits=output.end_logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
-            global_attentions=tf.convert_to_tensor(output.global_attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=hs,
+            attentions=attns,
+            global_attentions=g_attns,
         )
 
 
@@ -2397,14 +2402,15 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
         )
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        g_attns = tf.convert_to_tensor(output.global_attentions) if self.config.output_attentions else None
+
         return TFLongformerSequenceClassifierOutput(
-            loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
-            global_attentions=tf.convert_to_tensor(output.global_attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=hs,
+            attentions=attns,
+            global_attentions=g_attns,
         )
 
 
@@ -2556,14 +2562,15 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         return self.serving_output(output)
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        g_attns = tf.convert_to_tensor(output.global_attentions) if self.config.output_attentions else None
+
         return TFLongformerMultipleChoiceModelOutput(
-            loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
-            global_attentions=tf.convert_to_tensor(output.global_attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=hs,
+            attentions=attns,
+            global_attentions=g_attns,
         )
 
 
@@ -2662,12 +2669,13 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
         )
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        g_attns = tf.convert_to_tensor(output.global_attentions) if self.config.output_attentions else None
+
         return TFLongformerTokenClassifierOutput(
-            loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
-            global_attentions=tf.convert_to_tensor(output.global_attentions)
-            if self.config.output_attentions
-            else None,
+            hidden_states=hs,
+            attentions=attns,
+            global_attentions=g_attns,
         )

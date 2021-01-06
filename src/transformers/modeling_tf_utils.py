@@ -566,8 +566,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         """
         return {
             "input_ids": tf.constant(DUMMY_INPUTS),
-            # "attention_mask": tf.constant(DUMMY_MASK),
-            # "token_type_ids": tf.constant(DUMMY_TOKEN_TYPE_IDS),
         }
 
     def __init__(self, config, *inputs, **kwargs):
@@ -607,7 +605,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
     def serving_output(output):
         """
-        Prepare the output of the saved model.
+        Prepare the output of the saved model. Each model must implement this function.
 
         Args:
             output (:obj:`~transformers.TFBaseModelOutput`):
@@ -847,10 +845,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         Arguments:
             save_directory (:obj:`str`):
                 Directory to which to save. Will be created if it doesn't exist.
-            saved_model (:obj:`bool`, `optional`, defaults to False):
+            saved_model (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 If the model has to be saved in saved model format as well or not.
-            version: (:obj:`int`, `optional`, defaults to 1):
-                The version of the saved model.
+            version (:obj:`int`, `optional`, defaults to 1):
+                The version of the saved model. A saved model needs to be versioned in order to be properly loaded by
+                TensorFlow Serving as detailed in the official documentation
+                https://www.tensorflow.org/tfx/serving/serving_basic
         """
         if os.path.isfile(save_directory):
             logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))

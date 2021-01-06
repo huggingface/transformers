@@ -1206,11 +1206,15 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
         return outputs
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        mems = tf.convert_to_tensor(output.mems) if output.mems is not None else None
+
         return TFXLNetModelOutput(
             last_hidden_state=output.last_hidden_state,
-            mems=tf.convert_to_tensor(output.mems) if output.mems is not None else None,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            mems=mems,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -1385,12 +1389,15 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         )
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        mems = tf.convert_to_tensor(output.mems) if output.mems is not None else None
+
         return TFXLNetLMHeadModelOutput(
-            loss=None,
             logits=output.logits,
-            mems=tf.convert_to_tensor(output.mems) if output.mems is not None else None,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            mems=mems,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -1502,12 +1509,15 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
         )
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        mems = tf.convert_to_tensor(output.mems) if output.mems is not None else None
+
         return TFXLNetForSequenceClassificationOutput(
-            loss=None,
             logits=output.logits,
-            mems=tf.convert_to_tensor(output.mems) if output.mems is not None else None,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            mems=mems,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -1665,12 +1675,15 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
         return self.serving_output(output)
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        mems = tf.convert_to_tensor(output.mems) if output.mems is not None else None
+
         return TFXLNetForMultipleChoiceOutput(
-            loss=None,
             logits=output.logits,
-            mems=tf.convert_to_tensor(output.mems) if output.mems is not None else None,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            mems=mems,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -1776,12 +1789,15 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
         )
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        mems = tf.convert_to_tensor(output.mems) if output.mems is not None else None
+
         return TFXLNetForTokenClassificationOutput(
-            loss=None,
             logits=output.logits,
-            mems=tf.convert_to_tensor(output.mems) if output.mems is not None else None,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            mems=mems,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -1901,11 +1917,14 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
         )
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        mems = tf.convert_to_tensor(output.mems) if output.mems is not None else None
+
         return TFXLNetForQuestionAnsweringSimpleOutput(
-            loss=None,
             start_logits=output.start_logits,
             end_logits=output.end_logits,
-            mems=tf.convert_to_tensor(output.mems) if output.mems is not None else None,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            mems=mems,
+            hidden_states=hs,
+            attentions=attns,
         )

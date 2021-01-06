@@ -1181,22 +1181,20 @@ class TFT5Model(TFT5PreTrainedModel):
         )
 
     def serving_output(self, output):
+        pkv = (tf.convert_to_tensor(output.past_key_values[1:]) if self.config.use_cache else None,)
+        dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
+        dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
+        enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
+        enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
+
         return TFSeq2SeqModelOutput(
             last_hidden_state=output.last_hidden_state,
-            past_key_values=tf.convert_to_tensor(output.past_key_values[1:]) if self.config.use_cache else None,
-            decoder_hidden_states=tf.convert_to_tensor(output.decoder_hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            decoder_attentions=tf.convert_to_tensor(output.decoder_attentions)
-            if self.config.output_attentions
-            else None,
+            past_key_values=pkv,
+            decoder_hidden_states=dec_hs,
+            decoder_attentions=dec_attns,
             encoder_last_hidden_state=output.encoder_last_hidden_state,
-            encoder_hidden_states=tf.convert_to_tensor(output.encoder_hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            encoder_attentions=tf.convert_to_tensor(output.encoder_attentions)
-            if self.config.output_attentions
-            else None,
+            encoder_hidden_states=enc_hs,
+            encoder_attentions=enc_attns,
         )
 
 
@@ -1407,23 +1405,20 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         )
 
     def serving_output(self, output):
+        pkv = (tf.convert_to_tensor(output.past_key_values[1:]) if self.config.use_cache else None,)
+        dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
+        dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
+        enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
+        enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
+
         return TFSeq2SeqLMOutput(
-            loss=None,
             logits=output.logits,
-            past_key_values=tf.convert_to_tensor(output.past_key_values[1:]) if self.config.use_cache else None,
-            decoder_hidden_states=tf.convert_to_tensor(output.decoder_hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            decoder_attentions=tf.convert_to_tensor(output.decoder_attentions)
-            if self.config.output_attentions
-            else None,
+            past_key_values=pkv,
+            decoder_hidden_states=dec_hs,
+            decoder_attentions=dec_attns,
             encoder_last_hidden_state=output.encoder_last_hidden_state,
-            encoder_hidden_states=tf.convert_to_tensor(output.encoder_hidden_states)
-            if self.config.output_hidden_states
-            else None,
-            encoder_attentions=tf.convert_to_tensor(output.encoder_attentions)
-            if self.config.output_attentions
-            else None,
+            encoder_hidden_states=enc_hs,
+            encoder_attentions=enc_attns,
         )
 
     def prepare_inputs_for_generation(self, inputs, past, attention_mask, use_cache, **kwargs):
@@ -1578,8 +1573,11 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
         )
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
         return TFBaseModelOutput(
             last_hidden_state=output.last_hidden_state,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            hidden_states=hs,
+            attentions=attns,
         )

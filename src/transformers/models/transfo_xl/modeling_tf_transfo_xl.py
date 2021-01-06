@@ -898,11 +898,14 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
         return outputs
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
         return TFTransfoXLModelOutput(
             last_hidden_state=output.last_hidden_state,
             mems=tf.convert_to_tensor(output.mems),
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -1023,11 +1026,14 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         )
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
         return TFTransfoXLLMHeadModelOutput(
             prediction_scores=output.prediction_scores,
             mems=tf.convert_to_tensor(output.mems),
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            hidden_states=hs,
+            attentions=attns,
         )
 
     def prepare_inputs_for_generation(self, inputs, past, **model_kwargs):
@@ -1186,10 +1192,12 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
         )
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
         return TFTransfoXLSequenceClassifierOutputWithPast(
-            loss=None,
             logits=output.logits,
             mems=tf.convert_to_tensor(output.mems),
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            hidden_states=hs,
+            attentions=attns,
         )

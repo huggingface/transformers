@@ -595,11 +595,15 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
         return outputs
 
     def serving_output(self, output):
+        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
         return TFBaseModelOutputWithPast(
             last_hidden_state=output.last_hidden_state,
-            past_key_values=tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            past_key_values=pkv,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -738,12 +742,15 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
         )
 
     def serving_output(self, output):
+        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
         return TFCausalLMOutputWithPast(
-            loss=None,
             logits=output.logits,
-            past_key_values=tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            past_key_values=pkv,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -904,9 +911,11 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
         )
 
     def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
         return TFSequenceClassifierOutput(
-            loss=None,
             logits=output.logits,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            hidden_states=hs,
+            attentions=attns,
         )

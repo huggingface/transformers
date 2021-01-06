@@ -631,11 +631,15 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
         return outputs
 
     def serving_output(self, output):
+        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
         return TFBaseModelOutputWithPast(
             last_hidden_state=output.last_hidden_state,
-            past_key_values=tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            past_key_values=pkv,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -745,12 +749,15 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         )
 
     def serving_output(self, output):
+        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
         return TFCausalLMOutputWithPast(
-            loss=None,
             logits=output.logits,
-            past_key_values=tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            past_key_values=pkv,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -906,12 +913,16 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         return self.serving_output(output)
 
     def serving_output(self, output):
+        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
         return TFGPT2DoubleHeadsModelOutput(
             logits=output.logits,
             mc_logits=output.mc_logits,
-            past_key_values=tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            past_key_values=pkv,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -1070,10 +1081,13 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
         )
 
     def serving_output(self, output):
+        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
         return TFSequenceClassifierOutputWithPast(
-            loss=None,
             logits=output.logits,
-            past_key_values=tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None,
-            hidden_states=tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None,
-            attentions=tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None,
+            past_key_values=pkv,
+            hidden_states=hs,
+            attentions=attns,
         )
