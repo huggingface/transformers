@@ -522,6 +522,7 @@ class GenerationTesterMixin:
                 return
 
             config.use_cache = True
+            config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
             output_greedy, output_generate = self._greedy_generate(
                 model=model,
