@@ -281,8 +281,42 @@ Finally, you can view the results, including any calculated metrics, by launchin
 Trainer Integrations
 -----------------------------------------------------------------------------------------------------------------------
 
-XXX: this will first be merged with fairscale docs in https://github.com/huggingface/transformers/pull/9208 then
-reworked, until then just putting important notes in here:
+The trainer is being extended to support experimental libraries that may dramatically improve your training time and
+fit bigger models.
+
+The main part that is being integrated at the moment is based on the paper `ZeRO: Memory Optimizations Toward Training
+Trillion Parameter Models, by Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, Yuxiong He
+<https://arxiv.org/abs/1910.02054>`__.
+
+You can already deploy the following features from this paper:
+
+* Optimizer State Sharding
+* Gradient Sharding
+
+using the `--sharded_ddp` trainer argument. This is implemented via `fairscale
+<https://github.com/facebookresearch/fairscale/>`__, so you will have to install this library.
+
+This feature requires distributed training (so multiple GPUs) and is not implemented for TPUs.
+
+For example here is how you could use it for `finetune_trainer.py`:
+
+.. code-block:: bash
+
+    cd examples/seq2seq
+    python -m torch.distributed.launch --nproc_per_node=2 ./finetune_trainer.py \
+    --model_name_or_path sshleifer/distill-mbart-en-ro-12-4 --data_dir wmt_en_ro \
+    --output_dir output_dir --overwrite_output_dir \
+    --do_train --n_train 500 --num_train_epochs 1 \
+    --per_device_train_batch_size 1  --freeze_embeds \
+    --src_lang en_XX --tgt_lang ro_RO --task translation \
+    --fp16 --sharded_ddp
+
+Note that it works with `--fp16` too, to make things even faster.
+
+One of the main benefits of enabling `--sharded_ddp` is that it uses a lot less GPU memory, so you should be able to
+use significantly larger batch sizes using the same hardware (e.g. 3x or bigger).
+
+Eventually more parts will be supported via integrating `DeepSpeed <https://github.com/microsoft/DeepSpeed>`__.
 
 
 DeepSpeed
@@ -297,6 +331,9 @@ source.
 g-karthik: in order to use certain features in DeepSpeed such as 1-bit Adam, there are certain special installations to
 be done that do not come with the PyPI package.
 
+
+
+>>>>>>> origin/master
 
 
 .. _additional-resources:

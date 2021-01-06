@@ -120,11 +120,11 @@ from .models.bert import (
 from .models.bert_generation import BertGenerationConfig
 from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
 from .models.bertweet import BertweetTokenizer
-from .models.blenderbot import (
-    BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    BlenderbotConfig,
+from .models.blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig, BlenderbotTokenizer
+from .models.blenderbot_small import (
+    BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    BlenderbotSmallConfig,
     BlenderbotSmallTokenizer,
-    BlenderbotTokenizer,
 )
 from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
 from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
@@ -146,6 +146,7 @@ from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, F
 from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
 from .models.herbert import HerbertTokenizer
 from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
+from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
 from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
 from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
 from .models.marian import MarianConfig
@@ -255,6 +256,7 @@ if is_tokenizers_available():
     from .models.gpt2 import GPT2TokenizerFast
     from .models.herbert import HerbertTokenizerFast
     from .models.layoutlm import LayoutLMTokenizerFast
+    from .models.led import LEDTokenizerFast
     from .models.longformer import LongformerTokenizerFast
     from .models.lxmert import LxmertTokenizerFast
     from .models.mbart import MBartTokenizerFast
@@ -299,6 +301,7 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # Modeling
 if is_torch_available():
+
     # Benchmarks
     from .benchmark.benchmark import PyTorchBenchmark
     from .benchmark.benchmark_args import PyTorchBenchmarkArguments
@@ -412,6 +415,11 @@ if is_torch_available():
         BlenderbotForConditionalGeneration,
         BlenderbotModel,
     )
+    from .models.blenderbot_small import (
+        BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        BlenderbotSmallForConditionalGeneration,
+        BlenderbotSmallModel,
+    )
     from .models.camembert import (
         CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         CamembertForCausalLM,
@@ -507,6 +515,13 @@ if is_torch_available():
         LayoutLMForTokenClassification,
         LayoutLMModel,
     )
+    from .models.led import (
+        LED_PRETRAINED_MODEL_ARCHIVE_LIST,
+        LEDForConditionalGeneration,
+        LEDForQuestionAnswering,
+        LEDForSequenceClassification,
+        LEDModel,
+    )
     from .models.longformer import (
         LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
         LongformerForMaskedLM,
@@ -526,8 +541,13 @@ if is_torch_available():
         LxmertVisualFeatureEncoder,
         LxmertXLayer,
     )
-    from .models.marian import MarianMTModel
-    from .models.mbart import MBartForConditionalGeneration, MBartModel
+    from .models.marian import MarianModel, MarianMTModel
+    from .models.mbart import (
+        MBartForConditionalGeneration,
+        MBartForQuestionAnswering,
+        MBartForSequenceClassification,
+        MBartModel,
+    )
     from .models.mmbt import MMBTForClassification, MMBTModel, ModalEmbeddings
     from .models.mobilebert import (
         MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -695,6 +715,7 @@ else:
 
 # TensorFlow
 if is_tf_available():
+
     from .benchmark.benchmark_args_tf import TensorFlowBenchmarkArguments
 
     # Benchmarks
@@ -831,6 +852,7 @@ if is_tf_available():
         TFGPT2Model,
         TFGPT2PreTrainedModel,
     )
+    from .models.led import TFLEDForConditionalGeneration, TFLEDModel, TFLEDPreTrainedModel
     from .models.longformer import (
         TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFLongformerForMaskedLM,

@@ -271,6 +271,15 @@ class Trainer:
                 raise RuntimeError("`Trainer` requires either a `model` or `model_init` argument, but not both")
             self.model_init = None
 
+        # Model parallel
+        if model is not None and not self.args.model_parallel:
+            model = model.to(args.device)
+
+        if self.args.model_parallel and not model.is_parallelizable:
+            raise ValueError(
+                f"{model.__class__.__name__} implementation currently doesn't support model parallelism, therefore --model_parallel cl arg cannot be used"
+            )
+
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
@@ -302,7 +311,9 @@ class Trainer:
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
         callbacks = DEFAULT_CALLBACKS if callbacks is None else DEFAULT_CALLBACKS + callbacks
-        self.callback_handler = CallbackHandler(callbacks, self.model, self.optimizer, self.lr_scheduler)
+        self.callback_handler = CallbackHandler(
+            callbacks, self.model, self.tokenizer, self.optimizer, self.lr_scheduler
+        )
         self.add_callback(PrinterCallback if self.args.disable_tqdm else DEFAULT_PROGRESS_CALLBACK)
 
         # Will be set to True by `self._setup_loggers()` on first call to `self.log()`.
