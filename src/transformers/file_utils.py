@@ -1082,9 +1082,9 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
     """
     ua = "transformers/{}; python/{}".format(__version__, sys.version.split()[0])
     if is_torch_available():
-        ua += f"; torch/{importlib_metadata.version("torch")}"
+        ua += f"; torch/{importlib_metadata.version('torch')}"
     if is_tf_available():
-        ua += f"; tensorflow/{importlib_metadata.version("tensorflow")}"
+        ua += f"; tensorflow/{importlib_metadata.version('tensorflow')}"
     if isinstance(user_agent, dict):
         ua += "; " + "; ".join("{}/{}".format(k, v) for k, v in user_agent.items())
     elif isinstance(user_agent, str):
