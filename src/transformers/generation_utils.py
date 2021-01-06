@@ -45,6 +45,7 @@ class GreedySearchDecoderOnlyOutput(ModelOutput):
     """
     Base class for outputs of decoder-only generation models using greedy search.
 
+
     Args:
         sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
@@ -73,6 +74,7 @@ class GreedySearchEncoderDecoderOutput(ModelOutput):
     Base class for outputs of encoder-decoder generation models using greedy search. Hidden states and attention
     weights of the decoder (respectively the encoder) can be accessed via the encoder_attentions and the
     encoder_hidden_states attributes (respectively the decoder_attentions and the decoder_hidden_states attributes)
+
 
     Args:
         sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
@@ -109,6 +111,7 @@ class SampleDecoderOnlyOutput(ModelOutput):
     """
     Base class for outputs of decoder-only generation models using sampling.
 
+
     Args:
         sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
@@ -136,9 +139,10 @@ class SampleDecoderOnlyOutput(ModelOutput):
 @dataclass
 class SampleEncoderDecoderOutput(ModelOutput):
     """
-    Base class for outputs of encoder-decoder generation models using sampling. Hidden states and attention
-    weights of the decoder (respectively the encoder) can be accessed via the encoder_attentions and the
-    encoder_hidden_states attributes (respectively the decoder_attentions and the decoder_hidden_states attributes)
+    Base class for outputs of encoder-decoder generation models using sampling. Hidden states and attention weights of
+    the decoder (respectively the encoder) can be accessed via the encoder_attentions and the encoder_hidden_states
+    attributes (respectively the decoder_attentions and the decoder_hidden_states attributes)
+
 
     Args:
         sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
@@ -177,6 +181,7 @@ class BeamSearchDecoderOnlyOutput(ModelOutput):
     """
     Base class for outputs of decoder-only generation models using beam search.
 
+
     Args:
         sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
@@ -208,9 +213,10 @@ class BeamSearchDecoderOnlyOutput(ModelOutput):
 @dataclass
 class BeamSearchEncoderDecoderOutput(ModelOutput):
     """
-    Base class for outputs of encoder-decoder generation models using beam search. Hidden states and attention
-    weights of the decoder (respectively the encoder) can be accessed via the encoder_attentions and the
-    encoder_hidden_states attributes (respectively the decoder_attentions and the decoder_hidden_states attributes)
+    Base class for outputs of encoder-decoder generation models using beam search. Hidden states and attention weights
+    of the decoder (respectively the encoder) can be accessed via the encoder_attentions and the encoder_hidden_states
+    attributes (respectively the decoder_attentions and the decoder_hidden_states attributes)
+
 
 
     Args:
@@ -255,6 +261,7 @@ class BeamSampleDecoderOnlyOutput(ModelOutput):
     """
     Base class for outputs of decoder-only generation models using beam sample.
 
+
     Args:
         sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
@@ -288,6 +295,7 @@ class BeamSampleEncoderDecoderOutput(ModelOutput):
     Base class for outputs of encoder-decoder generation models using beam sampling. Hidden states and attention
     weights of the decoder (respectively the encoder) can be accessed via the encoder_attentions and the
     encoder_hidden_states attributes (respectively the decoder_attentions and the decoder_hidden_states attributes)
+
 
 
     Args:
@@ -637,6 +645,7 @@ class GenerationMixin:
         <https://huggingface.co/blog/how-to-generate>`__.
 
 
+
         Parameters:
 
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -721,13 +730,15 @@ class GenerationMixin:
                 kwargs should be prefixed with `decoder_`.
 
 
+
         Return:
-            :class:`~transformers.file_utils.ModelOutput` or :obj:`torch.LongTensor`:
-                A :class:`~transformers.file_utils.ModelOutput` (if ``return_dict_in_generate=True`` or when
-                ``config.return_dict_in_generate=True``) or a :obj:`torch.FloatTensor`.
+            :class:`~transformers.file_utils.ModelOutput` or :obj:`torch.LongTensor`: A
+            :class:`~transformers.file_utils.ModelOutput` (if ``return_dict_in_generate=True`` or when
+            ``config.return_dict_in_generate=True``) or a :obj:`torch.FloatTensor`.
 
                 If the model is `not` an encoder-decoder model (``model.config.is_encoder_decoder=False``), the
                 possible :class:`~transformers.file_utils.ModelOutput` types are:
+
                     - :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput`,
                     - :class:`~transformers.generation_utils.SampleDecoderOnlyOutput`,
                     - :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput`,
@@ -735,10 +746,12 @@ class GenerationMixin:
 
                 If the model is an encoder-decoder model (``model.config.is_encoder_decoder=True``), the possible
                 :class:`~transformers.file_utils.ModelOutput` types are:
+
                     - :class:`~transformers.generation_utils.GreedySearchEncoderDecoderOutput`,
                     - :class:`~transformers.generation_utils.SampleEncoderDecoderOutput`,
                     - :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput`,
                     - :class:`~transformers.generation_utils.BeamSampleEncoderDecoderOutput`
+
 
         Examples::
             >>> from transformers import AutoTokenizer, AutoModelForCausalLM, AutoModelForSeq2SeqLM
@@ -1045,6 +1058,7 @@ class GenerationMixin:
         Generates sequences for models with a language modeling head using greedy decoding.
 
 
+
         Parameters:
 
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1076,13 +1090,16 @@ class GenerationMixin:
                 model. If model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
 
 
+
         Return:
-            :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput`, :class:`~transformers.generation_utils.GreedySearchEncoderDecoderOutput` or obj:`torch.LongTensor`:
-                A :obj:`torch.LongTensor` containing the generated tokens (default behaviour) or a
-                :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput` if
-                ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
-                :class:`~transformers.generation_utils.GreedySearchEncoderDecoderOutput` if
-                ``model.config.is_encoder_decoder=True``.
+            :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput`,
+            :class:`~transformers.generation_utils.GreedySearchEncoderDecoderOutput` or obj:`torch.LongTensor`: A
+            :obj:`torch.LongTensor` containing the generated tokens (default behaviour) or a
+            :class:`~transformers.generation_utils.GreedySearchDecoderOnlyOutput` if
+            ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
+            :class:`~transformers.generation_utils.GreedySearchEncoderDecoderOutput` if
+            ``model.config.is_encoder_decoder=True``.
+
 
         Examples::
 
@@ -1241,6 +1258,7 @@ class GenerationMixin:
         Generates sequences for models with a language modeling head using multinomial sampling.
 
 
+
         Parameters:
 
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1275,13 +1293,16 @@ class GenerationMixin:
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
 
 
+
         Return:
-            :class:`~transformers.generation_utils.SampleDecoderOnlyOutput`, :class:`~transformers.generation_utils.SampleEncoderDecoderOutput` or obj:`torch.LongTensor`:
-                A :obj:`torch.LongTensor` containing the generated tokens (default behaviour)
-                or a :class:`~transformers.generation_utils.SampleDecoderOnlyOutput` if
-                ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
-                :class:`~transformers.generation_utils.SampleEncoderDecoderOutput` if
-                ``model.config.is_encoder_decoder=True``.
+            :class:`~transformers.generation_utils.SampleDecoderOnlyOutput`,
+            :class:`~transformers.generation_utils.SampleEncoderDecoderOutput` or obj:`torch.LongTensor`: A
+            :obj:`torch.LongTensor` containing the generated tokens (default behaviour) or a
+            :class:`~transformers.generation_utils.SampleDecoderOnlyOutput` if
+            ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
+            :class:`~transformers.generation_utils.SampleEncoderDecoderOutput` if
+            ``model.config.is_encoder_decoder=True``.
+
 
         Examples::
 
@@ -1450,6 +1471,7 @@ class GenerationMixin:
         Generates sequences for models with a language modeling head using beam search decoding.
 
 
+
         Parameters:
 
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1483,13 +1505,16 @@ class GenerationMixin:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
 
+
         Return:
-            :class:`~transformers.generation_utilsBeamSearchDecoderOnlyOutput`, :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput` or obj:`torch.LongTensor`:
-                A :obj:`torch.LongTensor` containing the generated tokens (default behaviour)
-                or a :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput` if
-                ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
-                :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput` if
-                ``model.config.is_encoder_decoder=True``.
+            :class:`~transformers.generation_utilsBeamSearchDecoderOnlyOutput`,
+            :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput` or obj:`torch.LongTensor`: A
+            :obj:`torch.LongTensor` containing the generated tokens (default behaviour) or a
+            :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput` if
+            ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
+            :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput` if
+            ``model.config.is_encoder_decoder=True``.
+
 
         Examples::
 
@@ -1697,6 +1722,7 @@ class GenerationMixin:
         Generates sequences for models with a language modeling head using beam search with multinomial sampling.
 
 
+
         Parameters:
 
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1735,13 +1761,16 @@ class GenerationMixin:
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
 
 
+
         Return:
-            :class:`~transformers.generation_utils.BeamSampleDecoderOnlyOutput`, :class:`~transformers.generation_utils.BeamSampleEncoderDecoderOutput` or obj:`torch.LongTensor`:
-                A :obj:`torch.LongTensor` containing the generated tokens (default behaviour)
-                or a :class:`~transformers.generation_utils.BeamSampleDecoderOnlyOutput` if
-                ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
-                :class:`~transformers.generation_utils.BeamSampleEncoderDecoderOutput` if
-                ``model.config.is_encoder_decoder=True``.
+            :class:`~transformers.generation_utils.BeamSampleDecoderOnlyOutput`,
+            :class:`~transformers.generation_utils.BeamSampleEncoderDecoderOutput` or obj:`torch.LongTensor`: A
+            :obj:`torch.LongTensor` containing the generated tokens (default behaviour) or a
+            :class:`~transformers.generation_utils.BeamSampleDecoderOnlyOutput` if
+            ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
+            :class:`~transformers.generation_utils.BeamSampleEncoderDecoderOutput` if
+            ``model.config.is_encoder_decoder=True``.
+
 
 
         Examples::
@@ -1956,6 +1985,7 @@ class GenerationMixin:
         Generates sequences for models with a language modeling head using beam search decoding.
 
 
+
         Parameters:
 
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1990,14 +2020,17 @@ class GenerationMixin:
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
 
 
+
         Return:
-            :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput`, :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput` or obj:`torch.LongTensor`:
-                A :obj:`torch.LongTensor` containing the generated tokens (default behaviour) or a
-                :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput` if
-                :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput` if
-                ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
-                :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput` if
-                ``model.config.is_encoder_decoder=True``.
+            :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput`,
+            :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput` or obj:`torch.LongTensor`: A
+            :obj:`torch.LongTensor` containing the generated tokens (default behaviour) or a
+            :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput` if
+            :class:`~transformers.generation_utils.BeamSearchDecoderOnlyOutput` if
+            ``model.config.is_encoder_decoder=False`` and ``return_dict_in_generate=True`` or a
+            :class:`~transformers.generation_utils.BeamSearchEncoderDecoderOutput` if
+            ``model.config.is_encoder_decoder=True``.
+
 
 
         Examples::
@@ -2246,6 +2279,7 @@ def top_k_top_p_filtering(
 ) -> torch.FloatTensor:
     """
     Filter a distribution of logits using top-k and/or nucleus (top-p) filtering
+
 
     Args:
         logits: logits distribution shape (batch size, vocabulary size)
