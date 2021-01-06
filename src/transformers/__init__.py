@@ -197,7 +197,7 @@ _import_structure = {
     "models.xlm_prophetnet": ["XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig"],
     "models.xlm_roberta": ["XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMRobertaConfig"],
     "models.xlnet": ["XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLNetConfig"],
-    ".pipelines": [
+    "pipelines": [
         "Conversation",
         "ConversationalPipeline",
         "CsvPipelineDataFormat",
