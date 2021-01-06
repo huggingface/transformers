@@ -1148,6 +1148,7 @@ class T5Model(T5PreTrainedModel):
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
+        encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
         self.encoder = T5Stack(encoder_config, self.shared)
@@ -1325,6 +1326,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
+        encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
         self.encoder = T5Stack(encoder_config, self.shared)

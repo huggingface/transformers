@@ -113,21 +113,20 @@ class SampleDecoderOnlyOutput(ModelOutput):
 
 
     Args:
-        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
+        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size*num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
             at each generation step. :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of
-            shape :obj:`(batch_size * num_return_sequences, config.vocab_size)`).
+            shape :obj:`(batch_size*num_return_sequences, config.vocab_size)`).
         attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(num_return_sequences * batch_size, num_heads, generated_length,
+            :obj:`torch.FloatTensor` of shape :obj:`(num_return_sequences*batch_size, num_heads, generated_length,
             sequence_length)`.
         hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(num_return_sequences * batch_size, generated_length,
-            hidden_size)`.
+            :obj:`torch.FloatTensor` of shape :obj:`(num_return_sequences*batch_size, generated_length, hidden_size)`.
     """
 
     sequences: torch.LongTensor = None
@@ -145,27 +144,26 @@ class SampleEncoderDecoderOutput(ModelOutput):
 
 
     Args:
-        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
+        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size*num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
             at each generation step. :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of
-            shape :obj:`(batch_size * num_return_sequences, config.vocab_size)`).
+            shape :obj:`(batch_size*num_return_sequences, config.vocab_size)`).
         encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer of the decoder) of shape :obj:`(batch_size *
-            num_return_sequences, num_heads, sequence_length, sequence_length)`.
+            Tuple of :obj:`torch.FloatTensor` (one for each layer of the decoder) of shape
+            :obj:`(batch_size*num_return_sequences, num_heads, sequence_length, sequence_length)`.
         encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size * num_return_sequences, sequence_length, hidden_size)`.
+            of shape :obj:`(batch_size*num_return_sequences, sequence_length, hidden_size)`.
         decoder_attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequences, num_heads, generated_length,
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_return_sequences, num_heads, generated_length,
             sequence_length)`.
         decoder_hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequences, generated_length,
-            hidden_size)`.
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_return_sequences, generated_length, hidden_size)`.
     """
 
     sequences: torch.LongTensor = None
@@ -182,23 +180,23 @@ class BeamSearchDecoderOnlyOutput(ModelOutput):
     Base class for outputs of decoder-only generation models using beam search.
 
     Args:
-        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
+        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size*num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
-        sequences_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequences)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+        sequences_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_return_sequences)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Final beam scores of the generated ``sequences``.
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of shape :obj:`(batch_size
-            * num_beams * num_return_sequences, config.vocab_size)`).
+            . :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of shape
+            :obj:`(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
         attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams, num_heads, generated_length,
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_beams, num_heads, generated_length,
             sequence_length)`.
         hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams * num_return_sequences, generated_length,
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_beams*num_return_sequences, generated_length,
             hidden_size)`.
     """
 
@@ -217,30 +215,30 @@ class BeamSearchEncoderDecoderOutput(ModelOutput):
     attributes (respectively the decoder_attentions and the decoder_hidden_states attributes)
 
     Args:
-        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
+        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size*num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
-        sequences_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequences)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
+        sequences_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_return_sequences)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Final beam scores of the generated ``sequences``.
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of shape :obj:`(batch_size
-            * num_beams, config.vocab_size)`).
+            . :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of shape
+            :obj:`(batch_size*num_beams, config.vocab_size)`).
         attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
         encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer of the decoder) of shape :obj:`(batch_size,
             num_heads, sequence_length, sequence_length)`.
         encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size * num_beams * num_return_sequences, sequence_length, hidden_size)`.
+            of shape :obj:`(batch_size*num_beams*num_return_sequences, sequence_length, hidden_size)`.
         decoder_attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams * num_return_sequences, num_heads,
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_beams*num_return_sequences, num_heads,
             generated_length, sequence_length)`.
         decoder_hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams * num_return_sequences, generated_length,
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_beams*num_return_sequences, generated_length,
             hidden_size)`.
     """
 
@@ -259,7 +257,7 @@ class BeamSampleDecoderOnlyOutput(ModelOutput):
     Base class for outputs of decoder-only generation models using beam sample.
 
     Args:
-        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`):
+        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size*num_return_sequences, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
         sequences_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequence)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
@@ -267,15 +265,15 @@ class BeamSampleDecoderOnlyOutput(ModelOutput):
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of shape :obj:`(batch_size
-            * num_beams * num_return_sequences, config.vocab_size)`).
+            . :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of shape
+            :obj:`(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
         attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams, num_heads, generated_length,
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_beams, num_heads, generated_length,
             sequence_length)`.
         hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams, generated_length, hidden_size)`.
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_beams, generated_length, hidden_size)`.
     """
 
     sequences: torch.LongTensor = None
@@ -293,7 +291,7 @@ class BeamSampleEncoderDecoderOutput(ModelOutput):
     encoder_hidden_states attributes (respectively the decoder_attentions and the decoder_hidden_states attributes)
 
     Args:
-        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size * num_beams, sequence_length)`):
+        sequences (:obj:`torch.LongTensor` of shape :obj:`(batch_size*num_beams, sequence_length)`):
             The generated sequences. The second dimension (sequence_length) is either equal to :obj:`max_length` or
             shorter if all batches finished early due to the :obj:`eos_token_id`.
         sequences_scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequence)`, `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
@@ -301,21 +299,21 @@ class BeamSampleEncoderDecoderOutput(ModelOutput):
         scores (:obj:`tuple(torch.FloatTensor)` `optional`, returned when ``output_scores=True`` is passed or when ``config.output_scores=True``):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of shape :obj:`(batch_size
-            * num_beams, config.vocab_size)`).
+            . :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of shape
+            :obj:`(batch_size*num_beams, config.vocab_size)`).
         encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer of the decoder) of shape :obj:`(batch_size,
             num_heads, sequence_length, sequence_length)`.
         encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size * num_beams, sequence_length, hidden_size)`.
+            of shape :obj:`(batch_size*num_beams, sequence_length, hidden_size)`.
         decoder_attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams, num_heads, generated_length,
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_beams, num_heads, generated_length,
             sequence_length)`.
         decoder_hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
-            :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_beams, generated_length, hidden_size)`.
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_beams, generated_length, hidden_size)`.
     """
 
     sequences: torch.LongTensor = None
