@@ -15,17 +15,18 @@
 import unittest
 
 from transformers import is_torch_available, pipeline
-from transformers.models.bart import BartConfig, BartForConditionalGeneration
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.tokenization_utils import TruncationStrategy
 
 from .test_pipelines_common import MonoInputPipelineCommonMixin
 
 
-DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
-
 if is_torch_available():
     import torch
+
+    from transformers.models.bart import BartConfig, BartForConditionalGeneration
+
+DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 
 
 class DummyTok:
