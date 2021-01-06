@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import unittest
+from string import ascii_lowercase
 
 from transformers import is_torch_available, pipeline
 from transformers.models.bart import BartConfig, BartForConditionalGeneration
@@ -53,15 +54,17 @@ class DummyTok:
         return torch.LongTensor(list(input_.encode("utf-8")))
 
     def decode(self, sequence, **kwargs):
-        try:
-            return bytes(sequence).decode("utf-8")
-        except Exception:
-            return "D" * len(sequence)
+        N = len(ascii_lowercase)
+        output = ""
+        for i in range(len(sequence)):
+            output += ascii_lowercase[i % N]
+        return output
 
 
 class SimpleSummarizationPipelineTests(unittest.TestCase):
     @require_torch
     def test_input_too_long(self):
+        torch.manual_seed(0)
         config = BartConfig(
             vocab_size=257,
             d_model=32,
@@ -84,7 +87,7 @@ class SimpleSummarizationPipelineTests(unittest.TestCase):
             _ = nlp("This is a test")
 
         output = nlp("This is a test", truncation=TruncationStrategy.ONLY_FIRST)
-        self.assertEquals(output, [{"summary_text": "\0\0\0\0"}])
+        self.assertEqual(output, [{"summary_text": "ab"}])
 
 
 class SummarizationPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
