@@ -25,8 +25,8 @@ from contextlib import AbstractContextManager
 from typing import Dict, List, Optional
 
 import requests
-from transformers.commands import BaseTransformersCLICommand
 
+from .commands import BaseTransformersCLICommand
 from ..utils import logging
 
 

@@ -16,8 +16,8 @@ import argparse
 
 import torch
 
-from transformers import BartForConditionalGeneration, MBartConfig
-
+from . import MBartConfig
+from ..bart import BartForConditionalGeneration
 from ..bart.convert_bart_original_pytorch_checkpoint_to_pytorch import remove_ignore_keys_
 
 

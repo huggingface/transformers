@@ -14,8 +14,8 @@
 
 from argparse import ArgumentParser
 
-from transformers.commands import BaseTransformersCLICommand
-from transformers.pipelines import SUPPORTED_TASKS, Pipeline, PipelineDataFormat, pipeline
+from . import BaseTransformersCLICommand
+from ..pipelines import SUPPORTED_TASKS, Pipeline, PipelineDataFormat, pipeline
 
 from ..utils import logging
 

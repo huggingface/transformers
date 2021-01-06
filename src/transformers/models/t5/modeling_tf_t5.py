@@ -22,7 +22,7 @@ from typing import Tuple
 
 import tensorflow as tf
 
-from transformers.modeling_tf_utils import TFWrappedEmbeddings
+from ...modeling_tf_utils import TFWrappedEmbeddings
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
