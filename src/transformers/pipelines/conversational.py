@@ -201,10 +201,8 @@ class ConversationalPipeline(Pipeline):
         Returns:
             :obj:`List[int]`: The list of tokens for the past input of that conversation.
         """
-        # history = conversation._history[:]
-        # index = conversation._index
-        history = []
-        index = 0
+        history = conversation._history[:]
+        index = conversation._index
         for i, (past_user_input, generated_response) in enumerate(
             zip(conversation.past_user_inputs[index:], conversation.generated_responses[index:])
         ):
@@ -242,7 +240,7 @@ class ConversationalPipeline(Pipeline):
             conversations = [conversations]
         # Input validation
         if isinstance(conversations, list):
-            for i, conversation in enumerate(conversations):
+            for conversation in conversations:
                 assert isinstance(
                     conversation, Conversation
                 ), "DialoguePipeline expects a Conversation or list of Conversations as an input"
@@ -374,7 +372,9 @@ class ConversationalPipeline(Pipeline):
                     if cutoff_eos_index == 0 or cutoff_eos_index == len(new_input) - 1:
                         break
                     else:
-                        logger.warning("Cutting history off because it's too long for underlying model")
+                        logger.warning(
+                            "Cutting history off because it's too long ({len(new_input)} > {max_length - self.min_length_for_response}) for underlying model"
+                        )
                         new_input = new_input[cutoff_eos_index + 1 :]
             outputs.append(new_input)
         padded_outputs = self.tokenizer.pad(
