@@ -146,11 +146,11 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
 
         # use bart in pytorch
         summarizer = pipeline("summarization")
-        summarizer("Sam Shleifer writes the best docstring examples in the whole world.", min_length=5, max_length=20)
+        summarizer("An apple a day, keeps the doctor away", min_length=5, max_length=20)
 
         # use t5 in tf
         summarizer = pipeline("summarization", model="t5-base", tokenizer="t5-base", framework="tf")
-        summarizer("Sam Shleifer writes the best docstring examples in the whole world.", min_length=5, max_length=20)
+        summarizer("An apple a day, keeps the doctor away", min_length=5, max_length=20)
     """
 
     return_name = "summary"
