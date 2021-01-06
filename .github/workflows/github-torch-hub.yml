@@ -33,7 +33,7 @@ jobs:
       run: |
         pip install --upgrade pip
         pip install torch
-        pip install numpy filelock protobuf requests tqdm regex sentencepiece sacremoses tokenizers packaging
+        pip install numpy filelock protobuf requests tqdm regex sentencepiece sacremoses tokenizers packaging importlib_metadata
 
     - name: Torch hub list
       run: |

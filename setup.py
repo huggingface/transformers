@@ -99,6 +99,7 @@ _deps = [
     "flake8>=3.8.3",
     "flax>=0.2.2",
     "fugashi>=1.0",
+    "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
     "jax>=0.2.0",
@@ -232,6 +233,7 @@ extras["dev"] = (
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
     deps["dataclasses"] + ";python_version<'3.7'",  # dataclasses for Python versions that don't have it
+    deps["importlib_metadata"] + ";python_version<'3.8'",  # importlib_metadata for Python versions that don't have it
     deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
     deps["numpy"],
     deps["packaging"],  # utilities from PyPA to e.g., compare versions

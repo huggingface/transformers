@@ -26,6 +26,8 @@ from .utils.versions import require_version_core
 pkgs_to_check_at_runtime = "python tqdm regex sacremoses requests packaging filelock numpy tokenizers".split()
 if sys.version_info < (3, 7):
     pkgs_to_check_at_runtime.append("dataclasses")
+if sys.version_info < (3, 8):
+    pkgs_to_check_at_runtime.append("importlib_metadata")
 
 for pkg in pkgs_to_check_at_runtime:
     if pkg in deps:
