@@ -191,6 +191,7 @@ class BeamSearchDecoderOnlyOutput(ModelOutput):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
             . :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of shape :obj:`(batch_size
+
             * num_beams * num_return_sequences, config.vocab_size)`).
         attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
@@ -226,6 +227,7 @@ class BeamSearchEncoderDecoderOutput(ModelOutput):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
             . :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of shape :obj:`(batch_size
+
             * num_beams, config.vocab_size)`).
         attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
         encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
@@ -268,6 +270,7 @@ class BeamSampleDecoderOnlyOutput(ModelOutput):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
             . :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of shape :obj:`(batch_size
+
             * num_beams * num_return_sequences, config.vocab_size)`).
         attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
@@ -302,6 +305,7 @@ class BeamSampleEncoderDecoderOutput(ModelOutput):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
             softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
             . :obj:`(max_length,)`-shaped tuple of :obj:`torch.FloatTensor` with each tensor of shape :obj:`(batch_size
+
             * num_beams, config.vocab_size)`).
         encoder_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer of the decoder) of shape :obj:`(batch_size,

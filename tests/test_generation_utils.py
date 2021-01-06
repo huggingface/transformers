@@ -730,6 +730,7 @@ class GenerationTesterMixin:
             beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
 
             config.use_cache = True
+            config.is_decoder = True
             model = model_class(config).to(torch_device).eval()
             output_beam, output_generate = self._beam_search_generate(
                 model=model,
