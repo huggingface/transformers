@@ -279,7 +279,8 @@ Finally, you can view the results, including any calculated metrics, by launchin
 ``logging_dir`` directory.
 
 Trainer Integrations
------------------------------------------------------------------------------------------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 
 The trainer is being extended to support experimental libraries that may dramatically improve your training time and
 fit bigger models.
@@ -287,6 +288,11 @@ fit bigger models.
 The main part that is being integrated at the moment is based on the paper `ZeRO: Memory Optimizations Toward Training
 Trillion Parameter Models, by Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, Yuxiong He
 <https://arxiv.org/abs/1910.02054>`__.
+
+These parts are supported by FairScale and DeepSpeed that have been integrated into ``transformers``' Trainer.
+
+FairScale
+-----------------------------------------------------------------------------------------------------------------------
 
 You can already deploy the following features from this paper:
 
@@ -298,7 +304,7 @@ using the `--sharded_ddp` trainer argument. This is implemented via `fairscale
 
 This feature requires distributed training (so multiple GPUs) and is not implemented for TPUs.
 
-For example here is how you could use it for `finetune_trainer.py`:
+For example here is how you could use it for ``finetune_trainer.py``:
 
 .. code-block:: bash
 
@@ -316,12 +322,65 @@ Note that it works with `--fp16` too, to make things even faster.
 One of the main benefits of enabling `--sharded_ddp` is that it uses a lot less GPU memory, so you should be able to
 use significantly larger batch sizes using the same hardware (e.g. 3x or bigger).
 
-Eventually more parts will be supported via integrating `DeepSpeed <https://github.com/microsoft/DeepSpeed>`__.
-
-
 DeepSpeed
+-----------------------------------------------------------------------------------------------------------------------
 
-DeepSpeed works with the PyTorch Trainer but not TF Trainer.
+The other important third party component that this trainer supports is `DeepSpeed
+<https://github.com/microsoft/DeepSpeed>`__.
+
+It implements everything described in the `ZeRO paper <https://arxiv.org/abs/1910.02054>`__.
+
+To enable DeepSpeed you need to first install DeepSpeed following `the instructions
+<https://github.com/microsoft/deepspeed#installation>`__.
+
+And when the installation has been completed you need to adjust the command line arguments as following:
+
+1. replace ``python -m torch.distributed.launch`` with ``deepspeed``
+2. add a new argument ``--deepspeed ds_config.json`` where ``ds_config.json`` is the DeepSpeed configuration file as
+   documented at https://www.deepspeed.ai/docs/config-json/
+
+Therefore if your original program looked as following:
+
+.. code-block:: bash
+
+    python -m torch.distributed.launch --nproc_per_node=2 your_program.py <your program\'s normal args>
+
+Now it becomes:
+
+.. code-block:: bash
+
+    deepspeed your_program.py <your program\'s normal args> --deepspeed ds_config.json
+
+For example to run ``finetune_trainer.py`` under DeepSpeed:
+
+.. code-block:: bash
+
+    cd examples/seq2seq
+    deepspeed ./finetune_trainer.py --deepspeed ds_config.json \
+    --model_name_or_path sshleifer/distill-mbart-en-ro-12-4 --data_dir wmt_en_ro \
+    --output_dir output_dir --overwrite_output_dir \
+    --do_train --n_train 500 --num_train_epochs 1 \
+    --per_device_train_batch_size 1  --freeze_embeds \
+    --src_lang en_XX --tgt_lang ro_RO --task translation
+
+Of course, you can name the DeepSpeed configuration file in any way you want, just adjust its name when you specify it
+on the command line.
+
+Note that in the DeepSpeed documentation you are likely to see ``--deepspeed --deepspeed_config ds_config.json`` - i.e.
+2 DeepSpeed-related arguments, but for simplicity-sake, and since there are already so many arguments to deal with, we
+combined the two into a single argument.
+
+You can configure DeepSpeed integration in 2 ways:
+
+1. supply most of the configuration inside ``ds_config.json``
+2. configure it using the normal trainer arguments
+
+XXX: need more details and examples here.
+
+
+Notes:
+
+- DeepSpeed works with the PyTorch Trainer but not TF Trainer.
 
 Notes to check:
 
@@ -331,9 +390,6 @@ source.
 g-karthik: in order to use certain features in DeepSpeed such as 1-bit Adam, there are certain special installations to
 be done that do not come with the PyPI package.
 
-
-
->>>>>>> origin/master
 
 
 .. _additional-resources:
