@@ -19,7 +19,7 @@ from argparse import ArgumentParser, Namespace
 from pathlib import Path
 from typing import List
 
-from .commands import BaseTransformersCLICommand
+from . import BaseTransformersCLICommand
 from ..utils import logging
 
 

@@ -14,7 +14,7 @@
 
 from argparse import ArgumentParser, Namespace
 
-from .commands import BaseTransformersCLICommand
+from . import BaseTransformersCLICommand
 from ..utils import logging
 
 

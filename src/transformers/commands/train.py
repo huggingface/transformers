@@ -15,7 +15,7 @@
 import os
 from argparse import ArgumentParser, Namespace
 
-from .commands import BaseTransformersCLICommand
+from . import BaseTransformersCLICommand
 from ..data import SingleSentenceClassificationProcessor as Processor
 from ..file_utils import is_tf_available, is_torch_available
 from ..pipelines import TextClassificationPipeline

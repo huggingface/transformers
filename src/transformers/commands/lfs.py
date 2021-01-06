@@ -26,7 +26,7 @@ from typing import Dict, List, Optional
 
 import requests
 
-from .commands import BaseTransformersCLICommand
+from . import BaseTransformersCLICommand
 from ..utils import logging
 
 
