@@ -18,7 +18,7 @@ import os
 import unittest
 
 from transformers import CamembertTokenizer, CamembertTokenizerFast
-from transformers.file_utils import is_torch_available()
+from transformers.file_utils import is_torch_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
 from .test_tokenization_common import TokenizerTesterMixin
