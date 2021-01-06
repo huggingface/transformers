@@ -455,7 +455,7 @@ class EncoderDecoderModel(PreTrainedModel):
             "decoder_attention_mask": decoder_attention_mask,
             "decoder_input_ids": decoder_inputs["input_ids"],
             "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
+            "past_key_values": decoder_inputs["past_key_values"],
             "use_cache": use_cache,
         }
         return input_dict
