@@ -220,6 +220,8 @@ TensorFlow and/or Flax.
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |         Blenderbot          |       ✅       |       ❌       |       ✅        |         ✅         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
+|       BlenderbotSmall       |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |
++-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |            CTRL             |       ✅       |       ❌       |       ✅        |         ✅         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |          CamemBERT          |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
@@ -361,6 +363,7 @@ TensorFlow and/or Flax.
     model_doc/bertweet
     model_doc/bertgeneration
     model_doc/blenderbot
+    model_doc/blenderbot_small
     model_doc/camembert
     model_doc/ctrl
     model_doc/deberta
@@ -372,6 +375,7 @@ TensorFlow and/or Flax.
     model_doc/flaubert
     model_doc/fsmt
     model_doc/funnel
+    model_doc/herbert
     model_doc/layoutlm
     model_doc/led
     model_doc/longformer
