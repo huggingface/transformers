@@ -388,6 +388,7 @@ TensorFlow and/or Flax.
     model_doc/gpt
     model_doc/gpt2
     model_doc/pegasus
+    model_doc/phobert
     model_doc/prophetnet
     model_doc/rag
     model_doc/reformer
