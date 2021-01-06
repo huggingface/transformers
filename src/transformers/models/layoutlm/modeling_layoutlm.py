@@ -638,8 +638,8 @@ LAYOUTLM_INPUTS_DOCSTRING = r"""
 
             `What are input IDs? <../glossary.html#input-ids>`__
         bbox (:obj:`torch.LongTensor` of shape :obj:`({0}, 4)`, `optional`):
-            Bounding Boxes of each input sequence tokens. Selected in the range ``[0, config.max_2d_position_embeddings
-            - 1]``.
+            Bounding Boxes of each input sequence tokens. Selected in the range ``[0,
+            config.max_2d_position_embeddings-1]``.
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``: ``1`` for
             tokens that are NOT MASKED, ``0`` for MASKED tokens.

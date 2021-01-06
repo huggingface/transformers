@@ -40,7 +40,6 @@ Tips:
   *Longformer*'s *chunked self-attention* layer. :class:`~transformers.LEDTokenizer` is an alias of
   :class:`~transformers.BartTokenizer`.
 - LED works very well on long-range *sequence-to-sequence* tasks where the ``input_ids`` largely exceed a length of
-
   1024 tokens.
 - LED pads the ``input_ids`` to be a multiple of ``config.attention_window`` if required. Therefore a small speed-up is
   gained, when :class:`~transformers.LEDTokenizer` is used with the ``pad_to_multiple_of`` argument.
