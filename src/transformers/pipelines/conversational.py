@@ -2,8 +2,8 @@ import uuid
 from typing import List, Optional, Union
 
 from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
-from ..utils import logging
 from ..tokenization_utils import TruncationStrategy
+from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
