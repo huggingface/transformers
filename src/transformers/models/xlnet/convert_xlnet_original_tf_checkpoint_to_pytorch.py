@@ -20,6 +20,8 @@ import os
 
 import torch
 
+from ...file_utils import CONFIG_NAME, WEIGHTS_NAME
+from ...utils import logging
 from . import (
     XLNetConfig,
     XLNetForQuestionAnswering,
@@ -27,8 +29,6 @@ from . import (
     XLNetLMHeadModel,
     load_tf_weights_in_xlnet,
 )
-from ...file_utils import CONFIG_NAME, WEIGHTS_NAME
-from ...utils import logging
 
 
 GLUE_TASKS_NUM_LABELS = {

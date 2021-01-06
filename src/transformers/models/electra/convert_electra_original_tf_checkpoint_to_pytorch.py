@@ -19,8 +19,8 @@ import argparse
 
 import torch
 
-from . import ElectraConfig, ElectraForMaskedLM, ElectraForPreTraining, load_tf_weights_in_electra
 from ...utils import logging
+from . import ElectraConfig, ElectraForMaskedLM, ElectraForPreTraining, load_tf_weights_in_electra
 
 
 logging.set_verbosity_info()

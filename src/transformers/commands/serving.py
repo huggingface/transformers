@@ -15,10 +15,9 @@
 from argparse import ArgumentParser, Namespace
 from typing import Any, List, Optional
 
-from . import BaseTransformersCLICommand
 from ..pipelines import SUPPORTED_TASKS, Pipeline, pipeline
-
 from ..utils import logging
+from . import BaseTransformersCLICommand
 
 
 try:

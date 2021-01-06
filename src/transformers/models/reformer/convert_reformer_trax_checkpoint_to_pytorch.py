@@ -21,8 +21,8 @@ import pickle
 import numpy as np
 import torch
 
-from . import ReformerConfig, ReformerModelWithLMHead
 from ...utils import logging
+from . import ReformerConfig, ReformerModelWithLMHead
 
 
 logging.set_verbosity_info()

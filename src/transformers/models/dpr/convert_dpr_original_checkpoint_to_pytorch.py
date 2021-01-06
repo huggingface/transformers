@@ -19,8 +19,8 @@ from pathlib import Path
 import torch
 from torch.serialization import default_restore_location
 
-from . import DPRConfig, DPRContextEncoder, DPRQuestionEncoder, DPRReader
 from ...models.bert import BertConfig
+from . import DPRConfig, DPRContextEncoder, DPRQuestionEncoder, DPRReader
 
 
 CheckpointState = collections.namedtuple(

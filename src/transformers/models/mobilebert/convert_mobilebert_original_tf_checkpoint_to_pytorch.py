@@ -16,8 +16,8 @@ import argparse
 
 import torch
 
-from . import MobileBertConfig, MobileBertForPreTraining, load_tf_weights_in_mobilebert
 from ...utils import logging
+from . import MobileBertConfig, MobileBertForPreTraining, load_tf_weights_in_mobilebert
 
 
 logging.set_verbosity_info()

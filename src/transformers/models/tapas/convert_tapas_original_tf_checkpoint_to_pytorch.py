@@ -17,6 +17,7 @@
 
 import argparse
 
+from ...utils import logging
 from . import (
     TapasConfig,
     TapasForMaskedLM,
@@ -26,7 +27,6 @@ from . import (
     TapasTokenizer,
     load_tf_weights_in_tapas,
 )
-from ...utils import logging
 
 
 logging.set_verbosity_info()

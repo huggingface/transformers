@@ -1320,7 +1320,6 @@ if TYPE_CHECKING:
     from .training_args_seq2seq import Seq2SeqTrainingArguments
     from .training_args_tf import TFTrainingArguments
 
-
     if is_sentencepiece_available():
         from .models.albert import AlbertTokenizer
         from .models.barthez import BarthezTokenizer
@@ -1373,7 +1372,6 @@ if TYPE_CHECKING:
             from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
     else:
         from .utils.dummy_tokenizers_objects import *
-
 
     # Modeling
     if is_torch_available():
@@ -2054,7 +2052,6 @@ if TYPE_CHECKING:
         # They will raise an import error if the user tries to instantiate / use them.
         from .utils.dummy_tf_objects import *
 
-
     if is_flax_available():
         from .modeling_flax_utils import FlaxPreTrainedModel
         from .models.auto import FLAX_MODEL_MAPPING, FlaxAutoModel
@@ -2073,12 +2070,13 @@ else:
         """
         Module class that surfaces all objects but only performs associated imports when the objects are requested.
         """
+
         __file__ = globals()["__file__"]
         __path__ = [os.path.dirname(__file__)]
 
         def _get_module(self, module_name: str):
             return importlib.import_module("." + module_name, self.__name__)
-        
+
         def __getattr__(self, name: str):
             # Special handling for the version, which is a constant from this module and not imported in a submodule.
             if name == "__version__":

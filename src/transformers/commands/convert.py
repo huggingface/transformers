@@ -14,8 +14,8 @@
 
 from argparse import ArgumentParser, Namespace
 
-from . import BaseTransformersCLICommand
 from ..utils import logging
+from . import BaseTransformersCLICommand
 
 
 def convert_command_factory(args: Namespace):

@@ -31,10 +31,10 @@ import torch
 from fairseq import hub_utils
 from fairseq.data.dictionary import Dictionary
 
-from . import VOCAB_FILES_NAMES, FSMTConfig, FSMTForConditionalGeneration
 from ...file_utils import WEIGHTS_NAME
-from ...utils import logging
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
+from ...utils import logging
+from . import VOCAB_FILES_NAMES, FSMTConfig, FSMTForConditionalGeneration
 
 
 logging.set_verbosity_warning()

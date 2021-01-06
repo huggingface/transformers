@@ -22,8 +22,8 @@ import numpy
 import torch
 
 from ...file_utils import CONFIG_NAME, WEIGHTS_NAME
-from .tokenization_xlm import VOCAB_FILES_NAMES
 from ...utils import logging
+from .tokenization_xlm import VOCAB_FILES_NAMES
 
 
 logging.set_verbosity_info()

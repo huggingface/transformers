@@ -32,7 +32,6 @@ from typing import Callable, Iterable, List, NamedTuple, Optional, Union
 
 from .. import AutoConfig, PretrainedConfig
 from .. import __version__ as version
-
 from ..file_utils import is_psutil_available, is_py3nvml_available, is_tf_available, is_torch_available
 from ..utils import logging
 from .benchmark_args_utils import BenchmarkArguments
