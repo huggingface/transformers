@@ -271,7 +271,7 @@ else:
 if is_tokenizers_available():
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
-    _import_structure["models.barthez"] = ["BarthezTokenizerFast"]
+    _import_structure["models.barthez"].append("BarthezTokenizerFast")
     _import_structure["models.bert"].append("BertTokenizerFast")
     _import_structure["models.camembert"].append("CamembertTokenizerFast")
     _import_structure["models.distilbert"].append("DistilBertTokenizerFast")
