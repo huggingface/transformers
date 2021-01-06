@@ -391,7 +391,6 @@ class Trainer:
         number of training steps is either
 
         1. args.max_steps if --max_steps > 1
-
         2. else derive from dataset if we can get its size
         """
         if self.args.max_steps > 0:
@@ -811,7 +810,6 @@ class Trainer:
         # Model re-init
         if self.model_init is not None:
             # Seed must be set before instantiating the model when using model_init.
-            # XXX: move this and the same inside __init__ to call_model_init?
             set_seed(self.args.seed)
 
             model = self.call_model_init(trial)
