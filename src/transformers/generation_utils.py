@@ -158,7 +158,7 @@ class SampleEncoderDecoderOutput(ModelOutput):
         encoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size * num_return_sequences, sequence_length, hidden_size)`.
-        decoder_attentions (:obj:`tupletuple((torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+        decoder_attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             :obj:`torch.FloatTensor` of shape :obj:`(batch_size * num_return_sequences, num_heads, generated_length,
             sequence_length)`.
