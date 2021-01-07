@@ -62,8 +62,8 @@ class GenerationTesterMixin:
         input_ids = input_ids[:max_batch_size, :sequence_length]
         attention_mask = attention_mask[:max_batch_size, :sequence_length]
 
-        # generate max 3 tokens
-        max_length = input_ids.shape[-1] + 3
+        # generate max 2 tokens
+        max_length = input_ids.shape[-1] + 2
         if config.eos_token_id is not None and config.pad_token_id is None:
             # hack to allow generate for models such as GPT2 as is done in `generate()`
             config.pad_token_id = config.eos_token_id
