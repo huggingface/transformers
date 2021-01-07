@@ -800,7 +800,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             :obj:`tf.Variable`: Pointer to the input tokens Embeddings Module of the model.
         """
         if new_num_tokens is None or new_num_tokens == self.config.vocab_size:
-            return self._find_weights(self.get_input_embeddings())
+            return self._get_word_embedding_weight(self.get_input_embeddings())
 
         model_embeds = self._resize_token_embeddings(new_num_tokens)
 
@@ -809,7 +809,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
         return model_embeds
 
-    def _find_weights(self, embedding_layer):
+    def _get_word_embedding_weight(self, embedding_layer):
         if hasattr(embedding_layer, "word_embeddings"):
             return embedding_layer.word_embeddings
         elif hasattr(embedding_layer, "weight"):
@@ -830,7 +830,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 return None
 
     def _resize_token_embeddings(self, new_num_tokens):
-        old_embeddings = self._find_weights(self.get_input_embeddings())
+        old_embeddings = self._get_word_embedding_weight(self.get_input_embeddings())
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
 
         # if word embeddings are not tied, make sure that lm head bias is resized as well
@@ -842,7 +842,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
         # if word embeddings are not tied, make sure that lm head decoder is resized as well
         if self.get_output_embeddings() is not None:
-            old_lm_head_decoder = self._find_weights(self.get_output_embeddings())
+            old_lm_head_decoder = self._get_word_embedding_weight(self.get_output_embeddings())
             new_lm_head_decoder = self._get_resized_lm_head_decoder(old_lm_head_decoder, new_num_tokens)
 
             self.set_output_embeddings(new_lm_head_decoder)
@@ -922,7 +922,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             input ones.
         """
         new_lm_head_decoder = old_lm_head_decoder
-        is_input_output_equals = tf.reduce_any(self._find_weights(self.get_input_embeddings()) == old_lm_head_decoder)
+        is_input_output_equals = tf.reduce_any(
+            self._get_word_embedding_weight(self.get_input_embeddings()) == old_lm_head_decoder
+        )
 
         if old_lm_head_decoder is not None and not is_input_output_equals:
             old_embedding_dim = shape_list(old_lm_head_decoder)[1]

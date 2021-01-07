@@ -85,7 +85,7 @@ class TFBlenderbotModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_resize_token_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        def _find_weights(model, embedding_layer):
+        def _get_word_embedding_weight(model, embedding_layer):
             if hasattr(embedding_layer, "weight"):
                 return embedding_layer.weight
             else:
@@ -101,14 +101,14 @@ class TFBlenderbotModelTest(TFModelTesterMixin, unittest.TestCase):
             for size in [config.vocab_size - 10, config.vocab_size + 10, None]:
                 # build the embeddings
                 model = model_class(config=config)
-                old_input_embeddings = _find_weights(model, model.get_input_embeddings())
-                old_output_embeddings = _find_weights(model, model.get_output_embeddings())
+                old_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
+                old_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
                 old_final_logits_bias = model.get_bias()
 
                 # reshape the embeddings
                 model.resize_token_embeddings(size)
-                new_input_embeddings = _find_weights(model, model.get_input_embeddings())
-                new_output_embeddings = _find_weights(model, model.get_output_embeddings())
+                new_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
+                new_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
                 new_final_logits_bias = model.get_bias()
 
                 # check that the resized embeddings size matches the desired size.
