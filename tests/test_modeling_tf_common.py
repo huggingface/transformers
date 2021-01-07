@@ -766,6 +766,20 @@ class TFModelTesterMixin:
                 inputs["decoder_inputs_embeds"] = self._get_embeds(wte, decoder_input_ids)
 
             model(inputs)
+    
+    def test_models_with_numpy_arrays(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def prepare_numpy_arrays(inputs_dict):
+            inputs_np_dict = {}
+            for k, v in inputs_dict.items():
+                inputs_np_dict[k] = v.numpy()
+        
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            inputs_np = prepare_numpy_arrays(inputs)
 
     def test_resize_token_embeddings(self):
         if not self.test_resize_embeddings:
