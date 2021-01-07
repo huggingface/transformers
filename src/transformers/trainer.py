@@ -160,10 +160,6 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def is_parallel(model):
-    return hasattr(model, "is_parallelizable") and model.is_parallelizable and model.model_parallel
-
-
 def _model_unwrap(model: nn.Module) -> nn.Module:
     # since there could be multiple levels of wrapping, unwrap recursively
     if hasattr(model, "module"):
@@ -225,13 +221,15 @@ class Trainer:
 
     Important accessors:
 
-        ``self.model`` - always points to the core model. If using a transformers model, it will be a
-        :class:`PreTrainedModel` subclass.
+        * ``self.model`` - always points to the core model. If using a transformers model, it will be a
+          :class:`PreTrainedModel` subclass.
 
-        ``self.model_wrapped`` - always points to the most external model in case one or more other modules wrap the
+        * ``self.model_wrapped`` - always points to the most external model in case one or more other modules wrap the
         original model. This is the model that should be used for the forward pass. For example, under ``DeepSpeed``,
         the inner model is wrapped in ``DeepSpeed`` and then again in ``DistributedDataParallel``. If the inner model
         hasn't been wrapped, then ``self.model_wrapped`` is the same as ``self.model``.
+
+        * ``self.is_model_parallel`` - is true if a model has been switched to a model parallel mode.
     """
 
     def __init__(
@@ -271,6 +269,11 @@ class Trainer:
                 )
             self.model_init = model_init
 
+        if hasattr(model, "is_parallelizable") and model.is_parallelizable and model.model_parallel:
+            self.is_model_parallel = True
+        else:
+            self.is_model_parallel = False
+
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
@@ -278,7 +281,7 @@ class Trainer:
         self.tokenizer = tokenizer
 
         # Model parallel
-        if not (is_parallel(model)):
+        if not self.is_model_parallel:
             model = model.to(args.device)
         else:
             # Force n_gpu to 1 to avoid DataParallel.
@@ -676,7 +679,7 @@ class Trainer:
             set_seed(self.args.seed)
 
             model = self.call_model_init(trial)
-            if not is_parallel(model):
+            if not self.is_model_parallel:
                 model = model.to(self.args.device)
 
             self.model = model
@@ -937,7 +940,7 @@ class Trainer:
             )
             if isinstance(self.model, PreTrainedModel):
                 self.model = self.model.from_pretrained(self.state.best_model_checkpoint)
-                if not is_parallel(model):
+                if not self.is_model_parallel:
                     self.model = self.model.to(self.args.device)
             else:
                 state_dict = torch.load(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME))
