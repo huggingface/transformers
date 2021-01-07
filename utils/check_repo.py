@@ -413,9 +413,6 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
 def ignore_undocumented(name):
     """Rules to determine if `name` should be undocumented."""
     # NOT DOCUMENTED ON PURPOSE.
-    # Magic attributes are not documented.
-    if name.startswith("__"):
-        return True
     # Constants uppercase are not documented.
     if name.isupper():
         return True
@@ -459,7 +456,9 @@ def ignore_undocumented(name):
 def check_all_objects_are_documented():
     """ Check all models are properly documented."""
     documented_objs = find_all_documented_objects()
-    undocumented_objs = [c for c in dir(transformers) if c not in documented_objs and not ignore_undocumented(c)]
+    modules = transformers._modules
+    objects = [c for c in dir(transformers) if c not in modules and not c.startswith("_")]
+    undocumented_objs = [c for c in objects if c not in documented_objs and not ignore_undocumented(c)]
     if len(undocumented_objs) > 0:
         raise Exception(
             "The following objects are in the public init so should be documented:\n - "
