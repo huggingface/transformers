@@ -402,11 +402,6 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "BertJapaneseTokenizer",
     "CharacterTokenizer",
     "MecabTokenizer",
-    # Herbert
-    "HerbertTokenizer",
-    "HerbertTokenizerFast",
-    # Phoebus
-    "PhobertTokenizer",
     # Benchmarks
     "PyTorchBenchmark",
     "PyTorchBenchmarkArguments",

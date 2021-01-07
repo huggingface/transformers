@@ -28,7 +28,7 @@ import time
 import warnings
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 
 # Integrations must be imported before ML frameworks:
@@ -148,12 +148,6 @@ if is_mlflow_available():
 
     DEFAULT_CALLBACKS.append(MLflowCallback)
 
-if is_optuna_available():
-    import optuna
-
-if is_ray_tune_available():
-    from ray import tune
-
 if is_azureml_available():
     from .integrations import AzureMLCallback
 
@@ -164,8 +158,12 @@ if is_fairscale_available():
     from fairscale.optim import OSS
     from fairscale.optim.grad_scaler import ShardedGradScaler
 
+
 if is_deepspeed_available():
     import deepspeed
+
+if TYPE_CHECKING:
+    import optuna
 
 logger = logging.get_logger(__name__)
 
@@ -229,13 +227,15 @@ class Trainer:
             :class:`~transformers.AdamW` on your model and a scheduler given by
             :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
 
-    Important accessors: ``self.model`` - always points to a PretrainedModule subclass (i.e. inner `transformers`
-    model)
+    Important accessors:
+
+        ``self.model`` - always points to the core model. If using a transformers model, it will be a
+        :class:`PreTrainedModel` subclass.
 
         ``self.model_wrapped`` - always points to the most external model in case one or more other modules wrap the
-        original model. For example, under ``DeepSpeed``, the inner model is wrapped in ``DeepSpeed`` and then again in
-        ``DistributedDataParallel``. If the inner model hasn't been wrapped, then ``self.model_wrapped`` is the same as
-        ``self.model``.
+        original model. This is the model that should be used for the forward pass. For example, under ``DeepSpeed``,
+        the inner model is wrapped in ``DeepSpeed`` and then again in ``DistributedDataParallel``. If the inner model
+        hasn't been wrapped, then ``self.model_wrapped`` is the same as ``self.model``.
     """
 
     def __init__(
@@ -268,12 +268,12 @@ class Trainer:
                 raise RuntimeError("`Trainer` requires either a `model` or `model_init` argument")
         else:
             if model_init is not None:
-                raise RuntimeError("`Trainer` requires either a `model` or `model_init` argument, but not both")
-            self.model_init = None
-
-        # Model parallel
-        if model is not None and not self.args.model_parallel:
-            model = model.to(args.device)
+                warnings.warn(
+                    "`Trainer` requires either a `model` or `model_init` argument, but not both. "
+                    "`model_init` will overwrite your model when calling the `train` method. This will become a fatal error in the next release.",
+                    FutureWarning,
+                )
+            self.model_init = model_init
 
         if self.args.model_parallel and not model.is_parallelizable:
             raise ValueError(
@@ -770,15 +770,21 @@ class Trainer:
             return
         self.objective = self.compute_objective(metrics.copy())
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
+            import optuna
+
             trial.report(self.objective, epoch)
             if trial.should_prune():
                 raise optuna.TrialPruned()
         elif self.hp_search_backend == HPSearchBackend.RAY:
+            from ray import tune
+
             if self.state.global_step % self.args.save_steps == 0:
                 self._tune_save_checkpoint()
             tune.report(objective=self.objective, **metrics)
 
     def _tune_save_checkpoint(self):
+        from ray import tune
+
         if not self.use_tune_checkpoints:
             return
         with tune.checkpoint_dir(step=self.state.global_step) as checkpoint_dir:
@@ -1141,7 +1147,12 @@ class Trainer:
         checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
 
         if self.hp_search_backend is not None and trial is not None:
-            run_id = trial.number if self.hp_search_backend == HPSearchBackend.OPTUNA else tune.get_trial_id()
+            if self.hp_search_backend == HPSearchBackend.OPTUNA:
+                run_id = trial.number
+            else:
+                from ray import tune
+
+                run_id = tune.get_trial_id()
             run_name = self.hp_name(trial) if self.hp_name is not None else f"run-{run_id}"
             output_dir = os.path.join(self.args.output_dir, run_name, checkpoint_folder)
         else:
