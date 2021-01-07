@@ -169,7 +169,8 @@ def _model_unwrap(model: nn.Module) -> nn.Module:
 
 
 class Trainer:
-    """Trainer is a simple but feature-complete training and eval loop for PyTorch, optimized for 🤗 Transformers.
+    """
+    Trainer is a simple but feature-complete training and eval loop for PyTorch, optimized for 🤗 Transformers.
 
     Args:
         model (:class:`~transformers.PreTrainedModel` or :obj:`torch.nn.Module`, `optional`):
@@ -218,17 +219,17 @@ class Trainer:
             :class:`~transformers.AdamW` on your model and a scheduler given by
             :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
 
-    Important accessors:
+    Important attributes:
 
         ``self.model`` - always points to the core model. If using a transformers model, it will be a
-          :class:`PreTrainedModel` subclass.
+        :class:`PreTrainedModel` subclass.
 
         ``self.model_wrapped`` - always points to the most external model in case one or more other modules wrap the
         original model. This is the model that should be used for the forward pass. For example, under ``DeepSpeed``,
         the inner model is wrapped in ``DeepSpeed`` and then again in ``DistributedDataParallel``. If the inner model
         hasn't been wrapped, then ``self.model_wrapped`` is the same as ``self.model``.
 
-       ``self.is_model_parallel`` - is true if a model has been switched to a model parallel mode.
+       ``self.is_model_parallel`` - is True if a model has been switched to a model parallel mode.
 
     """
 
