@@ -24,69 +24,145 @@
 ##
 ## Put '## COMMENT' to comment on the file.
 
-
 # To replace in: "src/transformers/__init__.py"
-# Below: "if is_torch_available():" if generating PyTorch
+# Below: "    # PyTorch models structure" if generating PyTorch
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
-    from .models.{{cookiecutter.lowercase_modelname}} import (
-        {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
-        {{cookiecutter.camelcase_modelname}}ForMaskedLM,
-        {{cookiecutter.camelcase_modelname}}ForCausalLM,
-        {{cookiecutter.camelcase_modelname}}ForMultipleChoice,
-        {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
-        {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
-        {{cookiecutter.camelcase_modelname}}ForTokenClassification,
-        {{cookiecutter.camelcase_modelname}}Layer,
-        {{cookiecutter.camelcase_modelname}}Model,
-        {{cookiecutter.camelcase_modelname}}PreTrainedModel,
-        load_tf_weights_in_{{cookiecutter.lowercase_modelname}},
+    _import_structure["models.{{cookiecutter.lowercase_modelname}}"].extend(
+        [
+            "{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "{{cookiecutter.camelcase_modelname}}ForMaskedLM",
+            "{{cookiecutter.camelcase_modelname}}ForCausalLM",
+            "{{cookiecutter.camelcase_modelname}}ForMultipleChoice",
+            "{{cookiecutter.camelcase_modelname}}ForQuestionAnswering",
+            "{{cookiecutter.camelcase_modelname}}ForSequenceClassification",
+            "{{cookiecutter.camelcase_modelname}}ForTokenClassification",
+            "{{cookiecutter.camelcase_modelname}}Layer",
+            "{{cookiecutter.camelcase_modelname}}Model",
+            "{{cookiecutter.camelcase_modelname}}PreTrainedModel",
+            "load_tf_weights_in_{{cookiecutter.lowercase_modelname}}",
+        ]
     )
 {% else %}
-    from .models.{{cookiecutter.lowercase_modelname}} import (
-        {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
-        {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
-        {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
-        {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
-        {{cookiecutter.camelcase_modelname}}Model,
+    _import_structure["models.{{cookiecutter.lowercase_modelname}}"].extend(
+        [
+            "{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "{{cookiecutter.camelcase_modelname}}ForConditionalGeneration",
+            "{{cookiecutter.camelcase_modelname}}ForQuestionAnswering",
+            "{{cookiecutter.camelcase_modelname}}ForSequenceClassification",
+            "{{cookiecutter.camelcase_modelname}}Model",
+        ]
     )
 {% endif -%}
 # End.
 
-# Below: "if is_tf_available():" if generating TensorFlow
+# Below: "    # TensorFlow models structure" if generating TensorFlow
 # Replace with:
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
-    from .models.{{cookiecutter.lowercase_modelname}} import (
-        TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
-        TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
-        TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
-        TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
-        TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
-        TF{{cookiecutter.camelcase_modelname}}ForTokenClassification,
-        TF{{cookiecutter.camelcase_modelname}}Layer,
-        TF{{cookiecutter.camelcase_modelname}}Model,
-        TF{{cookiecutter.camelcase_modelname}}PreTrainedModel,
+    _import_structure["models.{{cookiecutter.lowercase_modelname}}"].extend(
+        [
+            "TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TF{{cookiecutter.camelcase_modelname}}ForMaskedLM",
+            "TF{{cookiecutter.camelcase_modelname}}ForCausalLM",
+            "TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice",
+            "TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering",
+            "TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification",
+            "TF{{cookiecutter.camelcase_modelname}}ForTokenClassification",
+            "TF{{cookiecutter.camelcase_modelname}}Layer",
+            "TF{{cookiecutter.camelcase_modelname}}Model",
+            "TF{{cookiecutter.camelcase_modelname}}PreTrainedModel",
+        ]
     )
 {% else %}
-    from .models.{{cookiecutter.lowercase_modelname}} import (
-        TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
-        TF{{cookiecutter.camelcase_modelname}}Model,
-        TF{{cookiecutter.camelcase_modelname}}PreTrainedModel,
+    _import_structure["models.{{cookiecutter.lowercase_modelname}}"].extend(
+        [
+            "TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration",
+            "TF{{cookiecutter.camelcase_modelname}}Model",
+            "TF{{cookiecutter.camelcase_modelname}}PreTrainedModel",
+        ]
     )
 {% endif -%}
 # End.
 
 # Below: "if is_tokenizers_available():"
 # Replace with:
-    from .models.{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}TokenizerFast
+    _import_structure["models.{{cookiecutter.lowercase_modelname}}"].append("{{cookiecutter.camelcase_modelname}}TokenizerFast")
 # End.
 
-# Below: "from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig"
+# Below: "    "models": [],"
 # Replace with:
-from .models.{{cookiecutter.lowercase_modelname}} import {{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP, {{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}Tokenizer
+    "{{cookiecutter.lowercase_modelname}}": ["{{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP", "{{cookiecutter.camelcase_modelname}}Config", "{{cookiecutter.camelcase_modelname}}Tokenizer"],
 # End.
 
+# To replace in: "src/transformers/__init__.py"
+# Below: "    if is_torch_available():" if generating PyTorch
+# Replace with:
+{% if cookiecutter.is_encoder_decoder_model == "False" %}
+        from .models.{{cookiecutter.lowercase_modelname}} import (
+            {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
+            {{cookiecutter.camelcase_modelname}}ForMaskedLM,
+            {{cookiecutter.camelcase_modelname}}ForCausalLM,
+            {{cookiecutter.camelcase_modelname}}ForMultipleChoice,
+            {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
+            {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
+            {{cookiecutter.camelcase_modelname}}ForTokenClassification,
+            {{cookiecutter.camelcase_modelname}}Layer,
+            {{cookiecutter.camelcase_modelname}}Model,
+            {{cookiecutter.camelcase_modelname}}PreTrainedModel,
+            load_tf_weights_in_{{cookiecutter.lowercase_modelname}},
+        )
+{% else %}
+        from .models.{{cookiecutter.lowercase_modelname}} import (
+            {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
+            {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+            {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
+            {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
+            {{cookiecutter.camelcase_modelname}}Model,
+        )
+{% endif -%}
+# End.
+
+# Below: "    if is_tf_available():" if generating TensorFlow
+# Replace with:
+{% if cookiecutter.is_encoder_decoder_model == "False" %}
+        from .models.{{cookiecutter.lowercase_modelname}} import (
+            TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
+            TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
+            TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
+            TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
+            TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
+            TF{{cookiecutter.camelcase_modelname}}ForTokenClassification,
+            TF{{cookiecutter.camelcase_modelname}}Layer,
+            TF{{cookiecutter.camelcase_modelname}}Model,
+            TF{{cookiecutter.camelcase_modelname}}PreTrainedModel,
+        )
+{% else %}
+        from .models.{{cookiecutter.lowercase_modelname}} import (
+            TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+            TF{{cookiecutter.camelcase_modelname}}Model,
+            TF{{cookiecutter.camelcase_modelname}}PreTrainedModel,
+        )
+{% endif -%}
+# End.
+
+# Below: "    if is_tokenizers_available():"
+# Replace with:
+        from .models.{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}TokenizerFast
+# End.
+
+# Below: "    from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig"
+# Replace with:
+    from .models.{{cookiecutter.lowercase_modelname}} import {{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP, {{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}Tokenizer
+# End.
+
+
+
+# To replace in: "src/transformers/models/__init__.py"
+# Below: "from . import ("
+# Replace with:
+        {{cookiecutter.lowercase_modelname}},
+# End.
 
 
 # To replace in: "src/transformers/models/auto/configuration_auto.py"
