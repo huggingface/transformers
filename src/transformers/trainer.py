@@ -276,6 +276,9 @@ class Trainer:
         # Model parallel
         if not (model.is_parallelizable and model.parallel):
             model = model.to(args.device)
+        else:
+            # Force n_gpu to 1 to avoid DataParallel.
+            self.args._force_n_gpu = 1
 
         # later use `self.model is self.model_wrapped` to check if it's wrapped or not
         self.model_wrapped = model
@@ -719,7 +722,7 @@ class Trainer:
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
 
         # Multi-gpu training (should be after apex fp16 initialization)
-        if self.args.n_gpu > 1 and not (model.is_parallelizable and model.parallel):
+        if self.args.n_gpu > 1:
             model = torch.nn.DataParallel(model)
 
         # Distributed training (should be after apex fp16 initialization)
@@ -1481,7 +1484,7 @@ class Trainer:
 
         model = self.model
         # multi-gpu eval
-        if self.args.n_gpu > 1 and not (model.is_parallelizable and model.parallel):
+        if self.args.n_gpu > 1:
             model = torch.nn.DataParallel(model)
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
