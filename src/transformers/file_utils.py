@@ -49,6 +49,7 @@ from . import __version__
 from .hf_api import HfFolder
 from .utils import logging
 
+
 # The package importlib_metadata is in a different place, depending on the python version.
 if version.parse(sys.version) < version.parse("3.8"):
     import importlib_metadata
