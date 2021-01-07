@@ -51,10 +51,10 @@ if is_tf_available():
         for gpu in gpus:
             # Restrict TensorFlow to only allocate x GB of memory on the GPUs
             try:
-                tf.config.experimental.set_virtual_device_configuration(
-                    gpu, [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=_tf_gpu_memory_limit)]
+                tf.config.set_logical_device_configuration(
+                    gpu, [tf.config.LogicalDeviceConfiguration(memory_limit=_tf_gpu_memory_limit)]
                 )
-                logical_gpus = tf.config.experimental.list_logical_devices("GPU")
+                logical_gpus = tf.config.list_logical_devices("GPU")
                 print("Logical GPUs", logical_gpus)
             except RuntimeError as e:
                 # Virtual devices must be set before GPUs have been initialized
@@ -122,7 +122,7 @@ class TFModelTesterMixin:
             outputs = model(self._prepare_for_class(inputs_dict, model_class))
 
             with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
+                model.save_pretrained(tmpdirname, saved_model=False)
                 model = model_class.from_pretrained(tmpdirname)
                 after_outputs = model(self._prepare_for_class(inputs_dict, model_class))
 
@@ -164,6 +164,46 @@ class TFModelTesterMixin:
                 expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    def test_saved_model_creation(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = False
+        config.output_attentions = False
+
+        if hasattr(config, "use_cache"):
+            config.use_cache = False
+
+        model_class = self.all_model_classes[0]
+
+        class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+        model = model_class(config)
+
+        model(class_inputs_dict)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname, saved_model=True)
+            saved_model_dir = os.path.join(tmpdirname, "saved_model")
+            self.assertTrue(os.path.exists(saved_model_dir))
+
+    @slow
+    def test_saved_model_creation_extended(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        if hasattr(config, "use_cache"):
+            config.use_cache = True
+
+        for model_class in self.all_model_classes:
+            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+
+            model(class_inputs_dict)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, saved_model=True)
+                saved_model_dir = os.path.join(tmpdirname, "saved_model")
+                self.assertTrue(os.path.exists(saved_model_dir))
+
     @slow
     def test_saved_model_with_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -178,12 +218,11 @@ class TFModelTesterMixin:
                 config.use_cache = class_inputs_dict.pop("use_cache")
             model = model_class(config)
             num_out = len(model(class_inputs_dict))
-            model._saved_model_inputs_spec = None
-            model._set_save_spec(class_inputs_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
-                tf.saved_model.save(model, tmpdirname)
-                model = tf.keras.models.load_model(tmpdirname)
+                model.save_pretrained(tmpdirname)
+                saved_model_dir = os.path.join(tmpdirname, "saved_model")
+                model = tf.keras.models.load_model(saved_model_dir)
                 outputs = model(class_inputs_dict)
 
                 if self.is_encoder_decoder:
@@ -219,12 +258,11 @@ class TFModelTesterMixin:
                 config.use_cache = class_inputs_dict.pop("use_cache")
             model = model_class(config)
             num_out = len(model(class_inputs_dict))
-            model._saved_model_inputs_spec = None
-            model._set_save_spec(class_inputs_dict)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
-                tf.saved_model.save(model, tmpdirname)
-                model = tf.keras.models.load_model(tmpdirname)
+                saved_model_dir = os.path.join(tmpdirname, "saved_model")
+                model.save_pretrained(saved_model_dir)
+                model = tf.keras.models.load_model(saved_model_dir)
                 outputs = model(class_inputs_dict)
 
                 if self.is_encoder_decoder:
@@ -489,7 +527,7 @@ class TFModelTesterMixin:
             model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
             # Let's load it from the disk to be sure we can use pretrained weights
             with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
+                model.save_pretrained(tmpdirname, saved_model=False)
                 model = model_class.from_pretrained(tmpdirname)
 
             outputs_dict = model(input_ids)

@@ -179,6 +179,8 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
 # - PreTrainedModel for the models (it-self a sub-class of torch.nn.Module)
 ####################################################
 PARALLELIZE_DOCSTRING = r"""
+    This is an experimental feature and is a subject to change at a moment's notice.
+
     Uses a device map to distribute attention modules of the model across several devices. If no device map is given,
     it will evenly distribute blocks across all devices.
 
@@ -694,6 +696,7 @@ class T5PreTrainedModel(PreTrainedModel):
     config_class = T5Config
     load_tf_weights = load_tf_weights_in_t5
     base_model_prefix = "transformer"
+    is_parallelizable = True
 
     @property
     def dummy_inputs(self):
@@ -1005,14 +1008,22 @@ T5_INPUTS_DOCSTRING = r"""
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Provide for sequence to sequence training. T5 uses the :obj:`pad_token_id` as the starting token for
-            :obj:`decoder_input_ids` generation. If :obj:`past_key_values` is used, optionally only the last
-            :obj:`decoder_input_ids` have to be input (see :obj:`past_key_values`).
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`~transformers.BartTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+
+            T5 uses the :obj:`pad_token_id` as the starting token for :obj:`decoder_input_ids` generation. If
+            :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
+            :obj:`past_key_values`).
 
             To know more on how to prepare :obj:`decoder_input_ids` for pretraining take a look at `T5 Training
             <./t5.html#training>`__. If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both unset,
             :obj:`decoder_input_ids` takes the value of :obj:`input_ids`.
-        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
+        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
         encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
@@ -1117,6 +1128,7 @@ class T5Model(T5PreTrainedModel):
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
+        encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
         self.encoder = T5Stack(encoder_config, self.shared)
@@ -1272,6 +1284,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
+        encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
         self.encoder = T5Stack(encoder_config, self.shared)

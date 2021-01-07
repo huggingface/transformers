@@ -272,14 +272,13 @@ def booleans_processing(config, **kwargs):
             if kwargs["output_hidden_states"] is not None
             else config.output_hidden_states
         )
-
-        if "return_dict" in kwargs:
-            final_booleans["return_dict"] = (
-                kwargs["return_dict"] if kwargs["return_dict"] is not None else config.return_dict
-            )
+        final_booleans["return_dict"] = (
+            kwargs["return_dict"] if kwargs["return_dict"] is not None else config.return_dict
+        )
 
         if "use_cache" in kwargs:
             final_booleans["use_cache"] = kwargs["use_cache"] if kwargs["use_cache"] is not None else config.use_cache
+
     else:
         if (
             kwargs["output_attentions"] is not None
@@ -294,12 +293,9 @@ def booleans_processing(config, **kwargs):
         final_booleans["output_attentions"] = config.output_attentions
         final_booleans["output_hidden_states"] = config.output_hidden_states
 
-        if "return_dict" in kwargs:
-            if kwargs["return_dict"] is not None:
-                logger.warning(
-                    "The parameter `return_dict` cannot be set in graph mode and will always be set to `True`."
-                )
-            final_booleans["return_dict"] = True
+        if kwargs["return_dict"] is not None:
+            logger.warning("The parameter `return_dict` cannot be set in graph mode and will always be set to `True`.")
+        final_booleans["return_dict"] = True
 
         if "use_cache" in kwargs:
             final_booleans["use_cache"] = config.use_cache
@@ -568,7 +564,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         Returns:
             :obj:`Dict[str, tf.Tensor]`: The dummy inputs.
         """
-        return {"input_ids": tf.constant(DUMMY_INPUTS)}
+        return {
+            "input_ids": tf.constant(DUMMY_INPUTS),
+        }
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -583,6 +581,37 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        """
+        Method used for serving the model.
+
+        Args:
+            inputs (:obj:`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionnary of tensors.
+        """
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
+    def serving_output(output):
+        """
+        Prepare the output of the saved model. Each model must implement this function.
+
+        Args:
+            output (:obj:`~transformers.TFBaseModelOutput`):
+                The output returned by the model.
+        """
+        raise NotImplementedError
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         """
@@ -808,7 +837,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         """
         raise NotImplementedError
 
-    def save_pretrained(self, save_directory):
+    def save_pretrained(self, save_directory, saved_model=False, version=1):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
         :func:`~transformers.TFPreTrainedModel.from_pretrained` class method.
@@ -816,11 +845,22 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         Arguments:
             save_directory (:obj:`str`):
                 Directory to which to save. Will be created if it doesn't exist.
+            saved_model (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                If the model has to be saved in saved model format as well or not.
+            version (:obj:`int`, `optional`, defaults to 1):
+                The version of the saved model. A saved model needs to be versioned in order to be properly loaded by
+                TensorFlow Serving as detailed in the official documentation
+                https://www.tensorflow.org/tfx/serving/serving_basic
         """
         if os.path.isfile(save_directory):
             logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
             return
         os.makedirs(save_directory, exist_ok=True)
+
+        if saved_model:
+            saved_model_dir = os.path.join(save_directory, "saved_model", str(version))
+            self.save(saved_model_dir, include_optimizer=False, signatures=self.serving)
+            logger.info(f"Saved model created in {saved_model_dir}")
 
         # Save configuration file
         self.config.save_pretrained(save_directory)
@@ -1033,7 +1073,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             # Load from a PyTorch checkpoint
             return load_pytorch_checkpoint_in_tf2_model(model, resolved_archive_file, allow_missing_keys=True)
 
-        model(model.dummy_inputs, training=False)  # build the network with dummy inputs
+        model(model.dummy_inputs)  # build the network with dummy inputs
 
         assert os.path.isfile(resolved_archive_file), "Error retrieving file {}".format(resolved_archive_file)
         # 'by_name' allow us to do transfer learning by skipping/adding layers
@@ -1046,7 +1086,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 "If you tried to load a TF 2.0 model from a PyTorch checkpoint, please set from_pt=True. "
             )
 
-        model(model.dummy_inputs, training=False)  # Make sure restore ops are run
+        model(model.dummy_inputs)  # Make sure restore ops are run
 
         if cls._keys_to_ignore_on_load_missing is not None:
             for pat in cls._keys_to_ignore_on_load_missing:

@@ -30,9 +30,19 @@ PATH_TO_DOC = "docs/source"
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = [
     # models to ignore for not tested
+    "LEDEncoder",  # Building part of bigger (tested) model.
+    "LEDDecoder",  # Building part of bigger (tested) model.
     "BartDecoder",  # Building part of bigger (tested) model.
     "BartEncoder",  # Building part of bigger (tested) model.
     "BertLMHeadModel",  # Needs to be setup as decoder.
+    "BlenderbotSmallEncoder",  # Building part of bigger (tested) model.
+    "BlenderbotSmallDecoder",  # Building part of bigger (tested) model.
+    "BlenderbotEncoder",  # Building part of bigger (tested) model.
+    "BlenderbotDecoder",  # Building part of bigger (tested) model.
+    "MBartEncoder",  # Building part of bigger (tested) model.
+    "MBartDecoder",  # Building part of bigger (tested) model.
+    "PegasusEncoder",  # Building part of bigger (tested) model.
+    "PegasusDecoder",  # Building part of bigger (tested) model.
     "DPREncoder",  # Building part of bigger (tested) model.
     "DPRSpanPredictor",  # Building part of bigger (tested) model.
     "ProphetNetDecoderWrapper",  # Building part of bigger (tested) model.
@@ -64,8 +74,14 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = [
     # models to ignore for model xxx mapping
+    "LEDEncoder",
+    "LEDDecoder",
     "BartDecoder",
     "BartEncoder",
+    "BlenderbotSmallEncoder",
+    "BlenderbotSmallDecoder",
+    "BlenderbotEncoder",
+    "BlenderbotDecoder",
     "DPRContextEncoder",
     "DPREncoder",
     "DPRReader",
@@ -74,7 +90,11 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "FunnelBaseModel",
     "GPT2DoubleHeadsModel",
     "MT5EncoderModel",
+    "MBartEncoder",
+    "MBartDecoder",
     "OpenAIGPTDoubleHeadsModel",
+    "PegasusEncoder",
+    "PegasusDecoder",
     "ProphetNetDecoder",
     "ProphetNetEncoder",
     "ProphetNetDecoderWrapper",
@@ -315,7 +335,7 @@ def find_all_documented_objects():
     """ Parse the content of all doc files to detect which classes and functions it documents"""
     documented_obj = []
     for doc_file in Path(PATH_TO_DOC).glob("**/*.rst"):
-        with open(doc_file) as f:
+        with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
             content = f.read()
         raw_doc_objs = re.findall(r"(?:autoclass|autofunction):: transformers.(\S+)\s+", content)
         documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
@@ -382,13 +402,6 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "BertJapaneseTokenizer",
     "CharacterTokenizer",
     "MecabTokenizer",
-    # Bertweet
-    "BertweetTokenizer",
-    # Herbert
-    "HerbertTokenizer",
-    "HerbertTokenizerFast",
-    # Phoebus
-    "PhobertTokenizer",
     # Benchmarks
     "PyTorchBenchmark",
     "PyTorchBenchmarkArguments",
@@ -400,9 +413,6 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
 def ignore_undocumented(name):
     """Rules to determine if `name` should be undocumented."""
     # NOT DOCUMENTED ON PURPOSE.
-    # Magic attributes are not documented.
-    if name.startswith("__"):
-        return True
     # Constants uppercase are not documented.
     if name.isupper():
         return True
@@ -446,7 +456,9 @@ def ignore_undocumented(name):
 def check_all_objects_are_documented():
     """ Check all models are properly documented."""
     documented_objs = find_all_documented_objects()
-    undocumented_objs = [c for c in dir(transformers) if c not in documented_objs and not ignore_undocumented(c)]
+    modules = transformers._modules
+    objects = [c for c in dir(transformers) if c not in modules and not c.startswith("_")]
+    undocumented_objs = [c for c in objects if c not in documented_objs and not ignore_undocumented(c)]
     if len(undocumented_objs) > 0:
         raise Exception(
             "The following objects are in the public init so should be documented:\n - "

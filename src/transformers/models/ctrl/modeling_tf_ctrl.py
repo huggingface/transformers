@@ -375,7 +375,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         all_hidden_states = () if inputs["output_hidden_states"] else None
         all_attentions = () if inputs["output_attentions"] else None
         for i, (h, layer_past) in enumerate(zip(self.h, inputs["past"])):
-            if output_hidden_states:
+            if inputs["output_hidden_states"]:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
             outputs = h(
                 hidden_states,
@@ -384,7 +384,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
                 inputs["attention_mask"],
                 inputs["head_mask"][i],
                 inputs["use_cache"],
-                output_attentions,
+                inputs["output_attentions"],
                 training=inputs["training"],
             )
             hidden_states, present = outputs[:2]
@@ -392,7 +392,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             if inputs["use_cache"]:
                 presents = presents + (present,)
 
-            if output_attentions:
+            if inputs["output_attentions"]:
                 all_attentions = all_attentions + (outputs[2],)
 
         hidden_states = self.layernorm(hidden_states)
@@ -594,6 +594,18 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
         )
         return outputs
 
+    def serving_output(self, output):
+        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutputWithPast(
+            last_hidden_state=output.last_hidden_state,
+            past_key_values=pkv,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
 
 class TFCTRLLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
@@ -727,6 +739,18 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+        )
+
+    def serving_output(self, output):
+        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFCausalLMOutputWithPast(
+            logits=output.logits,
+            past_key_values=pkv,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -884,4 +908,14 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
             logits=pooled_logits,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+        )
+
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFSequenceClassifierOutput(
+            logits=output.logits,
+            hidden_states=hs,
+            attentions=attns,
         )

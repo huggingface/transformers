@@ -480,8 +480,6 @@ import copy
 import tempfile
 import unittest
 
-import timeout_decorator  # noqa
-
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
@@ -682,23 +680,6 @@ class {{cookiecutter.camelcase_modelname}}ModelTest(ModelTesterMixin, Generation
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    def test_initialization_more(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        model = {{cookiecutter.camelcase_modelname}}Model(config)
-        model.to(torch_device)
-        model.eval()
-        # test init
-        self.assertTrue((model.encoder.embed_tokens.weight == model.shared.weight).all().item())
-
-        def _check_var(module):
-            """Check that we initialized various parameters from N(0, config.init_std)."""
-            self.assertAlmostEqual(torch.std(module.weight).item(), config.init_std, 2)
-
-        _check_var(model.encoder.embed_tokens)
-        _check_var(model.encoder.layers[0].self_attn.k_proj)
-        _check_var(model.encoder.layers[0].fc1)
-        _check_var(model.encoder.embed_positions)
 
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()

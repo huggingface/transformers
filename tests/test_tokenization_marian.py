@@ -21,10 +21,11 @@ from pathlib import Path
 from shutil import copyfile
 
 from transformers import BatchEncoding, MarianTokenizer
-from transformers.testing_utils import _sentencepiece_available, _torch_available, require_sentencepiece
+from transformers.file_utils import is_sentencepiece_available, is_torch_available
+from transformers.testing_utils import require_sentencepiece
 
 
-if _sentencepiece_available:
+if is_sentencepiece_available():
     from transformers.models.marian.tokenization_marian import save_json, vocab_files_names
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -35,7 +36,7 @@ SAMPLE_SP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/t
 mock_tokenizer_config = {"target_lang": "fi", "source_lang": "en"}
 zh_code = ">>zh<<"
 ORG_NAME = "Helsinki-NLP/"
-FRAMEWORK = "pt" if _torch_available else "tf"
+FRAMEWORK = "pt" if is_torch_available() else "tf"
 
 
 @require_sentencepiece
