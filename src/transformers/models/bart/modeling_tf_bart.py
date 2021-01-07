@@ -504,18 +504,6 @@ class TFBartPretrainedModel(TFPreTrainedModel):
         base_model.encoder.set_embed_tokens(embed_tokens)
         base_model.decoder.set_embed_tokens(embed_tokens)
 
-    def get_output_embeddings(self):
-        return self.get_input_embeddings()
-
-    def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.get_input_embeddings()
-
-    def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
-
     @tf.function(
         input_signature=[
             {

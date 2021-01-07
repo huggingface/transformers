@@ -1877,20 +1877,6 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
         }
         return dummy_inputs
     
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
     def get_input_embeddings(self):
         base_model = getattr(self, self.base_model_prefix, self)
 
@@ -1913,6 +1899,21 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
         embed_tokens = TFWrappedEmbeddings(base_model.shared, abs_scope_name=shared_abs_scope_name)
         base_model.encoder.set_embed_tokens(embed_tokens)
         base_model.decoder.set_embed_tokens(embed_tokens)
+    
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
 
 
 {{cookiecutter.uppercase_modelname}}_START_DOCSTRING = r"""

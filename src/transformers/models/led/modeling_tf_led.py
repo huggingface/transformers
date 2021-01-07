@@ -1205,6 +1205,21 @@ class TFLEDPreTrainedModel(TFPreTrainedModel):
         base_model.encoder.set_embed_tokens(embed_tokens)
         base_model.decoder.set_embed_tokens(embed_tokens)
 
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
 
 @dataclass
 # Copied from transformers.models.longformer.modeling_tf_longformer.TFLongformerBaseModelOutput with TFLongformer->TFLEDEncoder
@@ -2078,15 +2093,6 @@ class TFLEDModel(TFLEDPreTrainedModel):
             encoder_attentions=enc_attns,
             encoder_global_attentions=enc_g_attns,
         )
-
-    def get_input_embeddings(self):
-        return self.shared
-
-    def set_input_embeddings(self, value):
-        self.shared = value
-
-    def get_output_embeddings(self):
-        return self.shared
 
 
 @add_start_docstrings(

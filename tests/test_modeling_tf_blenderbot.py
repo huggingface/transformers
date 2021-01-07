@@ -77,11 +77,10 @@ class TFBlenderbotModelTest(TFModelTesterMixin, unittest.TestCase):
                 name = model.get_bias()
                 assert name is None
 
-<<<<<<< HEAD
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
         pass
-=======
+
     def test_resize_token_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -144,7 +143,6 @@ class TFBlenderbotModelTest(TFModelTesterMixin, unittest.TestCase):
                             if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
                                 models_equal = False
                     self.assertTrue(models_equal)
->>>>>>> 328b8edbf... Rework bert+blenderbot
 
 
 @is_pt_tf_cross_test
