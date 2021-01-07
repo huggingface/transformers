@@ -131,7 +131,7 @@ except importlib_metadata.PackageNotFoundError:
 
 _scatter_available = importlib.util.find_spec("torch_scatter") is not None
 try:
-    _scatter_version = importlib_metadata.version("torch_scatterr")
+    _scatter_version = importlib_metadata.version("torch_scatter")
     logger.debug(f"Successfully imported torch-scatter version {_scatter_version}")
 except importlib_metadata.PackageNotFoundError:
     _scatter_available = False
