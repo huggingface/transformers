@@ -278,7 +278,7 @@ class Trainer:
             model = model.to(args.device)
         else:
             # Force n_gpu to 1 to avoid DataParallel.
-            self.args._force_n_gpu = 1
+            self.args._n_gpu = 1
 
         # later use `self.model is self.model_wrapped` to check if it's wrapped or not
         self.model_wrapped = model

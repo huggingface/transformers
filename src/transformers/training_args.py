@@ -398,6 +398,7 @@ class TrainingArguments:
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
     adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace Adam by Adafactor."})
+    _n_gpu: int = field(init=False, repr=False, default=0)
 
     def __post_init__(self):
         if self.disable_tqdm is None:
@@ -418,7 +419,7 @@ class TrainingArguments:
 
         if is_torch_available() and self.device.type != "cuda" and self.fp16:
             raise ValueError("Mixed precision training with AMP or APEX (`--fp16`) can only be used on CUDA devices.")
-        self._force_n_gpu = None
+        self._n_gpu = torch.cuda.device_count()
 
     def __repr__(self):
         # We override the default repr to remove deprecated arguments from the repr. This method should be removed once
@@ -440,10 +441,7 @@ class TrainingArguments:
                 "version. Using `--per_device_train_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_train_batch_size or self.per_device_train_batch_size
-        if not self.model_parallel:
-            train_batch_size = per_device_batch_size * max(1, self.n_gpu)
-        else:
-            train_batch_size = per_device_batch_size
+        train_batch_size = per_device_batch_size * max(1, self.n_gpu)
         return train_batch_size
 
     @property
@@ -457,10 +455,7 @@ class TrainingArguments:
                 "version. Using `--per_device_eval_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_eval_batch_size or self.per_device_eval_batch_size
-        if not self.model_parallel:
-            eval_batch_size = per_device_batch_size * max(1, self.n_gpu)
-        else:
-            eval_batch_size = per_device_batch_size
+        eval_batch_size = per_device_batch_size * max(1, self.n_gpu)
         return eval_batch_size
 
     @cached_property
@@ -481,7 +476,7 @@ class TrainingArguments:
             # GPUs available in the environment, so `CUDA_VISIBLE_DEVICES=1,2` with `cuda:0`
             # will use the first GPU in that env, i.e. GPU#1
             device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-            n_gpu = torch.cuda.device_count() if self._force_n_gpu is None else self._force_n_gpu
+            n_gpu = self._n_gpu
         else:
             # Here, we'll use torch.distributed.
             # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
