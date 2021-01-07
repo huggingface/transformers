@@ -210,9 +210,6 @@ class TrainingArguments:
             - :obj:`True` if :obj:`metric_for_best_model` is set to a value that isn't :obj:`"loss"` or
               :obj:`"eval_loss"`.
             - :obj:`False` if :obj:`metric_for_best_model` is not set, or set to :obj:`"loss"` or :obj:`"eval_loss"`.
-        model_parallel (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If the model supports model parallelism and there is more than one device, whether to use model parallelism
-            to distribute the model's modules across devices or not.
         ignore_skip_data (:obj:`bool`, `optional`, defaults to :obj:`False`):
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to :obj:`True`, the training will begin faster (as that skipping
@@ -245,15 +242,6 @@ class TrainingArguments:
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
     do_eval: bool = field(default=None, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
-    model_parallel: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "If there are more than one devices, whether to use model parallelism to distribute the "
-                "model's modules across devices."
-            )
-        },
-    )
     evaluation_strategy: EvaluationStrategy = field(
         default="no",
         metadata={"help": "The evaluation strategy to use."},

@@ -267,11 +267,6 @@ class Trainer:
                 )
             self.model_init = model_init
 
-        if self.args.model_parallel and not model.is_parallelizable:
-            raise ValueError(
-                f"{model.__class__.__name__} implementation currently doesn't support model parallelism, therefore --model_parallel cl arg cannot be used"
-            )
-
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
@@ -279,7 +274,7 @@ class Trainer:
         self.tokenizer = tokenizer
 
         # Model parallel
-        if not self.args.model_parallel:
+        if not (model.is_parallelizable and model.parallel):
             model = model.to(args.device)
 
         # later use `self.model is self.model_wrapped` to check if it's wrapped or not
@@ -674,7 +669,7 @@ class Trainer:
             set_seed(self.args.seed)
 
             model = self.call_model_init(trial)
-            if not self.args.model_parallel:
+            if not (model.is_parallelizable and model.parallel):
                 model = model.to(self.args.device)
 
             self.model = model
@@ -724,7 +719,7 @@ class Trainer:
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
 
         # Multi-gpu training (should be after apex fp16 initialization)
-        if self.args.n_gpu > 1 and not self.args.model_parallel:
+        if self.args.n_gpu > 1 and not (model.is_parallelizable and model.parallel):
             model = torch.nn.DataParallel(model)
 
         # Distributed training (should be after apex fp16 initialization)
@@ -935,7 +930,7 @@ class Trainer:
             )
             if isinstance(self.model, PreTrainedModel):
                 self.model = self.model.from_pretrained(self.state.best_model_checkpoint)
-                if not self.args.model_parallel:
+                if not (model.is_parallelizable and model.parallel):
                     self.model = self.model.to(self.args.device)
             else:
                 state_dict = torch.load(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME))
@@ -1486,7 +1481,7 @@ class Trainer:
 
         model = self.model
         # multi-gpu eval
-        if self.args.n_gpu > 1 and not self.args.model_parallel:
+        if self.args.n_gpu > 1 and not (model.is_parallelizable and model.parallel):
             model = torch.nn.DataParallel(model)
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
