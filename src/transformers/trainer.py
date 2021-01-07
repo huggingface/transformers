@@ -160,6 +160,10 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
+def is_parallel(model):
+    return hasattr(model, "is_parallelizable") and model.is_parallelizable and model.parallel
+
+
 def _model_unwrap(model: nn.Module) -> nn.Module:
     # since there could be multiple levels of wrapping, unwrap recursively
     if hasattr(model, "module"):
@@ -274,7 +278,7 @@ class Trainer:
         self.tokenizer = tokenizer
 
         # Model parallel
-        if not (model.is_parallelizable and model.parallel):
+        if not (is_parallel(model)):
             model = model.to(args.device)
         else:
             # Force n_gpu to 1 to avoid DataParallel.
@@ -672,7 +676,7 @@ class Trainer:
             set_seed(self.args.seed)
 
             model = self.call_model_init(trial)
-            if not (model.is_parallelizable and model.parallel):
+            if not is_parallel(model):
                 model = model.to(self.args.device)
 
             self.model = model
@@ -933,7 +937,7 @@ class Trainer:
             )
             if isinstance(self.model, PreTrainedModel):
                 self.model = self.model.from_pretrained(self.state.best_model_checkpoint)
-                if not (model.is_parallelizable and model.parallel):
+                if not is_parallel(model):
                     self.model = self.model.to(self.args.device)
             else:
                 state_dict = torch.load(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME))
