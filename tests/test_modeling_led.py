@@ -149,6 +149,10 @@ class LEDModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()
+        global_attention_mask = torch.zeros_like(inputs_dict["input_ids"])
+        global_attention_mask[:, -1] = 1
+        inputs_dict["global_attention_mask"] = global_attention_mask
+
         return config, inputs_dict
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
