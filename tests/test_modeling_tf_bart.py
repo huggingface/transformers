@@ -164,6 +164,10 @@ class TFBartModelTest(TFModelTesterMixin, unittest.TestCase):
             name = model.get_prefix_bias_name()
             assert name is None
 
+    def test_saved_model_creation(self):
+        # This test is too long (>30sec) and makes fail the CI
+        pass
+
 
 @require_tf
 class TFBartHeadTests(unittest.TestCase):
