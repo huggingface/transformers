@@ -44,6 +44,7 @@ from .file_utils import (
 )
 from .utils import logging
 
+
 if TYPE_CHECKING:
     if is_torch_available():
         import torch
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
         import tensorflow as tf
     if is_flax_available():
         import jax.numpy as jnp
+
 
 def _is_numpy(x):
     return isinstance(x, np.ndarray)
