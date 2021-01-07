@@ -781,6 +781,8 @@ class TFModelTesterMixin:
             inputs = self._prepare_for_class(inputs_dict, model_class)
             inputs_np = prepare_numpy_arrays(inputs)
 
+            
+
     def test_resize_token_embeddings(self):
         if not self.test_resize_embeddings:
             return
