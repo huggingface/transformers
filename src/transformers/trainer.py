@@ -900,7 +900,7 @@ class Trainer:
             # find_unused_parameters breaks checkpointing as per
             # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
 
-        # for the rest of this function ``model`` is the outside model, whether it was wrapped or not
+        # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
             self.model_wrapped = model
 

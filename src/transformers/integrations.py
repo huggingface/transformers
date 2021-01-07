@@ -50,7 +50,6 @@ try:
 except ImportError:
     _has_deepspeed = False
 
-# No transformer imports above this point
 
 from .file_utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
 from .trainer_callback import TrainerCallback  # noqa: E402
