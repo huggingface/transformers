@@ -18,8 +18,6 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 
 import collections
 import inspect
-import io
-import json
 import math
 import os
 import re
@@ -27,7 +25,6 @@ import shutil
 import time
 import warnings
 from pathlib import Path
-from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 
@@ -286,8 +283,20 @@ class Trainer:
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
 
+        # Mixed precision setup: part 1
+        self.use_apex = False
+        self.use_amp = False
+        fp16_backend = None
+
+        if args.fp16:
+            if args.fp16_backend == "auto":
+                fp16_backend = "amp" if _is_native_amp_available else "apex"
+            else:
+                fp16_backend = args.fp16_backend
+            logger.info(f"Using {fp16_backend} fp16 backend")
+
         if args.deepspeed:
-            model, optimizer, lr_scheduler = self._init_deepspeed(model)
+            model, optimizer, lr_scheduler = self._init_deepspeed(model, fp16_backend)
             self.optimizer = optimizer
             self.lr_scheduler = lr_scheduler
         else:
@@ -351,22 +360,15 @@ class Trainer:
                 raise ValueError("Using sharded DDP only works in distributed training.")
             elif not is_fairscale_available():
                 raise ImportError("Sharded DDP training requires fairscale: `pip install fairscale`.")
+            elif args.deepspeed:
+                raise ValueError("can't use --sharded_ddp together with --deepspeed.")
             else:
                 self.sharded_dpp = True
 
-        # Mixed precision setup
-        self.use_apex = False
-        self.use_amp = False
-
+        # Mixed precision setup: part 2
         # deepspeed manages its own fp16, so don't interfere
         if args.fp16 and not args.deepspeed:
-            if args.fp16_backend == "auto":
-                backend = "amp" if _is_native_amp_available else "apex"
-            else:
-                backend = args.fp16_backend
-            logger.info(f"Using {backend} fp16 backend")
-
-            if backend == "amp":
+            if fp16_backend == "amp":
                 self.use_amp = True
                 self.scaler = ShardedGradScaler() if self.sharded_dpp else torch.cuda.amp.GradScaler()
             else:
@@ -422,22 +424,26 @@ class Trainer:
                 "can't figure out the number of training steps, either set --max_steps or fix the dataloader so that it returns the length of the dataset"
             )
 
-    def _init_deepspeed(self, model):
+    def _init_deepspeed(self, model, fp16_backend):
+        import io
+        import json
+        from types import SimpleNamespace
+
         args = self.args
 
-        # for clarity extract what args are being passed to deepspeed
-        # XXX: we shouldn't need to pass deepspeed_config anymore, since we handle it ourselves, but
-        # currently ds won't work without this argument present in args
+        # for clarity extract the specific cl args that are being passed to deepspeed
         ds_args = dict(local_rank=args.local_rank)
 
         with io.open(args.deepspeed, "r", encoding="utf-8") as f:
             config = json.load(f)
 
-        # The following code injects some of trainer's cl args into the DS config
+        # The following code translates relevant trainer's cl args into the DS config
 
         # First to ensure that there is no mismatch between cl args values and presets in the config
-        # file, ask to not set "train_batch_size", "train_micro_batch_size_per_gpu",
-        # "gradient_accumulation_steps" in ds config file
+        # file, ask to not set in ds config file:
+        # - "train_batch_size",
+        # - "train_micro_batch_size_per_gpu",
+        # - "gradient_accumulation_steps"
         bs_keys = ["train_batch_size", "train_micro_batch_size_per_gpu"]
         if len([x for x in bs_keys if x in config.keys()]):
             raise ValueError(
@@ -454,21 +460,23 @@ class Trainer:
         config["train_micro_batch_size_per_gpu"] = args.per_device_train_batch_size
         config["gradient_accumulation_steps"] = args.gradient_accumulation_steps
 
-        # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
-        optimizer_configs = {
-            "Adam": {
-                "lr": args.learning_rate,
-                "betas": [args.adam_beta1, args.adam_beta2],
-                "eps": args.adam_epsilon,
-                "weight_decay": args.weight_decay,
-            }
-        }
-        optimizer = "Adam"  # currently trainer only has Adam config params
-
         # override only if the ds config doesn't already have this section
         if "optimizer" in config:
-            logger.info("Keeping the optimizer config from the config file intact")
+            logger.info(
+                "Keeping the `optimizer` config from the config file intact, ignoring any optimizer-specific cl args"
+            )
         else:
+            # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
+            optimizer_configs = {
+                "Adam": {
+                    "lr": args.learning_rate,
+                    "betas": [args.adam_beta1, args.adam_beta2],
+                    "eps": args.adam_epsilon,
+                    "weight_decay": args.weight_decay,
+                }
+            }
+            optimizer = "Adam"  # currently trainer only has Adam config params
+
             config["optimizer"] = {
                 "type": optimizer,
                 "params": optimizer_configs[optimizer],
@@ -486,7 +494,7 @@ class Trainer:
         # override only if the ds config doesn't already have this section
         if "scheduler" in config:
             logger.info(
-                "Keeping the scheduler config from the config file intact, ignoring any scheduler-specific cl args"
+                "Keeping the `scheduler` config from the config file intact, ignoring any scheduler-specific cl args"
             )
         else:
             if args.lr_scheduler_type == SchedulerType.LINEAR:
@@ -514,16 +522,31 @@ class Trainer:
             }
 
         # fp16
-        if "fp16" in config:
-            logger.info("Keeping the fp16 config from the config file intact, ignoring any fp16-specific cl args")
-        elif args.fp16:
-            # XXX: not sure what to do with args.fp16_backend
-            config["fp16"] = {
-                "enabled": True,
-                "opt_level": args.fp16_opt_level,
-            }
+        if fp16_backend is not None:
+            # Deepspeed has 2 possible fp16 config entries:
+            # - `fp16`: for the native amp - it has a bunch of optional params but we won't set any here unless the user did the work
+            # - `amp`: which delegates amp work to apex (which needs to be available), but it cannot be used with any ZeRO features, so probably best to be avoided.
+            if fp16_backend == "apex":
+                if "amp" in config:
+                    logger.info(
+                        "Keeping the `amp` config from the config file intact, ignoring any amp-specific cl args"
+                    )
+                else:
+                    config["amp"] = {
+                        "enabled": True,
+                        "opt_level": args.fp16_opt_level,
+                    }
+            else:  # fp16_backend == amp
+                if "fp16" in config:
+                    logger.info(
+                        "Keeping the `fp16` config from the config file intact, ignoring any fp16-specific cl args"
+                    )
+                else:
+                    config["fp16"] = {
+                        "enabled": True,
+                    }
 
-        # init that takes some config via `args`, and the bulk of it via `config_params`
+        # init that takes part of the config via `args`, and the bulk of it via `config_params`
         model_parameters = filter(lambda p: p.requires_grad, model.parameters())
         model, optimizer, _, lr_scheduler = deepspeed.initialize(
             args=SimpleNamespace(**ds_args),  # expects an obj
