@@ -121,6 +121,7 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     "models": [],
+    # Models
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",

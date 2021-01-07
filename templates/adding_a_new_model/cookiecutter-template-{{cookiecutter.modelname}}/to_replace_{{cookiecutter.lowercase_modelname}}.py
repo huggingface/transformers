@@ -89,7 +89,7 @@
     _import_structure["models.{{cookiecutter.lowercase_modelname}}"].append("{{cookiecutter.camelcase_modelname}}TokenizerFast")
 # End.
 
-# Below: "    "models": [],"
+# Below: "    # Models"
 # Replace with:
     "{{cookiecutter.lowercase_modelname}}": ["{{cookiecutter.uppercase_modelname}}_PRETRAINED_CONFIG_ARCHIVE_MAP", "{{cookiecutter.camelcase_modelname}}Config", "{{cookiecutter.camelcase_modelname}}Tokenizer"],
 # End.
@@ -161,7 +161,7 @@
 # To replace in: "src/transformers/models/__init__.py"
 # Below: "from . import ("
 # Replace with:
-        {{cookiecutter.lowercase_modelname}},
+    {{cookiecutter.lowercase_modelname}},
 # End.
 
 
