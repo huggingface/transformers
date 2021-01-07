@@ -1,0 +1,4 @@
+for i in {0..20}
+do
+   RUN_SLOW=1 pytest tests/test_modeling_tf_gpt2.py::TFGPT2ModelTest::test_gpt2_model_past_large_inputs
+done
