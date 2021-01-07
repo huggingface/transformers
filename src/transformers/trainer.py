@@ -161,7 +161,7 @@ logger = logging.get_logger(__name__)
 
 
 def is_parallel(model):
-    return hasattr(model, "is_parallelizable") and model.is_parallelizable and model.parallel
+    return hasattr(model, "is_parallelizable") and model.is_parallelizable and model.model_parallel
 
 
 def _model_unwrap(model: nn.Module) -> nn.Module:
