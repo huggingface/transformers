@@ -271,6 +271,7 @@ else:
 
 # tokenziers-backed objects
 if is_tokenizers_available():
+    # Fast tokenizers
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")

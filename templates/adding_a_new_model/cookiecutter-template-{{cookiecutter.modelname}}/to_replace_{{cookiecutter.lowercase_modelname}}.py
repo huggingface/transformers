@@ -84,7 +84,7 @@
 {% endif -%}
 # End.
 
-# Below: "if is_tokenizers_available():"
+# Below: "    # Fast tokenizers"
 # Replace with:
     _import_structure["models.{{cookiecutter.lowercase_modelname}}"].append("{{cookiecutter.camelcase_modelname}}TokenizerFast")
 # End.
