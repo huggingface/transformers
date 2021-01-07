@@ -500,6 +500,7 @@ class BartClassificationHead(nn.Module):
 class BartPretrainedModel(PreTrainedModel):
     config_class = BartConfig
     base_model_prefix = "model"
+    is_parallelizable = True
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -715,8 +716,8 @@ class BartEncoder(BartPretrainedModel):
             for layer in v:
                 self.layers[layer].parallelize(f"cuda:{k}")
         self.layernorm_embedding.to(self.first_device)
-        if self.layer_norm is not None:
-            self.layer_norm.to(self.last_device)  # XXX: first?
+        # if self.layer_norm is not None:
+        #     self.layer_norm.to(self.last_device)  # XXX: first?
 
         self.model_parallel = True
 
@@ -923,8 +924,8 @@ class BartDecoder(BartPretrainedModel):
             for layer in v:
                 self.layers[layer].parallelize(f"cuda:{k}")
         self.layernorm_embedding.to(self.first_device)
-        if self.layer_norm is not None:
-            self.layer_norm.to(self.last_device)  # XXX: first?
+        # if self.layer_norm is not None:
+        #     self.layer_norm.to(self.last_device)  # XXX: first?
 
         self.model_parallel = True
 
