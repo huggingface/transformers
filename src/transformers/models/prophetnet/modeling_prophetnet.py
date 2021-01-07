@@ -177,9 +177,8 @@ def ngram_attention_bias(sequence_length, ngram, device, dtype):
     for stream_idx in range(ngram):
         right_block[stream_idx].fill_diagonal_(0, wrap=False)
         left_block[stream_idx].triu_(-stream_idx + 1)
-        for i in range(stream_idx):
-            left_block[stream_idx][i][0] = 0
 
+    left_block[:, :, 0] = 0
     return torch.cat([left_block, right_block], dim=2)
 
 
