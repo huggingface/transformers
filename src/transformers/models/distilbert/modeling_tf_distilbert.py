@@ -96,7 +96,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
             initializer_range=config.initializer_range,
             name="position_embeddings",
         )
-        self.embeddings = tf.keras.layers.Add()
+        self.embeddings_sum = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.dropout)
 
@@ -117,7 +117,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
         else:
             position_embeds = self.position_embeddings(position_ids=position_ids)
 
-        final_embeddings = self.embeddings(inputs=[inputs_embeds, position_embeds])
+        final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds])
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
 

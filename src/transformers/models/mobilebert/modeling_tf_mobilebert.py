@@ -137,7 +137,7 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
             initializer_range=config.initializer_range,
             name="token_type_embeddings",
         )
-        self.embeddings = tf.keras.layers.Add()
+        self.embeddings_sum = tf.keras.layers.Add()
         self.embedding_transformation = tf.keras.layers.Dense(config.hidden_size, name="embedding_transformation")
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
@@ -189,7 +189,7 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
             position_embeds = self.position_embeddings(position_ids=position_ids)
 
         token_type_embeds = self.token_type_embeddings(token_type_ids=token_type_ids)
-        final_embeddings = self.embeddings(inputs=[inputs_embeds, position_embeds, token_type_embeds])
+        final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds, token_type_embeds])
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
 

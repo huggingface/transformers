@@ -106,7 +106,7 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
             embeddings_initializer=get_initializer(config.initializer_range),
             name="position_embeddings",
         )
-        self.embeddings = tf.keras.layers.Add()
+        self.embeddings_sum = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
@@ -167,7 +167,7 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds=inputs_embeds)
 
         position_embeds = self.position_embeddings(inputs=position_ids)
-        final_embeddings = self.embeddings(inputs=[inputs_embeds, position_embeds])
+        final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds])
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
 
