@@ -51,7 +51,7 @@ if TYPE_CHECKING:
     if is_tf_available():
         import tensorflow as tf
     if is_flax_available():
-        import jax.numpy as jnp
+        import jax.numpy as jnp  # noqa: F401
 
 
 def _is_numpy(x):
@@ -71,7 +71,7 @@ def _is_tensorflow(x):
 
 
 def _is_jax(x):
-    import jax.numpy as jnp
+    import jax.numpy as jnp  # noqa: F811
 
     return isinstance(x, jnp.ndarray)
 
@@ -741,7 +741,7 @@ class BatchEncoding(UserDict):
         elif tensor_type == TensorType.JAX:
             if not is_flax_available():
                 raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
-            import jax.numpy as jnp
+            import jax.numpy as jnp  # noqa: F811
 
             as_tensor = jnp.array
             is_tensor = _is_jax
