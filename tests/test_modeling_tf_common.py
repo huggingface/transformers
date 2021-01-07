@@ -766,7 +766,7 @@ class TFModelTesterMixin:
                 inputs["decoder_inputs_embeds"] = self._get_embeds(wte, decoder_input_ids)
 
             model(inputs)
-    
+
     def test_numpy_arrays_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -774,9 +774,9 @@ class TFModelTesterMixin:
             inputs_np_dict = {}
             for k, v in inputs_dict.items():
                 inputs_np_dict[k] = v.numpy()
-            
+
             return inputs_np_dict
-        
+
         for model_class in self.all_model_classes:
             model = model_class(config)
 
