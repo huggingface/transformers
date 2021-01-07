@@ -398,7 +398,7 @@ class TrainingArguments:
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
     adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace Adam by Adafactor."})
-    _n_gpu: int = field(init=False, repr=False, default=0)
+    _n_gpu: int = field(default=0, repr=False)
 
     def __post_init__(self):
         if self.disable_tqdm is None:
