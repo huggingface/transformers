@@ -773,7 +773,10 @@ class TFModelTesterMixin:
         def prepare_numpy_arrays(inputs_dict):
             inputs_np_dict = {}
             for k, v in inputs_dict.items():
-                inputs_np_dict[k] = v.numpy()
+                if tf.is_tensor(v):
+                    inputs_np_dict[k] = v.numpy()
+                else:
+                    inputs_np_dict[k] = np.array(k)
 
             return inputs_np_dict
 
