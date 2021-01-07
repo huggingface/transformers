@@ -78,9 +78,13 @@ Once you are logged in with your model hub credentials, you can start building y
 
     transformers-cli repo create your-model-name
 
-This creates a repo on the model hub, which can be cloned. If you want to create a repo under a specific organization,
-you might find the `upload_a_new_repo.py script
-<https://github.com/huggingface/efficient_scripts/blob/main/upload_a_new_repo.py>`__ useful.
+If you want to create a repo under a specific organization, you should add a `--organization` flag:
+
+.. code-block:: bash
+
+    transformers-cli repo create your-model-name --organization your-org-name
+
+This creates a repo on the model hub, which can be cloned.
 
 .. code-block:: bash
 
@@ -100,14 +104,15 @@ with any other git repo.
     echo "hello" >> README.md
     git add . && git commit -m "Update from $USER"
 
-If you want to change multiple repos at once, the `change_config.py script
-<https://github.com/huggingface/efficient_scripts/blob/main/change_config.py>`__ can probably save you some time. We
-are intentionally not wrapping git too much, so that you can go on with the workflow you're used to and the tools you
-already know.
+We are intentionally not wrapping git too much, so that you can go on with the workflow you're used to and the tools
+you already know.
 
 The only learning curve you might have compared to regular git is the one for git-lfs. The documentation at
 `git-lfs.github.com <https://git-lfs.github.com/>`__ is decent, but we'll work on a tutorial with some tips and tricks
 in the coming weeks!
+
+Additionally, if you want to change multiple repos at once, the `change_config.py script
+<https://github.com/huggingface/efficient_scripts/blob/main/change_config.py>`__ can probably save you some time.
 
 Make your model work on all frameworks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
