@@ -49,19 +49,21 @@ class SimpleConversationPipelineTests(unittest.TestCase):
         )
         model = GPT2LMHeadModel(config)
         tokenizer = DummyTok()
-        nlp = pipeline(task="conversational", device=DEFAULT_DEVICE_NUM, model=model, tokenizer=tokenizer)
-        return nlp
+        conversation_agent = pipeline(
+            task="conversational", device=DEFAULT_DEVICE_NUM, model=model, tokenizer=tokenizer
+        )
+        return conversation_agent
 
     @require_torch
     def test_integration_torch_conversation(self):
-        nlp = self.get_pipeline()
+        conversation_agent = self.get_pipeline()
         conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
         conversation_2 = Conversation("What's the last book you have read?")
         # Then
         self.assertEqual(len(conversation_1.past_user_inputs), 0)
         self.assertEqual(len(conversation_2.past_user_inputs), 0)
         # When
-        result = nlp([conversation_1, conversation_2], max_length=48)
+        result = conversation_agent([conversation_1, conversation_2], max_length=48)
         # Then
         self.assertEqual(result, [conversation_1, conversation_2])
         self.assertEqual(
@@ -80,7 +82,7 @@ class SimpleConversationPipelineTests(unittest.TestCase):
 
         # When
         conversation_2.add_user_input("Why do you recommend it?")
-        result = nlp(conversation_2, max_length=49)
+        result = conversation_agent(conversation_2, max_length=49)
         # Then
         self.assertEqual(result, conversation_2)
         self.assertEqual(
@@ -94,13 +96,13 @@ class SimpleConversationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_history_cache(self):
-        nlp = self.get_pipeline()
+        conversation_agent = self.get_pipeline()
         conversation = Conversation(
             "Why do you recommend it?",
             past_user_inputs=["What's the last book you have read?"],
             generated_responses=["b"],
         )
-        _ = nlp(conversation, max_length=26)
+        _ = conversation_agent(conversation, max_length=26)
         self.assertEqual(conversation._index, 1)
         self.assertEqual(
             conversation._history,
