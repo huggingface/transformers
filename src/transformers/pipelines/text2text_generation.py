@@ -31,6 +31,7 @@ class Text2TextGenerationPipeline(Pipeline):
         text2text_generator("question: What is 42 ? context: 42 is the answer to life, the universe and everything")
     """
 
+    # Used in the return key of the pipeline.
     return_name = "generated"
 
     def __init__(self, *args, **kwargs):
@@ -153,6 +154,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
         summarizer("An apple a day, keeps the doctor away", min_length=5, max_length=20)
     """
 
+    # Used in the return key of the pipeline.
     return_name = "summary"
 
     def __call__(self, *args, **kwargs):
@@ -218,6 +220,7 @@ class TranslationPipeline(Text2TextGenerationPipeline):
         en_fr_translator("How old are you?")
     """
 
+    # Used in the return key of the pipeline.
     return_name = "translation"
 
     def check_inputs(self, input_length: int, min_length: int, max_length: int):
