@@ -42,13 +42,18 @@ import numpy as np
 from packaging import version
 from tqdm.auto import tqdm
 
-import importlib_metadata
 import requests
 from filelock import FileLock
 
 from . import __version__
 from .hf_api import HfFolder
 from .utils import logging
+
+# The package importlib_metadata is in a different place, depending on the python version.
+if version.parse(sys.version) < version.parse("3.8"):
+    import importlib_metadata
+else:
+    import importlib.metadata as importlib_metadata
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -131,7 +136,7 @@ except importlib_metadata.PackageNotFoundError:
 
 _scatter_available = importlib.util.find_spec("torch_scatter") is not None
 try:
-    _scatter_version = importlib_metadata.version("torch_scatterr")
+    _scatter_version = importlib_metadata.version("torch_scatter")
     logger.debug(f"Successfully imported torch-scatter version {_scatter_version}")
 except importlib_metadata.PackageNotFoundError:
     _scatter_available = False
