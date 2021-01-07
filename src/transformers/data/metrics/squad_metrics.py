@@ -27,8 +27,7 @@ import math
 import re
 import string
 
-from transformers import BasicTokenizer
-
+from ...models.bert import BasicTokenizer
 from ...utils import logging
 
 

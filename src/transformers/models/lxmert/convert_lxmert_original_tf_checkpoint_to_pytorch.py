@@ -20,7 +20,7 @@ import logging
 
 import torch
 
-from transformers import LxmertConfig, LxmertForPreTraining, load_tf_weights_in_lxmert
+from . import LxmertConfig, LxmertForPreTraining, load_tf_weights_in_lxmert
 
 
 logging.basicConfig(level=logging.INFO)

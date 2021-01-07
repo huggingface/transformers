@@ -15,11 +15,11 @@
 import os
 from argparse import ArgumentParser, Namespace
 
-from transformers import SingleSentenceClassificationProcessor as Processor
-from transformers import TextClassificationPipeline, is_tf_available, is_torch_available
-from transformers.commands import BaseTransformersCLICommand
-
+from ..data import SingleSentenceClassificationProcessor as Processor
+from ..file_utils import is_tf_available, is_torch_available
+from ..pipelines import TextClassificationPipeline
 from ..utils import logging
+from . import BaseTransformersCLICommand
 
 
 if not is_tf_available() and not is_torch_available():

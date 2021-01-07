@@ -22,8 +22,6 @@ from typing import Tuple
 
 import tensorflow as tf
 
-from transformers.modeling_tf_utils import TFWrappedEmbeddings
-
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
     DUMMY_INPUTS,
@@ -42,6 +40,7 @@ from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
     TFSharedEmbeddings,
+    TFWrappedEmbeddings,
     input_processing,
     keras_serializable,
     shape_list,

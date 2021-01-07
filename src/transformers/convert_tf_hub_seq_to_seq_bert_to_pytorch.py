@@ -17,7 +17,7 @@
 
 import argparse
 
-from transformers import (
+from . import (
     BertConfig,
     BertGenerationConfig,
     BertGenerationDecoder,

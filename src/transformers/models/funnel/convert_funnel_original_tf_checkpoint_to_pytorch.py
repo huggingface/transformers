@@ -20,7 +20,7 @@ import logging
 
 import torch
 
-from transformers import FunnelConfig, FunnelForPreTraining, load_tf_weights_in_funnel
+from . import FunnelConfig, FunnelForPreTraining, load_tf_weights_in_funnel
 
 
 logging.basicConfig(level=logging.INFO)

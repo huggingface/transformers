@@ -28,9 +28,7 @@ from typing import Callable, Dict, Generator, List, Optional, Text, Tuple, Union
 
 import numpy as np
 
-from transformers import add_end_docstrings
-
-from ...file_utils import is_pandas_available
+from ...file_utils import add_end_docstrings, is_pandas_available
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
