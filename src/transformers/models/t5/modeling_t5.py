@@ -40,7 +40,11 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
-from ...utils.model_parallel_utils import init_device_map, model_parallel_inputs_to_device
+from ...utils.model_parallel_utils import (
+    init_device_map,
+    model_parallel_inputs_to_device,
+    model_parallel_inputs_to_specific_device,
+)
 from .configuration_t5 import T5Config
 
 
@@ -1142,12 +1146,14 @@ class T5Model(T5PreTrainedModel):
         self.init_weights()
 
         self.model_parallel = False
+        self.main_device = None
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
         device_map = init_device_map(len(self.encoder.block), device_map)
         self.encoder.parallelize(device_map)
         self.decoder.parallelize(device_map)
+        self.main_device = self.encoder.first_device
         self.model_parallel = True
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
@@ -1254,6 +1260,11 @@ class T5Model(T5PreTrainedModel):
         if not return_dict:
             return decoder_outputs + encoder_outputs
 
+        if self.model_parallel:
+            encoder_outputs, decoder_outputs = model_parallel_inputs_to_specific_device(
+                self.main_device, encoder_outputs, decoder_outputs
+            )
+
         return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
@@ -1300,13 +1311,17 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         self.init_weights()
 
         self.model_parallel = False
+        self.first_device = None
+        self.last_device = None
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):
         device_map = init_device_map(len(self.encoder.block), device_map)
         self.encoder.parallelize(device_map)
         self.decoder.parallelize(device_map)
-        self.lm_head.to(self.decoder.first_device)
+        self.first_device = self.encoder.first_device
+        self.last_device = self.decoder.last_device
+        self.lm_head.to(self.first_device)
         self.model_parallel = True
 
     @add_start_docstrings(DEPARALLELIZE_DOCSTRING)
@@ -1432,12 +1447,13 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = decoder_outputs[0]
-
-        # Set device for model parallelism
         if self.model_parallel:
-            self.lm_head = self.lm_head.to(self.encoder.first_device)
-            sequence_output = sequence_output.to(self.lm_head.weight.device)
+            encoder_outputs, decoder_outputs = model_parallel_inputs_to_specific_device(
+                self.first_device, encoder_outputs, decoder_outputs
+            )
+            # self.lm_head.to(self.first_device)
+
+        sequence_output = decoder_outputs[0]
 
         if self.config.tie_word_embeddings:
             # Rescale output before projecting on vocab

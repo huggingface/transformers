@@ -71,12 +71,51 @@ def init_device_map(n_layers, device_map=None):
     return device_map
 
 
+def get_layer_device(self):
+    try:
+        device = next(self.parameters(recurse=True)).device
+    except StopIteration:
+        device = None
+    return device
+
+
+def recursive_to(device, item):
+    """
+    Switch any tensors found in `item` to `device`. Currently can handle a single tensor, or any of the nested list,
+    tuple and dict structures.
+    """
+
+    if torch.is_tensor(item):
+        return item.to(device)
+
+    elif isinstance(item, list):
+        for i, x in enumerate(item):
+            item[i] = recursive_to(device, x)
+        return item
+
+    elif isinstance(item, tuple):
+        return tuple(recursive_to(device, list(item)))
+
+    elif isinstance(item, dict):
+        for k, v in item.items():
+            item[k] = recursive_to(device, v)
+        return item
+
+    else:
+        return item
+
+
 def model_parallel_inputs_to_device(func):
     """
-    This decorator will try to find a at least one parameter or a buffer to read layer's .device from and then will
-    automatically copy any inputs to that device before `forward` is called.
+    This decorator is a noop unless self.model_parallel == True.
 
-    this will work do its magical thing only if all params of this layer are on the same device
+    It will try to find at least one parameter to read layer's .device from and then will automatically copy any inputs
+    to that device before `forward` is called. Use it as:
+
+    @model_parallel_inputs_to_device def forward(self, input1, input2, ...)
+
+    It will do its magical thing only if all params of this layer are on the same device. If it is not the case use
+    `model_parallel_inputs_to_specific_device` at the top of `forward`
     """
 
     def _call__mp(self, *input, **kwargs):
@@ -92,24 +131,37 @@ def model_parallel_inputs_to_device(func):
 
         # print(f"layer device: {device}")
         if device is not None:
+            # torch.cuda.set_device(device)
+            # print(f"auto-move inputs to {device}")
 
-            # pprint(input)
-            input = list(input)
-            for i, v in enumerate(input):
-                if v is not None:
-                    input[i] = v.to(device)
-            input = tuple(input)
-            # pprint(input)
+            input = recursive_to(device, input)
+            kwargs = recursive_to(device, kwargs)
 
-            # pprint(kwargs)
-            for k in kwargs.keys():
-                if kwargs[k] is not None and torch.is_tensor(kwargs[k]):
-                    kwargs[k] = kwargs[k].to(device)
-            # pprint(kwargs)
-
-        return func(self, *input, **kwargs)
+            return func(self, *input, **kwargs)
 
     return _call__mp
+
+
+def model_parallel_inputs_to_specific_device(device, *input):
+    """
+    Similar to the model_parallel_inputs_to_device decorator, but this one is used for situations either when: 1. an
+    explicit call is desired (similar to `model.to()`) 2. the layer has params on mixed devices and therefore a wrong
+    device might get picked
+
+    To use:
+
+    @model_parallel_inputs_to_device def forward(self, input1, input2, ...): # get the desired device somewhere, e.g. a
+    specific param or a module attribute device = self.fc1.device input1, input2 =
+    model_parallel_inputs_to_specific_device(device, input1, input2) # this is the same as: input1 = input1.to(device)
+    input2 = input2.to(device) # but it works on variables that contain tensors but don't have `.to()` otherwise
+    """
+    if device is None:
+        raise ValueError("device cannot be None")
+    # print(f"move specific inputs to {device}")
+    input = recursive_to(device, input)
+    # remove the need for the caller to perform "a, = foo(a)",
+    # which otherwise will make `a` a tuple when it might not be one
+    return input[0] if len(input) == 1 else input
 
 
 # XXX: still used by gpt2 so leave here for now
