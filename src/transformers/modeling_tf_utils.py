@@ -17,6 +17,7 @@
 
 import functools
 import inspect
+from operator import ne
 import os
 import re
 import warnings
@@ -921,7 +922,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             :obj:`tf.Variable`: Pointer to the resized decoder or None if the output embeddings are differents of the
             input ones.
         """
-        new_lm_head_decoder = None
+        new_lm_head_decoder = old_lm_head_decoder
         is_input_output_equals = tf.reduce_any(self._find_weights(self.get_input_embeddings()) == old_lm_head_decoder)
 
         if old_lm_head_decoder is not None and not is_input_output_equals:
