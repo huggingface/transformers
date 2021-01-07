@@ -1956,9 +1956,6 @@ class TFLEDModel(TFLEDPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    def get_output_embeddings(self):
-        return self.shared
-
     @add_start_docstrings_to_model_forward(LED_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
