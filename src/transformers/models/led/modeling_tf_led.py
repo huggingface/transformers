@@ -1205,12 +1205,6 @@ class TFLEDPreTrainedModel(TFPreTrainedModel):
         base_model.encoder.set_embed_tokens(embed_tokens)
         base_model.decoder.set_embed_tokens(embed_tokens)
 
-    def get_output_embeddings(self):
-        return self.get_input_embeddings()
-
-    def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
-
 
 @dataclass
 # Copied from transformers.models.longformer.modeling_tf_longformer.TFLongformerBaseModelOutput with TFLongformer->TFLEDEncoder
@@ -1512,6 +1506,9 @@ class TFLEDEncoder(tf.keras.layers.Layer):
         self.layers = [TFLEDEncoderLayer(config, i, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
+    def set_embed_tokens(self, embed_tokens):
+        self.embed_tokens = embed_tokens
+
     def call(
         self,
         input_ids=None,
@@ -1742,6 +1739,9 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
+
+    def set_embed_tokens(self, embed_tokens):
+        self.embed_tokens = embed_tokens
 
     def call(
         self,
@@ -2109,16 +2109,22 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         )
 
     def get_decoder(self):
-        return self.model.decoder
+        return self.led.decoder
 
     def get_encoder(self):
-        return self.model.encoder
+        return self.led.encoder
 
     def get_bias(self):
         return {"final_logits_bias": self.final_logits_bias}
 
     def set_bias(self, value):
         self.final_logits_bias = value["final_logits_bias"]
+
+    def get_output_embeddings(self):
+        return self.get_input_embeddings()
+
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
 
     @add_start_docstrings_to_model_forward(LED_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFLEDSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)

@@ -1204,6 +1204,12 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel):
     def get_encoder(self):
         return self.model.encoder
 
+    def get_output_embeddings(self):
+        return self.get_input_embeddings()
+
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
+
     def get_bias(self):
         return {"final_logits_bias": self.final_logits_bias}
 

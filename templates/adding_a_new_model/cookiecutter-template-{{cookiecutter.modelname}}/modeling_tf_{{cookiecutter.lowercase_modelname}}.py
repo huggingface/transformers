@@ -1913,12 +1913,6 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
         embed_tokens = TFWrappedEmbeddings(base_model.shared, abs_scope_name=shared_abs_scope_name)
         base_model.encoder.set_embed_tokens(embed_tokens)
         base_model.decoder.set_embed_tokens(embed_tokens)
-    
-    def get_output_embeddings(self):
-        return self.get_input_embeddings()
-
-    def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
 
 
 {{cookiecutter.uppercase_modelname}}_START_DOCSTRING = r"""
@@ -2034,6 +2028,9 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
         self.layers = [TF{{cookiecutter.camelcase_modelname}}EncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
+    def set_embed_tokens(self, embed_tokens):
+        self.embed_tokens = embed_tokens
+    
     def call(
         self,
         input_ids=None,
@@ -2174,6 +2171,9 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
+    def set_embed_tokens(self, embed_tokens):
+        self.embed_tokens = embed_tokens
+    
     def call(
         self,
         input_ids=None,
@@ -2535,6 +2535,12 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
 
     def set_bias(self, value):
         self.final_logits_bias = value["final_logits_bias"]
+    
+    def get_output_embeddings(self):
+        return self.get_input_embeddings()
+
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
