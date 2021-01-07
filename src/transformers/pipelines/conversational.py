@@ -322,9 +322,7 @@ class ConversationalPipeline(Pipeline):
         Parse arguments and tokenize, adding an EOS token at the end of the user input
         """
         # Parse arguments
-        inputs = self.tokenizer(inputs, add_special_tokens=False, padding=False).get("input_ids", [])
-        for input in inputs:
-            input.append(self.tokenizer.eos_token_id)
+        inputs = self.tokenizer(inputs, **kwargs).get("input_ids", [])
         return inputs
 
     def _clean_padding_history(self, generated_tensor) -> List[List[int]]:
@@ -368,9 +366,9 @@ class ConversationalPipeline(Pipeline):
         for new_input, history in zip(inputs, histories):
             if history is not None:
                 new_input = history + new_input
-            if len(new_input) > max_length - self.min_length_for_response:
+            if len(new_input) > max_length:
                 cutoff_eos_index = 0
-                while len(new_input) - cutoff_eos_index > max_length - self.min_length_for_response:
+                while len(new_input) - cutoff_eos_index > max_length:
                     if cutoff_eos_index >= len(new_input):
                         break
                     cutoff_eos_index = new_input[cutoff_eos_index:].index(self.tokenizer.eos_token_id)
@@ -378,9 +376,8 @@ class ConversationalPipeline(Pipeline):
                         break
                     else:
                         logger.warning(
-                            f"Cutting history off because it's too long ({len(new_input)} > {max_length - self.min_length_for_response}) for underlying model"
+                            f"Cutting history off because it's too long ({len(new_input)} > {max_length}) for underlying model"
                         )
-                        new_input = new_input[cutoff_eos_index + 1 :]
             outputs.append(new_input)
         padded_outputs = self.tokenizer.pad(
             {"input_ids": outputs}, padding="longest", return_attention_mask=True, return_tensors=self.framework
