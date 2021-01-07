@@ -749,6 +749,16 @@ class TFXLMModel(TFXLMPreTrainedModel):
 
         return outputs
 
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
 
 class TFXLMPredLayer(tf.keras.layers.Layer):
     """
@@ -891,6 +901,16 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
             logits=outputs, hidden_states=transformer_outputs.hidden_states, attentions=transformer_outputs.attentions
         )
 
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFXLMWithLMHeadModelOutput(
+            logits=output.logits,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
 
 @add_start_docstrings(
     """
@@ -987,6 +1007,16 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
             logits=logits,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+        )
+
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFSequenceClassifierOutput(
+            logits=output.logits,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -1129,6 +1159,30 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
             attentions=transformer_outputs.attentions,
         )
 
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFMultipleChoiceModelOutput(
+            logits=output.logits,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
 
 @add_start_docstrings(
     """
@@ -1228,6 +1282,16 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
             logits=logits,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+        )
+
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFTokenClassifierOutput(
+            logits=output.logits,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -1340,4 +1404,15 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
             end_logits=end_logits,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+        )
+
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFQuestionAnsweringModelOutput(
+            start_logits=output.start_logits,
+            end_logits=output.end_logits,
+            hidden_states=hs,
+            attentions=attns,
         )

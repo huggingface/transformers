@@ -16,9 +16,9 @@ import argparse
 
 import torch
 
-from transformers import BartForConditionalGeneration, MBartConfig
-
+from ..bart import BartForConditionalGeneration
 from ..bart.convert_bart_original_pytorch_checkpoint_to_pytorch import remove_ignore_keys_
+from . import MBartConfig
 
 
 def convert_fairseq_mbart_checkpoint_from_disk(checkpoint_path, hf_config_path="facebook/mbart-large-en-ro"):
