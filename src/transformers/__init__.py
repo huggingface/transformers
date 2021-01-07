@@ -615,7 +615,7 @@ if is_torch_available():
         RobertaForSequenceClassification,
         RobertaForTokenClassification,
         RobertaModel,
-        RobertaPreTrainedModel
+        RobertaPreTrainedModel,
     )
     from .models.squeezebert import (
         SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
