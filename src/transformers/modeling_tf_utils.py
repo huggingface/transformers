@@ -356,9 +356,9 @@ def input_processing(func, config, input_ids, **kwargs):
         for i, input in enumerate(input_ids):
             # EagerTensors don't allow to use the .name property so we check for a real Tensor
             if type(input) == tf.Tensor:
-                # Tensor names have always the pattern name:device_id then we check only the
-                # name and not the device id
-                tensor_name = input.name.split(":")[0]
+                # Tensor names have always the pattern `tensor/name:id` then we check only the
+                # `name` part
+                tensor_name = input.name.split("/")[-1].split(":")[0]
 
                 if tensor_name in parameter_names:
                     output[tensor_name] = input

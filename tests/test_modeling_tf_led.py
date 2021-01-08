@@ -352,30 +352,8 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertEqual(model.config.output_hidden_states, True)
             check_encoder_attentions_output(outputs)
 
-    @slow
-    def test_saved_model_with_attentions_output(self):
-        # longformer has special attentions which are not
-        # compatible in graph mode
-        pass
-
-    @slow
-    def test_saved_model_with_hidden_states_output(self):
-        # TODO(JPLU, PVP) this test should pass!!! PVP:
-        # IMO there is a problem with the signature check.
-        # Test passes for TFLEDModel, but not for TFLEDForConditionalGeneration
-        # IMO the reason is that the tensor variable name cannot be changed
-        # from decoder_input_ids -> input_ids, which poses a BIG restrictions
-        pass
-
-    @slow
-    def test_saved_model_creation_extended(self):
-        # All the tests about building a saved model
-        # fails because the Seq2Seq models uses model in a model
-        # as a layer.
-        # TODO(JPLU) WARNING: NEED TO BE FIXED ASAP
-        pass
-
     def test_saved_model_creation(self):
+        # This test is too long (>30sec) and makes fail the CI
         pass
 
 

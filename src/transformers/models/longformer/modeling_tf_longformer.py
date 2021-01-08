@@ -1543,7 +1543,7 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
-                hidden_states_to_add = hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
+                hidden_states_to_add = tf.cond(tf.math.greater(padding_len, 0), lambda: hidden_states[:, :-padding_len], lambda: hidden_states)
                 all_hidden_states = all_hidden_states + (hidden_states_to_add,)
 
             layer_outputs = layer_module(
@@ -1565,10 +1565,11 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
                 # bzs x num_attn_heads x num_global_attn x seq_len => bzs x num_attn_heads x seq_len x num_global_attn
                 all_global_attentions = all_global_attentions + (tf.transpose(layer_outputs[2], (0, 1, 3, 2)))
 
+        hidden_states = tf.cond(tf.math.greater(padding_len, 0), lambda: hidden_states[:, :-padding_len], lambda: hidden_states)
+
         # Add last layer
         if output_hidden_states:
-            hidden_states_to_add = hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
-            all_hidden_states = all_hidden_states + (hidden_states_to_add,)
+            all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
             return tuple(
@@ -1773,12 +1774,18 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         batch_size, seq_len = input_shape[:2]
         padding_len = (attention_window - seq_len % attention_window) % attention_window
 
-        if padding_len > 0:
+        def log(): 
             logger.info(
                 "Input ids are automatically padded from {} to {} to be a multiple of `config.attention_window`: {}".format(
                     seq_len, seq_len + padding_len, attention_window
                 )
             )
+            return 0
+        
+        def not_log():
+            return 1
+
+        _ = tf.cond(tf.math.greater(padding_len, 0), log, not_log)
 
         paddings = tf.convert_to_tensor([[0, 0], [0, padding_len]])
 
@@ -1796,7 +1803,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
                 inputs_embeds_padding = self.embeddings(input_ids_padding)
                 return tf.concat([inputs_embeds, inputs_embeds_padding], axis=-2)
 
-            inputs_embeds = tf.cond(padding_len > 0, pad_embeddings, lambda: inputs_embeds)
+            inputs_embeds = tf.cond(tf.math.greater(padding_len, 0), pad_embeddings, lambda: inputs_embeds)
 
         attention_mask = tf.pad(attention_mask, paddings, constant_values=False)  # no attention on the padding tokens
         token_type_ids = tf.pad(token_type_ids, paddings, constant_values=0)  # pad with token_type_id = 0

@@ -871,13 +871,15 @@ class TFBartDecoder(tf.keras.layers.Layer):
         hidden_states = self.dropout(hidden_states, training=inputs["training"])
 
         # decoder layers
-        all_hidden_states = ()
-        all_self_attns = ()
-        present_key_values = ()
+        all_hidden_states = () if inputs["output_hidden_states"] else None
+        all_self_attns = () if inputs["output_attentions"] else None
+        present_key_values = () if inputs["use_cache"] else None
+
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if inputs["output_hidden_states"]:
                 all_hidden_states += (hidden_states,)
+
             dropout_probability = random.uniform(0, 1)
 
             if inputs["training"] and (dropout_probability < self.layerdrop):
@@ -901,12 +903,12 @@ class TFBartDecoder(tf.keras.layers.Layer):
 
         if inputs["output_hidden_states"]:
             all_hidden_states += (hidden_states,)
-        else:
-            all_hidden_states = None
+        
+        if inputs["output_attentions"]:
+            all_self_attns = list(all_self_attns)
 
-        all_self_attns = list(all_self_attns) if inputs["output_attentions"] else None
-
-        present_key_values = (encoder_hidden_states, present_key_values) if inputs["use_cache"] else None
+        if inputs["use_cache"]:
+            present_key_values = (inputs["encoder_hidden_states"], present_key_values)
 
         if not inputs["return_dict"]:
             return hidden_states, present_key_values, all_hidden_states, all_self_attns
@@ -1054,7 +1056,7 @@ class TFBartModel(TFBartPretrainedModel):
         )
 
     def serving_output(self, output):
-        pkv = (tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,)
+        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
@@ -1199,7 +1201,7 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel):
         )
 
     def serving_output(self, output):
-        pkv = (tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,)
+        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None

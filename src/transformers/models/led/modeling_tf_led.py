@@ -1181,6 +1181,21 @@ class TFLEDPreTrainedModel(TFPreTrainedModel):
             "decoder_input_ids": input_ids,
         }
         return dummy_inputs
+    
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
+                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
 
     def get_input_embeddings(self):
         base_model = getattr(self, self.base_model_prefix, self)
@@ -1624,20 +1639,17 @@ class TFLEDEncoder(tf.keras.layers.Layer):
         # check attention mask and invert
         if inputs["attention_mask"] is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(inputs["attention_mask"])[:, 0, 0, :]
-            attention_mask = attention_mask[:, :, None, None]
-        else:
-            attention_mask = None
+            inputs["attention_mask"] = _expand_mask(inputs["attention_mask"])[:, 0, 0, :]
+            inputs["attention_mask"] = inputs["attention_mask"][:, :, None, None]
 
         encoder_states = () if inputs["output_hidden_states"] else None
-        all_attentions = () if inputs["output_attentions"] else None
-        all_global_attentions = () if inputs["output_attentions"] and is_global_attn else None
+        all_attentions = all_global_attentions = () if inputs["output_attentions"] else None
 
         # encoder layers
         for encoder_layer in self.layers:
 
             if inputs["output_hidden_states"]:
-                hidden_states_to_add = hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
+                hidden_states_to_add = tf.cond(tf.math.greater(padding_len, 0), lambda: hidden_states[:, :-padding_len], lambda: hidden_states)
                 encoder_states = encoder_states + (hidden_states_to_add,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
@@ -1646,7 +1658,7 @@ class TFLEDEncoder(tf.keras.layers.Layer):
 
             layer_outputs = encoder_layer(
                 hidden_states=hidden_states,
-                attention_mask=attention_mask,
+                attention_mask=inputs["attention_mask"],
                 is_index_masked=is_index_masked,
                 is_index_global_attn=is_index_global_attn,
                 is_global_attn=is_global_attn,
@@ -1658,14 +1670,12 @@ class TFLEDEncoder(tf.keras.layers.Layer):
                 # bzs x seq_len x num_attn_heads x (num_global_attn + attention_window_len + 1) => bzs x num_attn_heads x seq_len x (num_global_attn + attention_window_len + 1)
                 all_attentions = all_attentions + (tf.transpose(layer_outputs[1], (0, 2, 1, 3)),)
 
-                if is_global_attn:
-                    # bzs x num_attn_heads x num_global_attn x seq_len => bzs x num_attn_heads x seq_len x num_global_attn
-                    all_global_attentions = all_global_attentions + (tf.transpose(layer_outputs[2], (0, 1, 3, 2)),)
+                # bzs x num_attn_heads x num_global_attn x seq_len => bzs x num_attn_heads x seq_len x num_global_attn
+                all_global_attentions = all_global_attentions + (tf.transpose(layer_outputs[2], (0, 1, 3, 2)),)
 
         # undo padding
-        if padding_len > 0:
-            # unpad `hidden_states` because the calling function is expecting a length == input_ids.size(1)
-            hidden_states = hidden_states[:, :-padding_len]
+        # unpad `hidden_states` because the calling function is expecting a length == input_ids.size(1)
+        hidden_states = tf.cond(tf.math.greater(padding_len, 0), lambda: hidden_states[:, :-padding_len], lambda: hidden_states)
 
         if inputs["output_hidden_states"]:
             encoder_states = encoder_states + (hidden_states,)
@@ -1698,26 +1708,35 @@ class TFLEDEncoder(tf.keras.layers.Layer):
         batch_size, seq_len = input_shape[:2]
         padding_len = (attention_window - seq_len % attention_window) % attention_window
 
-        if padding_len > 0:
+        def log(): 
             logger.info(
                 "Input ids are automatically padded from {} to {} to be a multiple of `config.attention_window`: {}".format(
                     seq_len, seq_len + padding_len, attention_window
                 )
             )
+            return 0
+        
+        def not_log():
+            return 1
 
-            paddings = tf.convert_to_tensor([[0, 0], [0, padding_len]])
+        _ = tf.cond(tf.math.greater(padding_len, 0), log, not_log)
 
-            if input_ids is not None:
-                input_ids = tf.pad(input_ids, paddings, constant_values=pad_token_id)
+        paddings = tf.convert_to_tensor([[0, 0], [0, padding_len]])
 
-            if inputs_embeds is not None:
+        if input_ids is not None:
+            input_ids = tf.pad(input_ids, paddings, constant_values=pad_token_id)
+
+        if inputs_embeds is not None:
+            def pad_embeddings():
                 input_ids_padding = tf.fill((batch_size, padding_len), pad_token_id)
                 inputs_embeds_padding = self.embed_tokens(input_ids_padding)
-                inputs_embeds = tf.concat([inputs_embeds, inputs_embeds_padding], axis=-2)
+                return tf.concat([inputs_embeds, inputs_embeds_padding], axis=-2)
 
-            attention_mask = tf.pad(
-                attention_mask, paddings, constant_values=False
-            )  # no attention on the padding tokens
+            inputs_embeds = tf.cond(tf.math.greater(padding_len, 0), pad_embeddings, lambda: inputs_embeds)
+
+        attention_mask = tf.pad(
+            attention_mask, paddings, constant_values=False
+        )  # no attention on the padding tokens
 
         return (
             padding_len,
@@ -1862,16 +1881,31 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         hidden_states = inputs["inputs_embeds"]
 
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
-        else:
-            combined_attention_mask = _expand_mask(
+        combined_attention_mask = tf.cond(tf.math.greater(input_shape[-1], 1), lambda: _make_causal_mask(input_shape, past_key_values_length=past_key_values_length), lambda: _expand_mask(
                 tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
-            )
+            ))
 
-        if inputs["attention_mask"] is not None and input_shape[-1] > 1:
-            combined_attention_mask = combined_attention_mask + _expand_mask(
-                inputs["attention_mask"], tgt_len=input_shape[-1]
+        if inputs["attention_mask"] is None and inputs["input_ids"] is not None:
+            def attn_mask_from_inp_ids():
+                attns = tf.cast(
+                    tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id), inputs["input_ids"].dtype
+                )
+                attns = tf.concat(
+                    [
+                        tf.ones((input_shape[0], past_key_values_length), dtype=attns.dtype),
+                        attns,
+                    ],
+                    axis=-1,
+                )
+                
+                return attns
+            
+            inputs["attention_mask"] = tf.cond(tf.math.greater(input_shape[-1], 1), attn_mask_from_inp_ids, lambda: tf.ones(
+                (input_shape[0], input_shape[1] + past_key_values_length), dtype=tf.int32
+            ))
+        else:
+            inputs["attention_mask"] = tf.ones(
+                (input_shape[0], input_shape[1] + past_key_values_length), dtype=tf.int32
             )
 
         if inputs["encoder_hidden_states"] is not None and inputs["encoder_attention_mask"] is not None:
@@ -1882,13 +1916,15 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         hidden_states = self.dropout(hidden_states, training=inputs["training"])
 
         # decoder layers
-        all_hidden_states = ()
-        all_self_attns = ()
-        present_key_values = ()
+        all_hidden_states = () if inputs["output_hidden_states"] else None
+        all_self_attns = () if inputs["output_attentions"] else None
+        present_key_values = () if inputs["use_cache"] else None
+
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if inputs["output_hidden_states"]:
                 all_hidden_states += (hidden_states,)
+
             dropout_probability = random.uniform(0, 1)
 
             if inputs["training"] and (dropout_probability < self.layerdrop):
@@ -1912,12 +1948,12 @@ class TFLEDDecoder(tf.keras.layers.Layer):
 
         if inputs["output_hidden_states"]:
             all_hidden_states += (hidden_states,)
-        else:
-            all_hidden_states = None
+        
+        if inputs["output_attentions"]:
+            all_self_attns = list(all_self_attns)
 
-        all_self_attns = list(all_self_attns) if inputs["output_attentions"] else None
-
-        present_key_values = (encoder_hidden_states, present_key_values) if inputs["use_cache"] else None
+        if inputs["use_cache"]:
+            present_key_values = (inputs["encoder_hidden_states"], present_key_values)
 
         if not inputs["return_dict"]:
             return hidden_states, present_key_values, all_hidden_states, all_self_attns
@@ -2007,12 +2043,6 @@ class TFLEDModel(TFLEDPreTrainedModel):
         if inputs["decoder_input_ids"] is None and inputs["decoder_inputs_embeds"] is None:
             inputs["use_cache"] = False
 
-        inputs["output_hidden_states"] = (
-            inputs["output_hidden_states"]
-            if inputs["output_hidden_states"] is not None
-            else self.config.output_hidden_states
-        )
-
         if inputs["encoder_outputs"] is None:
             inputs["encoder_outputs"] = self.encoder(
                 input_ids=inputs["input_ids"],
@@ -2064,7 +2094,7 @@ class TFLEDModel(TFLEDPreTrainedModel):
         )
 
     def serving_output(self, output):
-        pkv = (tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,)
+        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
@@ -2096,6 +2126,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.led = TFLEDModel(config, name="led")
+        self.led._set_save_spec(inputs=self.serving.input_signature)
         self.use_cache = config.use_cache
         # final_bias_logits is registered as a buffer in pytorch, so not trainable for the the sake of consistency.
         self.final_logits_bias = self.add_weight(
@@ -2157,6 +2188,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             >>> probs = tf.nn.softmax(logits[0])
             >>> # probs[5] is associated with the mask token
         """
+
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -2221,7 +2253,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         )
 
     def serving_output(self, output):
-        pkv = (tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,)
+        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None

@@ -2089,7 +2089,7 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs["inputs_embeds"] is None:
-            inputs["inputs_embeds"] = self.embed_tokens(inputs["input_ids"]) * self.embed_scale
+            inputs_embeds = self.embed_tokens(inputs["input_ids"]) * self.embed_scale
 
         embed_pos = self.embed_positions(input_shape)
         hidden_states = inputs["inputs_embeds"] + embed_pos
@@ -2099,9 +2099,7 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
         # check attention mask and invert
         if inputs["attention_mask"] is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(inputs["attention_mask"])
-        else:
-            attention_mask = None
+            inputs["attention_mask"] = _expand_mask(inputs["attention_mask"])
 
         encoder_states = () if inputs["output_hidden_states"] else None
         all_attentions = () if inputs["output_attentions"] else None
@@ -2116,7 +2114,7 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
             if inputs["training"] and (dropout_probability < self.layerdrop):  # skip the layer
                 continue
 
-            hidden_states, attn = encoder_layer(hidden_states, attention_mask)
+            hidden_states, attn = encoder_layer(hidden_states, inputs["attention_mask"])
 
             if inputs["output_attentions"]:
                 all_attentions += (attn,)
@@ -2267,15 +2265,32 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
         hidden_states = inputs["inputs_embeds"]
 
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
-        else:
-            combined_attention_mask = _expand_mask(
+        combined_attention_mask = tf.cond(tf.math.greater(input_shape[-1], 1), lambda: _make_causal_mask(input_shape, past_key_values_length=past_key_values_length), lambda: _expand_mask(
                 tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
-            )
+            ))
 
-        if inputs["attention_mask"] is not None and input_shape[-1] > 1:
-            combined_attention_mask = combined_attention_mask + _expand_mask(inputs["attention_mask"], tgt_len=input_shape[-1])
+        if inputs["attention_mask"] is None and inputs["input_ids"] is not None:
+            def attn_mask_from_inp_ids():
+                attns = tf.cast(
+                    tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id), inputs["input_ids"].dtype
+                )
+                attns = tf.concat(
+                    [
+                        tf.ones((input_shape[0], past_key_values_length), dtype=attns.dtype),
+                        attns,
+                    ],
+                    axis=-1,
+                )
+                
+                return attns
+            
+            inputs["attention_mask"] = tf.cond(tf.math.greater(input_shape[-1], 1), attn_mask_from_inp_ids, lambda: tf.ones(
+                (input_shape[0], input_shape[1] + past_key_values_length), dtype=tf.int32
+            ))
+        else:
+            inputs["attention_mask"] = tf.ones(
+                (input_shape[0], input_shape[1] + past_key_values_length), dtype=tf.int32
+            )
 
         if inputs["encoder_hidden_states"] is not None and inputs["encoder_attention_mask"] is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -2285,13 +2300,15 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
         hidden_states = self.dropout(hidden_states, training=inputs["training"])
 
         # decoder layers
-        all_hidden_states = ()
-        all_self_attns = ()
-        present_key_values = ()
+        all_hidden_states = () if inputs["output_hidden_states"] else None
+        all_self_attns = () if inputs["output_attentions"] else None
+        present_key_values = () if inputs["use_cache"] else None
+
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if inputs["output_hidden_states"]:
                 all_hidden_states += (hidden_states,)
+
             dropout_probability = random.uniform(0, 1)
 
             if inputs["training"] and (dropout_probability < self.layerdrop):
@@ -2315,12 +2332,12 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
 
         if inputs["output_hidden_states"]:
             all_hidden_states += (hidden_states,)
-        else:
-            all_hidden_states = None
+        
+        if inputs["output_attentions"]:
+            all_self_attns = list(all_self_attns)
 
-        all_self_attns = list(all_self_attns) if inputs["output_attentions"] else None
-
-        present_key_values = (encoder_hidden_states, present_key_values) if inputs["use_cache"] else None
+        if inputs["use_cache"]:
+            present_key_values = (inputs["encoder_hidden_states"], present_key_values)
 
         if not inputs["return_dict"]:
             return hidden_states, present_key_values, all_hidden_states, all_self_attns
@@ -2408,12 +2425,6 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
         if inputs["decoder_input_ids"] is None and inputs["decoder_inputs_embeds"] is None:
             inputs["use_cache"] = False
 
-        inputs["output_hidden_states"] = (
-            inputs["output_hidden_states"]
-            if inputs["output_hidden_states"] is not None
-            else self.config.output_hidden_states
-        )
-
         if inputs["encoder_outputs"] is None:
             inputs["encoder_outputs"] = self.encoder(
                 input_ids=inputs["input_ids"],
@@ -2494,6 +2505,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.model = TF{{cookiecutter.camelcase_modelname}}Model(config, name="model")
+        self.model._set_save_spec(inputs=self.serving.input_signature)
         self.use_cache = config.use_cache
         # final_bias_logits is registered as a buffer in pytorch, so not trainable for the the sake of consistency.
         self.final_logits_bias = self.add_weight(
