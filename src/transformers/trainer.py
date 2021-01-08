@@ -1027,15 +1027,15 @@ class Trainer:
         # Save optimizer and scheduler
         if self.sharded_dpp:
             self.optimizer.consolidate_state_dict()
-        if self.deepspeed:
-            pass  # deepspeed.save_checkpoint above saves model/optim/sched
+
         if is_torch_tpu_available():
             xm.rendezvous("saving_optimizer_states")
             xm.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
             with warnings.catch_warnings(record=True) as caught_warnings:
                 xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
                 reissue_pt_warnings(caught_warnings)
-        elif self.is_world_process_zero():
+        elif self.is_world_process_zero() and not self.deepspeed:
+            # deepspeed.save_checkpoint above saves model/optim/sched
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
             with warnings.catch_warnings(record=True) as caught_warnings:
                 torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
