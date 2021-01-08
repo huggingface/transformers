@@ -173,9 +173,11 @@ Now it becomes:
 
 .. code-block:: bash
 
-    deepspeed your_program.py <your program\'s normal args> --deepspeed ds_config.json
+    deepspeed --num_gpus=2 your_program.py <your program\'s normal args> --deepspeed ds_config.json
 
-For example to run ``finetune_trainer.py`` under DeepSpeed:
+Unlike, `torch.distributed.launch` where you have to specify how many gpus to use with `--nproc_per_node`, with the `deepspeed` launcher you don't have to use the corresponding `--num_gpus` if you want all of your GPUs used. The full details on how to configure various nodes and GPUs can be found [here](https://www.deepspeed.ai/getting-started/#resource-configuration-multi-node).
+
+Here is an example of running ``finetune_trainer.py`` under DeepSpeed deploying all available GPUs:
 
 .. code-block:: bash
 
