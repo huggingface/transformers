@@ -269,11 +269,6 @@ class Trainer:
                 )
             self.model_init = model_init
 
-        if self.args.model_parallel and not model.is_parallelizable:
-            raise ValueError(
-                f"{model.__class__.__name__} implementation currently doesn't support model parallelism, therefore --model_parallel cl arg cannot be used"
-            )
-
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
@@ -895,7 +890,7 @@ class Trainer:
                             # AMP: gradients need unscaling
                             self.scaler.unscale_(self.optimizer)
 
-                        if hasattr(self.optimizer, "clip_grad_norm") and not self.args.deepspeed:
+                        if hasattr(self.optimizer, "clip_grad_norm") and not self.deepspeed:
                             # Some optimizers (like the sharded optimizer) have a specific way to do gradient clipping
                             # deepspeed has clip_grad_norm aliased to torch.nn.utils.clip_grad_norm_
                             self.optimizer.clip_grad_norm(self.args.max_grad_norm)
@@ -1255,7 +1250,7 @@ class Trainer:
         elif self.use_apex:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
-        elif self.args.deepspeed:
+        elif self.deepspeed:
             # calling on DS engine (model_wrapped == DDP(Deepspeed(PretrainedModule)))
             self.model_wrapped.module.backward(loss)
         else:

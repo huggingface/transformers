@@ -479,11 +479,11 @@ please file an issue with `DeepSpeed github <https://github.com/microsoft/deepsp
 
 Miscellaneous notes:
 
-* DeepSpeed works with the PyTorch Trainer but not TF Trainer.
-* While DeepSpeed has a pip
-installable PyPI package, it is highly recommended that it be `installed from source
-<https://github.com/microsoft/deepspeed#installation>`__ to best match your hardware and also to enable features like
-1-bit Adam, which aren't available in the pypi distribution.
+  * DeepSpeed works with the PyTorch Trainer but not TF Trainer.
+
+  * While DeepSpeed has a pip installable PyPI package, it is highly recommended that it be `installed from source
+    <https://github.com/microsoft/deepspeed#installation>`__ to best match your hardware and also to enable features
+    like 1-bit Adam, which aren't available in the pypi distribution.
 
 Main DeepSpeed resources: - `github <https://github.com/microsoft/deepspeed>`__ - `Usage docs
 <https://www.deepspeed.ai/getting-started/>`__ - `API docs <https://deepspeed.readthedocs.io/en/latest/index.html>`__
