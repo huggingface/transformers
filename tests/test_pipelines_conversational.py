@@ -24,10 +24,12 @@ from transformers import (
 )
 from transformers.testing_utils import require_torch, slow, torch_device
 
-from .test_pipelines_common import DummyTok, MonoInputPipelineCommonMixin
+from .test_pipelines_common import MonoInputPipelineCommonMixin
 
 
 if is_torch_available():
+    import torch
+
     from transformers.models.gpt2 import GPT2Config, GPT2LMHeadModel
 
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
@@ -37,7 +39,7 @@ class SimpleConversationPipelineTests(unittest.TestCase):
     def get_pipeline(self):
         # When
         config = GPT2Config(
-            vocab_size=258,
+            vocab_size=263,
             n_ctx=128,
             max_length=128,
             n_embd=64,
@@ -48,14 +50,27 @@ class SimpleConversationPipelineTests(unittest.TestCase):
         )
         model = GPT2LMHeadModel(config)
         # Force model output to be L
-        import torch
-
         V, D = model.lm_head.weight.shape
         bias = torch.zeros(V, requires_grad=True)
         bias[76] = 1
 
         model.lm_head.bias = torch.nn.Parameter(bias)
-        tokenizer = DummyTok()
+
+        # # Created with:
+        # import tempfile
+
+        # from tokenizers import Tokenizer, models
+        # from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
+
+        # vocab = [(chr(i), i) for i in range(256)]
+        # tokenizer = Tokenizer(models.Unigram(vocab))
+        # with tempfile.NamedTemporaryFile() as f:
+        #     tokenizer.save(f.name)
+        #     real_tokenizer = PreTrainedTokenizerFast(tokenizer_file=f.name, eos_token="<eos>", bos_token="<bos>")
+
+        # real_tokenizer._tokenizer.save("dummy.json")
+        # Special tokens are automatically added at load time.
+        tokenizer = AutoTokenizer.from_pretrained("Narsil/small_conversational_test")
         conversation_agent = pipeline(
             task="conversational", device=DEFAULT_DEVICE_NUM, model=model, tokenizer=tokenizer
         )
@@ -163,9 +178,9 @@ class SimpleConversationPipelineTests(unittest.TestCase):
                 97,
                 100,
                 63,
-                257,  # EOS
+                259,  # EOS
                 98,  # b
-                257,  # EOS
+                259,  # EOS
             ],
         )
 
