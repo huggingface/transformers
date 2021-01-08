@@ -206,7 +206,12 @@ class ModelTesterMixin:
                     "decoder_attention_mask",
                     "encoder_outputs",
                 ]
-                self.assertListEqual(arg_names[:5], expected_arg_names)
+                if model.config.model_type == "bart":
+                    expected_arg_names.insert(2, "head_mask")
+                    expected_arg_names.insert(5, "decoder_head_mask")
+                    self.assertListEqual(arg_names[:7], expected_arg_names)
+                else:
+                    self.assertListEqual(arg_names[:5], expected_arg_names)
             else:
                 expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
