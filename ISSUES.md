@@ -203,7 +203,7 @@ You are not required to read the following guidelines before opening an issue. H
 
 6. If this is an issue in your code, do try to reduce that code to a minimal example that still demonstrates the problem. Please ask at the forums if you have a hard time figuring how to do that. Please realize that we don't have the luxury of having time to try and understand all of your custom code.
 
-   If you really tried to make a short reproducible code but couldn't figure it out, it might be that having a traceback wil give the developer enough information to know what's going on. But if it is not enough and we can't reproduce the problem, we can't really solve it.
+   If you really tried to make a short reproducible code but couldn't figure it out, it might be that having a traceback will give the developer enough information to know what's going on. But if it is not enough and we can't reproduce the problem, we can't really solve it.
 
    Do not dispair if you can't figure it out from the begining, just share what you can and perhaps someone else will be able to help you at the forums.
 
