@@ -36,7 +36,7 @@ if is_tokenizers_available():
     _import_structure["tokenization_roberta_fast"] = ["RobertaTokenizerFast"]
 
 if is_torch_available():
-   _import_structure["modeling_roberta"] = [
+    _import_structure["modeling_roberta"] = [
         "ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "RobertaForCausalLM",
         "RobertaForMaskedLM",
