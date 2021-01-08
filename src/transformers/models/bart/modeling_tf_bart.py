@@ -901,6 +901,9 @@ class TFBartDecoder(tf.keras.layers.Layer):
             if inputs["output_attentions"]:
                 all_self_attns += (layer_self_attn,)
 
+        if self.layer_norm is not None:  # same as if config.add_final_layer_norm
+            hidden_states = self.layer_norm(hidden_states)
+        
         if inputs["output_hidden_states"]:
             all_hidden_states += (hidden_states,)
 
