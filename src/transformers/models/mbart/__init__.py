@@ -15,25 +15,77 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...file_utils import is_sentencepiece_available, is_tf_available, is_tokenizers_available, is_torch_available
-from .configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig
+from typing import TYPE_CHECKING
 
+from ...file_utils import (
+    _BaseLazyModule,
+    is_sentencepiece_available,
+    is_tf_available,
+    is_tokenizers_available,
+    is_torch_available,
+)
+
+
+_import_structure = {
+    "configuration_mbart": ["MBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "MBartConfig"],
+}
 
 if is_sentencepiece_available():
-    from .tokenization_mbart import MBartTokenizer
+    _import_structure["tokenization_mbart"] = ["MBartTokenizer"]
 
 if is_tokenizers_available():
-    from .tokenization_mbart_fast import MBartTokenizerFast
+    _import_structure["tokenization_mbart_fast"] = ["MBartTokenizerFast"]
 
 if is_torch_available():
-    from .modeling_mbart import (
-        MBART_PRETRAINED_MODEL_ARCHIVE_LIST,
-        MBartForConditionalGeneration,
-        MBartForQuestionAnswering,
-        MBartForSequenceClassification,
-        MBartModel,
-        MBartPreTrainedModel,
-    )
+    _import_structure["modeling_mbart"] = [
+        "MBART_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "MBartForConditionalGeneration",
+        "MBartForQuestionAnswering",
+        "MBartForSequenceClassification",
+        "MBartModel",
+        "MBartPreTrainedModel",
+    ]
 
 if is_tf_available():
-    from .modeling_tf_mbart import TFMBartForConditionalGeneration
+    _import_structure["modeling_tf_mbart"] = ["TFMBartForConditionalGeneration"]
+
+
+if TYPE_CHECKING:
+    from .configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig
+
+    if is_sentencepiece_available():
+        from .tokenization_mbart import MBartTokenizer
+
+    if is_tokenizers_available():
+        from .tokenization_mbart_fast import MBartTokenizerFast
+
+    if is_torch_available():
+        from .modeling_mbart import (
+            MBART_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MBartForConditionalGeneration,
+            MBartForQuestionAnswering,
+            MBartForSequenceClassification,
+            MBartModel,
+            MBartPreTrainedModel,
+        )
+
+    if is_tf_available():
+        from .modeling_tf_mbart import TFMBartForConditionalGeneration
+
+else:
+    import importlib
+    import os
+    import sys
+
+    class _LazyModule(_BaseLazyModule):
+        """
+        Module class that surfaces all objects but only performs associated imports when the objects are requested.
+        """
+
+        __file__ = globals()["__file__"]
+        __path__ = [os.path.dirname(__file__)]
+
+        def _get_module(self, module_name: str):
+            return importlib.import_module("." + module_name, self.__name__)
+
+    sys.modules[__name__] = _LazyModule(__name__, _import_structure)

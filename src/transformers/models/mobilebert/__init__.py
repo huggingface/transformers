@@ -16,41 +16,103 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...file_utils import is_tf_available, is_tokenizers_available, is_torch_available
-from .configuration_mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig
-from .tokenization_mobilebert import MobileBertTokenizer
+from typing import TYPE_CHECKING
 
+from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available, is_torch_available
+
+
+_import_structure = {
+    "configuration_mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig"],
+    "tokenization_mobilebert": ["MobileBertTokenizer"],
+}
 
 if is_tokenizers_available():
-    from .tokenization_mobilebert_fast import MobileBertTokenizerFast
+    _import_structure["tokenization_mobilebert_fast"] = ["MobileBertTokenizerFast"]
 
 if is_torch_available():
-    from .modeling_mobilebert import (
-        MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        MobileBertForMaskedLM,
-        MobileBertForMultipleChoice,
-        MobileBertForNextSentencePrediction,
-        MobileBertForPreTraining,
-        MobileBertForQuestionAnswering,
-        MobileBertForSequenceClassification,
-        MobileBertForTokenClassification,
-        MobileBertLayer,
-        MobileBertModel,
-        MobileBertPreTrainedModel,
-        load_tf_weights_in_mobilebert,
-    )
+    _import_structure["modeling_mobilebert"] = [
+        "MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "MobileBertForMaskedLM",
+        "MobileBertForMultipleChoice",
+        "MobileBertForNextSentencePrediction",
+        "MobileBertForPreTraining",
+        "MobileBertForQuestionAnswering",
+        "MobileBertForSequenceClassification",
+        "MobileBertForTokenClassification",
+        "MobileBertLayer",
+        "MobileBertModel",
+        "MobileBertPreTrainedModel",
+        "load_tf_weights_in_mobilebert",
+    ]
 
 if is_tf_available():
-    from .modeling_tf_mobilebert import (
-        TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFMobileBertForMaskedLM,
-        TFMobileBertForMultipleChoice,
-        TFMobileBertForNextSentencePrediction,
-        TFMobileBertForPreTraining,
-        TFMobileBertForQuestionAnswering,
-        TFMobileBertForSequenceClassification,
-        TFMobileBertForTokenClassification,
-        TFMobileBertMainLayer,
-        TFMobileBertModel,
-        TFMobileBertPreTrainedModel,
-    )
+    _import_structure["modeling_tf_mobilebert"] = [
+        "TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFMobileBertForMaskedLM",
+        "TFMobileBertForMultipleChoice",
+        "TFMobileBertForNextSentencePrediction",
+        "TFMobileBertForPreTraining",
+        "TFMobileBertForQuestionAnswering",
+        "TFMobileBertForSequenceClassification",
+        "TFMobileBertForTokenClassification",
+        "TFMobileBertMainLayer",
+        "TFMobileBertModel",
+        "TFMobileBertPreTrainedModel",
+    ]
+
+
+if TYPE_CHECKING:
+    from .configuration_mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig
+    from .tokenization_mobilebert import MobileBertTokenizer
+
+    if is_tokenizers_available():
+        from .tokenization_mobilebert_fast import MobileBertTokenizerFast
+
+    if is_torch_available():
+        from .modeling_mobilebert import (
+            MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MobileBertForMaskedLM,
+            MobileBertForMultipleChoice,
+            MobileBertForNextSentencePrediction,
+            MobileBertForPreTraining,
+            MobileBertForQuestionAnswering,
+            MobileBertForSequenceClassification,
+            MobileBertForTokenClassification,
+            MobileBertLayer,
+            MobileBertModel,
+            MobileBertPreTrainedModel,
+            load_tf_weights_in_mobilebert,
+        )
+
+    if is_tf_available():
+        from .modeling_tf_mobilebert import (
+            TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFMobileBertForMaskedLM,
+            TFMobileBertForMultipleChoice,
+            TFMobileBertForNextSentencePrediction,
+            TFMobileBertForPreTraining,
+            TFMobileBertForQuestionAnswering,
+            TFMobileBertForSequenceClassification,
+            TFMobileBertForTokenClassification,
+            TFMobileBertMainLayer,
+            TFMobileBertModel,
+            TFMobileBertPreTrainedModel,
+        )
+
+else:
+    import importlib
+    import os
+    import sys
+
+    class _LazyModule(_BaseLazyModule):
+        """
+        Module class that surfaces all objects but only performs associated imports when the objects are requested.
+        """
+
+        __file__ = globals()["__file__"]
+        __path__ = [os.path.dirname(__file__)]
+
+        def _get_module(self, module_name: str):
+            return importlib.import_module("." + module_name, self.__name__)
+
+    sys.modules[__name__] = _LazyModule(__name__, _import_structure)

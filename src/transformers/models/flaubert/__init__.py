@@ -16,30 +16,81 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...file_utils import is_tf_available, is_torch_available
-from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
-from .tokenization_flaubert import FlaubertTokenizer
+from typing import TYPE_CHECKING
 
+from ...file_utils import _BaseLazyModule, is_tf_available, is_torch_available
+
+
+_import_structure = {
+    "configuration_flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig"],
+    "tokenization_flaubert": ["FlaubertTokenizer"],
+}
 
 if is_torch_available():
-    from .modeling_flaubert import (
-        FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        FlaubertForMultipleChoice,
-        FlaubertForQuestionAnswering,
-        FlaubertForQuestionAnsweringSimple,
-        FlaubertForSequenceClassification,
-        FlaubertForTokenClassification,
-        FlaubertModel,
-        FlaubertWithLMHeadModel,
-    )
+    _import_structure["modeling_flaubert"] = [
+        "FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "FlaubertForMultipleChoice",
+        "FlaubertForQuestionAnswering",
+        "FlaubertForQuestionAnsweringSimple",
+        "FlaubertForSequenceClassification",
+        "FlaubertForTokenClassification",
+        "FlaubertModel",
+        "FlaubertWithLMHeadModel",
+    ]
 
 if is_tf_available():
-    from .modeling_tf_flaubert import (
-        TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFFlaubertForMultipleChoice,
-        TFFlaubertForQuestionAnsweringSimple,
-        TFFlaubertForSequenceClassification,
-        TFFlaubertForTokenClassification,
-        TFFlaubertModel,
-        TFFlaubertWithLMHeadModel,
-    )
+    _import_structure["modeling_tf_flaubert"] = [
+        "TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFFlaubertForMultipleChoice",
+        "TFFlaubertForQuestionAnsweringSimple",
+        "TFFlaubertForSequenceClassification",
+        "TFFlaubertForTokenClassification",
+        "TFFlaubertModel",
+        "TFFlaubertWithLMHeadModel",
+    ]
+
+
+if TYPE_CHECKING:
+    from .configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig
+    from .tokenization_flaubert import FlaubertTokenizer
+
+    if is_torch_available():
+        from .modeling_flaubert import (
+            FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            FlaubertForMultipleChoice,
+            FlaubertForQuestionAnswering,
+            FlaubertForQuestionAnsweringSimple,
+            FlaubertForSequenceClassification,
+            FlaubertForTokenClassification,
+            FlaubertModel,
+            FlaubertWithLMHeadModel,
+        )
+
+    if is_tf_available():
+        from .modeling_tf_flaubert import (
+            TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFFlaubertForMultipleChoice,
+            TFFlaubertForQuestionAnsweringSimple,
+            TFFlaubertForSequenceClassification,
+            TFFlaubertForTokenClassification,
+            TFFlaubertModel,
+            TFFlaubertWithLMHeadModel,
+        )
+
+else:
+    import importlib
+    import os
+    import sys
+
+    class _LazyModule(_BaseLazyModule):
+        """
+        Module class that surfaces all objects but only performs associated imports when the objects are requested.
+        """
+
+        __file__ = globals()["__file__"]
+        __path__ = [os.path.dirname(__file__)]
+
+        def _get_module(self, module_name: str):
+            return importlib.import_module("." + module_name, self.__name__)
+
+    sys.modules[__name__] = _LazyModule(__name__, _import_structure)
