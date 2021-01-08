@@ -561,6 +561,7 @@ if is_torch_available():
         [
             "LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
             "LayoutLMForMaskedLM",
+            "LayoutLMForSequenceClassification",
             "LayoutLMForTokenClassification",
             "LayoutLMModel",
         ]
@@ -1594,6 +1595,7 @@ if TYPE_CHECKING:
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             LayoutLMForMaskedLM,
+            LayoutLMForSequenceClassification,
             LayoutLMForTokenClassification,
             LayoutLMModel,
         )
