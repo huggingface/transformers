@@ -93,6 +93,7 @@ class DataTrainingArguments:
     validation_file: Optional[str] = field(
         default=None, metadata={"help": "A csv or a json file containing the validation data."}
     )
+    test_file: Optional[str] = field(default=None, metadata={"help": "A csv or a json file containing the test data."})
 
     def __post_init__(self):
         if self.task_name is not None:
@@ -412,6 +413,25 @@ def main():
 
     if training_args.do_predict:
         logger.info("*** Test ***")
+
+        # Get the datasets: you can provide your own CSV/JSON test file (see below)
+        # when you use `do_predict` without specifying a GLUE benchmark task.
+
+        if data_args.task_name is None and data_args.test_file is not None:
+            extension = data_args.test_file.split(".")[-1]
+            assert extension in ["csv", "json"], "`test_file` should be a csv or a json file."
+            if data_args.test_file.endswith(".csv"):
+                # Loading a dataset from local csv files
+                test_dataset = load_dataset("csv", data_files={"test": data_args.test_file})
+            else:
+                # Loading a dataset from local json files
+                test_dataset = load_dataset("json", data_files={"test": data_args.test_file})
+            test_dataset = test_dataset.map(
+                preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache
+            )
+            test_dataset = test_dataset["test"]
+        else:
+            raise ValueError("Need either a GLUE task or a test file for `do_predict`.")
 
         # Loop to handle MNLI double evaluation (matched, mis-matched)
         tasks = [data_args.task_name]
