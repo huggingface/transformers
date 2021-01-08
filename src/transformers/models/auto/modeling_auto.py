@@ -101,7 +101,12 @@ from ..funnel.modeling_funnel import (
     FunnelModel,
 )
 from ..gpt2.modeling_gpt2 import GPT2ForSequenceClassification, GPT2LMHeadModel, GPT2Model
-from ..layoutlm.modeling_layoutlm import LayoutLMForMaskedLM, LayoutLMForSequenceClassification, LayoutLMForTokenClassification, LayoutLMModel
+from ..layoutlm.modeling_layoutlm import (
+    LayoutLMForMaskedLM,
+    LayoutLMForSequenceClassification,
+    LayoutLMForTokenClassification,
+    LayoutLMModel,
+)
 from ..led.modeling_led import (
     LEDForConditionalGeneration,
     LEDForQuestionAnswering,

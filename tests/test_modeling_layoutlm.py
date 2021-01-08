@@ -17,8 +17,7 @@
 import unittest
 
 from transformers import is_torch_available
-from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, ids_tensor
@@ -28,12 +27,11 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        LayoutLMForMaskedLM, 
-        LayoutLMForSequenceClassification,
-        LayoutLMForTokenClassification, 
         LayoutLMConfig,
+        LayoutLMForMaskedLM,
+        LayoutLMForSequenceClassification,
+        LayoutLMForTokenClassification,
         LayoutLMModel,
-        LayoutLMTokenizer,
     )
 
 
@@ -166,9 +164,11 @@ class LayoutLMModelTester:
         model = LayoutLMForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, bbox, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
+        result = model(
+            input_ids, bbox, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels
+        )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-    
+
     def create_and_check_for_token_classification(
         self, config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -238,7 +238,7 @@ class LayoutLMModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
-    
+
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
@@ -246,82 +246,176 @@ class LayoutLMModelTest(ModelTesterMixin, unittest.TestCase):
 
 def prepare_layoutlm_batch_inputs():
     # Here we prepare a batch of 2 sequences to test a LayoutLM forward pass on:
-    input_ids = torch.tensor([[  101,  1019,  1014,  1016,  1037, 12849,  4747,  1004, 14246,  2278,
-          5439,  4524,  5002,  2930,  2193,  2930,  4341,  3208,  1005,  1055,
-          2171,  2848, 11300,  3531,   102],
-        [  101,  4070,  4034,  7020,  1024,  3058,  1015,  1013,  2861,  1013,
-          6070, 19274,  2772,  6205, 27814, 16147, 16147,  4343,  2047, 10283,
-         10969, 14389,  1012,  2338,   102]], device=torch_device)
-    
-    attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-         1],
-        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-         1]], device=torch_device)
+    input_ids = torch.tensor(
+        [
+            [
+                101,
+                1019,
+                1014,
+                1016,
+                1037,
+                12849,
+                4747,
+                1004,
+                14246,
+                2278,
+                5439,
+                4524,
+                5002,
+                2930,
+                2193,
+                2930,
+                4341,
+                3208,
+                1005,
+                1055,
+                2171,
+                2848,
+                11300,
+                3531,
+                102,
+            ],
+            [
+                101,
+                4070,
+                4034,
+                7020,
+                1024,
+                3058,
+                1015,
+                1013,
+                2861,
+                1013,
+                6070,
+                19274,
+                2772,
+                6205,
+                27814,
+                16147,
+                16147,
+                4343,
+                2047,
+                10283,
+                10969,
+                14389,
+                1012,
+                2338,
+                102,
+            ],
+        ],
+        device=torch_device,
+    )
 
-    bbox = torch.tensor([[[   0,    0,    0,    0],
-         [ 423,  237,  440,  251],
-         [ 427,  272,  441,  287],
-         [ 419,  115,  437,  129],
-         [ 961,  885,  992,  912],
-         [ 256,   38,  330,   58],
-         [ 256,   38,  330,   58],
-         [ 336,   42,  353,   57],
-         [ 360,   39,  401,   56],
-         [ 360,   39,  401,   56],
-         [ 411,   39,  471,   59],
-         [ 479,   41,  528,   59],
-         [ 533,   39,  630,   60],
-         [  67,  113,  134,  131],
-         [ 141,  115,  209,  132],
-         [  68,  149,  133,  166],
-         [ 141,  149,  187,  164],
-         [ 195,  148,  287,  165],
-         [ 195,  148,  287,  165],
-         [ 195,  148,  287,  165],
-         [ 295,  148,  349,  165],
-         [ 441,  149,  492,  166],
-         [ 497,  149,  546,  164],
-         [  64,  201,  125,  218],
-         [1000, 1000, 1000, 1000]],
+    attention_mask = torch.tensor(
+        [
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        ],
+        device=torch_device,
+    )
 
-        [[   0,    0,    0,    0],
-         [ 662,  150,  754,  166],
-         [ 665,  199,  742,  211],
-         [ 519,  213,  554,  228],
-         [ 519,  213,  554,  228],
-         [ 134,  433,  187,  454],
-         [ 130,  467,  204,  480],
-         [ 130,  467,  204,  480],
-         [ 130,  467,  204,  480],
-         [ 130,  467,  204,  480],
-         [ 130,  467,  204,  480],
-         [ 314,  469,  376,  482],
-         [ 504,  684,  582,  706],
-         [ 941,  825,  973,  900],
-         [ 941,  825,  973,  900],
-         [ 941,  825,  973,  900],
-         [ 941,  825,  973,  900],
-         [ 610,  749,  652,  765],
-         [ 130,  659,  168,  672],
-         [ 176,  657,  237,  672],
-         [ 238,  657,  312,  672],
-         [ 443,  653,  628,  672],
-         [ 443,  653,  628,  672],
-         [ 716,  301,  825,  317],
-         [1000, 1000, 1000, 1000]]], device=torch_device)
+    bbox = torch.tensor(
+        [
+            [
+                [0, 0, 0, 0],
+                [423, 237, 440, 251],
+                [427, 272, 441, 287],
+                [419, 115, 437, 129],
+                [961, 885, 992, 912],
+                [256, 38, 330, 58],
+                [256, 38, 330, 58],
+                [336, 42, 353, 57],
+                [360, 39, 401, 56],
+                [360, 39, 401, 56],
+                [411, 39, 471, 59],
+                [479, 41, 528, 59],
+                [533, 39, 630, 60],
+                [67, 113, 134, 131],
+                [141, 115, 209, 132],
+                [68, 149, 133, 166],
+                [141, 149, 187, 164],
+                [195, 148, 287, 165],
+                [195, 148, 287, 165],
+                [195, 148, 287, 165],
+                [295, 148, 349, 165],
+                [441, 149, 492, 166],
+                [497, 149, 546, 164],
+                [64, 201, 125, 218],
+                [1000, 1000, 1000, 1000],
+            ],
+            [
+                [0, 0, 0, 0],
+                [662, 150, 754, 166],
+                [665, 199, 742, 211],
+                [519, 213, 554, 228],
+                [519, 213, 554, 228],
+                [134, 433, 187, 454],
+                [130, 467, 204, 480],
+                [130, 467, 204, 480],
+                [130, 467, 204, 480],
+                [130, 467, 204, 480],
+                [130, 467, 204, 480],
+                [314, 469, 376, 482],
+                [504, 684, 582, 706],
+                [941, 825, 973, 900],
+                [941, 825, 973, 900],
+                [941, 825, 973, 900],
+                [941, 825, 973, 900],
+                [610, 749, 652, 765],
+                [130, 659, 168, 672],
+                [176, 657, 237, 672],
+                [238, 657, 312, 672],
+                [443, 653, 628, 672],
+                [443, 653, 628, 672],
+                [716, 301, 825, 317],
+                [1000, 1000, 1000, 1000],
+            ],
+        ],
+        device=torch_device,
+    )
 
-    token_type_ids = torch.tensor([[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-         0],
-        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-         0]], device=torch_device)
+    token_type_ids = torch.tensor(
+        [
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        ],
+        device=torch_device,
+    )
 
     # these are sequence labels (i.e. at the token level)
-    labels = torch.tensor([[-100,   10,   10,   10,    9,    1, -100,    7,    7, -100,    7,    7,
-            4,    2,    5,    2,    8,    8, -100, -100,    5,    0,    3,    2,
-         -100],
-        [-100,   12,   12,   12, -100,   12,   10, -100, -100, -100, -100,   10,
-           12,    9, -100, -100, -100,   10,   10,   10,    9,   12, -100,   10,
-         -100]], device=torch_device)
+    labels = torch.tensor(
+        [
+            [-100, 10, 10, 10, 9, 1, -100, 7, 7, -100, 7, 7, 4, 2, 5, 2, 8, 8, -100, -100, 5, 0, 3, 2, -100],
+            [
+                -100,
+                12,
+                12,
+                12,
+                -100,
+                12,
+                10,
+                -100,
+                -100,
+                -100,
+                -100,
+                10,
+                12,
+                9,
+                -100,
+                -100,
+                -100,
+                10,
+                10,
+                10,
+                9,
+                12,
+                -100,
+                10,
+                -100,
+            ],
+        ],
+        device=torch_device,
+    )
 
     return input_ids, attention_mask, bbox, token_type_ids, labels
 
@@ -331,16 +425,10 @@ TOLERANCE = 1e-3
 
 @require_torch
 class LayoutLMModelIntegrationTest(unittest.TestCase):
-    @cached_property
-    def default_tokenizer(self):
-        return LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
-
     @slow
     def test_forward_pass_no_head(self):
         model = LayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased").to(torch_device)
 
-        tokenizer = self.default_tokenizer
-        
         input_ids, attention_mask, bbox, token_type_ids, labels = prepare_layoutlm_batch_inputs()
 
         # forward pass
@@ -348,32 +436,34 @@ class LayoutLMModelIntegrationTest(unittest.TestCase):
 
         # test the sequence output on [0, :3, :3]
         expected_slice = torch.tensor(
-            [[ 0.1785, -0.1947, -0.0425],
-            [-0.3254, -0.2807,  0.2553],
-            [-0.5391, -0.3322,  0.3364]],
+            [[0.1785, -0.1947, -0.0425], [-0.3254, -0.2807, 0.2553], [-0.5391, -0.3322, 0.3364]],
             device=torch_device,
         )
 
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=TOLERANCE))
 
         # test the pooled output on [1, :3]
-        expected_slice = torch.tensor([-0.6580, -0.0214,  0.8552], device=torch_device)
+        expected_slice = torch.tensor([-0.6580, -0.0214, 0.8552], device=torch_device)
 
         self.assertTrue(torch.allclose(outputs.pooler_output[1, :3], expected_slice, atol=TOLERANCE))
 
     @slow
     def test_forward_pass_sequence_classification(self):
         # initialize model with randomly initialized sequence classification head
-        model = LayoutLMForSequenceClassification.from_pretrained("microsoft/layoutlm-base-uncased",
-        num_labels=2).to(torch_device)
+        model = LayoutLMForSequenceClassification.from_pretrained("microsoft/layoutlm-base-uncased", num_labels=2).to(
+            torch_device
+        )
 
-        tokenizer = self.default_tokenizer
-        
         input_ids, attention_mask, bbox, token_type_ids, _ = prepare_layoutlm_batch_inputs()
 
         # forward pass
-        outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
-        labels=torch.tensor([1,1], device=torch_device))
+        outputs = model(
+            input_ids=input_ids,
+            bbox=bbox,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            labels=torch.tensor([1, 1], device=torch_device),
+        )
 
         # test whether we get a loss as a scalar
         loss = outputs.loss
@@ -384,20 +474,20 @@ class LayoutLMModelIntegrationTest(unittest.TestCase):
         logits = outputs.logits
         expected_shape = torch.Size((2, 2))
         self.assertEqual(logits.shape, expected_shape)
-    
+
     @slow
     def test_forward_pass_token_classification(self):
         # initialize model with randomly initialized token classification head
-        model = LayoutLMForTokenClassification.from_pretrained("microsoft/layoutlm-base-uncased",
-        num_labels=13).to(torch_device)
+        model = LayoutLMForTokenClassification.from_pretrained("microsoft/layoutlm-base-uncased", num_labels=13).to(
+            torch_device
+        )
 
-        tokenizer = self.default_tokenizer
-        
         input_ids, attention_mask, bbox, token_type_ids, labels = prepare_layoutlm_batch_inputs()
 
         # forward pass
-        outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
-        labels=labels)
+        outputs = model(
+            input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids, labels=labels
+        )
 
         # test the loss calculation to be around 2.65
         expected_loss = torch.tensor(2.65, device=torch_device)
