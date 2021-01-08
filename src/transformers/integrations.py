@@ -250,9 +250,10 @@ def init_deepspeed(trainer, num_training_steps):
     import deepspeed
 
     args = trainer.args
+    ds_config_file = args.deepspeed
     model = trainer.model
 
-    with io.open(args.deepspeed, "r", encoding="utf-8") as f:
+    with io.open(ds_config_file, "r", encoding="utf-8") as f:
         config = json.load(f)
 
     # The following code translates relevant trainer's cl args into the DS config
@@ -280,7 +281,7 @@ def init_deepspeed(trainer, num_training_steps):
 
     if "optimizer" in config:
         logger.info(
-            "Keeping the `optimizer` config from the config file intact, ignoring any optimizer-specific cl args"
+            f"Keeping the `optimizer` config from {ds_config_file} intact, ignoring any optimizer-specific cl args"
         )
     else:  # override only if the ds config doesn't already have this section
         # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
@@ -309,7 +310,7 @@ def init_deepspeed(trainer, num_training_steps):
     # WarmupDecayLR| linear               | get_linear_schedule_with_warmup   |
     if "scheduler" in config:
         logger.info(
-            "Keeping the `scheduler` config from the config file intact, ignoring any scheduler-specific cl args"
+            f"Keeping the `scheduler` config from {ds_config_file} intact, ignoring any scheduler-specific cl args"
         )
     else:  # override only if the ds config doesn't already have this section
         if args.lr_scheduler_type == SchedulerType.LINEAR:
@@ -343,7 +344,9 @@ def init_deepspeed(trainer, num_training_steps):
         # - `amp`: which delegates amp work to apex (which needs to be available), but it cannot be used with any ZeRO features, so probably best to be avoided.
         if trainer.fp16_backend == "apex":
             if "amp" in config:
-                logger.info("Keeping the `amp` config from the config file intact, ignoring any amp-specific cl args")
+                logger.info(
+                    f"Keeping the `amp` config from {ds_config_file} intact, ignoring any amp-specific cl args"
+                )
             else:
                 config["amp"] = {
                     "enabled": True,
@@ -352,7 +355,7 @@ def init_deepspeed(trainer, num_training_steps):
         elif trainer.fp16_backend == "amp":
             if "fp16" in config:
                 logger.info(
-                    "Keeping the `fp16` config from the config file intact, ignoring any fp16-specific cl args"
+                    f"Keeping the `fp16` config from {ds_config_file} intact, ignoring any fp16-specific cl args"
                 )
             else:
                 config["fp16"] = {
