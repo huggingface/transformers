@@ -251,6 +251,7 @@ class Trainer:
         # Seed must be set before instantiating the model when using model
         set_seed(self.args.seed)
         self.hp_name = None
+        self.deepspeed = None
 
         if model is None:
             if model_init is not None:
@@ -850,14 +851,13 @@ class Trainer:
             num_train_epochs = 1
             num_update_steps_per_epoch = max_steps
 
-        self.deepspeed = None
         if self.args.deepspeed:
             model, optimizer, lr_scheduler = self._init_deepspeed(num_training_steps=max_steps)
+            self.model = model.module
+            self.model_wrapped = model  # will get further wrapped in DDP
+            self.deepspeed = model  # DeepSpeedEngine object
             self.optimizer = optimizer
             self.lr_scheduler = lr_scheduler
-            self.model = model.module
-            self.model_wrapped = model
-            self.deepspeed = model
         else:
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
@@ -1092,6 +1092,11 @@ class Trainer:
                 state_dict = torch.load(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME))
                 self.model.load_state_dict(state_dict)
 
+            if self.deepspeed:
+                self.deepspeed.load_checkpoint(
+                    self.state.best_model_checkpoint, load_optimizer_states=False, load_lr_scheduler_states=False
+                )
+
         metrics = speed_metrics("train", start_time, self.state.max_steps)
         if self._total_flos is not None:
             self.store_flos()
@@ -1155,10 +1160,14 @@ class Trainer:
             self.store_flos()
 
         self.save_model(output_dir)
+        if self.deepspeed:
+            self.deepspeed.save_checkpoint(output_dir)
 
         # Save optimizer and scheduler
         if self.sharded_dpp:
             self.optimizer.consolidate_state_dict()
+        if self.deepspeed:
+            pass  # deepspeed.save_checkpoint above saves model/optim/sched
         if is_torch_tpu_available():
             xm.rendezvous("saving_optimizer_states")
             xm.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
@@ -1197,10 +1206,11 @@ class Trainer:
 
     def _load_optimizer_and_scheduler(self, model_path):
         """If optimizer and scheduler states exist, load them."""
-        if (
-            model_path is not None
-            and os.path.isfile(os.path.join(model_path, "optimizer.pt"))
-            and os.path.isfile(os.path.join(model_path, "scheduler.pt"))
+        if model_path is None:
+            return
+
+        if os.path.isfile(os.path.join(model_path, "optimizer.pt")) and os.path.isfile(
+            os.path.join(model_path, "scheduler.pt")
         ):
             # Load in optimizer and scheduler states
             if is_torch_tpu_available():
@@ -1222,6 +1232,10 @@ class Trainer:
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     self.lr_scheduler.load_state_dict(torch.load(os.path.join(model_path, "scheduler.pt")))
                 reissue_pt_warnings(caught_warnings)
+
+        if self.deepspeed:
+            # Not sure how to check if there is a saved deepspeed checkpoint, but since it just return None if it fails to find a deepspeed checkpoint this is sort of a check-n-load function
+            self.deepspeed.load_checkpoint(model_path, load_optimizer_states=True, load_lr_scheduler_states=True)
 
     def hyperparameter_search(
         self,
