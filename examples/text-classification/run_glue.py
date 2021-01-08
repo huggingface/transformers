@@ -421,10 +421,10 @@ def main():
             extension = data_args.test_file.split(".")[-1]
             assert extension in ["csv", "json"], "`test_file` should be a csv or a json file."
             if data_args.test_file.endswith(".csv"):
-                # Loading a dataset from local csv files
+                # Loading a dataset from a local csv file
                 test_dataset = load_dataset("csv", data_files={"test": data_args.test_file})
             else:
-                # Loading a dataset from local json files
+                # Loading a dataset from a local json file
                 test_dataset = load_dataset("json", data_files={"test": data_args.test_file})
             test_dataset = test_dataset.map(
                 preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache
