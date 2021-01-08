@@ -247,14 +247,13 @@ class MonoInputPipelineCommonMixin(CustomInputPipelineCommonMixin):
 def DummyTok():
     import tempfile
 
-    from tokenizers import ByteLevelBPETokenizer, processors
+    from tokenizers import Tokenizer, models, processors
     from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
 
-    tokenizer = ByteLevelBPETokenizer()
-    with tempfile.NamedTemporaryFile() as f:
-        tokenizer.train([f.name], vocab_size=256, show_progress=False)
+    vocab = [(chr(i), i) for i in range(256)]
+    tokenizer = Tokenizer(models.Unigram(vocab))
     tokenizer.add_special_tokens(["<bos>", "<eos>"])
-    tokenizer._tokenizer.post_processor = processors.TemplateProcessing(
+    tokenizer.post_processor = processors.TemplateProcessing(
         single="<bos> $0 <eos>", special_tokens=[("<bos>", 256), ("<eos>", 257)]
     )
     with tempfile.NamedTemporaryFile() as f:

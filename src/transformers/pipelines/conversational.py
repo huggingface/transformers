@@ -184,7 +184,7 @@ class ConversationalPipeline(Pipeline):
         super().__init__(*args, **kwargs)
 
         # We need at least an eos_token
-        assert self.tokenizer.eos_token_id is not None, "DialoguePipeline tokenizer should have an EOS token set"
+        assert self.tokenizer.eos_token_id is not None, "ConversationalPipeline tokenizer should have an EOS token set"
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
@@ -322,7 +322,9 @@ class ConversationalPipeline(Pipeline):
         Parse arguments and tokenize, adding an EOS token at the end of the user input
         """
         # Parse arguments
-        inputs = self.tokenizer(inputs, **kwargs).get("input_ids", [])
+        inputs = self.tokenizer(inputs, add_special_tokens=False, padding=False).get("input_ids", [])
+        for input in inputs:
+            input.append(self.tokenizer.eos_token_id)
         return inputs
 
     def _clean_padding_history(self, generated_tensor) -> List[List[int]]:
@@ -366,9 +368,9 @@ class ConversationalPipeline(Pipeline):
         for new_input, history in zip(inputs, histories):
             if history is not None:
                 new_input = history + new_input
-            if len(new_input) > max_length:
+            if len(new_input) > max_length - self.min_length_for_response:
                 cutoff_eos_index = 0
-                while len(new_input) - cutoff_eos_index > max_length:
+                while len(new_input) - cutoff_eos_index > max_length - self.min_length_for_response:
                     if cutoff_eos_index >= len(new_input):
                         break
                     cutoff_eos_index = new_input[cutoff_eos_index:].index(self.tokenizer.eos_token_id)
@@ -376,7 +378,7 @@ class ConversationalPipeline(Pipeline):
                         break
                     else:
                         logger.warning(
-                            f"Cutting history off because it's too long ({len(new_input)} > {max_length}) for underlying model"
+                            f"Cutting history off because it's too long ({len(new_input)} > {max_length - self.min_length_for_response}) for underlying model"
                         )
             outputs.append(new_input)
         padded_outputs = self.tokenizer.pad(

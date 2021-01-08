@@ -52,7 +52,7 @@ class SimpleConversationPipelineTests(unittest.TestCase):
 
         V, D = model.lm_head.weight.shape
         bias = torch.zeros(V, requires_grad=True)
-        bias[43] = 1
+        bias[76] = 1
 
         model.lm_head.bias = torch.nn.Parameter(bias)
         tokenizer = DummyTok()
@@ -70,7 +70,7 @@ class SimpleConversationPipelineTests(unittest.TestCase):
         self.assertEqual(len(conversation_2.past_user_inputs), 0)
 
         with self.assertLogs("transformers", level="WARNING") as log:
-            result = conversation_agent([conversation_1, conversation_2], max_length=49)
+            result = conversation_agent([conversation_1, conversation_2], max_length=48)
             self.assertEqual(len(log.output), 2)
             self.assertIn("You might consider trimming the early phase of the conversation", log.output[0])
             self.assertIn("Setting `pad_token_id`", log.output[1])
@@ -94,10 +94,11 @@ class SimpleConversationPipelineTests(unittest.TestCase):
         # One conversation with history
         conversation_2.add_user_input("Why do you recommend it?")
         with self.assertLogs("transformers", level="WARNING") as log:
-            result = conversation_agent(conversation_2, max_length=67)
-            self.assertEqual(len(log.output), 2)
-            self.assertIn("You might consider trimming the early phase of the conversation", log.output[0])
-            self.assertIn("Setting `pad_token_id`", log.output[1])
+            result = conversation_agent(conversation_2, max_length=64)
+            self.assertEqual(len(log.output), 3)
+            self.assertIn("Cutting history off because it's too long", log.output[0])
+            self.assertIn("You might consider trimming the early phase of the conversation", log.output[1])
+            self.assertIn("Setting `pad_token_id`", log.output[2])
 
         self.assertEqual(result, conversation_2)
         self.assertEqual(
@@ -118,55 +119,53 @@ class SimpleConversationPipelineTests(unittest.TestCase):
             generated_responses=["b"],
         )
         with self.assertLogs("transformers", level="WARNING") as log:
-            _ = conversation_agent(conversation, max_length=28)
+            _ = conversation_agent(conversation, max_length=60)
             self.assertEqual(len(log.output), 3)
-            self.assertIn("Cutting history off because it's too long (66 > 28) for underlying model", log.output[0])
-            self.assertIn("66 is bigger than 0.9 * max_length: 28", log.output[1])
+            self.assertIn("Cutting history off because it's too long (63 > 28) for underlying model", log.output[0])
+            self.assertIn("63 is bigger than 0.9 * max_length: 60", log.output[1])
             self.assertIn("Setting `pad_token_id`", log.output[2])
         self.assertEqual(conversation._index, 1)
         self.assertEqual(
             conversation._history,
             [
-                256,  # BOS
-                54,
-                71,
-                64,
-                83,
-                6,
-                82,
-                220,
-                83,
-                71,
-                68,
-                220,
-                75,
-                64,
-                82,
-                83,
-                220,
-                65,
-                78,
-                78,
-                74,
-                220,
-                88,
-                78,
-                84,
-                220,
-                71,
-                64,
-                85,
-                68,
-                220,
-                81,
-                68,
-                64,
-                67,
-                30,
+                87,
+                104,
+                97,
+                116,
+                39,
+                115,
+                32,
+                116,
+                104,
+                101,
+                32,
+                108,
+                97,
+                115,
+                116,
+                32,
+                98,
+                111,
+                111,
+                107,
+                32,
+                121,
+                111,
+                117,
+                32,
+                104,
+                97,
+                118,
+                101,
+                32,
+                114,
+                101,
+                97,
+                100,
+                63,
                 257,  # EOS
-                256,
-                65,
-                257,
+                98,  # b
+                257,  # EOS
             ],
         )
 
