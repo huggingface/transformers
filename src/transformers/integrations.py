@@ -333,9 +333,9 @@ class WandbCallback(TrainerCallback):
                 logger.warning(
                     "W&B installed but not logged in. Run `wandb login` or set the WANDB_API_KEY env variable."
                 )
-                self._wandb = wandb
-            else:
                 self._wandb = None
+            else:
+                self._wandb = wandb
         self._initialized = False
 
     def setup(self, args, state, model, reinit, **kwargs):
