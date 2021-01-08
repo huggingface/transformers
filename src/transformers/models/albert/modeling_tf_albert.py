@@ -803,6 +803,17 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
 
         return outputs
 
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutputWithPooling(
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
 
 @add_start_docstrings(
     """
@@ -926,6 +937,17 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
             sop_logits=sop_scores,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFAlbertForPreTrainingOutput(
+            prediction_logits=output.prediction_logits,
+            sop_logits=output.sop_logits,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -1058,6 +1080,16 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
             attentions=outputs.attentions,
         )
 
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFMaskedLMOutput(
+            logits=output.logits,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
 
 @add_start_docstrings(
     """
@@ -1154,6 +1186,16 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
             attentions=outputs.attentions,
         )
 
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFSequenceClassifierOutput(
+            logits=output.logits,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
 
 @add_start_docstrings(
     """
@@ -1247,6 +1289,16 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFTokenClassifierOutput(
+            logits=output.logits,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -1355,6 +1407,17 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
             end_logits=end_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFQuestionAnsweringModelOutput(
+            start_logits=output.start_logits,
+            end_logits=output.end_logits,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -1485,4 +1548,28 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
             logits=reshaped_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFMultipleChoiceModelOutput(
+            logits=output.logits,
+            hidden_states=hs,
+            attentions=attns,
         )

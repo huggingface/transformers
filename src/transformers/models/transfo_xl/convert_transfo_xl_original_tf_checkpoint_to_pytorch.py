@@ -22,16 +22,11 @@ import sys
 
 import torch
 
-import transformers.models.transfo_xl.tokenization_transfo_xl as data_utils
-from transformers import (
-    CONFIG_NAME,
-    WEIGHTS_NAME,
-    TransfoXLConfig,
-    TransfoXLLMHeadModel,
-    load_tf_weights_in_transfo_xl,
-)
-from transformers.models.transfo_xl.tokenization_transfo_xl import CORPUS_NAME, VOCAB_FILES_NAMES
-from transformers.utils import logging
+from ...file_utils import CONFIG_NAME, WEIGHTS_NAME
+from ...utils import logging
+from . import TransfoXLConfig, TransfoXLLMHeadModel, load_tf_weights_in_transfo_xl
+from . import tokenization_transfo_xl as data_utils
+from .tokenization_transfo_xl import CORPUS_NAME, VOCAB_FILES_NAMES
 
 
 logging.set_verbosity_info()

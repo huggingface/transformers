@@ -15,8 +15,7 @@
 
 from typing import List, Optional
 
-from transformers import add_start_docstrings
-
+from ...file_utils import add_start_docstrings
 from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncoding
 from ...utils import logging
 from ..roberta.tokenization_roberta import RobertaTokenizer

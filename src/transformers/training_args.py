@@ -147,6 +147,10 @@ class TrainingArguments:
         fp16_opt_level (:obj:`str`, `optional`, defaults to 'O1'):
             For :obj:`fp16` training, Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
             on the `Apex documentation <https://nvidia.github.io/apex/amp.html>`__.
+        fp16_backend (:obj:`str`, `optional`, defaults to :obj:`"auto"`):
+            The backend to use for mixed precision training. Must be one of :obj:`"auto"`, :obj:`"amp"` or
+            :obj:`"apex"`. :obj:`"auto"` will use AMP or APEX depending on the PyTorch version detected, while the
+            other choices will force the requested backend.
         local_rank (:obj:`int`, `optional`, defaults to -1):
             Rank of the process during distributed training.
         tpu_num_cores (:obj:`int`, `optional`):
@@ -207,16 +211,12 @@ class TrainingArguments:
               :obj:`"eval_loss"`.
             - :obj:`False` if :obj:`metric_for_best_model` is not set, or set to :obj:`"loss"` or :obj:`"eval_loss"`.
         model_parallel (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If there is more than one device, whether to use model parallelism to distribute the model's modules across
-            devices or not.
+            If the model supports model parallelism and there is more than one device, whether to use model parallelism
+            to distribute the model's modules across devices or not.
         ignore_skip_data (:obj:`bool`, `optional`, defaults to :obj:`False`):
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to :obj:`True`, the training will begin faster (as that skipping
             step can take a long time) but will not yield the same results as the interrupted training would have.
-        fp16_backend (:obj:`str`, `optional`, defaults to :obj:`"auto"`):
-            The backend to use for mixed precision training. Must be one of :obj:`"auto"`, :obj:`"amp"` or
-            :obj:`"apex"`. :obj:`"auto"` will use AMP or APEX depending on the PyTorch version detected, while the
-            other choices will force the requested backend.
         sharded_ddp (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Use Sharded DDP training from `FairScale <https://github.com/facebookresearch/fairscale>`__ (in distributed
             training only). This is an experimental feature.
@@ -341,6 +341,10 @@ class TrainingArguments:
             )
         },
     )
+    fp16_backend: str = field(
+        default="auto",
+        metadata={"help": "The backend to be used for mixed precision.", "choices": ["auto", "amp", "apex"]},
+    )
     local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
 
     tpu_num_cores: Optional[int] = field(
@@ -397,10 +401,6 @@ class TrainingArguments:
         metadata={
             "help": "When resuming training, whether or not to skip the first epochs and batches to get to the same training data."
         },
-    )
-    fp16_backend: str = field(
-        default="auto",
-        metadata={"help": "The backend to be used for mixed precision.", "choices": ["auto", "amp", "apex"]},
     )
     sharded_ddp: bool = field(
         default=False,
