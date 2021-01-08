@@ -201,12 +201,12 @@ class TFModelTesterMixin:
             model = model_class(config)
 
             model(class_inputs_dict)
-            
+
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, saved_model=True)
                 saved_model_dir = os.path.join(tmpdirname, "saved_model")
                 self.assertTrue(os.path.exists(saved_model_dir))
-    
+
     @slow
     def test_saved_model_with_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

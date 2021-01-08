@@ -1543,7 +1543,9 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
-                hidden_states_to_add = tf.cond(tf.math.greater(padding_len, 0), lambda: hidden_states[:, :-padding_len], lambda: hidden_states)
+                hidden_states_to_add = tf.cond(
+                    tf.math.greater(padding_len, 0), lambda: hidden_states[:, :-padding_len], lambda: hidden_states
+                )
                 all_hidden_states = all_hidden_states + (hidden_states_to_add,)
 
             layer_outputs = layer_module(
@@ -1565,7 +1567,9 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
                 # bzs x num_attn_heads x num_global_attn x seq_len => bzs x num_attn_heads x seq_len x num_global_attn
                 all_global_attentions = all_global_attentions + (tf.transpose(layer_outputs[2], (0, 1, 3, 2)))
 
-        hidden_states = tf.cond(tf.math.greater(padding_len, 0), lambda: hidden_states[:, :-padding_len], lambda: hidden_states)
+        hidden_states = tf.cond(
+            tf.math.greater(padding_len, 0), lambda: hidden_states[:, :-padding_len], lambda: hidden_states
+        )
 
         # Add last layer
         if output_hidden_states:
@@ -1774,14 +1778,14 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         batch_size, seq_len = input_shape[:2]
         padding_len = (attention_window - seq_len % attention_window) % attention_window
 
-        def log(): 
+        def log():
             logger.info(
                 "Input ids are automatically padded from {} to {} to be a multiple of `config.attention_window`: {}".format(
                     seq_len, seq_len + padding_len, attention_window
                 )
             )
             return 0
-        
+
         def not_log():
             return 1
 

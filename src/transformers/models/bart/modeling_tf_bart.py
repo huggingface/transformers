@@ -903,7 +903,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
 
         if inputs["output_hidden_states"]:
             all_hidden_states += (hidden_states,)
-        
+
         if inputs["output_attentions"]:
             all_self_attns = list(all_self_attns)
 
