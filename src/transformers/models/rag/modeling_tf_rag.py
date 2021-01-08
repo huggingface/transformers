@@ -837,30 +837,71 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
     def question_encoder(self):
         return self.rag.question_encoder
 
-    # TOFIX : will translate when dealing with beam-search (waiting for generation_tf_util refactor ?)
-    # @staticmethod
-    # def _reorder_cache(past, beam_idx):
-    #     """Reorders cache for generation. BART-inspired but we need to take care of the extra dimension for docs"""
+    # TOFIX : translation in progress
+    @staticmethod
+    def _reorder_cache(past, beam_idx):
+        """Reorders cache for generation. BART-inspired but we need to take care of the extra dimension for docs"""
+        
+        def tf_index_select(input_, dim, indices):
+            """
+            Input:
+                input_(tensor): input tensor
+                dim(int): dimension
+                indices(list): selected indices list
+            Output:
+                mimic of torch_tensor.index_select(dim, indices)
+            
+            credit: https://stackoverflow.com/questions/58464790/is-there-an-equivalent-function-of-pytorch-named-index-select-in-tensorflow
+            """
+            shape = input_.get_shape().as_list()
+            if dim == -1:
+                dim = len(shape)-1
+            shape[dim] = 1
 
-    #     def _reorder_stacked(hidden_states):
-    #         n_docs = hidden_states.shape[0] // beam_idx.shape[0]
-    #         hidden_states = hidden_states.view(-1, n_docs, *hidden_states.shape[1:])
-    #         hidden_states = hidden_states.index_select(0, beam_idx)
-    #         return hidden_states.view(-1, *hidden_states.shape[2:])
+            tmp = []
+            for idx in indices:
+                begin = [0]*len(shape)
+                begin[dim] = idx
+                tmp.append(tf.slice(input_, begin, shape))
+            res = tf.concat(tmp, axis=dim)
 
-    #     def _reorder_buffer(attn_cache):
-    #         for k, input_buffer_k in attn_cache.items():
-    #             if input_buffer_k is not None:
-    #                 attn_cache[k] = _reorder_stacked(input_buffer_k)
-    #         return attn_cache
+            return res
 
-    #     reordered_past = []
-    #     for layer_past in past:
-    #         # get the correct batch idx from decoder layer's batch dim for cross and self-attn
-    #         layer_past_new = {attn_key: _reorder_buffer(attn_cache) for attn_key, attn_cache in layer_past.items()}
-    #         reordered_past.append(layer_past_new)
+        def _reorder_stacked(hidden_states, new_order=beam_idx):
+            # print('X:', new_order)
+            n_docs = hidden_states.shape[0] // new_order.shape[0]
+            hidden_states = tf.reshape(hidden_states, (-1, n_docs, *hidden_states.shape[1:]) )
+            hidden_states = tf_index_select(hidden_states, 0, new_order)
+            return tf.reshape(hidden_states, (-1, *hidden_states.shape[2:]) )
 
-    #     return reordered_past
+        if len(past)==1:
+            return past
+
+        past_key_values = past[1]
+
+        reordered_past = ()
+        k=0
+        for layer_past in past_key_values:
+            # print(k, ':', beam_idx)
+            k+=1
+            # if k==1: bp()
+            # get the correct batch idx from decoder layer's batch dim for cross and self-attn
+            reordered_past += (tuple(_reorder_stacked(past_state, beam_idx) for past_state in layer_past),)
+
+        ## OLD code before TFBart refactor
+        # def _reorder_buffer(attn_cache):
+        #     for k, input_buffer_k in attn_cache.items():
+        #         if input_buffer_k is not None:
+        #             attn_cache[k] = _reorder_stacked(input_buffer_k)
+        #     return attn_cache
+
+        # reordered_past = []
+        # for layer_past in past:
+        #     # get the correct batch idx from decoder layer's batch dim for cross and self-attn
+        #     layer_past_new = {attn_key: _reorder_buffer(attn_cache) for attn_key, attn_cache in layer_past.items()}
+        #     reordered_past.append(layer_past_new)
+
+        return (past[0], reordered_past)
 
     def marginalize(self, seq_logits, doc_scores, n_docs=None):
         n_docs = n_docs if n_docs is not None else self.config.n_docs
@@ -1181,7 +1222,6 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         encoder = self.rag.generator.get_encoder()
         encoder_outputs = encoder(input_ids=context_input_ids, attention_mask=context_attention_mask, return_dict=True)
 
-        # NEED_ADVICE : check why original Torch use torch.long, but I have to use tf.int32 here
         decoder_input_ids = tf.fill(
             (batch_size * num_beams, 1),
             tf.cast(decoder_start_token_id, tf.int32),
@@ -1229,8 +1269,6 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         top_p = self.config.top_p
         repetition_penalty = self.config.repetition_penalty
 
-        # TOFIX : not yet implemented beam search
-        num_beams = 1
         if num_beams > 1:
             return self._generate_beam_search(
                 decoder_input_ids,
@@ -1254,7 +1292,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 vocab_size=vocab_size,
                 attention_mask=context_attention_mask,
                 use_cache=use_cache,
-                # model_kwargs=kwargs,
+                **kwargs,  # encoder_outputs is here as in Pytorch's version
             )
         else:
             return self._generate_no_beam_search(
@@ -1277,6 +1315,330 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 use_cache=use_cache,
                 **kwargs,  # encoder_outputs is here as in Pytorch's version
             )
+
+    def _generate_beam_search(
+        self,
+        input_ids,
+        cur_len,
+        max_length,
+        min_length,
+        do_sample,
+        early_stopping,
+        temperature,
+        top_k,
+        top_p,
+        repetition_penalty,
+        no_repeat_ngram_size,
+        bad_words_ids,
+        pad_token_id,
+        eos_token_id,
+        batch_size,
+        num_return_sequences,
+        length_penalty,
+        num_beams,
+        vocab_size,
+        encoder_outputs,
+        attention_mask,
+        use_cache,
+        **kwargs,
+    ):
+        """Generate sequences for each example with beam search."""
+
+        # generated hypotheses
+        generated_hyps = [
+            BeamHypotheses(num_beams, max_length, length_penalty, early_stopping=early_stopping)
+            for _ in range(batch_size)
+        ]
+
+        # for greedy decoding it is made sure that only tokens of the first beam are considered to avoid sampling the exact same tokens three times
+        if do_sample is False:
+            beam_scores_begin = tf.zeros((batch_size, 1), dtype=tf.float32)
+            beam_scores_end = tf.ones((batch_size, num_beams - 1), dtype=tf.float32) * (-1e9)
+            beam_scores = tf.concat([beam_scores_begin, beam_scores_end], -1)
+        else:
+            beam_scores = tf.zeros((batch_size, num_beams), dtype=tf.float32)
+
+        beam_scores = tf.reshape(beam_scores, (batch_size * num_beams,))
+
+        # cache compute states
+        kwargs["encoder_outputs"] = encoder_outputs
+        past = kwargs["encoder_outputs"]
+        # to stay similar to torch : past = (encoder_outputs, None) if encoder_outputs is not None else None
+
+        # done sentences
+        done = [False for _ in range(batch_size)]
+
+        while cur_len < max_length:
+            model_inputs = self.prepare_inputs_for_generation(
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **kwargs
+            )
+            outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
+            next_token_logits = outputs.logits[:, -1, :]  # (batch_size * num_beams, vocab_size)
+
+            # if model has past, then set the past variable to speed up decoding
+            if self._use_cache(outputs, use_cache):
+                past = outputs.past_key_values
+
+            # repetition penalty (from CTRL paper https://arxiv.org/abs/1909.05858)
+            if repetition_penalty != 1.0:
+                next_token_logits_penalties = _create_next_token_logits_penalties(
+                    input_ids, next_token_logits, repetition_penalty
+                )
+                next_token_logits = tf.math.multiply(next_token_logits, next_token_logits_penalties)
+
+            # Temperature (higher temperature => more likely to sample low probability tokens)
+            if temperature != 1.0:
+                next_token_logits = next_token_logits / temperature
+
+            if self.config.is_encoder_decoder and do_sample is False:
+                next_token_logits = self.adjust_logits_during_generation(
+                    next_token_logits, cur_len=cur_len, max_length=max_length
+                )
+            #             calculate log softmax score
+            scores = tf.nn.log_softmax(next_token_logits, axis=-1)  # (batch_size * num_beams, vocab_size)
+
+            # set eos token prob to zero if min_length is not reached
+            if eos_token_id is not None and cur_len < min_length:
+                # create eos_token_id boolean mask
+                num_batch_hypotheses = batch_size * num_beams
+
+                is_token_logit_eos_token = tf.convert_to_tensor(
+                    [True if token is eos_token_id else False for token in range(vocab_size)], dtype=tf.bool
+                )
+                eos_token_indices_mask = tf.broadcast_to(is_token_logit_eos_token, [num_batch_hypotheses, vocab_size])
+
+                scores = set_tensor_by_indices_to_value(scores, eos_token_indices_mask, -float("inf"))
+
+            if no_repeat_ngram_size > 0:
+                # calculate a list of banned tokens to prevent repetitively generating the same ngrams
+                # from fairseq: https://github.com/pytorch/fairseq/blob/a07cb6f40480928c9e0548b737aadd36ee66ac76/fairseq/sequence_generator.py#L345
+                num_batch_hypotheses = batch_size * num_beams
+                banned_tokens = calc_banned_ngram_tokens(
+                    input_ids, num_batch_hypotheses, no_repeat_ngram_size, cur_len
+                )
+                # create banned_tokens boolean mask
+                banned_tokens_indices_mask = []
+                for banned_tokens_slice in banned_tokens:
+                    banned_tokens_indices_mask.append(
+                        [True if token in banned_tokens_slice else False for token in range(vocab_size)]
+                    )
+
+                scores = set_tensor_by_indices_to_value(
+                    scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
+                )
+
+            if bad_words_ids is not None:
+                # calculate a list of banned tokens according to bad words
+                banned_tokens = calc_banned_bad_words_ids(input_ids, bad_words_ids)
+
+                banned_tokens_indices_mask = []
+                for banned_tokens_slice in banned_tokens:
+                    banned_tokens_indices_mask.append(
+                        [True if token in banned_tokens_slice else False for token in range(vocab_size)]
+                    )
+
+                scores = set_tensor_by_indices_to_value(
+                    scores, tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf")
+                )
+
+            assert shape_list(scores) == [batch_size * num_beams, vocab_size]
+
+            if do_sample:
+                _scores = scores + tf.broadcast_to(
+                    beam_scores[:, None], (batch_size * num_beams, vocab_size)
+                )  # (batch_size * num_beams, vocab_size)
+
+                # Top-p/top-k filtering
+                _scores = tf_top_k_top_p_filtering(
+                    _scores, top_k=top_k, top_p=top_p, min_tokens_to_keep=2
+                )  # (batch_size * num_beams, vocab_size)
+                # Sample 2 next tokens for each beam (so we have some spare tokens and match output of greedy beam search)
+                _scores = tf.reshape(_scores, (batch_size, num_beams * vocab_size))
+
+                next_tokens = sample_without_replacement(
+                    _scores, num_samples=2 * num_beams
+                )  # (batch_size, 2 * num_beams)
+                # Compute next scores
+                next_scores = tf.gather(_scores, next_tokens, batch_dims=1)  # (batch_size, 2 * num_beams)
+
+                # sort the sampled vector to make sure that the first num_beams samples are the best
+                next_scores_indices = tf.argsort(next_scores, direction="DESCENDING", axis=1)
+                next_scores = tf.gather(next_scores, next_scores_indices, batch_dims=1)  # (batch_size, num_beams * 2)
+                next_tokens = tf.gather(next_tokens, next_scores_indices, batch_dims=1)  # (batch_size, num_beams * 2)
+            else:
+                # Add the log prob of the new beams to the log prob of the beginning of the sequence (sum of logs == log of the product)
+                next_scores = scores + tf.broadcast_to(
+                    beam_scores[:, None], (batch_size * num_beams, vocab_size)
+                )  # (batch_size * num_beams, vocab_size)
+
+                # re-organize to group the beam together (we are keeping top hypothesis across beams)
+                next_scores = tf.reshape(
+                    next_scores, (batch_size, num_beams * vocab_size)
+                )  # (batch_size, num_beams * vocab_size)
+
+                next_scores, next_tokens = tf.math.top_k(next_scores, k=2 * num_beams, sorted=True)
+
+            assert shape_list(next_scores) == shape_list(next_tokens) == [batch_size, 2 * num_beams]
+
+            # next batch beam content
+            next_batch_beam = []
+
+            # for each sentence
+            for batch_idx in range(batch_size):
+
+                # if we are done with this sentence
+                if done[batch_idx]:
+                    assert (
+                        len(generated_hyps[batch_idx]) >= num_beams
+                    ), "Batch can only be done if at least {} beams have been generated".format(num_beams)
+                    assert (
+                        eos_token_id is not None and pad_token_id is not None
+                    ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
+                    next_batch_beam.extend([(0, pad_token_id, 0)] * num_beams)  # pad the batch
+                    continue
+
+                # next sentence beam content
+                next_sent_beam = []
+
+                # next tokens for this sentence
+                for beam_token_rank, (beam_token_id, beam_token_score) in enumerate(
+                    zip(next_tokens[batch_idx], next_scores[batch_idx])
+                ):
+                    # get beam and token IDs
+                    beam_id = beam_token_id // vocab_size
+                    token_id = beam_token_id % vocab_size
+
+                    effective_beam_id = batch_idx * num_beams + beam_id
+                    # add to generated hypotheses if end of sentence or last iteration
+                    if (eos_token_id is not None) and (token_id.numpy() == eos_token_id):
+                        # if beam_token does not belong to top num_beams tokens, it should not be added
+                        is_beam_token_worse_than_top_num_beams = beam_token_rank >= num_beams
+                        if is_beam_token_worse_than_top_num_beams:
+                            continue
+                        generated_hyps[batch_idx].add(
+                            tf.identity(input_ids[effective_beam_id]), beam_token_score.numpy()
+                        )
+                    else:
+                        # add next predicted token if it is not eos_token
+                        next_sent_beam.append((beam_token_score, token_id, effective_beam_id))
+
+                    # the beam for next step is full
+                    if len(next_sent_beam) == num_beams:
+                        break
+
+                # Check if we are done so that we can save a pad step if all(done)
+                done[batch_idx] = done[batch_idx] or generated_hyps[batch_idx].is_done(
+                    tf.reduce_max(next_scores[batch_idx]).numpy(), cur_len
+                )
+
+                # update next beam content
+                assert len(next_sent_beam) == num_beams, "Beam should always be full"
+                next_batch_beam.extend(next_sent_beam)
+                assert len(next_batch_beam) == num_beams * (batch_idx + 1)
+
+            # stop when we are done with each sentence
+            if all(done):
+                break
+
+            # sanity check / prepare next batch
+            assert len(next_batch_beam) == batch_size * num_beams
+            beam_scores = tf.convert_to_tensor([x[0] for x in next_batch_beam], dtype=tf.float32)
+            beam_tokens = tf.convert_to_tensor([x[1] for x in next_batch_beam], dtype=tf.int32)
+            beam_idx = tf.convert_to_tensor([x[2] for x in next_batch_beam], dtype=tf.int32)
+
+            # re-order batch and update current length
+            input_ids = tf.stack([tf.identity(input_ids[x, :]) for x in beam_idx])
+            input_ids = tf.concat([input_ids, tf.expand_dims(beam_tokens, 1)], axis=-1)
+            cur_len = cur_len + 1
+
+            # re-order internal states
+            if past is not None:
+                past = self._reorder_cache(past, beam_idx)
+
+            # extend attention_mask for new generated input if only decoder
+            if self.config.is_encoder_decoder is False:
+                attention_mask = tf.concat(
+                    [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
+                )
+
+        # finalize all open beam hypotheses and end to generated hypotheses
+        for batch_idx in range(batch_size):
+            # Add all open beam hypothesis to generated_hyps
+            if done[batch_idx]:
+                continue
+            # test that beam scores match previously calculated scores if not eos and batch_idx not done
+            if eos_token_id is not None and all(
+                (token_id % vocab_size).numpy().item() != eos_token_id for token_id in next_tokens[batch_idx]
+            ):
+                assert tf.reduce_all(
+                    next_scores[batch_idx, :num_beams] == tf.reshape(beam_scores, (batch_size, num_beams))[batch_idx]
+                ), "If batch_idx is not done, final next scores: {} have to equal to accumulated beam_scores: {}".format(
+                    next_scores[:, :num_beams][batch_idx], tf.reshape(beam_scores, (batch_size, num_beams))[batch_idx]
+                )
+
+            # need to add best num_beams hypotheses to generated hyps
+            for beam_id in range(num_beams):
+                effective_beam_id = batch_idx * num_beams + beam_id
+                final_score = beam_scores[effective_beam_id].numpy().item()
+                final_tokens = input_ids[effective_beam_id]
+                generated_hyps[batch_idx].add(final_tokens, final_score)
+
+        # depending on whether greedy generation is wanted or not define different output_batch_size and output_num_return_sequences_per_batch
+        output_batch_size = batch_size if do_sample else batch_size * num_return_sequences
+        output_num_return_sequences_per_batch = 1 if do_sample else num_return_sequences
+
+        # select the best hypotheses
+        sent_lengths_list = []
+        best = []
+
+        # retrieve best hypotheses
+        for i, hypotheses in enumerate(generated_hyps):
+            sorted_hyps = sorted(hypotheses.beams, key=lambda x: x[0])
+            for j in range(output_num_return_sequences_per_batch):
+                best_hyp = sorted_hyps.pop()[1]
+                sent_lengths_list.append(len(best_hyp))
+                best.append(best_hyp)
+        assert output_batch_size == len(best), "Output batch size {} must match output beam hypotheses {}".format(
+            output_batch_size, len(best)
+        )
+
+        sent_lengths = tf.convert_to_tensor(sent_lengths_list, dtype=tf.int32)
+
+        # shorter batches are filled with pad_token
+        if tf.reduce_min(sent_lengths).numpy() != tf.reduce_max(sent_lengths).numpy():
+            assert pad_token_id is not None, "`Pad_token_id` has to be defined"
+            sent_max_len = min(tf.reduce_max(sent_lengths).numpy() + 1, max_length)
+            decoded_list = []
+
+            # fill with hypothesis and eos_token_id if necessary
+            for i, hypo in enumerate(best):
+                assert sent_lengths[i] == shape_list(hypo)[0]
+                # if sent_length is max_len do not pad
+                if sent_lengths[i] == sent_max_len:
+                    decoded_slice = hypo
+                else:
+                    # else pad to sent_max_len
+                    num_pad_tokens = sent_max_len - sent_lengths[i]
+                    padding = pad_token_id * tf.ones((num_pad_tokens,), dtype=tf.int32)
+                    decoded_slice = tf.concat([hypo, padding], axis=-1)
+
+                    # finish sentence with EOS token
+                    if sent_lengths[i] < max_length:
+                        decoded_slice = tf.where(
+                            tf.range(sent_max_len, dtype=tf.int32) == sent_lengths[i],
+                            eos_token_id * tf.ones((sent_max_len,), dtype=tf.int32),
+                            decoded_slice,
+                        )
+                # add to list
+                decoded_list.append(decoded_slice)
+
+            decoded = tf.stack(decoded_list)
+        else:
+            # none of the hypotheses have an eos_token
+            assert (len(hypo) == max_length for hypo in best)
+            decoded = tf.stack(best)
+
+        return decoded
 
     def _generate_no_beam_search(
         self,
@@ -1485,7 +1847,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
     def get_nll(self, seq_logits, doc_scores, target, reduce_loss=False, epsilon=0.0, n_docs=None):
         n_docs = n_docs if n_docs is not None else self.config.n_docs
         # shift tokens left (from original Pytorch's version)
-        # NEED_ADVICE : this does not perform in T5 -> inconsistent label format ?
+        # CONCERNS : T5 shift-right, RAG shift-left -> inconsistent label format ?
         target = tf.concat([target[:, 1:], tf.fill([target.shape[0], 1], self.config.generator.pad_token_id)], axis=1)
         rag_logprobs = self.marginalize(seq_logits, doc_scores, n_docs)
         loss = self.compute_loss(target, rag_logprobs, from_logits=True, reduce_loss=reduce_loss)
@@ -1493,7 +1855,6 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         return loss
 
     # Adopted modeling_tf_bart + add smooth_loss to match with pytorch version
-    # TOFIX: By using Bart's melted_label technique, it's not support reduce_loss=False here -> have to re-implement
     def compute_loss(self, labels, y_pred, smooth_epsilon=0.0, from_logits=True, reduce_loss=False):
         """CrossEntropyLoss that ignores pad tokens"""
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
@@ -1561,37 +1922,6 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
             load_weight_prefix=self.load_weight_prefix,
             name="rag",
         )
-
-    # UGLY HACK: (TEMPorarily put the hack back again to show case of the new nq_checkpoint test)
-    # really ugly fixed and require torch model: manually and ineffcient fixed of two weights name mismatched
-    @classmethod
-    def from_pretrained(cls, path_or_weight_name, model_pt=None, **kwargs):
-
-        print(path_or_weight_name, kwargs)
-        model = super(TFRagSequenceForGeneration, cls).from_pretrained(path_or_weight_name, **kwargs)
-
-        if path_or_weight_name == "facebook/rag-sequence-nq":
-            import gc
-
-            import tensorflow.keras.backend as K
-
-            from transformers import RagSequenceForGeneration
-
-            gc.collect()
-            if model_pt is None:
-                model_pt = RagSequenceForGeneration.from_pretrained(path_or_weight_name, **kwargs)
-
-            K.set_value(
-                model.rag.generator.model.shared.weight, model_pt.rag.generator.model.shared.weight.detach().numpy()
-            )
-            K.set_value(
-                model.rag.generator.final_logits_bias, model_pt.rag.generator.final_logits_bias.detach().numpy()
-            )
-            del model_pt
-            gc.collect()
-            print("*** Ugly fix of %s weights loading -- not a generalizable solution ***" % path_or_weight_name)
-
-        return model
 
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
