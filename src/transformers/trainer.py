@@ -896,7 +896,7 @@ class Trainer:
                     self.lr_scheduler.step()
                     model.zero_grad()
                     self.state.global_step += 1
-                    self.state.epoch = round( epoch + (step + 1) / steps_in_epoch, 2)
+                    self.state.epoch = round(epoch + (step + 1) / steps_in_epoch, 2)
                     self.control = self.callback_handler.on_step_end(self.args, self.state, self.control)
 
                     self._maybe_log_save_evaluate(tr_loss, model, trial, epoch)
