@@ -25,7 +25,6 @@ from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
-    BaseModelOutputWithPooling,
     BaseModelOutputWithPoolingAndCrossAttentions,
     MaskedLMOutput,
     SequenceClassifierOutput,
@@ -598,6 +597,7 @@ class LayoutLMPreTrainedModel(PreTrainedModel):
     """
 
     config_class = LayoutLMConfig
+    pretrained_model_archive_map = LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST
     base_model_prefix = "layoutlm"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
@@ -642,8 +642,8 @@ LAYOUTLM_INPUTS_DOCSTRING = r"""
         bbox (:obj:`torch.LongTensor` of shape :obj:`({0}, 4)`, `optional`):
             Bounding boxes of each input sequence tokens. Selected in the range ``[0,
             config.max_2d_position_embeddings-1]``. Each bounding box should be a normalized version in (x0, y0, x1,
-            y1) format, where (x0, y0) corresponds to the position of the upper left in the bounding box, and (x1, y1)
-            represents the position of the lower right. See Overview section for normalization.
+            y1) format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and
+            (x1, y1) represents the position of the lower right corner. See :ref:`Overview` for normalization.
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``: ``1`` for
             tokens that are NOT MASKED, ``0`` for MASKED tokens.
@@ -683,11 +683,6 @@ LAYOUTLM_INPUTS_DOCSTRING = r"""
     LAYOUTLM_START_DOCSTRING,
 )
 class LayoutLMModel(LayoutLMPreTrainedModel):
-
-    config_class = LayoutLMConfig
-    pretrained_model_archive_map = LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST
-    base_model_prefix = "layoutlm"
-
     def __init__(self, config):
         super(LayoutLMModel, self).__init__(config)
         self.config = config
@@ -713,7 +708,7 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(LAYOUTLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPoolingAndCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
@@ -742,17 +737,13 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
 
             >>> words = ["Hello", "world"]
             >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
-            >>> inputs = tokenizer(words, return_tensors="pt")
-            >>> input_ids = inputs['input_ids']
-            >>> attention_mask = inputs['attention_mask']
-            >>> token_type_ids = inputs['token_type_ids']
 
             >>> tokens = []
             >>> token_boxes = []
             >>> for word, box in zip(words, normalized_word_boxes):
-            ...    word_tokens = tokenizer.tokenize(word)
-            ...    tokens.extend(word_tokens)
-            ...    token_boxes.extend([box] * len(word_tokens))
+            ...     word_tokens = tokenizer.tokenize(word)
+            ...     tokens.extend(word_tokens)
+            ...     token_boxes.extend([box] * len(word_tokens))
 
             >>> # add cls + sep tokens
             >>> tokens = [tokenizer.cls_token] + tokens + [tokenizer.sep_token]
@@ -839,10 +830,6 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
 
 @add_start_docstrings("""LayoutLM Model with a `language modeling` head on top. """, LAYOUTLM_START_DOCSTRING)
 class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
-    config_class = LayoutLMConfig
-    pretrained_model_archive_map = LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST
-    base_model_prefix = "layoutlm"
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -896,17 +883,13 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
 
             >>> words = ["Hello", "[MASK]"]
             >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
-            >>> inputs = tokenizer(words, return_tensors="pt")
-            >>> input_ids = inputs['input_ids']
-            >>> attention_mask = inputs['attention_mask']
-            >>> token_type_ids = inputs['token_type_ids']
 
             >>> tokens = []
             >>> token_boxes = []
             >>> for word, box in zip(words, normalized_word_boxes):
-            ...    word_tokens = tokenizer.tokenize(word)
-            ...    tokens.extend(word_tokens)
-            ...    token_boxes.extend([box] * len(word_tokens))
+            ...     word_tokens = tokenizer.tokenize(word)
+            ...     tokens.extend(word_tokens)
+            ...     token_boxes.extend([box] * len(word_tokens))
 
             >>> # add cls + sep tokens
             >>> tokens = [tokenizer.cls_token] + tokens + [tokenizer.sep_token]
@@ -972,10 +955,6 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
     LAYOUTLM_START_DOCSTRING,
 )
 class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
-    config_class = LayoutLMConfig
-    pretrained_model_archive_map = LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST
-    base_model_prefix = "layoutlm"
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1022,17 +1001,13 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
 
             >>> words = ["Hello", "world"]
             >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
-            >>> inputs = tokenizer(words, return_tensors="pt")
-            >>> input_ids = inputs['input_ids']
-            >>> attention_mask = inputs['attention_mask']
-            >>> token_type_ids = inputs['token_type_ids']
 
             >>> tokens = []
             >>> token_boxes = []
             >>> for word, box in zip(words, normalized_word_boxes):
-            ...    word_tokens = tokenizer.tokenize(word)
-            ...    tokens.extend(word_tokens)
-            ...    token_boxes.extend([box] * len(word_tokens))
+            ...     word_tokens = tokenizer.tokenize(word)
+            ...     tokens.extend(word_tokens)
+            ...     token_boxes.extend([box] * len(word_tokens))
 
             >>> # add cls + sep tokens
             >>> tokens = [tokenizer.cls_token] + tokens + [tokenizer.sep_token]
@@ -1102,10 +1077,6 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
     LAYOUTLM_START_DOCSTRING,
 )
 class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
-    config_class = LayoutLMConfig
-    pretrained_model_archive_map = LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST
-    base_model_prefix = "layoutlm"
-
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1151,17 +1122,13 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
 
             >>> words = ["Hello", "world"]
             >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
-            >>> inputs = tokenizer(words, return_tensors="pt")
-            >>> input_ids = inputs['input_ids']
-            >>> attention_mask = inputs['attention_mask']
-            >>> token_type_ids = inputs['token_type_ids']
 
             >>> tokens = []
             >>> token_boxes = []
             >>> for word, box in zip(words, normalized_word_boxes):
-            ...    word_tokens = tokenizer.tokenize(word)
-            ...    tokens.extend(word_tokens)
-            ...    token_boxes.extend([box] * len(word_tokens))
+            ...     word_tokens = tokenizer.tokenize(word)
+            ...     tokens.extend(word_tokens)
+            ...     token_boxes.extend([box] * len(word_tokens))
 
             >>> # add cls + sep tokens
             >>> tokens = [tokenizer.cls_token] + tokens + [tokenizer.sep_token]
