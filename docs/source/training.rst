@@ -379,21 +379,114 @@ You can configure DeepSpeed integration in 2 ways:
 1. supply most of the configuration inside ``ds_config.json``
 2. configure it using the normal trainer arguments
 
-XXX: need more details and examples here.
+For example here is an example of a ``ds_config.json`` configuration file which activates ZeRO stage 2 features,
+enables fp16, uses Adam optimizer and WarmupLR scheduler:
 
+.. code-block:: json
 
-Notes:
+    {
+        "steps_per_print": 2000,
 
-- DeepSpeed works with the PyTorch Trainer but not TF Trainer.
+        "fp16": {
+            "enabled": true,
+            "loss_scale": 0,
+            "loss_scale_window": 1000,
+            "hysteresis": 2,
+            "min_loss_scale": 1
+        },
 
-Notes to check:
+       "zero_optimization": {
+           "stage": 2,
+           "allgather_partitions": true,
+           "allgather_bucket_size": 200000000,
+           "overlap_comm": true,
+           "reduce_scatter": true,
+           "reduce_bucket_size": 200000000,
+           "contiguous_gradients": true,
+           "cpu_offload": true
+       },
 
-g-karthik: While DeepSpeed has a pip installable PyPI package, IIRC it is highly recommended that it be installed from
-source.
+       "optimizer": {
+         "type": "Adam",
+         "params": {
+           "lr": 3e-5,
+           "betas": [
+             0.8,
+             0.999
+           ],
+           "eps": 1e-8,
+           "weight_decay": 3e-7
+         }
+       },
+       "scheduler": {
+         "type": "WarmupLR",
+         "params": {
+           "warmup_min_lr": 0,
+           "warmup_max_lr": 3e-5,
+           "warmup_num_steps": 500
+         }
+       }
+    }                
 
-g-karthik: in order to use certain features in DeepSpeed such as 1-bit Adam, there are certain special installations to
-be done that do not come with the PyPI package.
+If you already have a command line that you have been using with HF Trainer args, you can continue using those and
+Trainer will automatically convert them into the corresponding DeepSpeed configuration file. So for example you could
+use the following ``ds_config.json`` configuration file:
 
+.. code-block:: json
+
+    {
+       "steps_per_print": 2000,    
+       "zero_optimization": {
+           "stage": 2,
+           "allgather_partitions": true,
+           "allgather_bucket_size": 200000000,
+           "overlap_comm": true,
+           "reduce_scatter": true,
+           "reduce_bucket_size": 200000000,
+           "contiguous_gradients": true,
+           "cpu_offload": true
+       }    
+    }                
+
+and the following command line arguments:
+
+.. code-block:: bash
+
+    --learning_rate 3e-5 --warmup_steps 500 --adam_beta1 0.8 --adam_beta2 0.999 --adam_epsilon 1e-8 \
+    --weight_decay 3e-7 --lr_scheduler_type constant_with_warmup --fp16 --fp16_backend amp
+
+to achieve the same as the much longer json file in the first example.
+
+You always have to supply the following arguments specific to both DeepSpeed configuration and are also needed by the
+Trainer:
+
+* ``--per_device_train_batch_size``
+* ``--gradient_accumulation_steps``
+
+For all the DeepSpeed configuration options that can be used in its configuration file please refer to the `following
+documentation <https://www.deepspeed.ai/docs/config-json/>`__
+
+The ``zero_optimization`` section of the configuration file is the most important part (`docs
+<https://www.deepspeed.ai/docs/config-json/#zero-optimizations-for-fp16-training>`__). For example, here is where you
+define which ZeRO stages you want to enable.
+
+Note the buffer sizes `allgather_bucket_size`, which `reduce_bucket_size` in this example are set to a relatively small
+size which most cards should handle - if you have a large GPU consider raising those to ``500000000`` to get better
+performance.
+
+``transformers`` trainer only integrates DeepSpeed, therefore if you have any questions with regards to its usage
+please file an issue with `DeepSpeed github <https://github.com/microsoft/deepspeed>`__.
+
+Miscellaneous notes:
+
+* DeepSpeed works with the PyTorch Trainer but not TF Trainer.
+* While DeepSpeed has a pip
+installable PyPI package, it is highly recommended that it be `installed from source
+<https://github.com/microsoft/deepspeed#installation>`__ to best match your hardware and also to enable features like
+1-bit Adam, which aren't available in the pypi distribution.
+
+Main DeepSpeed resources: - `github <https://github.com/microsoft/deepspeed>`__ - `Usage docs
+<https://www.deepspeed.ai/getting-started/>`__ - `API docs <https://deepspeed.readthedocs.io/en/latest/index.html>`__
 
 
 .. _additional-resources:
