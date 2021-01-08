@@ -87,7 +87,6 @@ from .trainer_utils import (
     EvalPrediction,
     HPSearchBackend,
     PredictionOutput,
-    SchedulerType,
     TrainOutput,
     default_compute_objective,
     default_hp_space,
@@ -279,8 +278,6 @@ class Trainer:
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
 
-        self.optimizer, self.lr_scheduler = optimizers
-
         # Model parallel
         if not self.args.model_parallel:
             model = model.to(args.device)
@@ -290,6 +287,7 @@ class Trainer:
         self.model = model
 
         self.compute_metrics = compute_metrics
+        self.optimizer, self.lr_scheduler = optimizers
         if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
             raise RuntimeError(
                 "Passing a `model_init` is incompatible with providing the `optimizers` argument."
@@ -344,20 +342,18 @@ class Trainer:
         # Mixed precision setup
         self.use_apex = False
         self.use_amp = False
-        self.fp16_backend = None
 
         if args.fp16:
             if args.fp16_backend == "auto":
-                self.fp16_backend = "amp" if _is_native_amp_available else "apex"
+                fp16_backend = "amp" if _is_native_amp_available else "apex"
             else:
-                self.fp16_backend = args.fp16_backend
-            logger.info(f"Using {self.fp16_backend} fp16 backend")
+                fp16_backend = args.fp16_backend
+            logger.info(f"Using {fp16_backend} fp16 backend")
 
-        # deepspeed manages its own fp16, so don't interfere
-        if args.fp16 and not args.deepspeed:
-            if self.fp16_backend == "amp":
+            if fp16_backend == "amp":
                 self.use_amp = True
-                self.scaler = ShardedGradScaler() if self.sharded_dpp else torch.cuda.amp.GradScaler()
+                if not args.deepspeed:  # deepspeed manages its own fp16
+                    self.scaler = ShardedGradScaler() if self.sharded_dpp else torch.cuda.amp.GradScaler()
             else:
                 if not is_apex_available():
                     raise ImportError(
@@ -386,37 +382,14 @@ class Trainer:
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
-    def get_num_training_steps(self):
-        """
-        number of training steps is either
-
-        1. args.max_steps if --max_steps > 1
-        2. else derive from dataset if we can get its size
-        """
-        if self.args.max_steps > 0:
-            return self.args.max_steps
-        elif isinstance(self.train_dataset, collections.abc.Sized):
-            # XXX: hack to get dataset len before dist world is initiated
-            train_dataloader = DataLoader(
-                self.train_dataset,
-                batch_size=self.args.train_batch_size,
-                collate_fn=self.data_collator,
-                drop_last=self.args.dataloader_drop_last,
-            )
-            num_update_steps_per_epoch = len(train_dataloader) // self.args.gradient_accumulation_steps
-            num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
-            return math.ceil(self.args.num_train_epochs * num_update_steps_per_epoch)
-        else:
-            raise ValueError(
-                "can't figure out the number of training steps, either set --max_steps or fix the dataloader so that it returns the length of the dataset"
-            )
-
     def _init_deepspeed(self, num_training_steps):
         import io
         import json
         from types import SimpleNamespace
 
         import deepspeed
+
+        from .trainer_utils import SchedulerType
 
         args = self.args
         model = self.model
@@ -506,29 +479,26 @@ class Trainer:
             }
 
         # fp16
-        if self.fp16_backend is not None:
-            # Deepspeed has 2 possible fp16 config entries:
-            # - `fp16`: for the native amp - it has a bunch of optional params but we won't set any here unless the user did the work
-            # - `amp`: which delegates amp work to apex (which needs to be available), but it cannot be used with any ZeRO features, so probably best to be avoided.
-            if self.fp16_backend == "apex":
-                if "amp" in config:
-                    logger.info(
-                        "Keeping the `amp` config from the config file intact, ignoring any amp-specific cl args"
-                    )
-                else:
-                    config["amp"] = {
-                        "enabled": True,
-                        "opt_level": args.fp16_opt_level,
-                    }
-            else:  # self.fp16_backend == amp
-                if "fp16" in config:
-                    logger.info(
-                        "Keeping the `fp16` config from the config file intact, ignoring any fp16-specific cl args"
-                    )
-                else:
-                    config["fp16"] = {
-                        "enabled": True,
-                    }
+        # Deepspeed has 2 possible fp16 config entries:
+        # - `fp16`: for the native amp - it has a bunch of optional params but we won't set any here unless the user did the work
+        # - `amp`: which delegates amp work to apex (which needs to be available), but it cannot be used with any ZeRO features, so probably best to be avoided.
+        if self.use_apex:
+            if "amp" in config:
+                logger.info("Keeping the `amp` config from the config file intact, ignoring any amp-specific cl args")
+            else:
+                config["amp"] = {
+                    "enabled": True,
+                    "opt_level": args.fp16_opt_level,
+                }
+        elif self.use_amp:
+            if "fp16" in config:
+                logger.info(
+                    "Keeping the `fp16` config from the config file intact, ignoring any fp16-specific cl args"
+                )
+            else:
+                config["fp16"] = {
+                    "enabled": True,
+                }
 
         # for clarity extract the specific cl args that are being passed to deepspeed
         ds_args = dict(local_rank=args.local_rank)
