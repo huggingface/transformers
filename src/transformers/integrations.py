@@ -15,13 +15,17 @@
 Integrations with other Python libraries.
 """
 import importlib.util
+import io
+import json
 import math
 import numbers
 import os
 import re
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
+from .trainer_utils import SchedulerType
 from .utils import logging
 
 
@@ -243,13 +247,7 @@ def init_deepspeed(trainer, num_training_steps):
 
     Returns: model, optimizer, lr_scheduler
     """
-    import io
-    import json
-    from types import SimpleNamespace
-
     import deepspeed
-
-    from .trainer_utils import SchedulerType
 
     args = trainer.args
     model = trainer.model
