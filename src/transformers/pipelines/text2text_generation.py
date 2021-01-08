@@ -72,7 +72,8 @@ class Text2TextGenerationPipeline(Pipeline):
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to clean up the potential extra spaces in the text output.
             truncation (:obj:`TruncationStrategy`, `optional`, defaults to :obj:`TruncationStrategy.DO_NOT_TRUNCATE`):
-                The truncation strategy for the tokenization within the pipeline. :obj:`TruncationStrategy.DO_NOT_TRUNCATE` (default) will never truncate, but it is sometimes desirable
+                The truncation strategy for the tokenization within the pipeline.
+                :obj:`TruncationStrategy.DO_NOT_TRUNCATE` (default) will never truncate, but it is sometimes desirable
                 to truncate the input to fit the model's max_length instead of throwing an error down the line.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
