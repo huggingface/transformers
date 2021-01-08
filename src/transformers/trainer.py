@@ -221,16 +221,14 @@ class Trainer:
 
     Important attributes:
 
-        ``self.model`` - always points to the core model. If using a transformers model, it will be a
-        :class:`PreTrainedModel` subclass.
-
-        ``self.model_wrapped`` - always points to the most external model in case one or more other modules wrap the
-        original model. This is the model that should be used for the forward pass. For example, under ``DeepSpeed``,
-        the inner model is wrapped in ``DeepSpeed`` and then again in ``DistributedDataParallel``. If the inner model
-        hasn't been wrapped, then ``self.model_wrapped`` is the same as ``self.model``.
-
-       ``self.is_model_parallel`` - is True if a model has been switched to a model parallel mode.
-
+        - **model** -- Always points to the core model. If using a transformers model, it will be a
+          :class:`~transformers.PreTrainedModel` subclass.
+        - **model_wrapped** -- Always points to the most external model in case one or more other modules wrap the
+          original model. This is the model that should be used for the forward pass. For example, under ``DeepSpeed``,
+          the inner model is wrapped in ``DeepSpeed`` and then again in ``torch.nn.DistributedDataParallel``. If the
+          inner model hasn't been wrapped, then ``self.model_wrapped`` is the same as ``self.model``.
+        - **is_model_parallel** -- Whether or not a model has been switched to a model parallel mode (different from
+          data parallelism, this means some of the model layers are split on different GPUs).
     """
 
     def __init__(
