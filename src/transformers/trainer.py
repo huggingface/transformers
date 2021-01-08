@@ -35,7 +35,6 @@ from .integrations import (  # isort: split
     is_azureml_available,
     is_comet_available,
     is_fairscale_available,
-    is_deepspeed_available,
     is_mlflow_available,
     is_optuna_available,
     is_ray_tune_available,
@@ -155,9 +154,6 @@ if is_fairscale_available():
     from fairscale.optim import OSS
     from fairscale.optim.grad_scaler import ShardedGradScaler
 
-
-if is_deepspeed_available():
-    import deepspeed
 
 if TYPE_CHECKING:
     import optuna
@@ -283,24 +279,7 @@ class Trainer:
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
 
-        # Mixed precision setup: part 1
-        self.use_apex = False
-        self.use_amp = False
-        fp16_backend = None
-
-        if args.fp16:
-            if args.fp16_backend == "auto":
-                fp16_backend = "amp" if _is_native_amp_available else "apex"
-            else:
-                fp16_backend = args.fp16_backend
-            logger.info(f"Using {fp16_backend} fp16 backend")
-
-        if args.deepspeed:
-            model, optimizer, lr_scheduler = self._init_deepspeed(model, fp16_backend)
-            self.optimizer = optimizer
-            self.lr_scheduler = lr_scheduler
-        else:
-            self.optimizer, self.lr_scheduler = optimizers
+        self.optimizer, self.lr_scheduler = optimizers
 
         # Model parallel
         if not self.args.model_parallel:
@@ -308,10 +287,7 @@ class Trainer:
 
         # later use `self.model is self.model_wrapped` to check if it's wrapped or not
         self.model_wrapped = model
-        if args.deepspeed:
-            self.model = model.module
-        else:
-            self.model = model
+        self.model = model
 
         self.compute_metrics = compute_metrics
         if model_init is not None and (self.optimizer is not None or self.lr_scheduler is not None):
@@ -365,10 +341,21 @@ class Trainer:
             else:
                 self.sharded_dpp = True
 
-        # Mixed precision setup: part 2
+        # Mixed precision setup
+        self.use_apex = False
+        self.use_amp = False
+        self.fp16_backend = None
+
+        if args.fp16:
+            if args.fp16_backend == "auto":
+                self.fp16_backend = "amp" if _is_native_amp_available else "apex"
+            else:
+                self.fp16_backend = args.fp16_backend
+            logger.info(f"Using {self.fp16_backend} fp16 backend")
+
         # deepspeed manages its own fp16, so don't interfere
         if args.fp16 and not args.deepspeed:
-            if fp16_backend == "amp":
+            if self.fp16_backend == "amp":
                 self.use_amp = True
                 self.scaler = ShardedGradScaler() if self.sharded_dpp else torch.cuda.amp.GradScaler()
             else:
@@ -424,15 +411,15 @@ class Trainer:
                 "can't figure out the number of training steps, either set --max_steps or fix the dataloader so that it returns the length of the dataset"
             )
 
-    def _init_deepspeed(self, model, fp16_backend):
+    def _init_deepspeed(self, num_training_steps):
         import io
         import json
         from types import SimpleNamespace
 
-        args = self.args
+        import deepspeed
 
-        # for clarity extract the specific cl args that are being passed to deepspeed
-        ds_args = dict(local_rank=args.local_rank)
+        args = self.args
+        model = self.model
 
         with io.open(args.deepspeed, "r", encoding="utf-8") as f:
             config = json.load(f)
@@ -460,12 +447,11 @@ class Trainer:
         config["train_micro_batch_size_per_gpu"] = args.per_device_train_batch_size
         config["gradient_accumulation_steps"] = args.gradient_accumulation_steps
 
-        # override only if the ds config doesn't already have this section
         if "optimizer" in config:
             logger.info(
                 "Keeping the `optimizer` config from the config file intact, ignoring any optimizer-specific cl args"
             )
-        else:
+        else:  # override only if the ds config doesn't already have this section
             # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
             optimizer_configs = {
                 "Adam": {
@@ -490,18 +476,16 @@ class Trainer:
         # OneCycle     | na                   | na                                | 1CLR
         # WarmupLR     | constant_with_warmup | get_constant_schedule_with_warmup | w/ warmup_min_lr=0
         # WarmupDecayLR| linear               | get_linear_schedule_with_warmup   |
-
-        # override only if the ds config doesn't already have this section
         if "scheduler" in config:
             logger.info(
                 "Keeping the `scheduler` config from the config file intact, ignoring any scheduler-specific cl args"
             )
-        else:
+        else:  # override only if the ds config doesn't already have this section
             if args.lr_scheduler_type == SchedulerType.LINEAR:
                 scheduler = "WarmupDecayLR"
                 params = {
                     "last_batch_iteration": -1,
-                    "total_num_steps": self.get_num_training_steps(),
+                    "total_num_steps": num_training_steps,
                     "warmup_min_lr": 0,
                     "warmup_max_lr": args.learning_rate,
                     "warmup_num_steps": args.warmup_steps,
@@ -522,11 +506,11 @@ class Trainer:
             }
 
         # fp16
-        if fp16_backend is not None:
+        if self.fp16_backend is not None:
             # Deepspeed has 2 possible fp16 config entries:
             # - `fp16`: for the native amp - it has a bunch of optional params but we won't set any here unless the user did the work
             # - `amp`: which delegates amp work to apex (which needs to be available), but it cannot be used with any ZeRO features, so probably best to be avoided.
-            if fp16_backend == "apex":
+            if self.fp16_backend == "apex":
                 if "amp" in config:
                     logger.info(
                         "Keeping the `amp` config from the config file intact, ignoring any amp-specific cl args"
@@ -536,7 +520,7 @@ class Trainer:
                         "enabled": True,
                         "opt_level": args.fp16_opt_level,
                     }
-            else:  # fp16_backend == amp
+            else:  # self.fp16_backend == amp
                 if "fp16" in config:
                     logger.info(
                         "Keeping the `fp16` config from the config file intact, ignoring any fp16-specific cl args"
@@ -545,6 +529,9 @@ class Trainer:
                     config["fp16"] = {
                         "enabled": True,
                     }
+
+        # for clarity extract the specific cl args that are being passed to deepspeed
+        ds_args = dict(local_rank=args.local_rank)
 
         # init that takes part of the config via `args`, and the bulk of it via `config_params`
         model_parameters = filter(lambda p: p.requires_grad, model.parameters())
@@ -889,7 +876,15 @@ class Trainer:
             num_train_epochs = 1
             num_update_steps_per_epoch = max_steps
 
-        self.create_optimizer_and_scheduler(num_training_steps=max_steps)
+        if self.args.deepspeed:
+            model, optimizer, lr_scheduler = self._init_deepspeed(num_training_steps=max_steps)
+            self.optimizer = optimizer
+            self.lr_scheduler = lr_scheduler
+            self.model = model.module
+            self.model_wrapped = model
+        else:
+            self.create_optimizer_and_scheduler(num_training_steps=max_steps)
+
         self.state = TrainerState()
         self.state.is_hyper_param_search = trial is not None
 

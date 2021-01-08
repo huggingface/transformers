@@ -328,11 +328,11 @@ DeepSpeed
 The other important third party component that this trainer supports is `DeepSpeed
 <https://github.com/microsoft/DeepSpeed>`__.
 
-It implements almost everything described in the `ZeRO paper <https://arxiv.org/abs/1910.02054>`__. 
-As of this writing it is still missing ZeRO's stage 3. "Parameter Partitioning (Pos+g+p )", but it fully supports:
+It implements almost everything described in the `ZeRO paper <https://arxiv.org/abs/1910.02054>`__. As of this writing
+it is still missing ZeRO's stage 3. "Parameter Partitioning (Pos+g+p )", but it fully supports:
 
-1) Optimizer State Partitioning (stage 1)
-2) Add Gradient Partitioning (stage 2)
+1. Optimizer State Partitioning (stage 1)
+2. Add Gradient Partitioning (stage 2)
 
 To enable DeepSpeed you need to first install DeepSpeed following `the instructions
 <https://github.com/microsoft/deepspeed#installation>`__.
