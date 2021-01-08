@@ -342,18 +342,19 @@ class Trainer:
         # Mixed precision setup
         self.use_apex = False
         self.use_amp = False
+        self.fp16_backend = None
 
         if args.fp16:
             if args.fp16_backend == "auto":
-                fp16_backend = "amp" if _is_native_amp_available else "apex"
+                self.fp16_backend = "amp" if _is_native_amp_available else "apex"
             else:
-                fp16_backend = args.fp16_backend
-            logger.info(f"Using {fp16_backend} fp16 backend")
+                self.fp16_backend = args.fp16_backend
+            logger.info(f"Using {self.fp16_backend} fp16 backend")
 
-            if fp16_backend == "amp":
+        if args.fp16 and not args.deepspeed:  # deepspeed manages its own fp16
+            if self.fp16_backend == "amp":
                 self.use_amp = True
-                if not args.deepspeed:  # deepspeed manages its own fp16
-                    self.scaler = ShardedGradScaler() if self.sharded_dpp else torch.cuda.amp.GradScaler()
+                self.scaler = ShardedGradScaler() if self.sharded_dpp else torch.cuda.amp.GradScaler()
             else:
                 if not is_apex_available():
                     raise ImportError(
@@ -479,26 +480,29 @@ class Trainer:
             }
 
         # fp16
-        # Deepspeed has 2 possible fp16 config entries:
-        # - `fp16`: for the native amp - it has a bunch of optional params but we won't set any here unless the user did the work
-        # - `amp`: which delegates amp work to apex (which needs to be available), but it cannot be used with any ZeRO features, so probably best to be avoided.
-        if self.use_apex:
-            if "amp" in config:
-                logger.info("Keeping the `amp` config from the config file intact, ignoring any amp-specific cl args")
-            else:
-                config["amp"] = {
-                    "enabled": True,
-                    "opt_level": args.fp16_opt_level,
-                }
-        elif self.use_amp:
-            if "fp16" in config:
-                logger.info(
-                    "Keeping the `fp16` config from the config file intact, ignoring any fp16-specific cl args"
-                )
-            else:
-                config["fp16"] = {
-                    "enabled": True,
-                }
+        if self.fp16_backend is not None:
+            # Deepspeed has 2 possible fp16 config entries:
+            # - `fp16`: for the native amp - it has a bunch of optional params but we won't set any here unless the user did the work
+            # - `amp`: which delegates amp work to apex (which needs to be available), but it cannot be used with any ZeRO features, so probably best to be avoided.
+            if self.fp16_backend == "apex":
+                if "amp" in config:
+                    logger.info(
+                        "Keeping the `amp` config from the config file intact, ignoring any amp-specific cl args"
+                    )
+                else:
+                    config["amp"] = {
+                        "enabled": True,
+                        "opt_level": args.fp16_opt_level,
+                    }
+            elif self.fp16_backend == "amp":
+                if "fp16" in config:
+                    logger.info(
+                        "Keeping the `fp16` config from the config file intact, ignoring any fp16-specific cl args"
+                    )
+                else:
+                    config["fp16"] = {
+                        "enabled": True,
+                    }
 
         # for clarity extract the specific cl args that are being passed to deepspeed
         ds_args = dict(local_rank=args.local_rank)
@@ -846,12 +850,14 @@ class Trainer:
             num_train_epochs = 1
             num_update_steps_per_epoch = max_steps
 
+        self.deepspeed = None
         if self.args.deepspeed:
             model, optimizer, lr_scheduler = self._init_deepspeed(num_training_steps=max_steps)
             self.optimizer = optimizer
             self.lr_scheduler = lr_scheduler
             self.model = model.module
             self.model_wrapped = model
+            self.deepspeed = model
         else:
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
@@ -1147,6 +1153,7 @@ class Trainer:
             output_dir = os.path.join(self.args.output_dir, checkpoint_folder)
 
             self.store_flos()
+
         self.save_model(output_dir)
 
         # Save optimizer and scheduler
