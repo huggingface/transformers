@@ -773,17 +773,7 @@ class BartEncoder(BartPretrainedModel):
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None)
             else:
-<<<<<<< HEAD
-                hidden_states, attn = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    output_attentions=output_attentions,
-                )
-=======
                 if getattr(self.config, "gradient_checkpointing", False):
->>>>>>> master
-
                     def create_custom_forward(module):
                         def custom_forward(*inputs):
                             return module(*inputs, output_attentions)
@@ -794,9 +784,15 @@ class BartEncoder(BartPretrainedModel):
                         create_custom_forward(encoder_layer),
                         hidden_states,
                         attention_mask,
+                        (head_mask[idx] if head_mask is not None else None),
                     )
                 else:
-                    layer_outputs = encoder_layer(hidden_states, attention_mask, output_attentions=output_attentions)
+                    layer_outputs = encoder_layer(
+                        hidden_states,
+                        attention_mask,
+                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                        output_attentions=output_attentions,
+                    )
 
                 hidden_states = layer_outputs[0]
 
@@ -994,18 +990,6 @@ class BartDecoder(BartPretrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-<<<<<<< HEAD
-            hidden_states, layer_self_attn, present_key_value, layer_cross_attn = decoder_layer(
-                hidden_states,
-                attention_mask=combined_attention_mask,
-                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_attention_mask,
-                encoder_layer_head_mask=(encoder_head_mask[idx] if encoder_head_mask is not None else None),
-                past_key_value=past_key_value,
-                output_attentions=output_attentions,
-            )
-=======
             if getattr(self.config, "gradient_checkpointing", False):
                 if use_cache:
                     raise ValueError(
@@ -1023,23 +1007,26 @@ class BartDecoder(BartPretrainedModel):
                     create_custom_forward(decoder_layer),
                     hidden_states,
                     combined_attention_mask,
+                    head_mask[idx] if head_mask is not None else None,
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    None,
+                    encoder_head_mask[idx] if encoder_head_mask is not None else None,
+                    None
                 )
             else:
 
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=combined_attention_mask,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
+                    encoder_layer_head_mask=(encoder_head_mask[idx] if encoder_head_mask is not None else None),
                     past_key_value=past_key_value,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                 )
             hidden_states = layer_outputs[0]
->>>>>>> master
 
             if use_cache:
                 next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
