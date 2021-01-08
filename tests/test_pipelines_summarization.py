@@ -14,11 +14,11 @@
 
 import unittest
 
-from transformers import is_torch_available, pipeline
+from transformers import AutoTokenizer, is_torch_available, pipeline
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.tokenization_utils import TruncationStrategy
 
-from .test_pipelines_common import DummyTok, MonoInputPipelineCommonMixin
+from .test_pipelines_common import MonoInputPipelineCommonMixin
 
 
 if is_torch_available():
@@ -48,14 +48,36 @@ class SimpleSummarizationPipelineTests(unittest.TestCase):
             min_length=1,
         )
         model = BartForConditionalGeneration(config)
-        tokenizer = DummyTok(model_max_length=4)
+        # Bias output towards L
+        V, C = model.lm_head.weight.shape
+
+        bias = torch.zeros(V, requires_grad=True)
+        bias[76] = 10
+
+        model.lm_head.bias = torch.nn.Parameter(bias)
+
+        # # Generated with:
+        # import tempfile
+        # from tokenizers import Tokenizer, models
+        # from transformers import PreTrainedTokenizerFast
+        # model_max_length = 4
+        # vocab = [(chr(i), i) for i in range(256)]
+        # tokenizer = Tokenizer(models.Unigram(vocab))
+        # with tempfile.NamedTemporaryFile() as f:
+        #     tokenizer.save(f.name)
+        #     real_tokenizer = PreTrainedTokenizerFast(tokenizer_file=f.name, model_max_length=model_max_length)
+        # real_tokenizer._tokenizer.save("tokenizer.json")
+        # # + add missing config.json with albert as model_type
+        tokenizer = AutoTokenizer.from_pretrained("Narsil/small_summarization_test")
         nlp = pipeline(task="summarization", model=model, tokenizer=tokenizer)
 
-        with self.assertRaises(IndexError):
-            _ = nlp("This is a test")
+        with self.assertLogs("transformers", level="WARNING"):
+            with self.assertRaises(IndexError):
+                _ = nlp("This is a test")
 
         output = nlp("This is a test", truncation=TruncationStrategy.ONLY_FIRST)
-        self.assertEqual(output, [{"summary_text": "ab"}])
+        # 2 is default BOS from Bart.
+        self.assertEqual(output, [{"summary_text": "\x02 L L L"}])
 
 
 class SummarizationPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
