@@ -837,7 +837,6 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
     def question_encoder(self):
         return self.rag.question_encoder
 
-    # TOFIX : translation in progress
     @staticmethod
     def _reorder_cache(past, beam_idx):
         """Reorders cache for generation. BART-inspired but we need to take care of the extra dimension for docs"""
@@ -868,7 +867,6 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             return res
 
         def _reorder_stacked(hidden_states, new_order=beam_idx):
-            # print('X:', new_order)
             n_docs = hidden_states.shape[0] // new_order.shape[0]
             hidden_states = tf.reshape(hidden_states, (-1, n_docs, *hidden_states.shape[1:]) )
             hidden_states = tf_index_select(hidden_states, 0, new_order)
@@ -880,26 +878,8 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         past_key_values = past[1]
 
         reordered_past = ()
-        k=0
         for layer_past in past_key_values:
-            # print(k, ':', beam_idx)
-            k+=1
-            # if k==1: bp()
-            # get the correct batch idx from decoder layer's batch dim for cross and self-attn
             reordered_past += (tuple(_reorder_stacked(past_state, beam_idx) for past_state in layer_past),)
-
-        ## OLD code before TFBart refactor
-        # def _reorder_buffer(attn_cache):
-        #     for k, input_buffer_k in attn_cache.items():
-        #         if input_buffer_k is not None:
-        #             attn_cache[k] = _reorder_stacked(input_buffer_k)
-        #     return attn_cache
-
-        # reordered_past = []
-        # for layer_past in past:
-        #     # get the correct batch idx from decoder layer's batch dim for cross and self-attn
-        #     layer_past_new = {attn_key: _reorder_buffer(attn_cache) for attn_key, attn_cache in layer_past.items()}
-        #     reordered_past.append(layer_past_new)
 
         return (past[0], reordered_past)
 
