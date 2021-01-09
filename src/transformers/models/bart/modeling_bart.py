@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch BART model, ported from the fairseq repo."""
+import copy
 import math
 import random
 import warnings
@@ -1544,9 +1545,6 @@ class BartForCausalLM(BartPretrainedModel):
         config.is_encoder_decoder = False
         self.bart = BartDecoderWrapper(config)
 
-        self.padding_idx = config.pad_token_id
-        self.disable_ngram_loss = config.disable_ngram_loss
-
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         self.init_weights()
@@ -1599,59 +1597,25 @@ class BartForCausalLM(BartPretrainedModel):
             return_dict=return_dict,
         )
 
-        batch_size, sequence_length = input_ids.shape if input_ids is not None else inputs_embeds.shape[:2]
-
-        predicting_streams = outputs[1].view(batch_size, self.config.ngram, sequence_length, -1)
-        predict_logits = self.lm_head(predicting_streams)
-
-        logits = predict_logits[:, 0]
-        logits_ngram = predict_logits[:, 1:] if self.config.ngram > 1 else None
-
+        predict_logits = self.lm_head(outputs[0])
+      
         loss = None
         if labels is not None:
-            loss = self._compute_loss(predict_logits, labels)
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(predict_logits.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
-            all_logits = tuple(v for v in [logits, logits_ngram] if v is not None)
-            return (loss,) + all_logits + outputs[2:] if loss is not None else all_logits + outputs[2:]
-        else:
-            return BartDecoderLMOutput(
-                loss=loss,
-                logits=logits,
-                logits_ngram=logits_ngram,
-                past_key_values=outputs.past_key_values,
-                hidden_states=outputs.hidden_states,
-                hidden_states_ngram=outputs.hidden_states_ngram,
-                attentions=outputs.attentions,
-                ngram_attentions=outputs.ngram_attentions,
-                cross_attentions=outputs.cross_attentions,
-            )
+            output = (predict_logits,) + outputs[1:]
+            return (loss,) + output if loss is not None else output
 
-    def _compute_loss(self, logits, labels, ignore_index=-100):
-        expend_targets = labels.new_zeros(self.config.ngram, labels.size(0), labels.size(1)).fill_(ignore_index)
-
-        for i in range(self.config.ngram):
-            if i > 0 and self.disable_ngram_loss:
-                break
-            expend_targets[i, :, :] = labels
-
-        lprobs = F.log_softmax(
-            logits.view(-1, logits.size(-1)),
-            dim=-1,
-            dtype=torch.float32,
+        return BartDecoderLMOutput(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
         )
-
-        loss = F.nll_loss(lprobs, expend_targets.view(-1), reduction="mean")
-
-        if self.config.eps > 0.0:
-            smooth_loss = -lprobs.sum(dim=-1, keepdim=True)
-            non_masked_tokens = expend_targets.ne(ignore_index).view(-1)
-            smooth_loss = smooth_loss[non_masked_tokens]
-            smooth_loss = smooth_loss.mean()
-
-            eps_i = self.config.eps / lprobs.size(-1)
-            loss = (1.0 - self.config.eps) * loss + eps_i * smooth_loss
-        return loss
 
     def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, use_cache=None, **kwargs):
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
@@ -1667,23 +1631,11 @@ class BartForCausalLM(BartPretrainedModel):
             "past_key_values": past,
             "use_cache": use_cache,
         }
-
     @staticmethod
     def _reorder_cache(past, beam_idx):
-        # this function reorders the cache for beam search
-        def _reorder_cache(cache_dict, beam_idx):
-            for k, key_value_states in cache_dict.items():
-                if key_value_states is not None:
-                    cache_dict[k] = key_value_states.index_select(0, beam_idx)
-            return cache_dict
-
-        reordered_past = []
+        reordered_past = ()
         for layer_past in past:
-            # get the correct batch idx from decoder layer's batch dim for cross and self-attn
-            layer_past_new = {
-                attn_key: _reorder_cache(attn_cache, beam_idx) for attn_key, attn_cache in layer_past.items()
-            }
-            reordered_past.append(layer_past_new)
+            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
         return reordered_past
 
 
@@ -1698,9 +1650,6 @@ class BartDecoderLMOutput(ModelOutput):
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, decoder_sequence_length, config.vocab_size)`):
             Prediction scores of the main stream language modeling head (scores for each vocabulary token before
             SoftMax).
-        logits_ngram (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, ngram * decoder_sequence_length, config.vocab_size)`):
-            Prediction scores of the predict stream language modeling head (scores for each vocabulary token before
-            SoftMax).
         past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
             List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`, with each tensor of shape :obj:`(2,
             batch_size, num_attn_heads, decoder_sequence_length, embed_size_per_head)`).
@@ -1712,24 +1661,12 @@ class BartDecoderLMOutput(ModelOutput):
             of shape :obj:`(batch_size, decoder_sequence_length, hidden_size)`.
 
             Hidden-states of main stream of the decoder at the output of each layer plus the initial embedding outputs.
-        ngram_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, ngram * decoder_sequence_length, hidden_size)`.
-
-            Hidden-states of the predict stream of the decoder at the output of each layer plus the initial embedding
-            outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
             decoder_sequence_length, decoder_sequence_length)`.
 
             Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
-        ngram_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
-            decoder_sequence_length, decoder_sequence_length)`.
-
-            Attentions weights of the predict stream of the decoder, after the attention softmax, used to compute the
-            weighted average in the
         cross_attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_attn_heads,
             encoder_sequence_length, decoder_sequence_length)`.
@@ -1740,10 +1677,7 @@ class BartDecoderLMOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
-    logits_ngram: Optional[torch.FloatTensor] = None
     past_key_values: Optional[Tuple[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    hidden_states_ngram: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-    ngram_attentions: Optional[Tuple[torch.FloatTensor]] = None
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
