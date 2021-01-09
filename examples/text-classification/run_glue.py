@@ -226,14 +226,10 @@ def main():
 
         if data_args.train_file.endswith(".csv"):
             # Loading a dataset from local csv files
-            datasets = load_dataset(
-                "csv", data_files=data_files
-            )
+            datasets = load_dataset("csv", data_files=data_files)
         else:
             # Loading a dataset from local json files
-            datasets = load_dataset(
-                "json", data_files=data_files
-            )
+            datasets = load_dataset("json", data_files=data_files)
     # See more about loading any type of standard or custom dataset at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
