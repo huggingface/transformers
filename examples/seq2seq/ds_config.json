@@ -1,6 +1,4 @@
 {
-    "steps_per_print": 2000,
-
     "fp16": {
         "enabled": true,
         "loss_scale": 0,
@@ -12,10 +10,10 @@
    "zero_optimization": {
        "stage": 2,
        "allgather_partitions": true,
-       "allgather_bucket_size": 200000000,
+       "allgather_bucket_size": 2e8,
        "overlap_comm": true,
        "reduce_scatter": true,
-       "reduce_bucket_size": 200000000,
+       "reduce_bucket_size": 2e8,
        "contiguous_gradients": true,
        "cpu_offload": true
    },
@@ -32,6 +30,7 @@
        "weight_decay": 3e-7
      }
    },
+
    "scheduler": {
      "type": "WarmupLR",
      "params": {
@@ -40,5 +39,7 @@
        "warmup_num_steps": 500
      }
    },
-   "wall_clock_breakdown": false
+
+    "steps_per_print": 2000,
+    "wall_clock_breakdown": false
 }
