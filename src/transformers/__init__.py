@@ -1028,7 +1028,7 @@ if is_tf_available():
             "TFOpenAIGPTPreTrainedModel",
         ]
     )
-    _import_structure["models.pegasus"].append("TFPegasusForConditionalGeneration")
+    _import_structure["models.pegasus"].extend(["TFPegasusForConditionalGeneration", "TFPegasusModel"])
     _import_structure["models.roberta"].extend(
         [
             "TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1953,7 +1953,7 @@ if TYPE_CHECKING:
             TFLxmertPreTrainedModel,
             TFLxmertVisualFeatureEncoder,
         )
-        from .models.marian import TFMarianMTModel, TFMarian
+        from .models.marian import TFMarian, TFMarianMTModel
         from .models.mbart import TFMBartForConditionalGeneration, TFMBartModel
         from .models.mobilebert import (
             TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -1989,7 +1989,7 @@ if TYPE_CHECKING:
             TFOpenAIGPTModel,
             TFOpenAIGPTPreTrainedModel,
         )
-        from .models.pegasus import TFPegasusForConditionalGeneration
+        from .models.pegasus import TFPegasusForConditionalGeneration, TFPegasusModel
         from .models.roberta import (
             TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFRobertaForMaskedLM,

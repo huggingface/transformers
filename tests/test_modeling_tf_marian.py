@@ -19,7 +19,7 @@ import warnings
 
 from transformers import AutoTokenizer, MarianConfig, MarianTokenizer, TranslationPipeline, is_tf_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_tf, slow
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -28,7 +28,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFMarianMTModel, TFMarianModel, TFAutoModelForSeq2SeqLM
+    from transformers import TFAutoModelForSeq2SeqLM, TFMarianModel, TFMarianMTModel
 
 
 @require_tf

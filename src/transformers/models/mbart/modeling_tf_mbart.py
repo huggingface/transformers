@@ -490,7 +490,8 @@ MBART_INPUTS_DOCSTRING = r"""
 
             `What are input IDs? <../glossary.html#input-ids>`__
 
-            MBart uses the :obj:`eos_token_id` as the starting token for :obj:`decoder_input_ids` generation. If
+            MBart uses a specific language id token as the starting token for :obj:`decoder_input_ids` generation that
+            varies according to source and target language, *e.g.* 25004 for `en_XX`, and 25003 for `de_DE`. If
             :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
             :obj:`past_key_values`).
 
