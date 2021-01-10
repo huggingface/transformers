@@ -279,6 +279,13 @@ def init_deepspeed(trainer, num_training_steps):
     config["train_micro_batch_size_per_gpu"] = args.per_device_train_batch_size
     config["gradient_accumulation_steps"] = args.gradient_accumulation_steps
 
+    if "gradient_clipping" in config:
+        logger.info(
+            f"Keeping the `gradient_clipping` config from {ds_config_file} intact, ignoring any gradient clipping-specific cl args"
+        )
+    else:  # override only if the ds config doesn't already have this section
+        config["gradient_clipping"] = args.max_grad_norm
+
     if "optimizer" in config:
         logger.info(
             f"Keeping the `optimizer` config from {ds_config_file} intact, ignoring any optimizer-specific cl args"

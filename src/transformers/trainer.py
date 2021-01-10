@@ -885,14 +885,15 @@ class Trainer:
                     and (step + 1) == steps_in_epoch
                 ):
                     # Gradient clipping
-                    if self.args.max_grad_norm is not None and self.args.max_grad_norm > 0:
+                    if self.args.max_grad_norm is not None and self.args.max_grad_norm > 0 and not self.deepspeed:
+                        # deepspeed does its own clipping
+
                         if self.use_amp:
                             # AMP: gradients need unscaling
                             self.scaler.unscale_(self.optimizer)
 
-                        if hasattr(self.optimizer, "clip_grad_norm") and not self.deepspeed:
+                        if hasattr(self.optimizer, "clip_grad_norm"):
                             # Some optimizers (like the sharded optimizer) have a specific way to do gradient clipping
-                            # deepspeed has clip_grad_norm aliased to torch.nn.utils.clip_grad_norm_
                             self.optimizer.clip_grad_norm(self.args.max_grad_norm)
                         else:
                             # Revert to normal clipping otherwise, handling Apex or full precision
