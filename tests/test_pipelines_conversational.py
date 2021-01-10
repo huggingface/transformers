@@ -134,10 +134,10 @@ class SimpleConversationPipelineTests(unittest.TestCase):
             generated_responses=["b"],
         )
         with self.assertLogs("transformers", level="WARNING") as log:
-            _ = conversation_agent(conversation, max_length=60)
+            _ = conversation_agent(conversation, max_length=64)
             self.assertEqual(len(log.output), 3)
-            self.assertIn("Cutting history off because it's too long (63 > 28) for underlying model", log.output[0])
-            self.assertIn("63 is bigger than 0.9 * max_length: 60", log.output[1])
+            self.assertIn("Cutting history off because it's too long (63 > 32) for underlying model", log.output[0])
+            self.assertIn("63 is bigger than 0.9 * max_length: 64", log.output[1])
             self.assertIn("Setting `pad_token_id`", log.output[2])
         self.assertEqual(conversation._index, 1)
         self.assertEqual(
