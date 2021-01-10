@@ -658,11 +658,7 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFDPRContextEncoderOutput(
-            pooler_output=output.pooler_output,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFDPRContextEncoderOutput(pooler_output=output.pooler_output, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -755,11 +751,7 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFDPRQuestionEncoderOutput(
-            pooler_output=output.pooler_output,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFDPRQuestionEncoderOutput(pooler_output=output.pooler_output, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(

@@ -636,10 +636,7 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFBaseModelOutputWithPast(
-            last_hidden_state=output.last_hidden_state,
-            past_key_values=pkv,
-            hidden_states=hs,
-            attentions=attns,
+            last_hidden_state=output.last_hidden_state, past_key_values=pkv, hidden_states=hs, attentions=attns
         )
 
 
@@ -753,12 +750,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFCausalLMOutputWithPast(
-            logits=output.logits,
-            past_key_values=pkv,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFCausalLMOutputWithPast(logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1086,8 +1078,5 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFSequenceClassifierOutputWithPast(
-            logits=output.logits,
-            past_key_values=pkv,
-            hidden_states=hs,
-            attentions=attns,
+            logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns
         )
