@@ -632,11 +632,7 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFBaseModelOutput(
-            last_hidden_state=output.last_hidden_state,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
 
 
 class TFDistilBertLMHead(tf.keras.layers.Layer):
@@ -753,15 +749,12 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
             attentions=distilbert_output.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFMaskedLMOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -857,15 +850,12 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
             attentions=distilbert_output.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFSequenceClassifierOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -951,15 +941,12 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFTokenClassifierOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1097,15 +1084,12 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
 
         return self.serving_output(output)
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFMultipleChoiceModelOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1207,13 +1191,11 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
             attentions=distilbert_output.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFQuestionAnsweringModelOutput(
-            start_logits=output.start_logits,
-            end_logits=output.end_logits,
-            hidden_states=hs,
-            attentions=attns,
+            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
         )

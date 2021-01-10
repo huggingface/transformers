@@ -556,15 +556,12 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
         )
         return outputs
 
+    # Copied from transformers.models.distilbert.modeling_tf_distilbert.TFDistilBertModel.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFBaseModelOutput(
-            last_hidden_state=output.last_hidden_state,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -659,15 +656,12 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
             attentions=transformer_outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMHeadModel.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFCausalLMOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFCausalLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -816,10 +810,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFOpenAIGPTDoubleHeadsModelOutput(
-            logits=output.logits,
-            mc_logits=output.mc_logits,
-            hidden_states=hs,
-            attentions=attns,
+            logits=output.logits, mc_logits=output.mc_logits, hidden_states=hs, attentions=attns
         )
 
 
@@ -973,12 +964,9 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
             attentions=transformer_outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFSequenceClassifierOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)

@@ -2128,11 +2128,7 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
         g_attns = tf.convert_to_tensor(output.global_attentions) if self.config.output_attentions else None
 
         return TFLongformerMaskedLMOutput(
-            loss=None,
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-            global_attentions=g_attns,
+            logits=output.logits, hidden_states=hs, attentions=attns, global_attentions=g_attns
         )
 
 
@@ -2407,10 +2403,7 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
         g_attns = tf.convert_to_tensor(output.global_attentions) if self.config.output_attentions else None
 
         return TFLongformerSequenceClassifierOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-            global_attentions=g_attns,
+            logits=output.logits, hidden_states=hs, attentions=attns, global_attentions=g_attns
         )
 
 
@@ -2567,10 +2560,7 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
         g_attns = tf.convert_to_tensor(output.global_attentions) if self.config.output_attentions else None
 
         return TFLongformerMultipleChoiceModelOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-            global_attentions=g_attns,
+            logits=output.logits, hidden_states=hs, attentions=attns, global_attentions=g_attns
         )
 
 
@@ -2674,8 +2664,5 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
         g_attns = tf.convert_to_tensor(output.global_attentions) if self.config.output_attentions else None
 
         return TFLongformerTokenClassifierOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-            global_attentions=g_attns,
+            logits=output.logits, hidden_states=hs, attentions=attns, global_attentions=g_attns
         )

@@ -805,6 +805,7 @@ class TFMPNetModel(TFMPNetPreTrainedModel):
         )
         return outputs
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertModel.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
@@ -942,15 +943,12 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFMaskedLMOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 class TFMPNetClassificationHead(tf.keras.layers.Layer):
@@ -1069,15 +1067,12 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFSequenceClassifierOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1216,15 +1211,12 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
 
         return self.serving_output(output)
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFMultipleChoiceModelOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1321,15 +1313,12 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFTokenClassifierOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1439,13 +1428,11 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFQuestionAnsweringModelOutput(
-            start_logits=output.start_logits,
-            end_logits=output.end_logits,
-            hidden_states=hs,
-            attentions=attns,
+            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
         )
