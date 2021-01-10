@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Marian Team Authors and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,13 +28,14 @@ MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class MarianConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.MarianModel`. It is used to
-    instantiate an Marian model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the Marian
-    `Helsinki-NLP/opus-mt-en-de <https://huggingface.co/Helsinki-NLP/opus-mt-en-de>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.MarianModel`.
+    It is used to instantiate an Marian model according to the specified arguments, defining the model
+    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
+    the Marian `Helsinki-NLP/opus-mt-en-de <https://huggingface.co/Helsinki-NLP/opus-mt-en-de>`__ architecture.
 
-    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
-    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
+    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
+    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
+    for more information.
 
 
     Args:
@@ -78,14 +79,9 @@ class MarianConfig(PretrainedConfig):
         decoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
             The LayerDrop probability for the decoder. See the `LayerDrop paper <see
             https://arxiv.org/abs/1909.11556>`__ for more details.
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
-        scale_embedding (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Scale embeddings by diving by sqrt(d_model).
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the model should return the last key/values attentions (not used by all models)
-
-    Examples::
+            Whether or not the model should return the last key/values attentions (not used by all models).
+        Example::
 
         >>> from transformers import MarianModel, MarianConfig
 
@@ -100,7 +96,6 @@ class MarianConfig(PretrainedConfig):
     """
     model_type = "marian"
     keys_to_ignore_at_inference = ["past_key_values"]
-
     def __init__(
         self,
         vocab_size=50265,
@@ -121,20 +116,22 @@ class MarianConfig(PretrainedConfig):
         attention_dropout=0.0,
         activation_dropout=0.0,
         init_std=0.02,
-        decoder_start_token_id=58100,
+        decoder_start_token_id=2,
         classifier_dropout=0.0,
         scale_embedding=False,
         gradient_checkpointing=False,
-        pad_token_id=58100,
-        eos_token_id=0,
+        pad_token_id=1,
+        bos_token_id=0,
+        eos_token_id=2,
         **kwargs
     ):
         super().__init__(
             pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
+            **kwargs
         )
 
         self.vocab_size = vocab_size
@@ -159,6 +156,7 @@ class MarianConfig(PretrainedConfig):
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
+        
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads
