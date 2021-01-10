@@ -987,7 +987,7 @@ if is_tf_available():
         ]
     )
     _import_structure["models.marian"].append("TFMarianMTModel")
-    _import_structure["models.mbart"].append("TFMBartForConditionalGeneration")
+    _import_structure["models.mbart"].extend(["TFMBartForConditionalGeneration", "TFMBartModel"])
     _import_structure["models.mobilebert"].extend(
         [
             "TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1954,7 +1954,7 @@ if TYPE_CHECKING:
             TFLxmertVisualFeatureEncoder,
         )
         from .models.marian import TFMarianMTModel
-        from .models.mbart import TFMBartForConditionalGeneration
+        from .models.mbart import TFMBartForConditionalGeneration, TFMBartModel
         from .models.mobilebert import (
             TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFMobileBertForMaskedLM,

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -488,9 +488,9 @@ BART_INPUTS_DOCSTRING = r"""
 
             `What are input IDs? <../glossary.html#input-ids>`__
 
-            Bart uses the :obj:`eos_token_id` as the starting token for
-            :obj:`decoder_input_ids` generation. If :obj:`past_key_values` is used, optionally only the last
-            :obj:`decoder_input_ids` have to be input (see :obj:`past_key_values`).
+            Bart uses the :obj:`eos_token_id` as the starting token for :obj:`decoder_input_ids` generation. If
+            :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
+            :obj:`past_key_values`).
 
             For translation and summarization training, :obj:`decoder_input_ids` should be provided. If no
             :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`input_ids` to
@@ -1008,7 +1008,7 @@ class TFBartModel(TFBartPreTrainedModel):
         )
 
     def serving_output(self, output):
-        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,
+        pkv = (tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,)
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
@@ -1149,7 +1149,7 @@ class TFBartForConditionalGeneration(TFBartPreTrainedModel):
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
-            training=inputs["training"]
+            training=inputs["training"],
         )
         lm_logits = self.model.shared(outputs[0], mode="linear")
         lm_logits = lm_logits + self.final_logits_bias
@@ -1170,7 +1170,7 @@ class TFBartForConditionalGeneration(TFBartPreTrainedModel):
         )
 
     def serving_output(self, output):
-        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,
+        pkv = (tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,)
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
@@ -1231,7 +1231,8 @@ class TFBartForConditionalGeneration(TFBartPreTrainedModel):
         reordered_past = ()
         for layer_past_key_values in past_key_values:
             reordered_past += (
-                tuple(tf.gather(layer_past_key_value, beam_idx) for layer_past_key_value in layer_past_key_values[:2]) + layer_past_key_values[2:],
+                tuple(tf.gather(layer_past_key_value, beam_idx) for layer_past_key_value in layer_past_key_values[:2])
+                + layer_past_key_values[2:],
             )
         return (past[0], reordered_past)
 

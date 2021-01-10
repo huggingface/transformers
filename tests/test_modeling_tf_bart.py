@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,13 +15,14 @@
 
 import unittest
 
+import numpy as np
+
 from transformers import BartConfig, BartTokenizer, is_tf_available
-from transformers.testing_utils import require_tf, slow
 from transformers.file_utils import cached_property
+from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-import numpy as np
 
 
 if is_tf_available():
