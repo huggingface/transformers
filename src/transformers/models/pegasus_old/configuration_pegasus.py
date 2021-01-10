@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021, Google and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Marian model configuration """
+""" PEGASUS model configuration """
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -20,29 +20,28 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-MARIAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/config.json",
-    # See all Marian models at https://huggingface.co/models?filter=marian
+PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "google/pegasus-large": "https://huggingface.co/google/pegasus-large/resolve/main/config.json",
+    # See all PEGASUS models at https://huggingface.co/models?filter=pegasus
 }
 
 
-class MarianConfig(PretrainedConfig):
+class PegasusConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.MarianModel`.
-    It is used to instantiate an Marian model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the Marian `Helsinki-NLP/opus-mt-en-de <https://huggingface.co/Helsinki-NLP/opus-mt-en-de>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.PegasusModel`. It is used to
+    instantiate an PEGASUS model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the PEGASUS `google/pegasus-large
+    <https://huggingface.co/google/pegasus-large>`__ architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50265):
-            Vocabulary size of the Marian model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.MarianModel` or
-            :class:`~transformers.TFMarianModel`.
+            Vocabulary size of the PEGASUS model. Defines the number of different tokens that can be represented by the
+            :obj:`inputs_ids` passed when calling :class:`~transformers.PegasusModel` or
+            :class:`~transformers.TFPegasusModel`.
         d_model (:obj:`int`, `optional`, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (:obj:`int`, `optional`, defaults to 12):
@@ -79,23 +78,29 @@ class MarianConfig(PretrainedConfig):
         decoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
             The LayerDrop probability for the decoder. See the `LayerDrop paper <see
             https://arxiv.org/abs/1909.11556>`__ for more details.
+        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+        scale_embedding (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Scale embeddings by diving by sqrt(d_model).
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
-        Example::
+            Whether or not the model should return the last key/values attentions (not used by all models)
 
-        >>> from transformers import MarianModel, MarianConfig
+    Example::
 
-        >>> # Initializing a Marian Helsinki-NLP/opus-mt-en-de style configuration
-        >>> configuration = MarianConfig()
+        >>> from transformers import PegasusModel, PegasusConfig
 
-        >>> # Initializing a model from the Helsinki-NLP/opus-mt-en-de style configuration
-        >>> model = MarianModel(configuration)
+        >>> # Initializing a PEGASUS google/pegasus-large style configuration
+        >>> configuration = PegasusConfig()
+
+        >>> # Initializing a model from the google/pegasus-large style configuration
+        >>> model = PegasusModel(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config
     """
-    model_type = "marian"
+    model_type = "pegasus"
     keys_to_ignore_at_inference = ["past_key_values"]
+
     def __init__(
         self,
         vocab_size=50265,
@@ -116,22 +121,20 @@ class MarianConfig(PretrainedConfig):
         attention_dropout=0.0,
         activation_dropout=0.0,
         init_std=0.02,
-        decoder_start_token_id=2,
+        decoder_start_token_id=0,
         classifier_dropout=0.0,
         scale_embedding=False,
         gradient_checkpointing=False,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
+        pad_token_id=0,
+        eos_token_id=1,
         **kwargs
     ):
         super().__init__(
             pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
-            **kwargs
+            **kwargs,
         )
 
         self.vocab_size = vocab_size
@@ -156,7 +159,17 @@ class MarianConfig(PretrainedConfig):
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
-        
+        # IMPORTANT
+        # DELETE ALL OF THE FOLLOWING LINES AS SOON AS TF IS READY
+        self.extra_pos_embeddings = 0
+        self.normalize_before = True
+        self.add_final_layer_norm = True
+        self.do_blenderbot_90_layernorm = False
+        self.normalize_embedding = False
+        self.static_position_embeddings = True
+        self.add_bias_logits = False
+        self.force_bos_token_to_be_generated = False
+
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads
