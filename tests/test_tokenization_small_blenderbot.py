@@ -68,7 +68,7 @@ class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokenizer.convert_tokens_to_ids(input_tokens), input_bpe_tokens)
 
     def test_special_tokens_small_tok(self):
-        tok = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot_small-90M")
+        tok = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot-90M")
         assert tok("sam").input_ids == [1384]
         src_text = "I am a small frog."
         encoded = tok([src_text], padding=False, truncation=False)["input_ids"]
@@ -77,7 +77,7 @@ class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         assert decoded == "i am a small frog ."
 
     def test_empty_word_small_tok(self):
-        tok = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot_small-90M")
+        tok = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot-90M")
         src_text = "I am a small frog ."
         src_text_dot = "."
         encoded = tok(src_text)["input_ids"]

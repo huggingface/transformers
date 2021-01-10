@@ -17,8 +17,8 @@
 import unittest
 
 from transformers import BlenderbotSmallConfig, BlenderbotSmallTokenizer, is_tf_available
-from transformers.testing_utils import require_tokenizers, require_tf, slow
 from transformers.file_utils import cached_property
+from transformers.testing_utils import require_tf, require_tokenizers, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -27,7 +27,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFBlenderbotSmallForConditionalGeneration, TFBlenderbotSmallModel, TFAutoModelForSeq2SeqLM
+    from transformers import TFAutoModelForSeq2SeqLM, TFBlenderbotSmallForConditionalGeneration, TFBlenderbotSmallModel
 
 
 @require_tf
@@ -158,7 +158,9 @@ def prepare_blenderbot_small_inputs_dict(
 
 @require_tf
 class TFBlenderbotSmallModelTest(TFModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TFBlenderbotSmallForConditionalGeneration, TFBlenderbotSmallModel) if is_tf_available() else ()
+    all_model_classes = (
+        (TFBlenderbotSmallForConditionalGeneration, TFBlenderbotSmallModel) if is_tf_available() else ()
+    )
     all_generative_model_classes = (TFBlenderbotSmallForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
@@ -228,7 +230,7 @@ class TFBlenderbot90MIntegrationTests(unittest.TestCase):
     src_text = [
         "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like   i'm going to throw up.\nand why is that?"
     ]
-    model_name = "facebook/blenderbot_small-90M"
+    model_name = "facebook/blenderbot-90M"
 
     @cached_property
     def tokenizer(self):

@@ -869,7 +869,9 @@ if is_tf_available():
         ]
     )
     _import_structure["models.blenderbot"].extend(["TFBlenderbotForConditionalGeneration", "TFBlenderbotModel"])
-    _import_structure["models.blenderbot_small"].extend(["TFBlenderbotSmallForConditionalGeneration", "TFBlenderbotSmallModel"])
+    _import_structure["models.blenderbot_small"].extend(
+        ["TFBlenderbotSmallForConditionalGeneration", "TFBlenderbotSmallModel"]
+    )
     _import_structure["models.camembert"].extend(
         [
             "TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",

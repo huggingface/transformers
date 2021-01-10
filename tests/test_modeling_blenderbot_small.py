@@ -265,7 +265,7 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
 
 @require_torch
 class Blenderbot90MIntegrationTests(unittest.TestCase):
-    ckpt = "facebook/blenderbot_small-90M"
+    ckpt = "facebook/blenderbot-90M"
 
     @cached_property
     def model(self):

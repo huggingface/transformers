@@ -999,7 +999,7 @@ class TFBlenderbotModel(TFBlenderbotPreTrainedModel):
         )
 
     def serving_output(self, output):
-        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,
+        pkv = (tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,)
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
@@ -1140,7 +1140,7 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel):
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
-            training=inputs["training"]
+            training=inputs["training"],
         )
         lm_logits = self.model.shared(outputs[0], mode="linear")
         lm_logits = lm_logits + self.final_logits_bias
@@ -1161,7 +1161,7 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel):
         )
 
     def serving_output(self, output):
-        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,
+        pkv = (tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,)
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
@@ -1222,7 +1222,8 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel):
         reordered_past = ()
         for layer_past_key_values in past_key_values:
             reordered_past += (
-                tuple(tf.gather(layer_past_key_value, beam_idx) for layer_past_key_value in layer_past_key_values[:2]) + layer_past_key_values[2:],
+                tuple(tf.gather(layer_past_key_value, beam_idx) for layer_past_key_value in layer_past_key_values[:2])
+                + layer_past_key_values[2:],
             )
         return (past[0], reordered_past)
 

@@ -45,7 +45,10 @@ from ..bert.modeling_tf_bert import (
     TFBertModel,
 )
 from ..blenderbot.modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration, TFBlenderbotModel
-from ..blenderbot_small.modeling_tf_blenderbot_small import TFBlenderbotSmallForConditionalGeneration, TFBlenderbotSmallModel
+from ..blenderbot_small.modeling_tf_blenderbot_small import (
+    TFBlenderbotSmallForConditionalGeneration,
+    TFBlenderbotSmallModel,
+)
 from ..camembert.modeling_tf_camembert import (
     TFCamembertForMaskedLM,
     TFCamembertForMultipleChoice,
@@ -101,7 +104,7 @@ from ..longformer.modeling_tf_longformer import (
     TFLongformerModel,
 )
 from ..lxmert.modeling_tf_lxmert import TFLxmertForPreTraining, TFLxmertModel
-from ..marian.modeling_tf_marian import TFMarianMTModel, TFMarianModel
+from ..marian.modeling_tf_marian import TFMarianModel, TFMarianMTModel
 from ..mbart.modeling_tf_mbart import TFMBartForConditionalGeneration, TFMBartModel
 from ..mobilebert.modeling_tf_mobilebert import (
     TFMobileBertForMaskedLM,

@@ -16,9 +16,9 @@
 
 import unittest
 
-from transformers import BlenderbotConfig, is_tf_available, BlenderbotTokenizer
+from transformers import BlenderbotConfig, BlenderbotTokenizer, is_tf_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_tokenizers, require_tf, slow
+from transformers.testing_utils import require_tf, require_tokenizers, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -27,7 +27,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFBlenderbotForConditionalGeneration, TFBlenderbotModel, TFAutoModelForSeq2SeqLM
+    from transformers import TFAutoModelForSeq2SeqLM, TFBlenderbotForConditionalGeneration, TFBlenderbotModel
 
 
 @require_tf
@@ -225,9 +225,7 @@ def _long_tensor(tok_lst):
 
 @require_tokenizers
 class TFBlenderbot400MIntegrationTests(unittest.TestCase):
-    src_text = [
-        "My friends are cool but they eat too many carbs."
-    ]
+    src_text = ["My friends are cool but they eat too many carbs."]
     model_name = "facebook/blenderbot-400M-distill"
 
     @cached_property
@@ -246,4 +244,7 @@ class TFBlenderbot400MIntegrationTests(unittest.TestCase):
             model_inputs.input_ids,
         )
         generated_words = self.tokenizer.batch_decode(generated_ids.numpy(), skip_special_tokens=True)[0]
-        assert generated_words == " That's unfortunate. Are they trying to lose weight or are they just trying to be healthier?"
+        assert (
+            generated_words
+            == " That's unfortunate. Are they trying to lose weight or are they just trying to be healthier?"
+        )
