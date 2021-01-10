@@ -1196,8 +1196,5 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFTransfoXLSequenceClassifierOutputWithPast(
-            logits=output.logits,
-            mems=tf.convert_to_tensor(output.mems),
-            hidden_states=hs,
-            attentions=attns,
+            logits=output.logits, mems=tf.convert_to_tensor(output.mems), hidden_states=hs, attentions=attns
         )
