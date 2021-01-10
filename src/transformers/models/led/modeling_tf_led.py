@@ -190,11 +190,11 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         LongformerSelfAttention expects `len(hidden_states)` to be multiple of `attention_window`. Padding to
         `attention_window` happens in LongformerModel.forward to avoid redoing the padding on each layer.
 
-        The `attention_mask` is changed in `BertModel.forward` from 0, 1, 2 to -ve: no attention
+        The `attention_mask` is changed in :meth:`LongformerModel.forward` from 0, 1, 2 to:
 
-              0: local attention
-            +ve: global attention
-
+            * -10000: no attention
+            * 0: local attention
+            * +10000: global attention
         """
         # retrieve input args
         (
@@ -2028,6 +2028,25 @@ class TFLEDModel(TFLEDPreTrainedModel):
             encoder_global_attentions=inputs["encoder_outputs"].global_attentions,
         )
 
+    def serving_output(self, output):
+        pkv = (tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,)
+        dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
+        dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
+        enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
+        enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
+        enc_g_attns = tf.convert_to_tensor(output.encoder_global_attentions) if self.config.output_attentions else None
+
+        return TFLEDSeq2SeqModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            past_key_values=pkv,
+            decoder_hidden_states=dec_hs,
+            decoder_attentions=dec_attns,
+            encoder_last_hidden_state=output.encoder_last_hidden_state,
+            encoder_hidden_states=enc_hs,
+            encoder_attentions=enc_attns,
+            encoder_global_attentions=enc_g_attns,
+        )
+
     def get_input_embeddings(self):
         return self.shared
 
@@ -2175,6 +2194,25 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             encoder_hidden_states=outputs.encoder_hidden_states,  # 1 of e out
             encoder_attentions=outputs.encoder_attentions,  # 2 of e out
             encoder_global_attentions=outputs.encoder_global_attentions,
+        )
+
+    def serving_output(self, output):
+        pkv = (tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,)
+        dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
+        dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
+        enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
+        enc_attns = tf.convert_to_tensor(output.encoder_attentions) if self.config.output_attentions else None
+        enc_g_attns = tf.convert_to_tensor(output.encoder_global_attentions) if self.config.output_attentions else None
+
+        return TFLEDSeq2SeqLMOutput(
+            logits=output.logits,
+            past_key_values=pkv,
+            decoder_hidden_states=dec_hs,
+            decoder_attentions=dec_attns,
+            encoder_last_hidden_state=output.encoder_last_hidden_state,
+            encoder_hidden_states=enc_hs,
+            encoder_attentions=enc_attns,
+            encoder_global_attentions=enc_g_attns,
         )
 
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs) -> Dict:

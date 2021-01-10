@@ -28,8 +28,8 @@ import re
 import tensorflow as tf
 import torch
 
-from transformers import BertConfig, BertModel
-from transformers.utils import logging
+from ...utils import logging
+from . import BertConfig, BertModel
 
 
 logging.set_verbosity_info()
