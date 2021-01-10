@@ -102,10 +102,10 @@ class AddNewModelCommand(BaseTransformersCLICommand):
         model_dir = f"{path_to_transformer_root}/src/transformers/models/{lowercase_model_name}"
         os.makedirs(model_dir, exist_ok=True)
 
-        shutil.move(
-            f"{directory}/__init__.py",
-            f"{model_dir}/__init__.py",
-        )
+#        shutil.move(
+#            f"{directory}/__init__.py",
+#            f"{model_dir}/__init__.py",
+#        )
         #        shutil.move(
         #            f"{directory}/configuration_{lowercase_model_name}.py",
         #            f"{model_dir}/configuration_{lowercase_model_name}.py",
