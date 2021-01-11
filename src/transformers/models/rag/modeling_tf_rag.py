@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""TFRAG model implementation. (draft version)"""
+"""TFRAG model implementation."""
 
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
@@ -1191,6 +1191,10 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 out["context_attention_mask"],
                 out["retrieved_doc_embeds"],
             )
+
+            context_input_ids = tf.cast(context_input_ids, tf.int32)
+            context_attention_mask = tf.cast(context_attention_mask, tf.int32)
+            retrieved_doc_embeds = tf.cast(retrieved_doc_embeds, tf.float32)
 
             # compute doc_scores
             doc_scores = tf.matmul(
