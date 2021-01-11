@@ -272,4 +272,4 @@ In general the best way to figure out what works the best is learn from issues p
 
 Thank you for reading this somewhat lengthy document. We would like to conclude that these are not absolute rules, but a friendly advice that will help maximize the chances for us to understand what you are trying to communicate, reproduce the problem then resolve it to your satisfaction and the benefit of the whole community.
 
-If after reading this document there are remaining questions on how and why or there is a need for further elucidation, please, don't hesitate to ask "How do I?" type of questions in the following sub-section of the forums: [XXX: @sgugger].
+If after reading this document there are remaining questions on how and why or there is a need for further elucidation, please, don't hesitate to ask your question in [this thread](https://discuss.huggingface.co/t/how-to-request-support/3128).
