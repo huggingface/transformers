@@ -559,7 +559,7 @@ class ProphetNetPreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-class ProhpetNetPositionalEmbeddings(nn.Embedding):
+class ProphetNetPositionalEmbeddings(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size. Padding ids are ignored by either offsetting
     based on padding_idx or by setting padding_idx to None and ensuring that the appropriate position ids are passed to
@@ -598,7 +598,7 @@ class ProhpetNetPositionalEmbeddings(nn.Embedding):
         return super().forward(position_ids)
 
 
-class ProphetNetSelfAttention(nn.Module):
+class ProphetNetAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -726,7 +726,7 @@ class ProphetNetSelfAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-class ProhpetNetFeedForward(nn.Module):
+class ProphetNetFeedForward(nn.Module):
     """
     This is the residual two feed-forward layer block based on the original Transformer implementation.
     """
@@ -1046,11 +1046,11 @@ class ProphetNetEncoderLayer(nn.Module):
     def __init__(self, config: ProphetNetConfig):
         super().__init__()
         # 1st residual block
-        self.self_attn = ProphetNetSelfAttention(config, config.num_encoder_attention_heads)
+        self.self_attn = ProphetNetAttention(config, config.num_encoder_attention_heads)
         self.self_attn_layer_norm = LayerNorm(config.hidden_size)
 
         # 2nd residual block
-        self.feed_forward = ProhpetNetFeedForward(config, config.encoder_ffn_dim)
+        self.feed_forward = ProphetNetFeedForward(config, config.encoder_ffn_dim)
         self.feed_forward_layer_norm = LayerNorm(config.hidden_size)
 
     def forward(self, hidden_states, attention_mask):
@@ -1080,11 +1080,11 @@ class ProphetNetDecoderLayer(nn.Module):
 
         # 2nd residual block
         if config.add_cross_attention:
-            self.cross_attn = ProphetNetSelfAttention(config, config.num_decoder_attention_heads)
+            self.cross_attn = ProphetNetAttention(config, config.num_decoder_attention_heads)
             self.cross_attn_layer_norm = LayerNorm(config.hidden_size)
 
         # 3rd residual block
-        self.feed_forward = ProhpetNetFeedForward(config, config.decoder_ffn_dim)
+        self.feed_forward = ProphetNetFeedForward(config, config.decoder_ffn_dim)
         self.feed_forward_layer_norm = LayerNorm(config.hidden_size)
 
     def forward(
@@ -1156,7 +1156,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
             if word_embeddings is not None
             else nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         )
-        self.position_embeddings = ProhpetNetPositionalEmbeddings(config)
+        self.position_embeddings = ProphetNetPositionalEmbeddings(config)
         self.embeddings_layer_norm = LayerNorm(config.hidden_size)
 
         self.layers = nn.ModuleList([ProphetNetEncoderLayer(config) for _ in range(config.num_encoder_layers)])
@@ -1273,7 +1273,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             if word_embeddings is not None
             else nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         )
-        self.position_embeddings = ProhpetNetPositionalEmbeddings(config)
+        self.position_embeddings = ProphetNetPositionalEmbeddings(config)
 
         self.ngram_embeddings = nn.Embedding(self.ngram, config.hidden_size, None)
         self.layers = nn.ModuleList([ProphetNetDecoderLayer(config) for _ in range(config.num_decoder_layers)])
