@@ -16,8 +16,7 @@
 import os
 from typing import List, Optional
 
-from ...file_utils import add_start_docstrings
-from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncoding
+from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
 from .configuration_rag import RagConfig
 
@@ -63,7 +62,6 @@ class RagTokenizer:
     def batch_decode(self, *args, **kwargs):
         return self.generator.batch_decode(*args, **kwargs)
 
-    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
     def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
