@@ -749,14 +749,14 @@ class ProhpetNetFeedForward(nn.Module):
         return hidden_states
 
 
-class ProphetNetNgramProphetNetSelfAttention(nn.Module):
+class ProphetNetNgramSelfAttention(nn.Module):
     def __init__(self, config: ProphetNetConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
 
         self.num_buckets = config.num_buckets
         self.relative_max_distance = config.relative_max_distance
-        self.num_attn_heads = config.num_attention_heads
+        self.num_attn_heads = config.num_decoder_attention_heads
         self.dropout = config.dropout
         self.attention_dropout = config.attention_dropout
         self.head_dim = config.hidden_size // self.num_attn_heads
@@ -1075,7 +1075,7 @@ class ProphetNetDecoderLayer(nn.Module):
     def __init__(self, config: ProphetNetConfig):
         super().__init__()
         # 1st residual block
-        self.self_attn = ProphetNetNgramProphetNetSelfAttention(config)
+        self.self_attn = ProphetNetNgramSelfAttention(config)
         self.self_attn_layer_norm = LayerNorm(config.hidden_size)
 
         # 2nd residual block
@@ -1212,7 +1212,7 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         # prepare attention mask
         if attention_mask is not None:
             extended_attention_mask = (
-                1.0 - attention_mask[:, None, :].repeat(self.config.num_attention_heads, 1, 1)
+                1.0 - attention_mask[:, None, :].repeat(self.config.num_encoder_attention_heads, 1, 1)
             ) * -10000.0
             extended_attention_mask = extended_attention_mask.to(inputs_embeds.dtype)
         else:
@@ -1397,7 +1397,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         # prepare encoder attention mask
         if encoder_attention_mask is not None:
             extended_encoder_attention_mask = (
-                1.0 - encoder_attention_mask[:, None, :].repeat(self.config.num_attention_heads, 1, 1)
+                1.0 - encoder_attention_mask[:, None, :].repeat(self.config.num_decoder_attention_heads, 1, 1)
             ) * -10000.0
             extended_encoder_attention_mask = extended_encoder_attention_mask.to(inputs_embeds.dtype)
         else:
