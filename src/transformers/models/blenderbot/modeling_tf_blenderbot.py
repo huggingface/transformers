@@ -16,14 +16,16 @@
 
 
 import math
+import os
 import random
+import warnings
 from typing import Dict, Optional, Tuple, Union
 
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
-    add_code_sample_docstrings,
+    add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
@@ -46,6 +48,7 @@ from ...modeling_tf_utils import (
     shape_list,
 )
 from ...utils import logging
+from ..blenderbot_small import TFBlenderbotSmallForConditionalGeneration, TFBlenderbotSmallModel
 from .configuration_blenderbot import BlenderbotConfig
 
 
@@ -463,6 +466,31 @@ BLENDERBOT_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the
             model weights.
+"""
+
+BLENDERBOT_GENERATION_EXAMPLE = r"""
+    Conversation example::
+
+        >>> from transformers import BlenderbotTokenizer, TFBlenderbotForConditionalGeneration
+        >>> mname = 'facebook/blenderbot-400M-distill'
+        >>> model = TFBlenderbotForConditionalGeneration.from_pretrained(mname)
+        >>> tokenizer = BlenderbotTokenizer.from_pretrained(mname)
+        >>> UTTERANCE = "My friends are cool but they eat too many carbs."
+        >>> print("Human: ", UTTERANCE)
+        >>> inputs = tokenizer([UTTERANCE], return_tensors='tf')
+        >>> reply_ids = model.generate(**inputs)
+        >>> print("Bot: ", tokenizer.batch_decode(reply_ids, skip_special_tokens=True)[0])
+
+        >>> REPLY = "I'm not sure"
+        >>> print("Human: ", REPLY)
+        >>> NEXT_UTTERANCE = (
+        ... "My friends are cool but they eat too many carbs.</s> <s>That's unfortunate. "
+        ... "Are they trying to lose weight or are they just trying to be healthier?</s> "
+        ... "<s> I'm not sure."
+        ... )
+        >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors='tf')
+        >>> next_reply_ids = model.generate(**inputs)
+        >>> print("Bot: ", tokenizer.batch_decode(next_reply_ids, skip_special_tokens=True)[0])
 """
 
 BLENDERBOT_INPUTS_DOCSTRING = r"""
@@ -889,16 +917,22 @@ class TFBlenderbotModel(TFBlenderbotPreTrainedModel):
         self.encoder = TFBlenderbotEncoder(config, embed_tokens, name="encoder")
         self.decoder = TFBlenderbotDecoder(config, embed_tokens, name="decoder")
 
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
+        if pretrained_model_name_or_path == "facebook/blenderbot-90M":
+            warnings.warn(
+                "The checkpoint `facebook/blenderbot-90M` is deprecated. In the future, please use the identical checkpoint `facebook/small_blenderbot-90M` with `TFBlenderbotSmallModel.from_pretrained('facebook/small_blenderbot-90M')` instead.",
+                FutureWarning,
+            )
+            return TFBlenderbotSmallModel.from_pretrained(pretrained_model_name_or_path)
+
+        return super(TFBlenderbotModel, cls).from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+
     def get_decoder(self):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(BLENDERBOT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="facebook/blenderbot-3B",
-        output_type=TFSeq2SeqModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=TFSeq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids=None,
@@ -916,6 +950,22 @@ class TFBlenderbotModel(TFBlenderbotPreTrainedModel):
         training=False,
         **kwargs
     ):
+        r"""
+        Returns:
+
+        Example::
+
+            >>> from transformers import BlenderbotTokenizer, TFBlenderbotModel
+
+            >>> model = TFBlenderbotModel.from_pretrained("facebook/blenderbot-400M-distill")
+            >>> tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
+
+            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="tf").input_ids  # Batch size 1
+            >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="tf").input_ids  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+
+            >>> last_hidden_states = outputs.last_hidden_state
+        """
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1035,6 +1085,19 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel):
             name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )
 
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
+        if pretrained_model_name_or_path == "facebook/blenderbot-90M":
+            warnings.warn(
+                "The checkpoint `facebook/blenderbot-90M` is deprecated. In the future, please use the identical checkpoint `facebook/small_blenderbot-90M` with `TFBlenderbotSmallForConditionalGeneration.from_pretrained('facebook/small_blenderbot-90M')` instead.",
+                FutureWarning,
+            )
+            return TFBlenderbotSmallForConditionalGeneration.from_pretrained(pretrained_model_name_or_path)
+
+        return super(TFBlenderbotForConditionalGeneration, cls).from_pretrained(
+            pretrained_model_name_or_path, *model_args, **kwargs
+        )
+
     def get_decoder(self):
         return self.model.decoder
 
@@ -1057,6 +1120,7 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(BLENDERBOT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @add_end_docstrings(BLENDERBOT_GENERATION_EXAMPLE)
     def call(
         self,
         input_ids=None,
@@ -1075,21 +1139,14 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel):
         training=False,
         **kwargs,
     ):
-        """
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the masked language modeling loss. Indices should either be in ``[0, ...,
+            config.vocab_size]`` or -100 (see ``input_ids`` docstring). Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
+
         Returns:
 
-        Examples::
-
-            >>> from transformers import BlenderbotTokenizer, TFBlenderbotForConditionalGeneration
-            >>> import tensorflow as tf
-            >>> mname = 'facebook/blenderbot-3B'
-            >>> tokenizer = BlenderbotTokenizer.from_pretrained(mname)
-            >>> TXT = "My friends are <mask> but they eat too many carbs."
-            >>> model = TFBlenderbotForConditionalGeneration.from_pretrained(mname)
-            >>> batch = tokenizer([TXT], return_tensors='tf')
-            >>> logits = model(inputs=batch.input_ids).logits
-            >>> probs = tf.nn.softmax(logits[0])
-            >>> # probs[5] is associated with the mask token
         """
         inputs = input_processing(
             func=self.call,

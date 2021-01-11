@@ -24,7 +24,7 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
-    add_code_sample_docstrings,
+    add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
@@ -496,6 +496,26 @@ MARIAN_START_DOCSTRING = r"""
             model weights.
 """
 
+MARIAN_GENERATION_EXAMPLE = r"""
+        TF version of marian-nmt's transformer.h (c++). Designed for the OPUS-NMT translation checkpoints. Available
+        models are listed `here <https://huggingface.co/models?search=Helsinki-NLP>`__.
+
+        Examples::
+
+            >>> from transformers import MarianTokenizer, TFMarianMTModel
+            >>> from typing import List
+            >>> src = 'fr'  # source language
+            >>> trg = 'en'  # target language
+            >>> sample_text = "où est l'arrêt de bus ?"
+            >>> mname = f'Helsinki-NLP/opus-mt-{src}-{trg}'
+
+            >>> model = MarianMTModel.from_pretrained(mname)
+            >>> tok = MarianTokenizer.from_pretrained(mname)
+            >>> batch = tok.prepare_seq2seq_batch(src_texts=[sample_text], return_tensors="tf")  # don't need tgt_text for inference
+            >>> gen = model.generate(**batch)
+            >>> words: List[str] = tok.batch_decode(gen, skip_special_tokens=True)  # returns "Where is the bus stop ?"
+"""
+
 MARIAN_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`tf.Tensor` of shape :obj:`({0})`):
@@ -915,12 +935,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(MARIAN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="Helsinki-NLP/opus-mt-en-de",
-        output_type=TFSeq2SeqModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=TFSeq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids=None,
@@ -938,6 +953,24 @@ class TFMarianModel(TFMarianPreTrainedModel):
         training=False,
         **kwargs
     ):
+        r"""
+        Returns:
+
+        Example::
+
+            >>> from transformers import MarianTokenizer, TFMarianModel
+
+            >>> tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+            >>> model = TFMarianModel.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+
+            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="tf").input_ids  # Batch size 1
+            >>> decoder_input_ids = tokenizer("<pad> Studien haben gezeigt dass es hilfreich ist einen Hund zu besitzen",
+            ... return_tensors="tf", add_special_tokens=False).input_ids  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+
+            >>> last_hidden_states = outputs.last_hidden_state
+        """
+
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1082,6 +1115,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MARIAN_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @add_end_docstrings(MARIAN_GENERATION_EXAMPLE)
     def call(
         self,
         input_ids=None,
@@ -1100,21 +1134,14 @@ class TFMarianMTModel(TFMarianPreTrainedModel):
         training=False,
         **kwargs,
     ):
-        """
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the masked language modeling loss. Indices should either be in ``[0, ...,
+            config.vocab_size]`` or -100 (see ``input_ids`` docstring). Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
+
         Returns:
 
-        Examples::
-
-            >>> from transformers import MarianTokenizer, TFMarianMTModel
-            >>> import tensorflow as tf
-            >>> mname = 'Helsinki-NLP/opus-mt-en-de'
-            >>> tokenizer = MarianTokenizer.from_pretrained(mname)
-            >>> TXT = "My friends are <mask> but they eat too many carbs."
-            >>> model = TFMarianMTModel.from_pretrained(mname)
-            >>> batch = tokenizer([TXT], return_tensors='tf')
-            >>> logits = model(inputs=batch.input_ids).logits
-            >>> probs = tf.nn.softmax(logits[0])
-            >>> # probs[5] is associated with the mask token
         """
         inputs = input_processing(
             func=self.call,

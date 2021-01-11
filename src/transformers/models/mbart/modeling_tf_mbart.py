@@ -24,6 +24,7 @@ import tensorflow as tf
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
     add_code_sample_docstrings,
+    add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
@@ -526,6 +527,35 @@ MBART_INPUTS_DOCSTRING = r"""
         training (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
+"""
+
+MBART_GENERATION_EXAMPLE = r"""
+    Summarization example::
+
+        >>> from transformers import MBartTokenizer, TFMBartForConditionalGeneration, MBartConfig
+
+        >>> model = MBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25')
+        >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
+
+        >>> ARTICLE_TO_SUMMARIZE = "Meine Freunde sind cool, aber sie essen zu viel Kuchen."
+        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='tf')
+
+        >>> # Generate Summary
+        >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
+        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
+
+    Mask filling example::
+
+        >>> from transformers import MBartTokenizer, TFMBartForConditionalGeneration
+        >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
+        >>> # de_DE is the language symbol id <LID> for German
+        >>> TXT = "</s> Meine Freunde sind <mask> nett aber sie essen zu viel Kuchen. </s> de_DE"
+
+        >>> model = MBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25')
+        >>> input_ids = tokenizer([TXT], add_special_tokens=False, return_tensors='tf')['input_ids']
+        >>> logits = model(input_ids).logits
+        >>> probs = tf.nn.softmax(logits[0])
+        >>> # probs[5] is associated with the mask token
 """
 
 
@@ -1074,6 +1104,7 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(MBART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @add_end_docstrings(MBART_GENERATION_EXAMPLE)
     def call(
         self,
         input_ids=None,
@@ -1093,20 +1124,13 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel):
         **kwargs,
     ):
         """
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the masked language modeling loss. Indices should either be in ``[0, ...,
+            config.vocab_size]`` or -100 (see ``input_ids`` docstring). Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
+
         Returns:
 
-        Examples::
-
-            >>> from transformers import MBartTokenizer, TFMBartForConditionalGeneration
-            >>> import tensorflow as tf
-            >>> mname = 'facebook/mbart-large-cc25'
-            >>> tokenizer = MBartTokenizer.from_pretrained(mname)
-            >>> TXT = "My friends are <mask> but they eat too many carbs."
-            >>> model = TFMBartForConditionalGeneration.from_pretrained(mname)
-            >>> batch = tokenizer([TXT], return_tensors='tf')
-            >>> logits = model(inputs=batch.input_ids).logits
-            >>> probs = tf.nn.softmax(logits[0])
-            >>> # probs[5] is associated with the mask token
         """
         inputs = input_processing(
             func=self.call,
