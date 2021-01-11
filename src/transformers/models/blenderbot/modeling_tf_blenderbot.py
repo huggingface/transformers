@@ -417,6 +417,29 @@ class TFBlenderbotPreTrainedModel(TFPreTrainedModel):
         }
         return dummy_inputs
 
+    def get_input_embeddings(self):
+        base_model = getattr(self, self.base_model_prefix, self)
+
+        return base_model.shared
+
+    def set_input_embeddings(self, value):
+        base_model = getattr(self, self.base_model_prefix, self)
+
+        try:
+            base_model.shared.weight = value
+        except AttributeError:
+            self(self.dummy_inputs)
+            base_model.shared.weight = value
+
+        base_model.shared.vocab_size = shape_list(base_model.shared.weight)[0]
+
+        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
+            pass
+
+        embed_tokens = TFWrappedEmbeddings(base_model.shared, abs_scope_name=shared_abs_scope_name)
+        base_model.encoder.set_embed_tokens(embed_tokens)
+        base_model.decoder.set_embed_tokens(embed_tokens)
+
     @tf.function(
         input_signature=[
             {
@@ -579,6 +602,9 @@ class TFBlenderbotEncoder(tf.keras.layers.Layer):
         self.layers = [TFBlenderbotEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
+    def set_embed_tokens(self, embed_tokens):
+        self.embed_tokens = embed_tokens
+
     def call(
         self,
         input_ids=None,
@@ -719,6 +745,9 @@ class TFBlenderbotDecoder(tf.keras.layers.Layer):
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
+
+    def set_embed_tokens(self, embed_tokens):
+        self.embed_tokens = embed_tokens
 
     def call(
         self,
@@ -1056,29 +1085,6 @@ class TFBlenderbotModel(TFBlenderbotPreTrainedModel):
             encoder_attentions=enc_attns,
         )
 
-    def get_input_embeddings(self):
-        base_model = getattr(self, self.base_model_prefix, self)
-
-        return base_model.shared
-
-    def set_input_embeddings(self, value):
-        base_model = getattr(self, self.base_model_prefix, self)
-
-        try:
-            base_model.shared.weight = value
-        except AttributeError:
-            self(self.dummy_inputs)
-            base_model.shared.weight = value
-
-        base_model.shared.vocab_size = shape_list(base_model.shared.weight)[0]
-
-        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
-            pass
-
-        embed_tokens = TFWrappedEmbeddings(base_model.shared, abs_scope_name=shared_abs_scope_name)
-        base_model.encoder.set_embed_tokens(embed_tokens)
-        base_model.decoder.set_embed_tokens(embed_tokens)
-
 
 @add_start_docstrings(
     "The BLENDERBOT Model with a language modeling head. Can be used for summarization.",
@@ -1111,26 +1117,6 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel):
         return super(TFBlenderbotForConditionalGeneration, cls).from_pretrained(
             pretrained_model_name_or_path, *model_args, **kwargs
         )
-
-    def get_decoder(self):
-        return self.model.decoder
-
-    def resize_token_embeddings(self, new_num_tokens):
-        super().resize_token_embeddings(new_num_tokens=new_num_tokens)
-
-        # BLENDERBOT is a special case where the bias has two dimensions
-        # and not named just `bias`
-        if new_num_tokens is not None:
-            num_tokens_to_copy = min(shape_list(self.final_logits_bias)[0], new_num_tokens)
-            init_bias = tf.zeros((new_num_tokens,))
-            init_bias[:num_tokens_to_copy] = self.final_logits_bias.value()[:num_tokens_to_copy]
-            self.final_logits_bias = self.add_weight(
-                shape=(1, new_num_tokens),
-                initializer="zeros",
-                trainable=False,
-                name="final_logits_bias",
-            )
-            self.final_logits_bias.assign(init_bias)
 
     @add_start_docstrings_to_model_forward(BLENDERBOT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
