@@ -11,7 +11,7 @@ assignees: ''
 ## Environment info
 <!-- You can run the command `transformers-cli env` and copy-and-paste its output below.
      Don't forget to fill out the missing fields in that output! -->
-     
+
 - `transformers` version:
 - Platform:
 - Python version:
@@ -24,13 +24,13 @@ assignees: ''
 <!-- Your issue will be replied to more quickly if you can figure out the right person to tag with @
  If you know how to use git blame, that is the easiest way, otherwise, here is a rough guide of **who to tag**.
  Please tag fewer than 3 people.
- 
- albert, bert, GPT2, XLM: @LysandreJik 
+
+ albert, bert, GPT2, XLM: @LysandreJik
  tokenizers: @mfuntowicz
  Trainer: @sgugger
  Speed and Memory Benchmarks: @patrickvonplaten
  Model Cards: @julien-c
- TextGeneration: @TevenLeScao 
+ TextGeneration: @TevenLeScao
  examples/distillation: @VictorSanh
  nlp datasets: [different repo](https://github.com/huggingface/nlp)
  rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
@@ -47,6 +47,7 @@ assignees: ''
  FSMT: @stas00
  examples/seq2seq: @patil-suraj
  examples/bert-loses-patience: @JetRunner
+ ray/raytune: @richardliaw @amogkam
  tensorflow: @jplu
  examples/token-classification: @stefan-it
  documentation: @sgugger
