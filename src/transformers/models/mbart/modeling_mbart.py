@@ -166,6 +166,7 @@ class MBartAttention(nn.Module):
         key_value_states: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -232,6 +233,13 @@ class MBartAttention(nn.Module):
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = F.softmax(attn_weights, dim=-1)
+
+        if layer_head_mask is not None:
+            assert layer_head_mask.size() == (
+                self.num_heads,
+            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
             # this operation is a bit akward, but it's required to
@@ -1281,8 +1289,10 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
+        head_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        decoder_head_mask=None,
         encoder_outputs=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
@@ -1383,8 +1393,10 @@ class MBartForQuestionAnswering(MBartPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
+        head_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        decoder_head_mask=None,
         encoder_outputs=None,
         start_positions=None,
         end_positions=None,
