@@ -290,7 +290,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_sequence_builders(self):
-        tokenizer = self.tokenizer_class.from_pretrained("nielsr/tapas-base-finetuned-wtq")
+        tokenizer = self.tokenizer_class.from_pretrained("google/tapas-base-finetuned-wtq")
 
         empty_table = self.get_table(tokenizer, length=0)
         table = self.get_table(tokenizer, length=10)
