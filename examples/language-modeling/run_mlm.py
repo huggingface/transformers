@@ -38,6 +38,7 @@ from transformers import (
     AutoTokenizer,
     DataCollatorForLanguageModeling,
     HfArgumentParser,
+    TFTrainer,
     Trainer,
     TrainingArguments,
     set_seed,
@@ -377,16 +378,13 @@ def main():
 
     # Data collator
     # This one will take care of randomly masking the tokens.
-    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=data_args.mlm_probability)
 
     # Initialize our Trainer
-    trainer = Trainer(
+    trainer = TFTrainer(
         model=model,
         args=training_args,
         train_dataset=tokenized_datasets["train"] if training_args.do_train else None,
-        eval_dataset=tokenized_datasets["validation"] if training_args.do_eval else None,
-        tokenizer=tokenizer,
-        data_collator=data_collator,
+        eval_dataset=tokenized_datasets["validation"] if training_args.do_eval else None
     )
 
     # Training
