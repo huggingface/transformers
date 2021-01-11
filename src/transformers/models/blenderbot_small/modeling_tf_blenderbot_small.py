@@ -1095,6 +1095,24 @@ class TFBlenderbotSmallForConditionalGeneration(TFBlenderbotSmallPreTrainedModel
             name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )
 
+    def get_decoder(self):
+        return self.model.decoder
+
+    def get_encoder(self):
+        return self.model.encoder
+
+    def get_output_embeddings(self):
+        return self.get_input_embeddings()
+
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
+
+    def get_bias(self):
+        return {"final_logits_bias": self.final_logits_bias}
+
+    def set_bias(self, value):
+        self.final_logits_bias = value["final_logits_bias"]
+
     @add_start_docstrings_to_model_forward(BLENDERBOT_SMALL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     @add_end_docstrings(BLENDERBOT_SMALL_GENERATION_EXAMPLE)
@@ -1257,21 +1275,6 @@ class TFBlenderbotSmallForConditionalGeneration(TFBlenderbotSmallPreTrainedModel
             return tf.where(vocab_range != self.config.eos_token_id, LARGE_NEGATIVE, logits)
         else:
             return logits
-
-    def get_encoder(self):
-        return self.model.encoder
-
-    def get_output_embeddings(self):
-        return self.get_input_embeddings()
-
-    def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
-
-    def get_bias(self):
-        return {"final_logits_bias": self.final_logits_bias}
-
-    def set_bias(self, value):
-        self.final_logits_bias = value["final_logits_bias"]
 
     def compute_loss(self, labels, logits):
         """CrossEntropyLoss that ignores pad tokens"""
