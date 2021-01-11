@@ -24,7 +24,7 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
-    add_code_sample_docstrings,
+    add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
@@ -497,6 +497,26 @@ PEGASUS_START_DOCSTRING = r"""
             model weights.
 """
 
+PEGASUS_GENERATION_EXAMPLE = r"""
+    Summarization example::
+
+        >>> from transformers import PegasusTokenizer, TFPegasusForConditionalGeneration
+
+        >>> model = TFPegasusForConditionalGeneration.from_pretrained('google/pegasus-xsum')
+        >>> tokenizer = PegasusTokenizer.from_pretrained('google/pegasus-xsum')
+
+        >>> ARTICLE_TO_SUMMARIZE = (
+        ... "PG&E stated it scheduled the blackouts in response to forecasts for high winds "
+        ... "amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were "
+        ... "scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."
+        ... )
+        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='tf')
+
+        >>> # Generate Summary
+        >>> summary_ids = model.generate(inputs['input_ids'])
+        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
+"""
+
 PEGASUS_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`tf.Tensor` of shape :obj:`({0})`):
@@ -926,12 +946,7 @@ class TFPegasusModel(TFPegasusPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(PEGASUS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/pegasus-large",
-        output_type=TFSeq2SeqModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=TFSeq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids=None,
@@ -949,6 +964,22 @@ class TFPegasusModel(TFPegasusPreTrainedModel):
         training=False,
         **kwargs
     ):
+        r"""
+        Returns:
+
+        Example::
+
+            >>> from transformers import PegasusTokenizer, TFPegasusModel
+
+            >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-large")
+            >>> model = TFPegasusModel.from_pretrained("google/pegasus-large")
+
+            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="tf").input_ids  # Batch size 1
+            >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="tf").input_ids  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+
+            >>> last_hidden_states = outputs.last_hidden_state
+        """
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1093,6 +1124,7 @@ class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(PEGASUS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @add_end_docstrings(PEGASUS_GENERATION_EXAMPLE)
     def call(
         self,
         input_ids=None,
@@ -1112,20 +1144,13 @@ class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel):
         **kwargs,
     ):
         """
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the masked language modeling loss. Indices should either be in ``[0, ...,
+            config.vocab_size]`` or -100 (see ``input_ids`` docstring). Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
+
         Returns:
 
-        Examples::
-
-            >>> from transformers import PegasusTokenizer, TFPegasusForConditionalGeneration
-            >>> import tensorflow as tf
-            >>> mname = 'google/pegasus-large'
-            >>> tokenizer = PegasusTokenizer.from_pretrained(mname)
-            >>> TXT = "My friends are <mask> but they eat too many carbs."
-            >>> model = TFPegasusForConditionalGeneration.from_pretrained(mname)
-            >>> batch = tokenizer([TXT], return_tensors='tf')
-            >>> logits = model(inputs=batch.input_ids).logits
-            >>> probs = tf.nn.softmax(logits[0])
-            >>> # probs[5] is associated with the mask token
         """
         inputs = input_processing(
             func=self.call,

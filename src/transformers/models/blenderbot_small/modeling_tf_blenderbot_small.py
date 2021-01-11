@@ -23,7 +23,7 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
-    add_code_sample_docstrings,
+    add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
@@ -466,6 +466,34 @@ BLENDERBOT_SMALL_START_DOCSTRING = r"""
             model weights.
 """
 
+BLENDERBOT_SMALL_GENERATION_EXAMPLE = r"""
+    Conversation example::
+
+        >>> from transformers import BlenderbotSmallTokenizer, TFBlenderbotSmallForConditionalGeneration
+        >>> mname = 'facebook/blenderbot_small-90M'
+        >>> model = BlenderbotSmallForConditionalGeneration.from_pretrained(mname)
+        >>> tokenizer = TFBlenderbotSmallTokenizer.from_pretrained(mname)
+        >>> UTTERANCE = "My friends are cool but they eat too many carbs."
+        >>> print("Human: ", UTTERANCE)
+        >>> inputs = tokenizer([UTTERANCE], return_tensors='tf')
+        >>> inputs.pop("token_type_ids")
+        >>> reply_ids = model.generate(**inputs)
+        >>> print("Bot: ", tokenizer.batch_decode(reply_ids, skip_special_tokens=True)[0])
+        what kind of carbs do they eat? i don't know much about carbs.
+
+        >>> REPLY = "I'm not sure"
+        >>> print("Human: ", REPLY)
+        >>> NEXT_UTTERANCE = (
+        ... "My friends are cool but they eat too many carbs.</s> "
+        ... "<s>what kind of carbs do they eat? i don't know much about carbs.</s> "
+        ... "<s>I'm not sure."
+        ... )
+        >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors='tf')
+        >>> inputs.pop("token_type_ids")
+        >>> next_reply_ids = model.generate(**inputs)
+        >>> print("Bot: ", tokenizer.batch_decode(next_reply_ids, skip_special_tokens=True)[0])
+"""
+
 BLENDERBOT_SMALL_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`tf.Tensor` of shape :obj:`({0})`):
@@ -891,12 +919,7 @@ class TFBlenderbotSmallModel(TFBlenderbotSmallPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(BLENDERBOT_SMALL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="facebook/blenderbot-90M",
-        output_type=TFSeq2SeqModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=TFSeq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids=None,
@@ -914,6 +937,22 @@ class TFBlenderbotSmallModel(TFBlenderbotSmallPreTrainedModel):
         training=False,
         **kwargs
     ):
+        r"""
+        Returns:
+
+        Example::
+
+            >>> from transformers import BlenderbotSmallTokenizer, TFBlenderbotSmallModel
+
+            >>> model = TFBlenderbotSmallModel.from_pretrained("facebook/blenderbot_small-90M")
+            >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot_small-90M")
+
+            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="tf").input_ids  # Batch size 1
+            >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="tf").input_ids  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+
+            >>> last_hidden_states = outputs.last_hidden_state
+        """
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1055,6 +1094,7 @@ class TFBlenderbotSmallForConditionalGeneration(TFBlenderbotSmallPreTrainedModel
 
     @add_start_docstrings_to_model_forward(BLENDERBOT_SMALL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @add_end_docstrings(BLENDERBOT_SMALL_GENERATION_EXAMPLE)
     def call(
         self,
         input_ids=None,
@@ -1073,21 +1113,14 @@ class TFBlenderbotSmallForConditionalGeneration(TFBlenderbotSmallPreTrainedModel
         training=False,
         **kwargs,
     ):
-        """
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the masked language modeling loss. Indices should either be in ``[0, ...,
+            config.vocab_size]`` or -100 (see ``input_ids`` docstring). Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
+
         Returns:
 
-        Examples::
-
-            >>> from transformers import BlenderbotSmallTokenizer, TFBlenderbotSmallForConditionalGeneration
-            >>> import tensorflow as tf
-            >>> mname = 'facebook/blenderbot-90M'
-            >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained(mname)
-            >>> TXT = "My friends are <mask> but they eat too many carbs."
-            >>> model = TFBlenderbotSmallForConditionalGeneration.from_pretrained(mname)
-            >>> batch = tokenizer([TXT], return_tensors='tf')
-            >>> logits = model(inputs=batch.input_ids).logits
-            >>> probs = tf.nn.softmax(logits[0])
-            >>> # probs[5] is associated with the mask token
         """
         inputs = input_processing(
             func=self.call,
