@@ -374,8 +374,9 @@ no equivalent command line arguments.
 
 **Optimizer:**
 
-DeepSpeed has several tested with ZeRO optimizers, which are Adam, OneBitAdam, and Lamb. It, however, can import other optimizers from torch. The full
-documentation is `here <https://www.deepspeed.ai/docs/config-json/#optimizer-parameters>`__.
+DeepSpeed has several tested with ZeRO optimizers, which are Adam, OneBitAdam, and Lamb. It, however, can import other
+optimizers from torch. The full documentation is `here
+<https://www.deepspeed.ai/docs/config-json/#optimizer-parameters>`__.
 
 If you don't configure the ``optimizer`` entry in the configuration file, the :class:`~transformers.Trainer` will
 automatically set it to ``AdamW`` and will use the supplied values or the defaults for the following command line
@@ -398,9 +399,11 @@ Here is an example of the pre-configured ``optimizer`` entry for AdamW:
          }
     }
 
-Since AdamW isn't on the list of tested with DeepSpeed/ZeRO optimizers, we have to add ``zero_allow_untested_optimizer`` flag.
+Since AdamW isn't on the list of tested with DeepSpeed/ZeRO optimizers, we have to add
+``zero_allow_untested_optimizer`` flag.
 
-If you want to use one of the officially supported optimizers, configure them explicitly in the configuration file, and make sure to adjust the values. e.g. if use Adam you will want ``weight_decay`` around ``0.01``.
+If you want to use one of the officially supported optimizers, configure them explicitly in the configuration file, and
+make sure to adjust the values. e.g. if use Adam you will want ``weight_decay`` around ``0.01``.
 
 
 **Scheduler:**
