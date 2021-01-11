@@ -381,9 +381,9 @@ def style_rst_file(doc_file, max_len=119, check_only=False):
         doc = f.read()
 
     # Add missing new lines before lists
-    doc = _add_new_lines_before_list(doc)
+    clean_doc = _add_new_lines_before_list(doc)
     # Style
-    clean_doc = rst_styler.style(doc, max_len=max_len)
+    clean_doc = rst_styler.style(clean_doc, max_len=max_len)
 
     diff = clean_doc != doc
     if not check_only and diff:

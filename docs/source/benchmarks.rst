@@ -99,6 +99,7 @@ An instantiated benchmark object can then simply be run by calling ``benchmark.r
     --------------------------------------------------------------------------------
 
     ====================        ENVIRONMENT INFORMATION         ====================
+
     - transformers_version: 2.11.0
     - framework: PyTorch
     - use_torchscript: False
@@ -145,6 +146,7 @@ An instantiated benchmark object can then simply be run by calling ``benchmark.r
     --------------------------------------------------------------------------------
 
     ====================        ENVIRONMENT INFORMATION         ====================
+
     - transformers_version: 2.11.0
     - framework: Tensorflow
     - use_xla: False
@@ -228,6 +230,7 @@ configurations must be inserted with the benchmark args as follows.
     --------------------------------------------------------------------------------
 
     ====================        ENVIRONMENT INFORMATION         ====================
+
     - transformers_version: 2.11.0
     - framework: PyTorch
     - use_torchscript: False
@@ -297,6 +300,7 @@ configurations must be inserted with the benchmark args as follows.
     --------------------------------------------------------------------------------
 
     ====================        ENVIRONMENT INFORMATION         ====================
+
     - transformers_version: 2.11.0
     - framework: Tensorflow
     - use_xla: False
