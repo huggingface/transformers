@@ -1,4 +1,5 @@
 from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
+from ..tokenization_utils import TruncationStrategy
 from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
@@ -50,7 +51,13 @@ class Text2TextGenerationPipeline(Pipeline):
         return True
 
     def __call__(
-        self, *args, return_tensors=False, return_text=True, clean_up_tokenization_spaces=False, **generate_kwargs
+        self,
+        *args,
+        return_tensors=False,
+        return_text=True,
+        clean_up_tokenization_spaces=False,
+        truncation=TruncationStrategy.DO_NOT_TRUNCATE,
+        **generate_kwargs
     ):
         r"""
         Generate the output text(s) using text(s) given as inputs.
@@ -64,6 +71,10 @@ class Text2TextGenerationPipeline(Pipeline):
                 Whether or not to include the decoded texts in the outputs.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to clean up the potential extra spaces in the text output.
+            truncation (:obj:`TruncationStrategy`, `optional`, defaults to :obj:`TruncationStrategy.DO_NOT_TRUNCATE`):
+                The truncation strategy for the tokenization within the pipeline.
+                :obj:`TruncationStrategy.DO_NOT_TRUNCATE` (default) will never truncate, but it is sometimes desirable
+                to truncate the input to fit the model's max_length instead of throwing an error down the line.
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
                 corresponding to your framework `here <./model.html#generative-models>`__).
@@ -96,7 +107,7 @@ class Text2TextGenerationPipeline(Pipeline):
             )
 
         with self.device_placement():
-            inputs = self._parse_and_tokenize(*args, padding=padding, **generate_kwargs)
+            inputs = self._parse_and_tokenize(*args, padding=padding, truncation=truncation)
 
             if self.framework == "pt":
                 inputs = self.ensure_tensor_on_device(**inputs)
@@ -107,9 +118,6 @@ class Text2TextGenerationPipeline(Pipeline):
             min_length = generate_kwargs.get("min_length", self.model.config.min_length)
             max_length = generate_kwargs.get("max_length", self.model.config.max_length)
             self.check_inputs(input_length, min_length, max_length)
-
-            # truncation should be used by _parse_and_tokenize
-            generate_kwargs.pop("truncation", None)
 
             generations = self.model.generate(
                 inputs["input_ids"],
