@@ -812,7 +812,9 @@ class TFMBartDecoder(tf.keras.layers.Layer):
             )
 
         if inputs["attention_mask"] is not None and input_shape[-1] > 1:
-            combined_attention_mask = combined_attention_mask + _expand_mask(inputs["attention_mask"], tgt_len=input_shape[-1])
+            combined_attention_mask = combined_attention_mask + _expand_mask(
+                inputs["attention_mask"], tgt_len=input_shape[-1]
+            )
 
         if inputs["encoder_hidden_states"] is not None and inputs["encoder_attention_mask"] is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
