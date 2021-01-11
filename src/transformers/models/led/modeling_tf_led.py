@@ -267,12 +267,14 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         )
 
         attn_probs = tf.nn.softmax(attn_scores, axis=-1)
+
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
         attn_probs = tf.where(
             tf.broadcast_to(is_index_masked[:, :, None, None], shape_list(attn_probs)),
             0.0,
             attn_probs,
         )
+
         # apply dropout
         attn_probs = self.dropout(attn_probs, training=training)
         value_vectors = tf.reshape(value_vectors, (batch_size, seq_len, self.num_heads, self.head_dim))
@@ -476,6 +478,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         Same as _sliding_chunks_query_key_matmul but for attn_probs and value tensors. Returned tensor will be of the
         same shape as `attn_probs`
         """
+
         batch_size, seq_len, num_heads, head_dim = shape_list(value)
 
         tf.debugging.assert_equal(
@@ -483,13 +486,11 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
             0,
             message="Seq_len has to be multiple of 2 * window_overlap",
         )
-
         tf.debugging.assert_equal(
             shape_list(attn_probs)[:3],
             shape_list(value)[:3],
             message="value and attn_probs must have same dims (except head_dim)",
         )
-
         tf.debugging.assert_equal(
             shape_list(attn_probs)[3],
             2 * window_overlap + 1,
@@ -518,6 +519,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         # pad seq_len with w at the beginning of the sequence and another window overlap at the end
         paddings = tf.convert_to_tensor([[0, 0], [window_overlap, window_overlap], [0, 0]], dtype=tf.dtypes.int32)
         padded_value = tf.pad(value, paddings, constant_values=-1)
+
         # chunk padded_value into chunks of size 3 window overlap and an overlap of size window overlap
         frame_size = 3 * window_overlap * head_dim
         frame_hop_size = (shape_list(padded_value)[1] * head_dim - frame_size) // chunks_count

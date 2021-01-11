@@ -860,12 +860,14 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         )
 
         attn_probs = tf.nn.softmax(attn_scores, axis=-1)
+
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
         attn_probs = tf.where(
             tf.broadcast_to(is_index_masked[:, :, None, None], shape_list(attn_probs)),
             0.0,
             attn_probs,
         )
+
         # apply dropout
         attn_probs = self.dropout(attn_probs, training=training)
         value_vectors = tf.reshape(value_vectors, (batch_size, seq_len, self.num_heads, self.head_dim))
@@ -1069,6 +1071,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         Same as _sliding_chunks_query_key_matmul but for attn_probs and value tensors. Returned tensor will be of the
         same shape as `attn_probs`
         """
+
         batch_size, seq_len, num_heads, head_dim = shape_list(value)
 
         tf.debugging.assert_equal(
@@ -1076,13 +1079,11 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             0,
             message="Seq_len has to be multiple of 2 * window_overlap",
         )
-
         tf.debugging.assert_equal(
             shape_list(attn_probs)[:3],
             shape_list(value)[:3],
             message="value and attn_probs must have same dims (except head_dim)",
         )
-
         tf.debugging.assert_equal(
             shape_list(attn_probs)[3],
             2 * window_overlap + 1,
@@ -1111,6 +1112,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         # pad seq_len with w at the beginning of the sequence and another window overlap at the end
         paddings = tf.convert_to_tensor([[0, 0], [window_overlap, window_overlap], [0, 0]], dtype=tf.dtypes.int32)
         padded_value = tf.pad(value, paddings, constant_values=-1)
+
         # chunk padded_value into chunks of size 3 window overlap and an overlap of size window overlap
         frame_size = 3 * window_overlap * head_dim
         frame_hop_size = (shape_list(padded_value)[1] * head_dim - frame_size) // chunks_count
@@ -1543,7 +1545,7 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
-                hidden_states_to_add = self.compute_hidden_states(hidden_states, padding_len)
+                hidden_states_to_add = hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
                 all_hidden_states = all_hidden_states + (hidden_states_to_add,)
 
             layer_outputs = layer_module(
@@ -1567,7 +1569,7 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
 
         # Add last layer
         if output_hidden_states:
-            hidden_states_to_add = self.compute_hidden_states(hidden_states, padding_len)
+            hidden_states_to_add = hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
             all_hidden_states = all_hidden_states + (hidden_states_to_add,)
 
         if not return_dict:
@@ -1581,10 +1583,6 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
             attentions=all_attentions,
             global_attentions=all_global_attentions,
         )
-    
-    @tf.function
-    def compute_hidden_states(self, hidden_states, padding_len):
-        return hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
 
 
 @keras_serializable
@@ -1756,11 +1754,12 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
             global_attentions=encoder_outputs.global_attentions,
         )
 
-    @tf.function
     def _pad_to_window_size(
         self,
         input_ids,
         attention_mask,
+        token_type_ids,
+        position_ids,
         inputs_embeds,
         pad_token_id,
     ):
@@ -1783,24 +1782,33 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
                 )
             )
 
-            paddings = tf.convert_to_tensor([[0, 0], [0, padding_len]])
+        paddings = tf.convert_to_tensor([[0, 0], [0, padding_len]])
 
-            if input_ids is not None:
-                input_ids = tf.pad(input_ids, paddings, constant_values=pad_token_id)
+        if input_ids is not None:
+            input_ids = tf.pad(input_ids, paddings, constant_values=pad_token_id)
 
-            if inputs_embeds is not None:
-                input_ids_padding = tf.fill((batch_size, padding_len), pad_token_id)
-                inputs_embeds_padding = self.embed_tokens(input_ids_padding)
-                inputs_embeds = tf.concat([inputs_embeds, inputs_embeds_padding], axis=-2)
+        if position_ids is not None:
+            # pad with position_id = pad_token_id as in modeling_roberta.RobertaEmbeddings
+            position_ids = tf.pad(position_ids, paddings, constant_values=pad_token_id)
 
-            attention_mask = tf.pad(
-                attention_mask, paddings, constant_values=False
-            )  # no attention on the padding tokens
+        if inputs_embeds is not None:
+
+            def pad_embeddings():
+                input_ids_padding = tf.fill((batch_size, padding_len), self.pad_token_id)
+                inputs_embeds_padding = self.embeddings(input_ids_padding)
+                return tf.concat([inputs_embeds, inputs_embeds_padding], axis=-2)
+
+            inputs_embeds = tf.cond(padding_len > 0, pad_embeddings, lambda: inputs_embeds)
+
+        attention_mask = tf.pad(attention_mask, paddings, constant_values=False)  # no attention on the padding tokens
+        token_type_ids = tf.pad(token_type_ids, paddings, constant_values=0)  # pad with token_type_id = 0
 
         return (
             padding_len,
             input_ids,
             attention_mask,
+            token_type_ids,
+            position_ids,
             inputs_embeds,
         )
 
