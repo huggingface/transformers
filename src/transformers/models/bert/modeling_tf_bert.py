@@ -130,7 +130,7 @@ class TFBertWordEmbeddings(tf.keras.layers.Layer):
         self.initializer_range = initializer_range
 
     def build(self, input_shape):
-        self.word_embeddings = self.add_weight(
+        self.weight = self.add_weight(
             name="weight",
             shape=[self.vocab_size, self.hidden_size],
             initializer=get_initializer(initializer_range=self.initializer_range),
@@ -597,7 +597,7 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
         hidden_states = self.transform(hidden_states=hidden_states)
         seq_length = shape_list(tensor=hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
-        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.word_embeddings, transpose_b=True)
+        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
@@ -647,8 +647,8 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.word_embeddings.weight = value
+        self.embeddings.word_embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
