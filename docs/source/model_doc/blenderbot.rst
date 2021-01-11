@@ -105,3 +105,17 @@ See :obj:`transformers.TFBartForConditionalGeneration` for arguments to `forward
 
 .. autoclass:: transformers.TFBlenderbotForConditionalGeneration
     :members:
+
+
+TFBlenderbotModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFBlenderbotModel
+    :members: call
+
+
+TFBlenderbotForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFBlenderbotForConditionalGeneration
+    :members: call
