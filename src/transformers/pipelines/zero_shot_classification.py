@@ -3,6 +3,7 @@ from typing import List, Union
 import numpy as np
 
 from ..file_utils import add_end_docstrings
+from ..tokenization_utils import TruncationStrategy
 from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
 
@@ -78,7 +79,14 @@ class ZeroShotClassificationPipeline(Pipeline):
         return -1
 
     def _parse_and_tokenize(
-        self, sequences, candidate_labels, hypothesis_template, padding=True, add_special_tokens=True, **kwargs
+        self,
+        sequences,
+        candidate_labels,
+        hypothesis_template,
+        padding=True,
+        add_special_tokens=True,
+        truncation=TruncationStrategy.ONLY_FIRST,
+        **kwargs
     ):
         """
         Parse arguments and tokenize only_first so that hypothesis (label) is not truncated
@@ -89,7 +97,7 @@ class ZeroShotClassificationPipeline(Pipeline):
             add_special_tokens=add_special_tokens,
             return_tensors=self.framework,
             padding=padding,
-            truncation="only_first",
+            truncation=truncation,
         )
 
         return inputs
