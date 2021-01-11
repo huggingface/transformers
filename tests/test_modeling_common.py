@@ -206,7 +206,7 @@ class ModelTesterMixin:
                     "decoder_attention_mask",
                     "encoder_outputs",
                 ]
-                if model.config.model_type in ["bart", "mbart", "marian", "blenderbot", "blenderbot-small"]:
+                if model.config.model_type in ["bart", "mbart", "marian", "blenderbot", "blenderbot-small", "pegasus"]:
                     expected_arg_names.insert(2, "head_mask")
                     expected_arg_names.insert(5, "decoder_head_mask")
                     self.assertListEqual(arg_names[:7], expected_arg_names)
@@ -400,7 +400,14 @@ class ModelTesterMixin:
                     attention_mask = inputs["attention_mask"]
                     decoder_input_ids = inputs["decoder_input_ids"]
                     decoder_attention_mask = inputs["decoder_attention_mask"]
-                    if model.config.model_type not in ["bart", "mbart", "marian", "blenderbot", "blenderbot-small"]:
+                    if model.config.model_type not in [
+                        "bart",
+                        "mbart",
+                        "marian",
+                        "blenderbot",
+                        "blenderbot-small",
+                        "pegasus",
+                    ]:
                         traced_model = torch.jit.trace(
                             model, (input_ids, attention_mask, decoder_input_ids, decoder_attention_mask)
                         )
