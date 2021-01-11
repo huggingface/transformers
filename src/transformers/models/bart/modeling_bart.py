@@ -880,6 +880,7 @@ class BartDecoder(BartPretrainedModel):
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the heas is **masked**.
+
             encoder_hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, encoder_sequence_length, hidden_size)`, `optional`):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
@@ -1297,7 +1298,14 @@ class BartForConditionalGeneration(BartPretrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, decoder_input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
+        self,
+        decoder_input_ids,
+        past=None,
+        attention_mask=None,
+        head_mask=None,
+        use_cache=None,
+        encoder_outputs=None,
+        **kwargs
     ):
         # cut decoder_input_ids if past is used
         if past is not None:
@@ -1309,6 +1317,7 @@ class BartForConditionalGeneration(BartPretrainedModel):
             "past_key_values": past,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
+            "head_mask": head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
