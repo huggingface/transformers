@@ -23,6 +23,7 @@ import json
 import os
 import warnings
 from collections import OrderedDict, UserDict
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
@@ -33,6 +34,7 @@ import requests
 
 from .file_utils import (
     add_end_docstrings,
+    add_start_docstrings,
     cached_path,
     hf_bucket_url,
     is_flax_available,
@@ -3252,3 +3254,52 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                     "indexing errors".format(len(ids), self.model_max_length)
                 )
             self.deprecation_warnings["sequence-length-is-longer-than-the-specified-maximum"] = True
+
+    @contextmanager
+    def as_target_tokenizer(self):
+        """
+        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
+        sequence-to-sequence models that need a slightly different processing for the labels.
+        """
+        yield
+
+    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
+    def prepare_seq2seq_batch(
+        self,
+        src_texts: List[str],
+        tgt_texts: Optional[List[str]] = None,
+        max_length: Optional[int] = None,
+        max_target_length: Optional[int] = None,
+        padding: str = "longest",
+        return_tensors: str = "None",
+        truncation: bool = True,
+        **kwargs,
+    ) -> BatchEncoding:
+        if max_length is None:
+            max_length = self.model_max_length
+        model_inputs = self(
+            src_texts,
+            add_special_tokens=True,
+            return_tensors=return_tensors,
+            max_length=max_length,
+            padding=padding,
+            truncation=truncation,
+            **kwargs,
+        )
+        if tgt_texts is None:
+            return model_inputs
+        # Process tgt_texts
+        if max_target_length is None:
+            max_target_length = max_length
+        with self.as_target_tokenizer():
+            labels = self(
+                tgt_texts,
+                add_special_tokens=True,
+                return_tensors=return_tensors,
+                padding=padding,
+                max_length=max_target_length,
+                truncation=truncation,
+                **kwargs,
+            )
+        model_inputs["labels"] = labels["input_ids"]
+        return model_inputs
