@@ -2260,37 +2260,13 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
         positions = self.embed_positions(input_shape, past_key_values_length)
 
         if inputs["inputs_embeds"] is None:
-            inputs["inputs_embeds"] = self.embed_tokens(inputs["input_ids"]) * self.embed_scale
+            inputs["inputs_embeds"] = self.embed_tokens(inputs["input_ids"])
 
         hidden_states = inputs["inputs_embeds"]
 
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = tf.cond(tf.math.greater(input_shape[-1], 1), lambda: _make_causal_mask(input_shape, past_key_values_length=past_key_values_length), lambda: _expand_mask(
-                tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
-            ))
-
-        if inputs["attention_mask"] is None and inputs["input_ids"] is not None:
-            def attn_mask_from_inp_ids():
-                attns = tf.cast(
-                    tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id), inputs["input_ids"].dtype
-                )
-                attns = tf.concat(
-                    [
-                        tf.ones((input_shape[0], past_key_values_length), dtype=attns.dtype),
-                        attns,
-                    ],
-                    axis=-1,
-                )
-                
-                return attns
-            
-            inputs["attention_mask"] = tf.cond(tf.math.greater(input_shape[-1], 1), attn_mask_from_inp_ids, lambda: tf.ones(
-                (input_shape[0], input_shape[1] + past_key_values_length), dtype=tf.int32
-            ))
-        else:
-            inputs["attention_mask"] = tf.ones(
-                (input_shape[0], input_shape[1] + past_key_values_length), dtype=tf.int32
-            )
+        inputs["attention_mask"], combined_attention_mask = self.compute_combined_attns_mask(
+            inputs, input_shape, past_key_values_length
+        )
 
         if inputs["encoder_hidden_states"] is not None and inputs["encoder_attention_mask"] is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -2348,6 +2324,33 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
                 hidden_states=all_hidden_states,
                 attentions=all_self_attns,
             )
+    
+    @tf.function
+    def compute_combined_attns_mask(self, inputs, input_shape, past_key_values_length):
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        combined_attention_mask = None
+        if input_shape[-1] > 1:
+            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
+        else:
+            combined_attention_mask = _expand_mask(
+                tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
+            )
+
+        if inputs["attention_mask"] is None and inputs["input_ids"] is not None and input_shape[-1] > 1:
+            attention_mask = tf.cast(
+                tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id), inputs["input_ids"].dtype
+            )
+            attention_mask = tf.concat(
+                [
+                    tf.ones((input_shape[0], past_key_values_length), dtype=attention_mask.dtype),
+                    attention_mask,
+                ],
+                axis=-1,
+            )
+        else:
+            attention_mask = tf.ones((input_shape[0], input_shape[1] + past_key_values_length), dtype=tf.int32)
+
+        return attention_mask, combined_attention_mask
 
 
 @add_start_docstrings(
