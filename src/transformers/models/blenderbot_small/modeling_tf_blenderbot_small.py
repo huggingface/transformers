@@ -792,7 +792,6 @@ class TFBlenderbotSmallDecoder(tf.keras.layers.Layer):
             inputs["inputs_embeds"] = self.embed_tokens(inputs["input_ids"]) * self.embed_scale
 
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
         if input_shape[-1] > 1:
             combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
         else:

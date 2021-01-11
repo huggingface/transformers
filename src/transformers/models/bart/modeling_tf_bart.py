@@ -796,7 +796,6 @@ class TFBartDecoder(tf.keras.layers.Layer):
         hidden_states = inputs["inputs_embeds"]
 
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
         if input_shape[-1] > 1:
             combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
         else:
