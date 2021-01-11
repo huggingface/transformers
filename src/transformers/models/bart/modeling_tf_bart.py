@@ -1098,7 +1098,6 @@ class TFBartForConditionalGeneration(TFBartPreTrainedModel):
     def get_decoder(self):
         return self.model.decoder
 
-<<<<<<< HEAD
     def resize_token_embeddings(self, new_num_tokens):
         super().resize_token_embeddings(new_num_tokens=new_num_tokens)
 
@@ -1115,7 +1114,7 @@ class TFBartForConditionalGeneration(TFBartPreTrainedModel):
                 name="final_logits_bias",
             )
             self.final_logits_bias.assign(init_bias)
-=======
+
     def get_encoder(self):
         return self.model.encoder
 
@@ -1130,7 +1129,6 @@ class TFBartForConditionalGeneration(TFBartPreTrainedModel):
 
     def set_bias(self, value):
         self.final_logits_bias = value["final_logits_bias"]
->>>>>>> main/master
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
