@@ -150,7 +150,7 @@ class TFBertWordEmbeddings(tf.keras.layers.Layer):
 
     def call(self, input_ids):
         flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
-        embeddings = tf.gather(params=self.word_embeddings, indices=flat_input_ids)
+        embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
         embeddings = tf.reshape(
             tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=input_ids), [self.hidden_size]], axis=0)
         )
