@@ -219,15 +219,16 @@ class Trainer:
             :class:`~transformers.AdamW` on your model and a scheduler given by
             :func:`~transformers.get_linear_schedule_with_warmup` controlled by :obj:`args`.
 
-    Important accessors:
+    Important attributes:
 
-        ``self.model`` - always points to the core model. If using a transformers model, it will be a
-        :class:`PreTrainedModel` subclass.
-
-        ``self.model_wrapped`` - always points to the most external model in case one or more other modules wrap the
-        original model. This is the model that should be used for the forward pass. For example, under ``DeepSpeed``,
-        the inner model is wrapped in ``DeepSpeed`` and then again in ``DistributedDataParallel``. If the inner model
-        hasn't been wrapped, then ``self.model_wrapped`` is the same as ``self.model``.
+        - **model** -- Always points to the core model. If using a transformers model, it will be a
+          :class:`~transformers.PreTrainedModel` subclass.
+        - **model_wrapped** -- Always points to the most external model in case one or more other modules wrap the
+          original model. This is the model that should be used for the forward pass. For example, under ``DeepSpeed``,
+          the inner model is wrapped in ``DeepSpeed`` and then again in ``torch.nn.DistributedDataParallel``. If the
+          inner model hasn't been wrapped, then ``self.model_wrapped`` is the same as ``self.model``.
+        - **is_model_parallel** -- Whether or not a model has been switched to a model parallel mode (different from
+          data parallelism, this means some of the model layers are split on different GPUs).
     """
 
     def __init__(
@@ -267,6 +268,11 @@ class Trainer:
                 )
             self.model_init = model_init
 
+        if hasattr(model, "is_parallelizable") and model.is_parallelizable and model.model_parallel:
+            self.is_model_parallel = True
+        else:
+            self.is_model_parallel = False
+
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
@@ -274,8 +280,11 @@ class Trainer:
         self.tokenizer = tokenizer
 
         # Model parallel
-        if not self.args.model_parallel:
+        if not self.is_model_parallel:
             model = model.to(args.device)
+        else:
+            # Force n_gpu to 1 to avoid DataParallel.
+            self.args._n_gpu = 1
 
         # later use `self.model is self.model_wrapped` to check if it's wrapped or not
         self.model_wrapped = model
@@ -669,7 +678,7 @@ class Trainer:
             set_seed(self.args.seed)
 
             model = self.call_model_init(trial)
-            if not self.args.model_parallel:
+            if not self.is_model_parallel:
                 model = model.to(self.args.device)
 
             self.model = model
@@ -719,7 +728,7 @@ class Trainer:
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
 
         # Multi-gpu training (should be after apex fp16 initialization)
-        if self.args.n_gpu > 1 and not self.args.model_parallel:
+        if self.args.n_gpu > 1:
             model = torch.nn.DataParallel(model)
 
         # Distributed training (should be after apex fp16 initialization)
@@ -930,7 +939,7 @@ class Trainer:
             )
             if isinstance(self.model, PreTrainedModel):
                 self.model = self.model.from_pretrained(self.state.best_model_checkpoint)
-                if not self.args.model_parallel:
+                if not self.is_model_parallel:
                     self.model = self.model.to(self.args.device)
             else:
                 state_dict = torch.load(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME))
@@ -1481,7 +1490,7 @@ class Trainer:
 
         model = self.model
         # multi-gpu eval
-        if self.args.n_gpu > 1 and not self.args.model_parallel:
+        if self.args.n_gpu > 1:
             model = torch.nn.DataParallel(model)
         # Note: in torch.distributed mode, there's no point in wrapping the model
         # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
