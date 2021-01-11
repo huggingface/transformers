@@ -236,11 +236,12 @@ class TFBlenderbot90MIntegrationTests(unittest.TestCase):
     src_text = [
         "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like   i'm going to throw up.\nand why is that?"
     ]
-    model_name = "facebook/blenderbot-90M"
+    model_name = "facebook/blenderbot_small-90M"
 
     @cached_property
     def tokenizer(self):
-        return BlenderbotSmallTokenizer.from_pretrained(self.model_name)
+        # use "old" tokenizer here because of bug when downloading new tokenizer
+        return BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot-90M")
 
     @cached_property
     def model(self):
