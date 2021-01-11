@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import tempfile
 import unittest
 
 from transformers import AutoTokenizer, MBartConfig, is_tf_available
@@ -65,7 +65,6 @@ class TFMBartModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
-
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
@@ -115,26 +114,31 @@ class TFMBartModelTester:
         output, past_key_values = outputs.to_tuple()
         past_key_values = past_key_values[1]
 
-        # create hypothetical next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_attn_mask = tf.cast(ids_tensor((self.batch_size, 3), 2), tf.int8)
+    def test_compile_tf_model(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # append to next input_ids and
-        next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
-        next_attention_mask = tf.concat([attention_mask, next_attn_mask], axis=-1)
-
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[0]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[0]
-
-        self.parent.assertEqual(next_tokens.shape[1], output_from_past.shape[1])
-
-        # select random slice
-        random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx]
-        output_from_past_slice = output_from_past[:, :, random_slice_idx]
-
-        # test that outputs are equal for slice
-        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
+        optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
+        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
+        model_class = self.all_generative_model_classes[0]
+        input_ids = {
+            "decoder_input_ids": tf.keras.Input(batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"),
+            "input_ids": tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32"),
+        }
+        # Prepare our model
+        model = model_class(config)
+        model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
+        # Let's load it from the disk to be sure we can use pretrained weights
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model = model_class.from_pretrained(tmpdirname)
+        outputs_dict = model(input_ids)
+        hidden_states = outputs_dict[0]
+        # Add a dense layer on top to test integration with other keras modules
+        outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
+        # Compile extended model
+        extended_model = tf.keras.Model(inputs=[input_ids], outputs=[outputs])
+        extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
 
 
 def prepare_mbart_inputs_dict(
@@ -186,10 +190,19 @@ class TFMBartModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config)
             assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-            x = model.get_output_layer_with_bias()
-            assert x is None
-            name = model.get_prefix_bias_name()
-            assert name is None
+
+            if model_class in self.all_generative_model_classes:
+                x = model.get_output_embeddings()
+                assert isinstance(x, tf.keras.layers.Layer)
+                name = model.get_bias()
+                assert isinstance(name, dict)
+                for k, v in name.items():
+                    assert isinstance(v, tf.Variable)
+            else:
+                x = model.get_output_embeddings()
+                assert x is None
+                name = model.get_bias()
+                assert name is None
 
     @slow
     def test_saved_model_with_hidden_states_output(self):
@@ -208,6 +221,69 @@ class TFMBartModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_saved_model_creation_extended(self):
         # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
         pass
+
+    def test_resize_token_embeddings(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def _get_word_embedding_weight(model, embedding_layer):
+            if hasattr(embedding_layer, "weight"):
+                return embedding_layer.weight
+            else:
+                # Here we build the word embeddings weights if not exists.
+                # And then we retry to get the attribute once built.
+                model(model.dummy_inputs)
+                if hasattr(embedding_layer, "weight"):
+                    return embedding_layer.weight
+                else:
+                    return None
+
+        for model_class in self.all_model_classes:
+            for size in [config.vocab_size - 10, config.vocab_size + 10, None]:
+                # build the embeddings
+                model = model_class(config=config)
+                old_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
+                old_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
+                old_final_logits_bias = model.get_bias()
+
+                # reshape the embeddings
+                model.resize_token_embeddings(size)
+                new_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
+                new_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
+                new_final_logits_bias = model.get_bias()
+
+                # check that the resized embeddings size matches the desired size.
+                assert_size = size if size is not None else config.vocab_size
+
+                self.assertEqual(new_input_embeddings.shape[0], assert_size)
+
+                # check that weights remain the same after resizing
+                models_equal = True
+                for p1, p2 in zip(old_input_embeddings.value(), new_input_embeddings.value()):
+                    if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                        models_equal = False
+                self.assertTrue(models_equal)
+
+                if old_output_embeddings is not None and new_output_embeddings is not None:
+                    self.assertEqual(new_output_embeddings.shape[0], assert_size)
+
+                    models_equal = True
+                    for p1, p2 in zip(old_output_embeddings.value(), new_output_embeddings.value()):
+                        if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                            models_equal = False
+                    self.assertTrue(models_equal)
+
+                if old_final_logits_bias is not None and new_final_logits_bias is not None:
+                    old_final_logits_bias = old_final_logits_bias["final_logits_bias"]
+                    new_final_logits_bias = new_final_logits_bias["final_logits_bias"]
+                    self.assertEqual(new_final_logits_bias.shape[0], 1)
+                    self.assertEqual(new_final_logits_bias.shape[1], assert_size)
+
+                    models_equal = True
+                    for old, new in zip(old_final_logits_bias.value(), new_final_logits_bias.value()):
+                        for p1, p2 in zip(old, new):
+                            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                                models_equal = False
+                    self.assertTrue(models_equal)
 
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):

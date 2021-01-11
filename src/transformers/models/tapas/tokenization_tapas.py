@@ -255,7 +255,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             value for :obj:`lowercase` (as in the original BERT).
         cell_trim_length (:obj:`int`, `optional`, defaults to -1):
             If > 0: Trim cells so that the length is <= this value. Also disables further cell trimming, should thus be
-            used with 'drop_rows_to_fit' below.
+            used with :obj:`truncation` set to :obj:`True`.
         max_column_id (:obj:`int`, `optional`):
             Max column id to extract.
         max_row_id (:obj:`int`, `optional`):
@@ -264,8 +264,6 @@ class TapasTokenizer(PreTrainedTokenizer):
             Whether to add empty strings instead of column names.
         update_answer_coordinates (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to recompute the answer coordinates from the answer text.
-        drop_rows_to_fit (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to drop the last rows if a table doesn't fit within max sequence length.
 
     """
 
@@ -292,7 +290,6 @@ class TapasTokenizer(PreTrainedTokenizer):
         max_row_id: int = None,
         strip_column_names: bool = False,
         update_answer_coordinates: bool = False,
-        drop_rows_to_fit: bool = False,
         model_max_length: int = 512,
         additional_special_tokens: Optional[List[str]] = None,
         **kwargs
@@ -323,7 +320,6 @@ class TapasTokenizer(PreTrainedTokenizer):
             max_row_id=max_row_id,
             strip_column_names=strip_column_names,
             update_answer_coordinates=update_answer_coordinates,
-            drop_rows_to_fit=drop_rows_to_fit,
             model_max_length=model_max_length,
             additional_special_tokens=additional_special_tokens,
             **kwargs,
@@ -352,7 +348,6 @@ class TapasTokenizer(PreTrainedTokenizer):
         self.max_row_id = max_row_id if max_row_id is not None else self.model_max_length
         self.strip_column_names = strip_column_names
         self.update_answer_coordinates = update_answer_coordinates
-        self.drop_rows_to_fit = drop_rows_to_fit
 
     @property
     def do_lower_case(self):
@@ -1122,7 +1117,7 @@ class TapasTokenizer(PreTrainedTokenizer):
             prev_answer_coordinates = kwargs["prev_answer_coordinates"]
             prev_answer_text = kwargs["prev_answer_text"]
 
-        num_rows = self._get_num_rows(raw_table, self.drop_rows_to_fit)
+        num_rows = self._get_num_rows(raw_table, truncation != TapasTruncationStrategy.DO_NOT_TRUNCATE)
         num_columns = self._get_num_columns(raw_table)
         _, _, num_tokens = self._get_table_boundaries(tokenized_table)
 

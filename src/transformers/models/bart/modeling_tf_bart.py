@@ -412,6 +412,29 @@ class TFBartPreTrainedModel(TFPreTrainedModel):
         }
         return dummy_inputs
 
+    def get_input_embeddings(self):
+        base_model = getattr(self, self.base_model_prefix, self)
+
+        return base_model.shared
+
+    def set_input_embeddings(self, value):
+        base_model = getattr(self, self.base_model_prefix, self)
+
+        try:
+            base_model.shared.weight = value
+        except AttributeError:
+            self(self.dummy_inputs)
+            base_model.shared.weight = value
+
+        base_model.shared.vocab_size = shape_list(base_model.shared.weight)[0]
+
+        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
+            pass
+
+        embed_tokens = TFWrappedEmbeddings(base_model.shared, abs_scope_name=shared_abs_scope_name)
+        base_model.encoder.set_embed_tokens(embed_tokens)
+        base_model.decoder.set_embed_tokens(embed_tokens)
+
     @tf.function(
         input_signature=[
             {
@@ -583,6 +606,9 @@ class TFBartEncoder(tf.keras.layers.Layer):
         self.layers = [TFBartEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
+    def set_embed_tokens(self, embed_tokens):
+        self.embed_tokens = embed_tokens
+
     def call(
         self,
         input_ids=None,
@@ -722,6 +748,9 @@ class TFBartDecoder(tf.keras.layers.Layer):
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
+
+    def set_embed_tokens(self, embed_tokens):
+        self.embed_tokens = embed_tokens
 
     def call(
         self,
@@ -918,6 +947,9 @@ class TFBartModel(TFBartPreTrainedModel):
         self.encoder = TFBartEncoder(config, embed_tokens, name="encoder")
         self.decoder = TFBartDecoder(config, embed_tokens, name="decoder")
 
+    def get_encoder(self):
+        return self.encoder
+
     def get_decoder(self):
         return self.decoder
 
@@ -1043,15 +1075,6 @@ class TFBartModel(TFBartPreTrainedModel):
             encoder_attentions=enc_attns,
         )
 
-    def get_input_embeddings(self):
-        return self.shared
-
-    def set_input_embeddings(self, value):
-        self.shared = value
-
-    def get_output_embeddings(self):
-        return self.shared
-
 
 @add_start_docstrings(
     "The BART Model with a language modeling head. Can be used for summarization.",
@@ -1075,6 +1098,7 @@ class TFBartForConditionalGeneration(TFBartPreTrainedModel):
     def get_decoder(self):
         return self.model.decoder
 
+<<<<<<< HEAD
     def resize_token_embeddings(self, new_num_tokens):
         super().resize_token_embeddings(new_num_tokens=new_num_tokens)
 
@@ -1091,6 +1115,22 @@ class TFBartForConditionalGeneration(TFBartPreTrainedModel):
                 name="final_logits_bias",
             )
             self.final_logits_bias.assign(init_bias)
+=======
+    def get_encoder(self):
+        return self.model.encoder
+
+    def get_output_embeddings(self):
+        return self.get_input_embeddings()
+
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
+
+    def get_bias(self):
+        return {"final_logits_bias": self.final_logits_bias}
+
+    def set_bias(self, value):
+        self.final_logits_bias = value["final_logits_bias"]
+>>>>>>> main/master
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1258,12 +1298,6 @@ class TFBartForConditionalGeneration(TFBartPreTrainedModel):
             return tf.where(vocab_range != self.config.eos_token_id, LARGE_NEGATIVE, logits)
         else:
             return logits
-
-    def get_output_embeddings(self):
-        return self.model.shared
-
-    def get_encoder(self):
-        return self.model.encoder
 
     def compute_loss(self, labels, logits):
         """CrossEntropyLoss that ignores pad tokens"""

@@ -468,9 +468,6 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
     def set_input_embeddings(self, value):
         raise NotImplementedError
 
-    def _resize_token_embeddings(self, new_num_tokens):
-        return self.word_emb
-
     def backward_compatible(self):
         self.sample_softmax = -1
 
@@ -909,25 +906,6 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
         )
 
 
-class TFTransfoXLMHead(tf.keras.layers.Layer):
-    def __init__(self, config, input_embeddings, **kwargs):
-        super().__init__(**kwargs)
-        self.vocab_size = config.vocab_size
-
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.input_embeddings = input_embeddings
-
-    def build(self, input_shape):
-        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
-        super().build(input_shape)
-
-    def call(self, hidden_states):
-        hidden_states = self.input_embeddings(hidden_states, mode="linear")
-        hidden_states = hidden_states + self.bias
-        return hidden_states
-
-
 @add_start_docstrings(
     """
     The Transformer-XL Model with a language modeling head on top (adaptive softmax with weights tied to the adaptive
@@ -947,6 +925,9 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         self.crit = TFAdaptiveSoftmaxMask(
             config.vocab_size, config.d_embed, config.d_model, config.cutoffs, div_val=config.div_val, name="crit"
         )
+
+    def _resize_token_embeddings(self, new_num_tokens):
+        raise NotImplementedError()
 
     def get_output_embeddings(self):
         """Double-check if you are using adaptive softmax."""

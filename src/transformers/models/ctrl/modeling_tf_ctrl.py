@@ -15,6 +15,8 @@
 # limitations under the License.
 """ TF 2.0 CTRL model."""
 
+import warnings
+
 import numpy as np
 import tensorflow as tf
 
@@ -242,10 +244,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.w.weight = value
-        self.w.vocab_size = value.shape[0]
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+        self.w.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -618,6 +617,20 @@ class TFCTRLLMHead(tf.keras.layers.Layer):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
         super().build(input_shape)
 
+    def get_output_embeddings(self):
+        return self.input_embeddings
+
+    def set_output_embeddings(self, value):
+        self.input_embeddings.weight = value
+        self.input_embeddings.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
+
     def call(self, hidden_states):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
         hidden_states = hidden_states + self.bias
@@ -638,13 +651,11 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
 
         self.lm_head = TFCTRLLMHead(config, self.transformer.w, name="lm_head")
 
-    def get_output_embeddings(self):
-        return self.lm_head.input_embeddings
-
-    def get_output_layer_with_bias(self):
+    def get_lm_head(self):
         return self.lm_head
 
     def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.lm_head.name
 
     def prepare_inputs_for_generation(self, inputs, past, **kwargs):

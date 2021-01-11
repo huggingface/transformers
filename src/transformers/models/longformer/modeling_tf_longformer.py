@@ -14,6 +14,7 @@
 # limitations under the License.
 """Tensorflow Longformer model. """
 
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -436,6 +437,20 @@ class TFLongformerLMHead(tf.keras.layers.Layer):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
 
         super().build(input_shape)
+
+    def get_output_embeddings(self):
+        return self.decoder
+
+    def set_output_embeddings(self, value):
+        self.decoder.word_embeddings = value
+        self.decoder.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
@@ -1602,7 +1617,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.shape[0]
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -2040,13 +2055,11 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
         self.longformer = TFLongformerMainLayer(config, add_pooling_layer=False, name="longformer")
         self.lm_head = TFLongformerLMHead(config, self.longformer.embeddings, name="lm_head")
 
-    def get_output_embeddings(self):
-        return self.lm_head.decoder
-
-    def get_output_layer_with_bias(self):
+    def get_lm_head(self):
         return self.lm_head
 
     def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.lm_head.name
 
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
