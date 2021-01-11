@@ -227,18 +227,18 @@ class TFModelTesterMixin:
                 model.save_pretrained(tmpdirname, saved_model=True)
                 model = tf.keras.models.load_model(os.path.join(tmpdirname, "saved_model", "1"))
                 outputs = model(class_inputs_dict)
-                
+
                 if self.is_encoder_decoder:
                     output = outputs["encoder_hidden_states"]
                 else:
                     output = outputs["hidden_states"]
-                
+
                 self.assertEqual(len(outputs), num_out)
-                
+
                 expected_num_layers = getattr(
                     self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
                 )
-                
+
                 self.assertEqual(len(output), expected_num_layers)
                 self.assertListEqual(
                     list(output[0].shape[-2:]),
@@ -253,7 +253,7 @@ class TFModelTesterMixin:
 
         if hasattr(config, "use_cache"):
             config.use_cache = False
-        
+
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 

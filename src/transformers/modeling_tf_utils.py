@@ -346,7 +346,7 @@ def input_processing(func, config, input_ids, **kwargs):
         raise ValueError(
             f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
         )
-    
+
     kwargs.pop("kwargs_call")
 
     for k, v in kwargs.items():
@@ -1547,12 +1547,12 @@ def shape_list(tensor: tf.Tensor) -> List[int]:
         :obj:`List[int]`: The shape of the tensor as a list.
     """
     dynamic = tf.shape(tensor)
-    
+
     if tensor.shape == tf.TensorShape(None):
         return dynamic
-    
+
     static = tensor.shape.as_list()
-    
+
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 

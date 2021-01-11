@@ -236,7 +236,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
 
         # pad local attention probs
         attn_scores += diagonal_mask
-        
+
         tf.debugging.assert_equal(
             shape_list(attn_scores),
             [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + 1],
@@ -251,7 +251,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
             is_local_index_no_global_attn_nonzero,
         ) = self._get_global_attn_indices(is_index_global_attn)
 
-         # this function is only relevant for global attention
+        # this function is only relevant for global attention
         attn_scores = tf.cond(
             is_global_attn,
             lambda: self._concat_with_global_key_attn_probs(
@@ -297,7 +297,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
             [batch_size, seq_len, self.num_heads, self.head_dim],
             message="Unexpected size",
         )
-        
+
         attn_output = tf.reshape(attn_output, (batch_size, seq_len, embed_dim))
 
         # compute value for global attention and overwrite to attention output
@@ -1537,7 +1537,7 @@ class TFLEDEncoder(tf.keras.layers.Layer):
         )
         self.layers = [TFLEDEncoderLayer(config, i, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
-    
+
     def get_input_embeddings(self):
         return self.embed_tokens
 
@@ -1696,7 +1696,7 @@ class TFLEDEncoder(tf.keras.layers.Layer):
             attentions=all_attentions,
             global_attentions=all_global_attentions,
         )
-    
+
     @tf.function
     def compute_hidden_states(self, hidden_states, padding_len):
         return hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
@@ -1732,13 +1732,15 @@ class TFLEDEncoder(tf.keras.layers.Layer):
 
             if input_ids is not None:
                 input_ids = tf.pad(input_ids, paddings, constant_values=pad_token_id)
-            
+
             if inputs_embeds is not None:
                 input_ids_padding = tf.fill((batch_size, padding_len), pad_token_id)
                 inputs_embeds_padding = self.embed_tokens(input_ids_padding)
                 inputs_embeds = tf.concat([inputs_embeds, inputs_embeds_padding], axis=-2)
 
-            attention_mask = tf.pad(attention_mask, paddings, constant_values=False)  # no attention on the padding tokens
+            attention_mask = tf.pad(
+                attention_mask, paddings, constant_values=False
+            )  # no attention on the padding tokens
 
         return (
             padding_len,
@@ -1775,7 +1777,7 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
-    
+
     def get_input_embeddings(self):
         return self.embed_tokens
 
@@ -1866,7 +1868,7 @@ class TFLEDDecoder(tf.keras.layers.Layer):
             training=training,
             kwargs_call=kwargs,
         )
-        
+
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif inputs["input_ids"] is not None:
@@ -1887,8 +1889,10 @@ class TFLEDDecoder(tf.keras.layers.Layer):
             inputs["inputs_embeds"] = self.embed_tokens(inputs["input_ids"])
 
         hidden_states = inputs["inputs_embeds"]
-        
-        inputs["attention_mask"], combined_attention_mask = self.compute_combined_attns_mask(inputs, input_shape, past_key_values_length)
+
+        inputs["attention_mask"], combined_attention_mask = self.compute_combined_attns_mask(
+            inputs, input_shape, past_key_values_length
+        )
 
         if inputs["encoder_hidden_states"] is not None and inputs["encoder_attention_mask"] is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1946,7 +1950,7 @@ class TFLEDDecoder(tf.keras.layers.Layer):
                 hidden_states=all_hidden_states,
                 attentions=all_self_attns,
             )
-    
+
     @tf.function
     def compute_combined_attns_mask(self, inputs, input_shape, past_key_values_length):
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1970,10 +1974,8 @@ class TFLEDDecoder(tf.keras.layers.Layer):
                 axis=-1,
             )
         else:
-            attention_mask = tf.ones(
-                (input_shape[0], input_shape[1] + past_key_values_length), dtype=tf.int32
-            )
-        
+            attention_mask = tf.ones((input_shape[0], input_shape[1] + past_key_values_length), dtype=tf.int32)
+
         return attention_mask, combined_attention_mask
 
 
@@ -2118,7 +2120,7 @@ class TFLEDModel(TFLEDPreTrainedModel):
 
     def get_decoder(self):
         return self.led.decoder
-    
+
     def get_output_embeddings(self):
         return self.led.shared
 
@@ -2184,7 +2186,7 @@ class TFLEDModel(TFLEDPreTrainedModel):
         )
 
         return outputs
-    
+
     def serving_output(self, output):
         pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
