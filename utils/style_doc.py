@@ -61,8 +61,8 @@ _re_example = re.compile(r"::\s*$")
 _re_arg_def = re.compile(r"^\s*(Args?|Parameters?|Params|Arguments?|Environment|Attributes?)\s*:\s*$")
 # Matches the return introduction in docstrings.
 _re_return = re.compile(r"^\s*(Returns?|Raises?|Note)\s*:\s*$")
-# Matches any doc special word without an empty line before.
-_re_any_doc_special_word = re.compile(r"[^\n]\n([ \t]*)(" + "|".join(DOC_SPECIAL_WORD) + r")(::?\s*)\n")
+# Matches any doc special word.
+_re_any_doc_special_word = re.compile(r"^\s*(" + "|".join(DOC_SPECIAL_WORD) + r")::?\s*$")
 
 
 class SpecialBlock(Enum):
@@ -375,6 +375,19 @@ def _add_new_lines_before_list(text):
     return "\n".join(new_lines)
 
 
+def _add_new_lines_before_doc_special_words(text):
+    lines = text.split("\n")
+    new_lines = []
+    for idx, line in enumerate(lines):
+        # Detect if the line is the start of a new list.
+        if _re_any_doc_special_word.search(line) is not None:
+            # If the line before is non empty, add an extra new line.
+            if idx > 0 and len(lines[idx - 1]) != 0:
+                new_lines.append("")
+        new_lines.append(line)
+    return "\n".join(new_lines)
+
+
 def style_rst_file(doc_file, max_len=119, check_only=False):
     """ Style one rst file `doc_file` to `max_len`."""
     with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
@@ -414,7 +427,7 @@ def style_docstring(docstring, max_len=119):
         indent = indent_search.groups()[0] if indent_search is not None else ""
 
     # Add missing new lines before Args/Returns etc.
-    docstring = _re_any_doc_special_word.sub(r"\n\n\1\2\3\n", docstring)
+    docstring = _add_new_lines_before_doc_special_words(docstring)
     # Add missing new lines before lists
     docstring = _add_new_lines_before_list(docstring)
     # Style
