@@ -798,21 +798,8 @@ class TFBlenderbotDecoder(tf.keras.layers.Layer):
                 tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
             )
 
-        if inputs["attention_mask"] is None and inputs["input_ids"] is not None and input_shape[-1] > 1:
-            inputs["attention_mask"] = tf.cast(
-                tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id), inputs["input_ids"].dtype
-            )
-            inputs["attention_mask"] = tf.concat(
-                [
-                    tf.ones((input_shape[0], past_key_values_length), dtype=inputs["attention_mask"].dtype),
-                    inputs["attention_mask"],
-                ],
-                axis=-1,
-            )
-        else:
-            inputs["attention_mask"] = tf.ones(
-                (input_shape[0], input_shape[1] + past_key_values_length), dtype=tf.int32
-            )
+        if inputs["attention_mask"] is not None and input_shape[-1] > 1:
+            combined_attention_mask = combined_attention_mask + _expand_mask(inputs["attention_mask"], tgt_len=input_shape[-1])
 
         if inputs["encoder_hidden_states"] is not None and inputs["encoder_attention_mask"] is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -940,9 +927,6 @@ class TFBlenderbotModel(TFBlenderbotPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
-
-        if inputs["decoder_input_ids"] is None and inputs["decoder_inputs_embeds"] is None:
-            inputs["use_cache"] = False
 
         inputs["output_hidden_states"] = (
             inputs["output_hidden_states"]
@@ -1121,7 +1105,6 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel):
         )
 
         if inputs["labels"] is not None:
-            inputs["use_cache"] = False
             if inputs["decoder_input_ids"] is None:
                 inputs["decoder_input_ids"] = shift_tokens_right(
                     inputs["labels"], self.config.pad_token_id, self.config.decoder_start_token_id

@@ -324,7 +324,7 @@ class TFBlenderbotSmallDecoderLayer(tf.keras.layers.Layer):
 
     def call(
         self,
-        hidden_states,
+        hidden_states: tf.Tensor,
         attention_mask: Optional[tf.Tensor] = None,
         encoder_hidden_states: Optional[tf.Tensor] = None,
         encoder_attention_mask: Optional[tf.Tensor] = None,
@@ -781,13 +781,8 @@ class TFBlenderbotSmallDecoder(tf.keras.layers.Layer):
             shape_list(inputs["past_key_values"][0][0])[2] if inputs["past_key_values"] is not None else 0
         )
 
-        # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
-
         if inputs["inputs_embeds"] is None:
             inputs["inputs_embeds"] = self.embed_tokens(inputs["input_ids"]) * self.embed_scale
-
-        hidden_states = inputs["inputs_embeds"]
 
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
@@ -798,33 +793,24 @@ class TFBlenderbotSmallDecoder(tf.keras.layers.Layer):
                 tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
             )
 
-        if inputs["attention_mask"] is None and inputs["input_ids"] is not None and input_shape[-1] > 1:
-            inputs["attention_mask"] = tf.cast(
-                tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id), inputs["input_ids"].dtype
-            )
-            inputs["attention_mask"] = tf.concat(
-                [
-                    tf.ones((input_shape[0], past_key_values_length), dtype=inputs["attention_mask"].dtype),
-                    inputs["attention_mask"],
-                ],
-                axis=-1,
-            )
-        else:
-            inputs["attention_mask"] = tf.ones(
-                (input_shape[0], input_shape[1] + past_key_values_length), dtype=tf.int32
-            )
+        if inputs["attention_mask"] is not None and input_shape[-1] > 1:
+            combined_attention_mask = combined_attention_mask + _expand_mask(inputs["attention_mask"], tgt_len=input_shape[-1])
 
         if inputs["encoder_hidden_states"] is not None and inputs["encoder_attention_mask"] is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             inputs["encoder_attention_mask"] = _expand_mask(inputs["encoder_attention_mask"], tgt_len=input_shape[-1])
 
-        hidden_states = self.layernorm_embedding(hidden_states) + positions
+        # embed positions
+        positions = self.embed_positions(input_shape, past_key_values_length)
+
+        hidden_states = self.layernorm_embedding(inputs["inputs_embeds"]) + positions
         hidden_states = self.dropout(hidden_states, training=inputs["training"])
 
         # decoder layers
         all_hidden_states = ()
         all_self_attns = ()
         present_key_values = ()
+
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if inputs["output_hidden_states"]:
@@ -938,9 +924,6 @@ class TFBlenderbotSmallModel(TFBlenderbotSmallPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
-
-        if inputs["decoder_input_ids"] is None and inputs["decoder_inputs_embeds"] is None:
-            inputs["use_cache"] = False
 
         inputs["output_hidden_states"] = (
             inputs["output_hidden_states"]
@@ -1119,7 +1102,6 @@ class TFBlenderbotSmallForConditionalGeneration(TFBlenderbotSmallPreTrainedModel
         )
 
         if inputs["labels"] is not None:
-            inputs["use_cache"] = False
             if inputs["decoder_input_ids"] is None:
                 inputs["decoder_input_ids"] = shift_tokens_right(
                     inputs["labels"], self.config.pad_token_id, self.config.decoder_start_token_id
