@@ -80,6 +80,7 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int):
     return shifted_input_ids
 
 
+# Copied from transformers.models.bart.modeling_tf_bart._make_causal_mask
 def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: int = 0):
     """
     Make causal mask used for bi-directional self-attention.
@@ -96,6 +97,7 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     return tf.broadcast_to(mask[None, None, :, :], (bsz, 1, tgt_len, tgt_len + past_key_values_length))
 
 
+# Copied from transformers.models.bart.modeling_tf_bart._expand_mask
 def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
@@ -108,6 +110,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     return (1.0 - expanded_mask) * LARGE_NEGATIVE
 
 
+# Copied from transformers.models.bart.modeling_tf_bart.TFBartLearnedPositionalEmbedding with Bart->MBart
 class TFMBartLearnedPositionalEmbedding(TFSharedEmbeddings):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -130,6 +133,7 @@ class TFMBartLearnedPositionalEmbedding(TFSharedEmbeddings):
         return super().call(positions + self.offset)
 
 
+# Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->MBart
 class TFMBartAttention(tf.keras.layers.Layer):
     """Multi-headed attention from "Attention Is All You Need"""
 

@@ -59,6 +59,7 @@ _TOKENIZER_FOR_DOC = "MarianTokenizer"
 LARGE_NEGATIVE = -1e8
 
 
+# Copied from transformers.models.bart.modeling_tf_bart.shift_tokens_right
 def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
     shifted_input_ids = tf.cast(input_ids, tf.int32)
     shifted_input_ids = tf.roll(shifted_input_ids, 1, axis=-1)
@@ -79,6 +80,7 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_to
     return shifted_input_ids
 
 
+# Copied from transformers.models.bart.modeling_tf_bart._make_causal_mask
 def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: int = 0):
     """
     Make causal mask used for bi-directional self-attention.
@@ -95,6 +97,7 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     return tf.broadcast_to(mask[None, None, :, :], (bsz, 1, tgt_len, tgt_len + past_key_values_length))
 
 
+# Copied from transformers.models.bart.modeling_tf_bart._expand_mask
 def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
@@ -156,6 +159,7 @@ class TFMarianSinusoidalPositionalEmbedding(tf.keras.layers.Embedding):
         return super().call(positions)
 
 
+# Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->Marian
 class TFMarianAttention(tf.keras.layers.Layer):
     """Multi-headed attention from "Attention Is All You Need"""
 
@@ -279,6 +283,7 @@ class TFMarianAttention(tf.keras.layers.Layer):
         return attn_output, attn_weights, past_key_value
 
 
+# Copied from transformers.models.bart.modeling_tf_bart.TFBartEncoderLayer with Bart->Marian
 class TFMarianEncoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: MarianConfig, **kwargs):
         super().__init__(**kwargs)
@@ -325,6 +330,7 @@ class TFMarianEncoderLayer(tf.keras.layers.Layer):
         return hidden_states, self_attn_weights
 
 
+# Copied from transformers.models.bart.modeling_tf_bart.TFBartDecoderLayer with Bart->Marian
 class TFMarianDecoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: MarianConfig, **kwargs):
         super().__init__(**kwargs)

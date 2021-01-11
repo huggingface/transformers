@@ -59,6 +59,7 @@ _TOKENIZER_FOR_DOC = "PegasusTokenizer"
 LARGE_NEGATIVE = -1e8
 
 
+# Copied from transformers.models.bart.modeling_tf_bart.shift_tokens_right
 def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
     shifted_input_ids = tf.cast(input_ids, tf.int32)
     shifted_input_ids = tf.roll(shifted_input_ids, 1, axis=-1)
@@ -79,6 +80,7 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_to
     return shifted_input_ids
 
 
+# Copied from transformers.models.bart.modeling_tf_bart._make_causal_mask
 def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: int = 0):
     """
     Make causal mask used for bi-directional self-attention.
@@ -95,6 +97,7 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     return tf.broadcast_to(mask[None, None, :, :], (bsz, 1, tgt_len, tgt_len + past_key_values_length))
 
 
+# Copied from transformers.models.bart.modeling_tf_bart._expand_mask
 def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
@@ -107,25 +110,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     return (1.0 - expanded_mask) * LARGE_NEGATIVE
 
 
-class TFPegasusLearnedPositionalEmbedding(TFSharedEmbeddings):
-    """
-    This module learns positional embeddings up to a fixed maximum size.
-    """
-
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, **kwargs):
-        assert padding_idx is not None, "padding_idx cannot be None"
-        super().__init__(num_embeddings, embedding_dim, **kwargs)
-
-    def call(self, input_shape: tf.TensorShape, past_key_values_length: int = 0):
-        """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = input_shape[:2]
-
-        positions = tf.range(
-            past_key_values_length, seq_len + past_key_values_length, delta=1, dtype=tf.int32, name="range"
-        )
-        return super().call(positions)
-
-
+# Copied from transformers.models.marian.modeling_tf_marian.TFMarianSinusoidalPositionalEmbedding with Marian->Pegasus
 class TFPegasusSinusoidalPositionalEmbedding(tf.keras.layers.Embedding):
     """This module produces sinusoidal positional embeddings of any length."""
 
@@ -175,6 +160,7 @@ class TFPegasusSinusoidalPositionalEmbedding(tf.keras.layers.Embedding):
         return super().call(positions)
 
 
+# Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->Pegasus
 class TFPegasusAttention(tf.keras.layers.Layer):
     """Multi-headed attention from "Attention Is All You Need"""
 
@@ -298,6 +284,7 @@ class TFPegasusAttention(tf.keras.layers.Layer):
         return attn_output, attn_weights, past_key_value
 
 
+# Copied from transformers.models.mbart.modeling_tf_mbart.TFMBartEncoderLayer with MBart->Pegasus
 class TFPegasusEncoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: PegasusConfig, **kwargs):
         super().__init__(**kwargs)
@@ -344,6 +331,7 @@ class TFPegasusEncoderLayer(tf.keras.layers.Layer):
         return hidden_states, self_attn_weights
 
 
+# Copied from transformers.models.mbart.modeling_tf_mbart.TFMBartDecoderLayer with MBart->Pegasus
 class TFPegasusDecoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: PegasusConfig, **kwargs):
         super().__init__(**kwargs)
