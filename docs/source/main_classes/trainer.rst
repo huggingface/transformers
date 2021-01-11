@@ -153,8 +153,8 @@ For example here is how you could use it for ``finetune_trainer.py`` with 2 GPUs
 
 Notes:
 
-- This feature requires distributed training (so multiple GPUs)
-- It is not implemented for TPUs
+- This feature requires distributed training (so multiple GPUs).
+- It is not implemented for TPUs.
 - It works with ``--fp16`` too, to make things even faster.
 - One of the main benefits of enabling ``--sharded_ddp`` is that it uses a lot less GPU memory, so you should be able
   to use significantly larger batch sizes using the same hardware (e.g. 3x and even bigger) which should leave to
@@ -218,10 +218,10 @@ To deploy this feature:
        --src_lang en_XX --tgt_lang ro_RO --task translation
 
    Note that in the DeepSpeed documentation you are likely to see ``--deepspeed --deepspeed_config ds_config.json`` -
-   i.e. 2 DeepSpeed-related arguments, but for simplicity-sake, and since there are already so many arguments to deal
+   i.e. two DeepSpeed-related arguments, but for the sake of simplicity, and since there are already so many arguments to deal
    with, we combined the two into a single argument.
 
-But before you can deploy DeepSpeed, let's discuss its configuration.
+Before you can deploy DeepSpeed, let's discuss its configuration.
 
 **Configuration:**
 
@@ -235,10 +235,10 @@ several ways:
    recommended way as it puts most of the configuration params in one place.
 2. Supply just the ZeRO configuration params inside the file, and configure the rest using the normal Trainer command
    line arguments.
-3. Any variation of the first two ways
+3. Any variation of the first two ways.
 
 To get an idea of what DeepSpeed configuration file looks like, here is one that activates ZeRO stage 2 features,
-enables fp16, uses Adam optimizer and WarmupLR scheduler:
+enables FP16, uses Adam optimizer and WarmupLR scheduler:
 
 .. code-block:: json
 
@@ -285,7 +285,7 @@ enables fp16, uses Adam optimizer and WarmupLR scheduler:
        }
     }
 
-If you already have a command line that you have been using with HF Trainer args, you can continue using those and the
+If you already have a command line that you have been using with :class:`transformers.Trainer` args, you can continue using those and the
 Trainer will automatically convert them into the corresponding DeepSpeed configuration at run time. For example, you
 could use the following configuration file:
 
