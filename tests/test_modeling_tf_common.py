@@ -23,8 +23,6 @@ import unittest
 from importlib import import_module
 from typing import List, Tuple
 
-from tensorflow._api.v2 import saved_model
-
 from transformers import is_tf_available
 from transformers.testing_utils import _tf_gpu_memory_limit, is_pt_tf_cross_test, require_tf, slow
 
