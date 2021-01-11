@@ -331,7 +331,7 @@ class TFBlenderbotSmallDecoderLayer(tf.keras.layers.Layer):
 
     def call(
         self,
-        hidden_states: tf.Tensor,
+        hidden_states,
         attention_mask: Optional[tf.Tensor] = None,
         encoder_hidden_states: Optional[tf.Tensor] = None,
         encoder_attention_mask: Optional[tf.Tensor] = None,
