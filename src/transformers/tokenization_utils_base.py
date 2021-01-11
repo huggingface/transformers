@@ -3275,6 +3275,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         truncation: bool = True,
         **kwargs,
     ) -> BatchEncoding:
+        # mBART-specific kwargs that should be ignored by other models.
+        kwargs.pop("src_lang", None)
+        kwargs.pop("tgt_lang", None)
         if max_length is None:
             max_length = self.model_max_length
         model_inputs = self(
