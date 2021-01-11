@@ -653,7 +653,12 @@ class TFRagModel(TFRagPreTrainedModel):
                     retriever_outputs["retrieved_doc_embeds"],
                     retriever_outputs["doc_ids"],
                 )
-
+                
+                context_input_ids = tf.cast(context_input_ids, tf.int32)
+                context_attention_mask = tf.cast(context_attention_mask, tf.int32)
+                retrieved_doc_embeds = tf.cast(retrieved_doc_embeds, tf.float32)
+                retrieved_doc_ids = tf.cast(retrieved_doc_ids, tf.int32)
+                
                 # compute doc_scores
                 doc_scores = tf.squeeze(
                     tf.matmul(
