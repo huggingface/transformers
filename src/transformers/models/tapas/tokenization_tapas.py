@@ -1127,6 +1127,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         _, _, num_tokens = self._get_table_boundaries(tokenized_table)
 
         if truncation != TapasTruncationStrategy.DO_NOT_TRUNCATE:
+            self.drop_rows_to_fit = True
             num_rows, num_tokens = self._get_truncated_table_rows(
                 query_tokens, tokenized_table, num_rows, num_columns, max_length, truncation_strategy=truncation
             )
