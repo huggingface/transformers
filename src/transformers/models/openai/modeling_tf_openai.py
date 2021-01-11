@@ -219,7 +219,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.tokens_embed.weight = value
-        self.tokens_embed.vocab_size = value.shape[0]
+        self.tokens_embed.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -577,7 +577,10 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
         self.transformer = TFOpenAIGPTMainLayer(config, name="transformer")
 
     def get_output_embeddings(self):
-        return self.transformer.tokens_embed
+        return self.get_input_embeddings()
+
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
 
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -681,9 +684,6 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         self.multiple_choice_head = TFSequenceSummary(
             config, initializer_range=config.initializer_range, name="multiple_choice_head"
         )
-
-    def get_output_embeddings(self):
-        return self.transformer.tokens_embed
 
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFOpenAIGPTDoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -840,9 +840,6 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
             use_bias=False,
         )
         self.transformer = TFOpenAIGPTMainLayer(config, name="transformer")
-
-    def get_output_embeddings(self):
-        return self.transformer.tokens_embed
 
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

@@ -470,6 +470,21 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
+    def get_output_embeddings(self):
+        return self.decoder
+
+    def set_output_embeddings(self, value):
+        self.decoder.word_embeddings = value
+        self.decoder.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias, "decoder_bias": self.decoder_bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.decoder_bias = value["decoder_bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
+
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.activation(hidden_states)
@@ -505,10 +520,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.shape[0]
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -835,34 +847,8 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
         self.predictions = TFAlbertMLMHead(config, self.albert.embeddings, name="predictions")
         self.sop_classifier = TFAlbertSOPHead(config, name="sop_classifier")
 
-    def get_output_embeddings(self):
-        return self.albert.embeddings
-
-    def resize_token_embeddings(self, new_num_tokens):
-        super().resize_token_embeddings(new_num_tokens=new_num_tokens)
-
-        # ALBERT is a special case where there are two bias to update
-        # even though self.bias is not used anywhere and is here
-        # just to make the loading weights from a PT model happy
-        if new_num_tokens is not None:
-            num_tokens_to_copy = min(self.predictions.bias.shape[0], new_num_tokens)
-            self.predictions.vocab_size = num_tokens_to_copy
-            init_bias = tf.zeros((new_num_tokens,))
-            init_bias[:num_tokens_to_copy] = self.predictions.bias.value()[:num_tokens_to_copy]
-            name = self.name + "/" + self.predictions.name + "/bias"
-            self.predictions.bias = self.add_weight(
-                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
-            )
-            self.predictions.bias.assign(init_bias)
-
-            init_decoder_bias = tf.zeros((new_num_tokens,))
-            init_decoder_bias[:num_tokens_to_copy] = self.predictions.decoder_bias.value()[:num_tokens_to_copy]
-            name = self.name + "/" + self.predictions.name + "/decoder_bias"
-            self.predictions.decoder_bias = self.add_weight(
-                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
-            )
-
-            self.predictions.decoder_bias.assign(init_decoder_bias)
+    def get_lm_head(self):
+        return self.predictions
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFAlbertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -980,34 +966,8 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
         self.albert = TFAlbertMainLayer(config, add_pooling_layer=False, name="albert")
         self.predictions = TFAlbertMLMHead(config, self.albert.embeddings, name="predictions")
 
-    def get_output_embeddings(self):
-        return self.albert.embeddings
-
-    def resize_token_embeddings(self, new_num_tokens):
-        super().resize_token_embeddings(new_num_tokens=new_num_tokens)
-
-        # ALBERT is a special case where there are two bias to update
-        # even though self.bias is not used anywhere and is here
-        # just to make the loading weights from a PT model happy
-        if new_num_tokens is not None:
-            num_tokens_to_copy = min(self.predictions.bias.shape[0], new_num_tokens)
-            self.predictions.vocab_size = num_tokens_to_copy
-            init_bias = tf.zeros((new_num_tokens,))
-            init_bias[:num_tokens_to_copy] = self.predictions.bias.value()[:num_tokens_to_copy]
-            name = self.name + "/" + self.predictions.name + "/bias"
-            self.predictions.bias = self.add_weight(
-                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
-            )
-            self.predictions.bias.assign(init_bias)
-
-            init_decoder_bias = tf.zeros((new_num_tokens,))
-            init_decoder_bias[:num_tokens_to_copy] = self.predictions.decoder_bias.value()[:num_tokens_to_copy]
-            name = self.name + "/" + self.predictions.name + "/decoder_bias"
-            self.predictions.decoder_bias = self.add_weight(
-                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
-            )
-
-            self.predictions.decoder_bias.assign(init_decoder_bias)
+    def get_lm_head(self):
+        return self.predictions
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

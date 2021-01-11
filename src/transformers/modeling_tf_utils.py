@@ -530,6 +530,46 @@ def load_tf_weights(model, resolved_archive_file):
     return missing_layers, unexpected_layers
 
 
+def init_copy_embeddings(old_embeddings, new_num_tokens):
+    r"""
+    This function aims to reduce the embeddings in case new_num_tokens < old_num_tokens or to pad with -1 in case
+    new_num_tokens > old_num_tokens. A mask is also computed in order to know which weight in the embeddings should be
+    kept or not. Example:
+
+        - if new_num_tokens=5 and old_num_tokens=4 and old_embeddings=[w1,w2,w3,w4]
+
+            -  mask=[True,True,True,True,False] and current_weights=[w1,w2,w3,w4,-1]
+        - if new_num_tokens=4 and old_num_tokens=5 and old_embeddings=[w1,w2,w3,w4,w5]
+
+            - mask=[True,True,True,True] and current_weights=[w1,w2,w3,w4]
+    """
+    old_num_tokens, old_embedding_dim = shape_list(old_embeddings)
+    size_diff = new_num_tokens - old_num_tokens
+
+    # initialize new embeddings
+    # Copy token embeddings from the previous ones
+    if tf.math.greater(size_diff, 0):
+        # if the new size is greater than the old one, we extend the current embeddings with a padding until getting new size
+        # and we create a mask to properly identify the padded values and be replaced by the values of the newly created
+        # embeddings
+        current_weights = tf.pad(
+            old_embeddings.value(), tf.convert_to_tensor([[0, size_diff], [0, 0]]), constant_values=-1
+        )
+        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+        mask = tf.fill(tf.convert_to_tensor([num_tokens_to_copy, 1]), True)
+        mask = tf.pad(mask, tf.convert_to_tensor([[0, size_diff], [0, 0]]), constant_values=False)
+    else:
+        # if the new size if lower than the old one, we take the current embeddings until the new size
+        current_weights = tf.slice(
+            old_embeddings.value(),
+            tf.convert_to_tensor([0, 0]),
+            tf.convert_to_tensor([new_num_tokens, old_embedding_dim]),
+        )
+        mask = tf.fill(tf.convert_to_tensor([new_num_tokens, 1]), True)
+
+    return mask, current_weights
+
+
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
     r"""
     Base class for all TF models.
@@ -615,57 +655,131 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         """
-        Returns the model's input embeddings.
+        Returns the model's input embeddings layer.
 
         Returns:
-            :obj:`tf.keras.layers.Layer`: A torch module mapping vocabulary to hidden states.
+            :obj:`tf.Variable`: The embeddings layer mapping vocabulary to hidden states.
         """
-        base_model = getattr(self, self.base_model_prefix, self)
+        main_layer = getattr(self, self.base_model_prefix, self)
 
-        if base_model is not self:
-            return base_model.get_input_embeddings()
+        if main_layer is not self:
+            return main_layer.get_input_embeddings()
         else:
             raise NotImplementedError
 
     def set_input_embeddings(self, value):
         """
-        Set model's input embeddings.
+        Set model's input embeddings
 
         Args:
-            value (:obj:`tf.keras.layers.Layer`):
-                A module mapping vocabulary to hidden states.
+            value (:obj:`tf.Variable`):
+                The new weights mapping hidden states to vocabulary.
         """
-        base_model = getattr(self, self.base_model_prefix, self)
-        if base_model is not self:
-            base_model.set_input_embeddings(value)
-        else:
-            raise NotImplementedError
+        main_layer = getattr(self, self.base_model_prefix)
 
-    def get_output_embeddings(self) -> tf.keras.layers.Layer:
+        if main_layer is None:
+            raise NotImplementedError("The model does not implements the base_model_prefix attribute.")
+
+        try:
+            main_layer.set_input_embeddings(value)
+        except AttributeError:
+            logger.info("Building the model")
+            self(self.dummy_inputs)
+            main_layer.set_input_embeddings(value)
+
+    def get_output_embeddings(self) -> Union[None, tf.keras.layers.Layer]:
         """
         Returns the model's output embeddings
 
         Returns:
-            :obj:`tf.keras.layers.Layer`: A torch module mapping hidden states to vocabulary.
+            :obj:`tf.Variable`: The new weights mapping vocabulary to hidden states.
         """
+        if self.get_lm_head() is not None:
+            lm_head = self.get_lm_head()
+
+            return lm_head.get_output_embeddings()
+
         return None  # Overwrite for models with output embeddings
+
+    def set_output_embeddings(self, value):
+        """
+        Set model's output embeddings
+
+        Args:
+            value (:obj:`tf.Variable`):
+                The new weights mapping hidden states to vocabulary.
+        """
+        if self.get_lm_head() is not None:
+            lm_head = self.get_lm_head()
+            try:
+                lm_head.set_output_embeddings(value)
+            except AttributeError:
+                logger.info("Building the model")
+                self(self.dummy_inputs)
+                lm_head.set_output_embeddings(value)
 
     def get_output_layer_with_bias(self) -> Union[None, tf.keras.layers.Layer]:
         """
         Get the layer that handles a bias attribute in case the model has an LM head with weights tied to the
-        embeddings.
+        embeddings
 
         Return:
             :obj:`tf.keras.layers.Layer`: The layer that handles the bias, None if not an LM model.
         """
-        return None
+        warnings.warn(
+            "The method get_output_layer_with_bias is deprecated. Please use `get_lm_head` instead.", FutureWarning
+        )
+        return self.get_lm_head()
 
     def get_prefix_bias_name(self) -> Union[None, str]:
         """
-        Get the concatenated prefix name of the bias from the model name to the parent layer.
+        Get the concatenated prefix name of the bias from the model name to the parent layer
 
         Return:
             :obj:`str`: The prefix name of the bias.
+        """
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
+        return None
+
+    def get_bias(self) -> Union[None, Dict[str, tf.Variable]]:
+        """
+        Dict of bias attached to an LM head. The key represents the name of the bias attribute.
+
+        Return:
+            :obj:`tf.Variable`: The weights representing the bias, None if not an LM model.
+        """
+        if self.get_lm_head() is not None:
+            lm_head = self.get_lm_head()
+            try:
+                return lm_head.get_bias()
+            except AttributeError:
+                self(self.dummy_inputs)
+
+                return lm_head.get_bias()
+        return None
+
+    def set_bias(self, value):
+        """
+        Set all the bias in the LM head.
+
+        Args:
+            value (:obj:`Dict[tf.Variable]`):
+                All the new bias attached to an LM head.
+        """
+        if self.get_lm_head() is not None:
+            lm_head = self.get_lm_head()
+            try:
+                lm_head.set_bias(value)
+            except AttributeError:
+                self(self.dummy_inputs)
+                lm_head.set_bias(value)
+
+    def get_lm_head(self) -> tf.keras.layers.Layer:
+        """
+        The LM Head layer. This method must be overwritten by all the models that have a lm head.
+
+        Return:
+            :obj:`tf.keras.layers.Layer`: The LM head layer if the model has one, None if not.
         """
         return None
 
@@ -685,46 +799,151 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         Return:
             :obj:`tf.Variable`: Pointer to the input tokens Embeddings Module of the model.
         """
+        if new_num_tokens is None or new_num_tokens == self.config.vocab_size:
+            return self._get_word_embedding_weight(self.get_input_embeddings())
+
         model_embeds = self._resize_token_embeddings(new_num_tokens)
-        if new_num_tokens is None:
-            return model_embeds
+
+        # Update base model and current model config
+        self.config.vocab_size = new_num_tokens
 
         return model_embeds
 
-    def _resize_token_embeddings(self, new_num_tokens):
-        # get_input_embeddings and set_input_embeddings need to be implemented in base layer.
-        base_model = getattr(self, self.base_model_prefix, self)
-        old_embeddings = base_model.get_input_embeddings()
-        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
-        base_model.set_input_embeddings(new_embeddings)
-        # Update base model and current model config
-        self.config.vocab_size = new_num_tokens
-        base_model.vocab_size = new_num_tokens
-        return base_model.get_input_embeddings()
-
-    def _get_word_embeddings(self, embeddings):
-        if hasattr(embeddings, "word_embeddings"):
-            # TFBertEmbeddings, TFAlbertEmbeddings, TFElectraEmbeddings
-            return embeddings.word_embeddings
-        elif hasattr(embeddings, "weight"):
-            # TFSharedEmbeddings
-            return embeddings.weight
+    def _get_word_embedding_weight(self, embedding_layer):
+        if hasattr(embedding_layer, "word_embeddings"):
+            return embedding_layer.word_embeddings
+        elif hasattr(embedding_layer, "weight"):
+            return embedding_layer.weight
+        elif hasattr(embedding_layer, "decoder"):
+            return embedding_layer.decoder
         else:
             # Here we build the word embeddings weights if not exists.
             # And then we retry to get the attribute once built.
-            embeddings.build([])
-            if hasattr(embeddings, "word_embeddings"):
-                # TFBertEmbeddings, TFAlbertEmbeddings, TFElectraEmbeddings
-                return embeddings.word_embeddings
-            elif hasattr(embeddings, "weight"):
-                # TFSharedEmbeddings
-                return embeddings.weight
+            self(self.dummy_inputs)
+            if hasattr(embedding_layer, "word_embeddings"):
+                return embedding_layer.word_embeddings
+            elif hasattr(embedding_layer, "weight"):
+                return embedding_layer.weight
+            elif hasattr(embedding_layer, "decoder"):
+                return embedding_layer.decoder
             else:
-                raise ValueError("word embedding is not defined.")
+                return None
+
+    def _resize_token_embeddings(self, new_num_tokens):
+        old_embeddings = self._get_word_embedding_weight(self.get_input_embeddings())
+        new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
+
+        # if word embeddings are not tied, make sure that lm head bias is resized as well
+        if self.get_bias() is not None:
+            old_lm_head_bias = self.get_bias()
+            new_lm_head_bias = self._get_resized_lm_head_bias(old_lm_head_bias, new_num_tokens)
+
+            self.set_bias(new_lm_head_bias)
+
+        # if word embeddings are not tied, make sure that lm head decoder is resized as well
+        if self.get_output_embeddings() is not None:
+            old_lm_head_decoder = self._get_word_embedding_weight(self.get_output_embeddings())
+            new_lm_head_decoder = self._get_resized_lm_head_decoder(old_lm_head_decoder, new_num_tokens)
+
+            self.set_output_embeddings(new_lm_head_decoder)
+
+        self.set_input_embeddings(new_embeddings)
+
+        return self.get_input_embeddings()
+
+    def _get_resized_lm_head_bias(self, old_lm_head_bias, new_num_tokens):
+        """
+        Build a resized bias from the old ones. Increasing the size will add newly initialized vectors at the end.
+        Reducing the size will remove vectors from the end
+
+        Args:
+            old_lm_head_bias (:obj:`tf.Variable`):
+                Old lm head bias to be resized.
+            new_num_tokens (:obj:`int`, `optional`):
+                New number of tokens in the linear matrix.
+
+                Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
+                vectors from the end. If not provided or :obj:`None`, just returns None
+
+        Return:
+            :obj:`tf.Variable`: Pointer to the resized bias.
+        """
+        new_lm_head_bias = {}
+
+        for attr, weight in old_lm_head_bias.items():
+            first_dim, old_num_tokens = (None, shape_list(weight)[0]) if tf.rank(weight) == 1 else shape_list(weight)
+            size_diff = new_num_tokens - old_num_tokens
+            final_shape = [new_num_tokens] if first_dim is None else [first_dim, new_num_tokens]
+
+            # initialize new bias
+            if tf.math.greater(size_diff, 0):
+                padding_shape = [[0, size_diff]] if first_dim is None else [[0, 0], [0, size_diff]]
+                current_bias = tf.pad(weight.value(), tf.convert_to_tensor(padding_shape), constant_values=-1)
+                num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
+                mask_shape = [num_tokens_to_copy] if first_dim is None else [1, num_tokens_to_copy]
+                bias_mask = tf.fill(tf.convert_to_tensor(mask_shape), True)
+                bias_mask = tf.pad(bias_mask, tf.convert_to_tensor(padding_shape), constant_values=False)
+            else:
+                slice_from = [0] if first_dim is None else [0, 0]
+                current_bias = tf.slice(
+                    weight.value(), tf.convert_to_tensor(slice_from), tf.convert_to_tensor(final_shape)
+                )
+                bias_mask = tf.fill(tf.convert_to_tensor(final_shape), True)
+
+            new_bias = self.add_weight(
+                shape=final_shape,
+                initializer="zeros",
+                trainable=True,
+                name=weight.name.split(":")[0],
+            )
+            init_bias = tf.where(bias_mask, current_bias, new_bias.value())
+
+            new_bias.assign(init_bias)
+            new_lm_head_bias[attr] = new_bias
+
+        return new_lm_head_bias
+
+    def _get_resized_lm_head_decoder(self, old_lm_head_decoder, new_num_tokens):
+        """
+        Build a resized decoder from the old ones. Increasing the size will add newly initialized vectors at the end.
+        Reducing the size will remove vectors from the end
+
+        Args:
+            old_lm_head_decoder (:obj:`tf.Variable`):
+                Old lm head decoder to be resized.
+            new_num_tokens (:obj:`int`, `optional`):
+                New number of tokens in the linear matrix.
+
+                Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
+                vectors from the end. If not provided or :obj:`None`, just returns None
+
+        Return:
+            :obj:`tf.Variable`: Pointer to the resized decoder or None if the output embeddings are differents of the
+            input ones.
+        """
+        new_lm_head_decoder = old_lm_head_decoder
+        is_input_output_equals = tf.reduce_any(
+            self._get_word_embedding_weight(self.get_input_embeddings()) == old_lm_head_decoder
+        )
+
+        if old_lm_head_decoder is not None and not is_input_output_equals:
+            old_embedding_dim = shape_list(old_lm_head_decoder)[1]
+            decoder_mask, current_decoder = init_copy_embeddings(old_lm_head_decoder, new_num_tokens)
+            new_lm_head_decoder = self.add_weight(
+                shape=(new_num_tokens, old_embedding_dim),
+                initializer="zeros",
+                trainable=True,
+                name=old_lm_head_decoder.name.split(":")[0],
+            )
+            init_decoder = tf.where(decoder_mask, current_decoder, new_lm_head_decoder.value())
+
+            new_lm_head_decoder.assign(init_decoder)
+
+        return new_lm_head_decoder
 
     def _get_resized_embeddings(self, old_embeddings, new_num_tokens=None) -> tf.Variable:
         """
-        Build a resized Embedding Module from a provided token Embedding Module. Increasing the size will add newly
+        Build a resized Embedding weights from a provided token Embedding weights. Increasing the size will add newly
         initialized vectors at the end. Reducing the size will remove vectors from the end
 
         Args:
@@ -741,87 +960,18 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             :obj:`tf.Variable`: Pointer to the resized Embedding Module or the old Embedding Module if
             :obj:`new_num_tokens` is :obj:`None`
         """
-        word_embeddings = self._get_word_embeddings(old_embeddings)
-        bias_layer = self.get_output_layer_with_bias()
-
-        if new_num_tokens is None:
-            return word_embeddings
-
-        old_num_tokens, old_embedding_dim = word_embeddings.shape
-
-        if old_num_tokens == new_num_tokens:
-            return word_embeddings
-
-        # initialize new embeddings
-        # todo: initializer range is not always passed in config.
+        old_embedding_dim = shape_list(old_embeddings)[1]
         init_range = getattr(self.config, "initializer_range", 0.02)
-        name = (
-            self.name
-            + "/"
-            + self.base_model_prefix
-            + "/"
-            + old_embeddings.name
-            + "/"
-            + word_embeddings.name.split(":")[0]
-        )
+        embeddings_mask, current_embeddings = init_copy_embeddings(old_embeddings, new_num_tokens)
         new_embeddings = self.add_weight(
-            name=name,
+            name=old_embeddings.name.split(":")[0],
             shape=[new_num_tokens, old_embedding_dim],
             initializer=get_initializer(init_range),
             dtype=tf.float32,
         )
-        init_weights = tf.make_ndarray(tf.make_tensor_proto(new_embeddings.value()))
+        init_embeddings = tf.where(embeddings_mask, current_embeddings, new_embeddings.value())
 
-        # Copy token embeddings from the previous weights
-        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-        init_weights[:num_tokens_to_copy] = word_embeddings.value()[:num_tokens_to_copy, :]
-        new_embeddings.assign(init_weights)
-
-        if bias_layer is not None:
-            if not hasattr(bias_layer, "bias"):
-                bias_layer.build([])
-
-            # Second check in order to be sure the attribute has been properly created
-            if not hasattr(bias_layer, "bias"):
-                raise ValueError("bias is not defined.")
-
-            # initialize bias
-            init_bias = np.zeros((new_num_tokens,))
-            init_bias[:num_tokens_to_copy] = bias_layer.bias.value()[
-                :num_tokens_to_copy
-            ]  # tf.make_ndarray(tf.make_tensor_proto(bias_layer.bias.value()))[:num_tokens_to_copy]
-
-            bias_layer.bias = self.add_weight(
-                shape=(new_num_tokens,),
-                initializer="zeros",
-                trainable=True,
-                name=self.get_prefix_bias_name() + "/bias",
-            )
-
-            bias_layer.bias.assign(init_bias)
-
-        output_embeddings = self.get_output_embeddings()
-
-        if output_embeddings is not None:
-            if self.get_input_embeddings() != output_embeddings:
-                if not hasattr(output_embeddings, "decoder"):
-                    output_embeddings.build([])
-
-                # Second check in order to be sure the attribute has been properly created
-                if not hasattr(output_embeddings, "decoder"):
-                    raise ValueError("decoder is not defined.")
-
-                # initialize decoder
-                init_weights = np.zeros((new_num_tokens, old_embedding_dim))
-                init_weights[:num_tokens_to_copy] = output_embeddings.decoder.value()[:num_tokens_to_copy, :]
-
-                output_embeddings.decoder = self.add_weight(
-                    shape=(new_num_tokens, old_embedding_dim),
-                    initializer="zeros",
-                    trainable=True,
-                    name=self.get_prefix_bias_name() + "/decoder/weight",
-                )
-                output_embeddings.decoder.assign(init_weights)
+        new_embeddings.assign(init_embeddings)
 
         return new_embeddings
 
