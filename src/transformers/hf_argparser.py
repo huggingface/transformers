@@ -53,6 +53,8 @@ class HfArgumentParser(ArgumentParser):
 
     def _add_dataclass_arguments(self, dtype: DataClassType):
         for field in dataclasses.fields(dtype):
+            if not field.init:
+                continue
             field_name = f"--{field.name}"
             kwargs = field.metadata.copy()
             # field.metadata is not used at all by Data Classes,
@@ -66,9 +68,15 @@ class HfArgumentParser(ArgumentParser):
             typestring = str(field.type)
             for prim_type in (int, float, str):
                 for collection in (List,):
-                    if typestring == f"typing.Union[{collection[prim_type]}, NoneType]":
+                    if (
+                        typestring == f"typing.Union[{collection[prim_type]}, NoneType]"
+                        or typestring == f"typing.Optional[{collection[prim_type]}]"
+                    ):
                         field.type = collection[prim_type]
-                if typestring == f"typing.Union[{prim_type.__name__}, NoneType]":
+                if (
+                    typestring == f"typing.Union[{prim_type.__name__}, NoneType]"
+                    or typestring == f"typing.Optional[{prim_type.__name__}]"
+                ):
                     field.type = prim_type
 
             if isinstance(field.type, type) and issubclass(field.type, Enum):
@@ -142,7 +150,7 @@ class HfArgumentParser(ArgumentParser):
         namespace, remaining_args = self.parse_known_args(args=args)
         outputs = []
         for dtype in self.dataclass_types:
-            keys = {f.name for f in dataclasses.fields(dtype)}
+            keys = {f.name for f in dataclasses.fields(dtype) if f.init}
             inputs = {k: v for k, v in vars(namespace).items() if k in keys}
             for k in keys:
                 delattr(namespace, k)

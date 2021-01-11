@@ -15,6 +15,7 @@
 # limitations under the License.
 """ TF 2.0 MobileBERT model. """
 
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -665,6 +666,20 @@ class TFMobileBertLMPredictionHead(tf.keras.layers.Layer):
         )
         super().build(input_shape)
 
+    def get_output_embeddings(self):
+        return self
+
+    def set_output_embeddings(self, value):
+        self.decoder = value
+        self.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
+
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = tf.matmul(hidden_states, tf.concat([tf.transpose(self.decoder), self.dense], axis=0))
@@ -704,10 +719,7 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.shape[0]
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -1012,6 +1024,7 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
 
         return outputs
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertModel.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
@@ -1038,13 +1051,11 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
         self.predictions = TFMobileBertMLMHead(config, name="predictions___cls")
         self.seq_relationship = TFMobileBertOnlyNSPHead(2, name="seq_relationship___cls")
 
-    def get_output_embeddings(self):
-        return self.predictions.predictions
-
-    def get_output_layer_with_bias(self):
+    def get_lm_head(self):
         return self.predictions.predictions
 
     def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.predictions.name + "/" + self.predictions.predictions.name
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1148,13 +1159,11 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
         self.mobilebert = TFMobileBertMainLayer(config, add_pooling_layer=False, name="mobilebert")
         self.mlm = TFMobileBertMLMHead(config, name="mlm___cls")
 
-    def get_output_embeddings(self):
-        return self.mlm.predictions
-
-    def get_output_layer_with_bias(self):
+    def get_lm_head(self):
         return self.mlm.predictions
 
     def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1229,15 +1238,12 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFMaskedLMOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 class TFMobileBertOnlyNSPHead(tf.keras.layers.Layer):
@@ -1346,15 +1352,12 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForNextSentencePrediction.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFNextSentencePredictorOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFNextSentencePredictorOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1458,15 +1461,12 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFSequenceClassifierOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1582,15 +1582,13 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFQuestionAnsweringModelOutput(
-            start_logits=output.start_logits,
-            end_logits=output.end_logits,
-            hidden_states=hs,
-            attentions=attns,
+            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
         )
 
 
@@ -1743,15 +1741,12 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
 
         return self.serving_output(output)
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFMultipleChoiceModelOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1855,12 +1850,9 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFTokenClassifierOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)

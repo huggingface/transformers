@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
-from ..tokenization_utils import PreTrainedTokenizer
+from ..tokenization_utils import PreTrainedTokenizer, TruncationStrategy
 from ..utils import logging
 
 
@@ -577,7 +577,9 @@ class Pipeline(_ScikitCompat):
                 f"The model '{self.model.__class__.__name__}' is not supported for {self.task}. Supported models are {supported_models}",
             )
 
-    def _parse_and_tokenize(self, inputs, padding=True, add_special_tokens=True, **kwargs):
+    def _parse_and_tokenize(
+        self, inputs, padding=True, add_special_tokens=True, truncation=TruncationStrategy.DO_NOT_TRUNCATE, **kwargs
+    ):
         """
         Parse arguments and tokenize
         """
@@ -587,6 +589,7 @@ class Pipeline(_ScikitCompat):
             add_special_tokens=add_special_tokens,
             return_tensors=self.framework,
             padding=padding,
+            truncation=truncation,
         )
 
         return inputs

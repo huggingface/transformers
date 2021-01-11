@@ -577,7 +577,11 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         self.ctx_encoder = TFDPREncoderLayer(config, name="ctx_encoder")
 
     def get_input_embeddings(self):
-        return self.ctx_encoder.bert_model.get_input_embeddings()
+        try:
+            return self.ctx_encoder.bert_model.get_input_embeddings()
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.ctx_encoder.bert_model.get_input_embeddings()
 
     @add_start_docstrings_to_model_forward(TF_DPR_ENCODERS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFDPRContextEncoderOutput, config_class=_CONFIG_FOR_DOC)
@@ -658,11 +662,7 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFDPRContextEncoderOutput(
-            pooler_output=output.pooler_output,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFDPRContextEncoderOutput(pooler_output=output.pooler_output, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -675,7 +675,11 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         self.question_encoder = TFDPREncoderLayer(config, name="question_encoder")
 
     def get_input_embeddings(self):
-        return self.question_encoder.bert_model.get_input_embeddings()
+        try:
+            return self.question_encoder.bert_model.get_input_embeddings()
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.question_encoder.bert_model.get_input_embeddings()
 
     @add_start_docstrings_to_model_forward(TF_DPR_ENCODERS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFDPRQuestionEncoderOutput, config_class=_CONFIG_FOR_DOC)
@@ -755,11 +759,7 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFDPRQuestionEncoderOutput(
-            pooler_output=output.pooler_output,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFDPRQuestionEncoderOutput(pooler_output=output.pooler_output, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -772,7 +772,11 @@ class TFDPRReader(TFDPRPretrainedReader):
         self.span_predictor = TFDPRSpanPredictorLayer(config, name="span_predictor")
 
     def get_input_embeddings(self):
-        return self.span_predictor.encoder.bert_model.get_input_embeddings()
+        try:
+            return self.span_predictor.encoder.bert_model.get_input_embeddings()
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.span_predictor.encoder.bert_model.get_input_embeddings()
 
     @add_start_docstrings_to_model_forward(TF_DPR_READER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFDPRReaderOutput, config_class=_CONFIG_FOR_DOC)

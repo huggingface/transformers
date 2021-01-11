@@ -15,23 +15,73 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...file_utils import is_sentencepiece_available, is_tf_available, is_tokenizers_available, is_torch_available
-from .configuration_pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig
+from typing import TYPE_CHECKING
 
+from ...file_utils import (
+    _BaseLazyModule,
+    is_sentencepiece_available,
+    is_tf_available,
+    is_tokenizers_available,
+    is_torch_available,
+)
+
+
+_import_structure = {
+    "configuration_pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig"],
+}
 
 if is_sentencepiece_available():
-    from .tokenization_pegasus import PegasusTokenizer
+    _import_structure["tokenization_pegasus"] = ["PegasusTokenizer"]
 
 if is_tokenizers_available():
-    from .tokenization_pegasus_fast import PegasusTokenizerFast
+    _import_structure["tokenization_pegasus_fast"] = ["PegasusTokenizerFast"]
 
 if is_torch_available():
-    from .modeling_pegasus import (
-        PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST,
-        PegasusForConditionalGeneration,
-        PegasusModel,
-        PegasusPreTrainedModel,
-    )
+    _import_structure["modeling_pegasus"] = [
+        "PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "PegasusForConditionalGeneration",
+        "PegasusModel",
+        "PegasusPreTrainedModel",
+    ]
 
 if is_tf_available():
-    from .modeling_tf_pegasus import TFPegasusForConditionalGeneration
+    _import_structure["modeling_tf_pegasus"] = ["TFPegasusForConditionalGeneration"]
+
+
+if TYPE_CHECKING:
+    from .configuration_pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig
+
+    if is_sentencepiece_available():
+        from .tokenization_pegasus import PegasusTokenizer
+
+    if is_tokenizers_available():
+        from .tokenization_pegasus_fast import PegasusTokenizerFast
+
+    if is_torch_available():
+        from .modeling_pegasus import (
+            PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PegasusForConditionalGeneration,
+            PegasusModel,
+            PegasusPreTrainedModel,
+        )
+
+    if is_tf_available():
+        from .modeling_tf_pegasus import TFPegasusForConditionalGeneration
+
+else:
+    import importlib
+    import os
+    import sys
+
+    class _LazyModule(_BaseLazyModule):
+        """
+        Module class that surfaces all objects but only performs associated imports when the objects are requested.
+        """
+
+        __file__ = globals()["__file__"]
+        __path__ = [os.path.dirname(__file__)]
+
+        def _get_module(self, module_name: str):
+            return importlib.import_module("." + module_name, self.__name__)
+
+    sys.modules[__name__] = _LazyModule(__name__, _import_structure)
