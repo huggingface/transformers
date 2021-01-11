@@ -18,8 +18,10 @@
        "cpu_offload": true
    },
 
+   "zero_allow_untested_optimizer": true,
+
    "optimizer": {
-     "type": "Adam",
+     "type": "AdamW",
      "params": {
        "lr": 3e-5,
        "betas": [

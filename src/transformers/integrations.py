@@ -292,16 +292,20 @@ def init_deepspeed(trainer, num_training_steps):
         )
     else:  # override only if the ds config doesn't already have this section
         # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
+        # But trainer uses AdamW by default.
+        # To use other optimizers so using a different scheduler requires voiding warranty with: `zero_allow_untested_optimizer`
+
         optimizer_configs = {
-            "Adam": {
+            "AdamW": {
                 "lr": args.learning_rate,
                 "betas": [args.adam_beta1, args.adam_beta2],
                 "eps": args.adam_epsilon,
                 "weight_decay": args.weight_decay,
             }
         }
-        optimizer = "Adam"  # currently trainer only has Adam config params
+        optimizer = "AdamW"
 
+        config["zero_allow_untested_optimizer"] = True
         config["optimizer"] = {
             "type": optimizer,
             "params": optimizer_configs[optimizer],

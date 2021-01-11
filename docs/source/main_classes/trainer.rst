@@ -238,7 +238,7 @@ several ways:
 3. Any variation of the first two ways.
 
 To get an idea of what DeepSpeed configuration file looks like, here is one that activates ZeRO stage 2 features,
-enables FP16, uses Adam optimizer and WarmupLR scheduler:
+enables FP16, uses AdamW optimizer and WarmupLR scheduler:
 
 .. code-block:: json
 
@@ -263,17 +263,15 @@ enables FP16, uses Adam optimizer and WarmupLR scheduler:
        },
 
        "optimizer": {
-         "type": "Adam",
+         "type": "AdamW",
          "params": {
            "lr": 3e-5,
-           "betas": [
-             0.8,
-             0.999
-           ],
+           "betas": [ 0.8, 0.999 ],
            "eps": 1e-8,
            "weight_decay": 3e-7
          }
        },
+       "zero_allow_untested_optimizer": true,
 
        "scheduler": {
          "type": "WarmupLR",
@@ -376,20 +374,21 @@ no equivalent command line arguments.
 
 **Optimizer:**
 
-DeepSpeed supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch. The full
+DeepSpeed has several tested with ZeRO optimizers, which are Adam, OneBitAdam, and Lamb. It, however, can import other optimizers from torch. The full
 documentation is `here <https://www.deepspeed.ai/docs/config-json/#optimizer-parameters>`__.
 
 If you don't configure the ``optimizer`` entry in the configuration file, the :class:`~transformers.Trainer` will
-automatically set it to ``Adam`` and will use the supplied values or the defaults for the following command line
+automatically set it to ``AdamW`` and will use the supplied values or the defaults for the following command line
 arguments: ``--learning_rate``, ``--adam_beta1``, ``--adam_beta2``, ``--adam_epsilon`` and ``--weight_decay``.
 
-Here is an example of the pre-configured ``optimizer`` entry for Adam:
+Here is an example of the pre-configured ``optimizer`` entry for AdamW:
 
 .. code-block:: json
 
     {
+       "zero_allow_untested_optimizer": true,
        "optimizer": {
-           "type": "Adam",
+           "type": "AdamW",
            "params": {
              "lr": 0.001,
              "betas": [0.8, 0.999],
@@ -398,6 +397,10 @@ Here is an example of the pre-configured ``optimizer`` entry for Adam:
            }
          }
     }
+
+Since AdamW isn't on the list of tested with DeepSpeed/ZeRO optimizers, we have to add ``zero_allow_untested_optimizer`` flag.
+
+If you want to use one of the officially supported optimizers, configure them explicitly in the configuration file, and make sure to adjust the values. e.g. if use Adam you will want ``weight_decay`` around ``0.01``.
 
 
 **Scheduler:**
