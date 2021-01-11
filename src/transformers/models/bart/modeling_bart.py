@@ -774,6 +774,7 @@ class BartEncoder(BartPretrainedModel):
                 layer_outputs = (None, None)
             else:
                 if getattr(self.config, "gradient_checkpointing", False):
+
                     def create_custom_forward(module):
                         def custom_forward(*inputs):
                             return module(*inputs, output_attentions)
@@ -1011,7 +1012,7 @@ class BartDecoder(BartPretrainedModel):
                     encoder_hidden_states,
                     encoder_attention_mask,
                     encoder_head_mask[idx] if encoder_head_mask is not None else None,
-                    None
+                    None,
                 )
             else:
 

@@ -400,10 +400,24 @@ class ModelTesterMixin:
                     attention_mask = inputs["attention_mask"]
                     decoder_input_ids = inputs["decoder_input_ids"]
                     decoder_attention_mask = inputs["decoder_attention_mask"]
-
-                    traced_model = torch.jit.trace(
-                        model, (input_ids, attention_mask, decoder_input_ids, decoder_attention_mask)
-                    )
+                    if model.config.model_type != "bart":
+                        traced_model = torch.jit.trace(
+                            model, (input_ids, attention_mask, decoder_input_ids, decoder_attention_mask)
+                        )
+                    else:
+                        head_mask = inputs["head_mask"]
+                        decoder_head_mask = inputs["decoder_head_mask"]
+                        traced_model = torch.jit.trace(
+                            model,
+                            (
+                                input_ids,
+                                attention_mask,
+                                head_mask,
+                                decoder_input_ids,
+                                decoder_attention_mask,
+                                decoder_head_mask,
+                            ),
+                        )
                 else:
                     input_ids = inputs["input_ids"]
                     traced_model = torch.jit.trace(model, input_ids)
