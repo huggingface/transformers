@@ -17,6 +17,7 @@
 
 
 import math
+import warnings
 
 import tensorflow as tf
 
@@ -541,7 +542,7 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.set_input_embeddings
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.shape[0]
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer._prune_heads
     def _prune_heads(self, heads_to_prune):
@@ -840,6 +841,20 @@ class TFMPNetLMHead(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
+    def get_output_embeddings(self):
+        return self.decoder
+
+    def set_output_embeddings(self, value):
+        self.decoder.word_embeddings = value
+        self.decoder.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
+
     def call(self, features):
         x = self.dense(features)
         x = self.act(x)
@@ -862,13 +877,11 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
         self.mpnet = TFMPNetMainLayer(config, name="mpnet")
         self.lm_head = TFMPNetLMHead(config, self.mpnet.embeddings, name="lm_head")
 
-    def get_output_embeddings(self):
-        return self.mpnet.embeddings
-
-    def get_output_layer_with_bias(self):
+    def get_lm_head(self):
         return self.lm_head
 
     def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.lm_head.name
 
     @add_start_docstrings_to_model_forward(MPNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
