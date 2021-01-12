@@ -807,11 +807,6 @@ class TFModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         def _get_word_embedding_weight(model, embedding_layer):
-            embeds = getattr(embedding_layer, "word_embeddings", None)
-
-            if embeds is not None:
-                return embeds
-
             embeds = getattr(embedding_layer, "weight", None)
 
             if embeds is not None:
@@ -823,11 +818,6 @@ class TFModelTesterMixin:
                 return embeds
 
             model(model.dummy_inputs)
-
-            embeds = getattr(embedding_layer, "word_embeddings", None)
-
-            if embeds is not None:
-                return embeds
 
             embeds = getattr(embedding_layer, "weight", None)
 

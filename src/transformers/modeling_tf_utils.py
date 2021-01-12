@@ -809,25 +809,30 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
         return model_embeds
 
-    def _get_word_embedding_weight(self, embedding_layer):
-        if hasattr(embedding_layer, "word_embeddings"):
-            return embedding_layer.word_embeddings
-        elif hasattr(embedding_layer, "weight"):
-            return embedding_layer.weight
-        elif hasattr(embedding_layer, "decoder"):
-            return embedding_layer.decoder
-        else:
-            # Here we build the word embeddings weights if not exists.
-            # And then we retry to get the attribute once built.
-            self(self.dummy_inputs)
-            if hasattr(embedding_layer, "word_embeddings"):
-                return embedding_layer.word_embeddings
-            elif hasattr(embedding_layer, "weight"):
-                return embedding_layer.weight
-            elif hasattr(embedding_layer, "decoder"):
-                return embedding_layer.decoder
-            else:
-                return None
+    def _get_word_embedding_weight(model, embedding_layer):
+        embeds = getattr(embedding_layer, "weight", None)
+
+        if embeds is not None:
+            return embeds
+
+        embeds = getattr(embedding_layer, "decoder", None)
+
+        if embeds is not None:
+            return embeds
+
+        model(model.dummy_inputs)
+
+        embeds = getattr(embedding_layer, "weight", None)
+
+        if embeds is not None:
+            return embeds
+
+        embeds = getattr(embedding_layer, "decoder", None)
+
+        if embeds is not None:
+            return embeds
+
+        return None
 
     def _resize_token_embeddings(self, new_num_tokens):
         old_embeddings = self._get_word_embedding_weight(self.get_input_embeddings())
