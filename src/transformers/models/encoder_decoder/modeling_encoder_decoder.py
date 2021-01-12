@@ -17,6 +17,8 @@
 
 from typing import Optional
 
+import torch
+
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_outputs import Seq2SeqLMOutput
@@ -413,6 +415,24 @@ class EncoderDecoderModel(PreTrainedModel):
             )
 
         encoder_hidden_states = encoder_outputs[0]
+
+        if labels is not None and decoder_input_ids is None:
+            decoder_start_token_id = self.config.decoder_start_token_id
+
+            if decoder_start_token_id is None:
+                raise ValueError("Make sure `config.decoder_start_token_id` is not None.")
+
+            decoder_start_token = (
+                torch.ones((labels.shape[0], 1), device=self.device, dtype=labels.dtype) * decoder_start_token_id
+            )
+
+            # this is different from "standalone" Encoder-Decoder models, like T5, Bart, etc...
+            # because all "standalone" non-Encoder-Decoder models, like BERT, etc...
+            # always cut the first token of labels and the last of `input_ids` when training.
+            # By adding `decoder_start_token` to labels and cloning it for decoder_input_ids,
+            # we ensure the same behavior for `EncoderDecoderModel` and all Encoder-Decoder models
+            labels = torch.cat([decoder_start_token, labels], dim=-1)
+            decoder_input_ids = labels.clone()
 
         # Decode
         decoder_outputs = self.decoder(

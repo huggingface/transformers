@@ -268,18 +268,21 @@ class EncoderDecoderMixin:
     ):
         encoder_model, decoder_model = self.get_encoder_decoder_model(config, decoder_config)
         enc_dec_model = EncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        enc_dec_model.config.decoder_start_token_id = 0
         enc_dec_model.to(torch_device)
+        enc_dec_model.eval()
+
+        # make sure that
+        labels[:, 0] = enc_dec_model.config.decoder_start_token_id
+
         outputs_encoder_decoder = enc_dec_model(
             input_ids=input_ids,
-            decoder_input_ids=decoder_input_ids,
+            decoder_input_ids=labels,
             attention_mask=attention_mask,
-            decoder_attention_mask=decoder_attention_mask,
             labels=labels,
         )
 
         loss = outputs_encoder_decoder["loss"]
-        # check that backprop works
-        loss.backward()
 
         self.assertEqual(
             outputs_encoder_decoder["logits"].shape, (decoder_input_ids.shape + (decoder_config.vocab_size,))
@@ -287,6 +290,20 @@ class EncoderDecoderMixin:
         self.assertEqual(
             outputs_encoder_decoder["encoder_last_hidden_state"].shape, (input_ids.shape + (config.hidden_size,))
         )
+
+        # test correct behavior for standard seq2seq training
+        # labels should not include the `decoder_start_token_id`
+        outputs_encoder_decoder = enc_dec_model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            labels=labels[:, 1:],
+        )
+
+        loss_no_dec_inputs = outputs_encoder_decoder["loss"]
+        # check that backprop works
+        loss_no_dec_inputs.backward()
+
+        self.assertTrue(abs(loss.item() - loss_no_dec_inputs.item()) < 1e-3)
 
     def check_encoder_decoder_model_output_attentions(
         self,
