@@ -36,14 +36,12 @@ from ...modeling_tf_outputs import (
     TFTokenClassifierOutput,
 )
 from ...modeling_tf_utils import (
-    PositionEmbeddings,
     TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
-    WordEmbeddings,
     get_initializer,
     input_processing,
     keras_serializable,
@@ -69,7 +67,7 @@ TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFAlbertWordEmbeddings
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertWordEmbeddings
 class TFDistilBertWordEmbeddings(tf.keras.layers.Layer):
     def __init__(self, vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
         super().__init__(**kwargs)

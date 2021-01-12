@@ -73,7 +73,7 @@ TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFAlbertWordEmbeddings
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertWordEmbeddings
 class TFAlbertWordEmbeddings(tf.keras.layers.Layer):
     def __init__(self, vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
         super().__init__(**kwargs)
@@ -113,7 +113,7 @@ class TFAlbertWordEmbeddings(tf.keras.layers.Layer):
         return embeddings
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFAlbertTokenTypeEmbeddings
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertTokenTypeEmbeddings
 class TFAlbertTokenTypeEmbeddings(tf.keras.layers.Layer):
     def __init__(self, type_vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
         super().__init__(**kwargs)

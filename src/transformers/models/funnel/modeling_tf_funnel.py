@@ -44,7 +44,6 @@ from ...modeling_tf_utils import (
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
-    WordEmbeddings,
     get_initializer,
     input_processing,
     keras_serializable,
@@ -75,13 +74,53 @@ TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST = [
 INF = 1e6
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertWordEmbeddings
+class TFFunnelWordEmbeddings(tf.keras.layers.Layer):
+    def __init__(self, vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
+        super().__init__(**kwargs)
+
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
+
+    def build(self, input_shape):
+        self.weight = self.add_weight(
+            name="weight",
+            shape=[self.vocab_size, self.hidden_size],
+            initializer=get_initializer(initializer_range=self.initializer_range),
+        )
+
+        super().build(input_shape=input_shape)
+
+    def get_config(self):
+        config = {
+            "vocab_size": self.vocab_size,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def call(self, input_ids):
+        flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
+        embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
+        embeddings = tf.reshape(
+            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=input_ids), [self.hidden_size]], axis=0)
+        )
+
+        embeddings.set_shape(shape=input_ids.shape.as_list() + [self.hidden_size])
+
+        return embeddings
+
+
 class TFFunnelEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.word_embeddings = WordEmbeddings(
+        self.word_embeddings = TFFunnelWordEmbeddings(
             vocab_size=config.vocab_size,
             hidden_size=config.hidden_size,
             initializer_range=config.initializer_range,
@@ -90,7 +129,7 @@ class TFFunnelEmbeddings(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout)
 
-    def call(self, input_ids=None, position_ids=None, token_type_ids=None, inputs_embeds=None, training=False):
+    def call(self, input_ids=None, inputs_embeds=None, training=False):
         """
         Applies embedding based on inputs tensor.
 
@@ -98,6 +137,7 @@ class TFFunnelEmbeddings(tf.keras.layers.Layer):
             final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
         """
         assert not (input_ids is None and inputs_embeds is None)
+        assert not (input_ids is not None and inputs_embeds is not None)
 
         if input_ids is not None:
             inputs_embeds = self.word_embeddings(input_ids=input_ids)
@@ -736,8 +776,8 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
         return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.word_embeddings.weight = value
+        self.embeddings.word_embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
@@ -822,8 +862,8 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
         return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.word_embeddings.weight = value
+        self.embeddings.word_embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
@@ -948,7 +988,7 @@ class TFFunnelMaskedLMHead(tf.keras.layers.Layer):
         return self.input_embeddings
 
     def set_output_embeddings(self, value):
-        self.input_embeddings.word_embeddings = value
+        self.input_embeddings.weight = value
         self.input_embeddings.vocab_size = shape_list(value)[0]
 
     def get_bias(self):
@@ -961,7 +1001,7 @@ class TFFunnelMaskedLMHead(tf.keras.layers.Layer):
     def call(self, hidden_states, training=False):
         seq_length = shape_list(tensor=hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
-        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.word_embeddings, transpose_b=True)
+        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
