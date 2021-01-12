@@ -494,7 +494,7 @@ class ModelTesterMixin:
 
                 self.assertAlmostEqual(attentions[0][..., 0, :, :].flatten().sum().item(), 0.0)
                 self.assertNotEqual(attentions[0][..., -1, :, :].flatten().sum().item(), 0.0)
-                self.assertAlmostEqual(attentions[1][..., 0, :, :].flatten().sum().item(), 0.0)
+                self.assertNotEqual(attentions[1][..., 0, :, :].flatten().sum().item(), 0.0)
                 self.assertAlmostEqual(attentions[-1][..., -2, :, :].flatten().sum().item(), 0.0)
                 self.assertNotEqual(attentions[-1][..., -1, :, :].flatten().sum().item(), 0.0)
 
