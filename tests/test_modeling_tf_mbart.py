@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 HuggingFace Inc. team.
+# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,47 +12,107 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import tempfile
 import unittest
 
-from tests.test_configuration_common import ConfigTester
-from tests.test_modeling_tf_bart import TFBartModelTester
-from tests.test_modeling_tf_common import TFModelTesterMixin
 from transformers import AutoTokenizer, MBartConfig, is_tf_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import is_pt_tf_cross_test, require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+
+from .test_configuration_common import ConfigTester
+from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 
 if is_tf_available():
-
     import tensorflow as tf
 
-    from transformers import TFAutoModelForSeq2SeqLM, TFMBartForConditionalGeneration
-
-
-class ModelTester(TFBartModelTester):
-    config_updates = dict(normalize_before=True, add_final_layer_norm=True)
-    config_cls = MBartConfig
+    from transformers import TFAutoModelForSeq2SeqLM, TFMBartForConditionalGeneration, TFMBartModel
 
 
 @require_tf
-class TFMBartModelTest(TFModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TFMBartForConditionalGeneration,) if is_tf_available() else ()
-    all_generative_model_classes = (TFMBartForConditionalGeneration,) if is_tf_available() else ()
-    model_tester_cls = ModelTester
-    is_encoder_decoder = True
-    test_pruning = False
+class TFMBartModelTester:
+    config_cls = MBartConfig
+    config_updates = {}
+    hidden_act = "gelu"
 
-    def setUp(self):
-        self.model_tester = self.model_tester_cls(self)
-        self.config_tester = ConfigTester(self, config_class=MBartConfig)
+    def __init__(
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_labels=False,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=20,
+        eos_token_id=2,
+        pad_token_id=1,
+        bos_token_id=0,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_labels = use_labels
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
 
-    def test_config(self):
-        self.config_tester.run_common_tests()
+    def prepare_config_and_inputs_for_common(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
+        eos_tensor = tf.expand_dims(tf.constant([self.eos_token_id] * self.batch_size), 1)
+        input_ids = tf.concat([input_ids, eos_tensor], axis=1)
 
-    def test_inputs_embeds(self):
-        # inputs_embeds not supported
-        pass
+        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        config = self.config_cls(
+            vocab_size=self.vocab_size,
+            d_model=self.hidden_size,
+            encoder_layers=self.num_hidden_layers,
+            decoder_layers=self.num_hidden_layers,
+            encoder_attention_heads=self.num_attention_heads,
+            decoder_attention_heads=self.num_attention_heads,
+            encoder_ffn_dim=self.intermediate_size,
+            decoder_ffn_dim=self.intermediate_size,
+            dropout=self.hidden_dropout_prob,
+            attention_dropout=self.attention_probs_dropout_prob,
+            max_position_embeddings=self.max_position_embeddings,
+            eos_token_ids=[2],
+            bos_token_id=self.bos_token_id,
+            pad_token_id=self.pad_token_id,
+            decoder_start_token_id=self.pad_token_id,
+            **self.config_updates,
+        )
+        inputs_dict = prepare_mbart_inputs_dict(config, input_ids, decoder_input_ids)
+        return config, inputs_dict
+
+    def check_decoder_model_past_large_inputs(self, config, inputs_dict):
+        model = TFMBartModel(config=config).get_decoder()
+        input_ids = inputs_dict["input_ids"]
+
+        input_ids = input_ids[:1, :]
+        attention_mask = inputs_dict["attention_mask"][:1, :]
+        self.batch_size = 1
+
+        # first forward pass
+        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
+
+        output, past_key_values = outputs.to_tuple()
+        past_key_values = past_key_values[1]
 
     def test_compile_tf_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -60,13 +120,11 @@ class TFMBartModelTest(TFModelTesterMixin, unittest.TestCase):
         optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
         loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
         metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
-
         model_class = self.all_generative_model_classes[0]
         input_ids = {
             "decoder_input_ids": tf.keras.Input(batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"),
             "input_ids": tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32"),
         }
-
         # Prepare our model
         model = model_class(config)
         model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
@@ -74,16 +132,57 @@ class TFMBartModelTest(TFModelTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
             model = model_class.from_pretrained(tmpdirname)
-
         outputs_dict = model(input_ids)
         hidden_states = outputs_dict[0]
-
         # Add a dense layer on top to test integration with other keras modules
         outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
-
         # Compile extended model
         extended_model = tf.keras.Model(inputs=[input_ids], outputs=[outputs])
         extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
+
+
+def prepare_mbart_inputs_dict(
+    config,
+    input_ids,
+    decoder_input_ids,
+    attention_mask=None,
+    decoder_attention_mask=None,
+):
+    if attention_mask is None:
+        attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
+    if decoder_attention_mask is None:
+        decoder_attention_mask = tf.concat(
+            [
+                tf.ones(decoder_input_ids[:, :1].shape, dtype=tf.int8),
+                tf.cast(tf.math.not_equal(decoder_input_ids[:, 1:], config.pad_token_id), tf.int8),
+            ],
+            axis=-1,
+        )
+    return {
+        "input_ids": input_ids,
+        "decoder_input_ids": decoder_input_ids,
+        "attention_mask": attention_mask,
+        "decoder_attention_mask": decoder_attention_mask,
+    }
+
+
+@require_tf
+class TFMBartModelTest(TFModelTesterMixin, unittest.TestCase):
+    all_model_classes = (TFMBartForConditionalGeneration, TFMBartModel) if is_tf_available() else ()
+    all_generative_model_classes = (TFMBartForConditionalGeneration,) if is_tf_available() else ()
+    is_encoder_decoder = True
+    test_pruning = False
+
+    def setUp(self):
+        self.model_tester = TFMBartModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=MBartConfig)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_decoder_model_past_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
 
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -105,8 +204,22 @@ class TFMBartModelTest(TFModelTesterMixin, unittest.TestCase):
                 name = model.get_bias()
                 assert name is None
 
+    @slow
+    def test_saved_model_with_hidden_states_output(self):
+        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
+        pass
+
+    @slow
+    def test_saved_model_with_attentions_output(self):
+        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
+        pass
+
     def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
+        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
+        pass
+
+    def test_saved_model_creation_extended(self):
+        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
         pass
 
     def test_resize_token_embeddings(self):
@@ -173,10 +286,31 @@ class TFMBartModelTest(TFModelTesterMixin, unittest.TestCase):
                     self.assertTrue(models_equal)
 
 
-@is_pt_tf_cross_test
+def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
+    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
+    if a is None and b is None:
+        return True
+    try:
+        if tf.debugging.assert_near(a, b, atol=atol):
+            return True
+        raise
+    except Exception:
+        msg = "{} != {}".format(a, b)
+        if prefix:
+            msg = prefix + ": " + msg
+        raise AssertionError(msg)
+
+
+def _long_tensor(tok_lst):
+    return tf.constant(tok_lst, dtype=tf.int32)
+
+
+TOLERANCE = 1e-4
+
+
 @require_sentencepiece
 @require_tokenizers
-class TestMBartEnRO(unittest.TestCase):
+class TFMBartModelIntegrationTest(unittest.TestCase):
     src_text = [
         " UN Chief Says There Is No Military Solution in Syria",
     ]
@@ -191,7 +325,7 @@ class TestMBartEnRO(unittest.TestCase):
 
     @cached_property
     def model(self):
-        model = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name, from_pt=True)
+        model = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name)
         return model
 
     def _assert_generated_batch_equal_expected(self, **tokenizer_kwargs):
