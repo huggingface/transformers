@@ -738,21 +738,18 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
             >>> words = ["Hello", "world"]
             >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
 
-            >>> tokens = []
             >>> token_boxes = []
             >>> for word, box in zip(words, normalized_word_boxes):
             ...     word_tokens = tokenizer.tokenize(word)
-            ...     tokens.extend(word_tokens)
             ...     token_boxes.extend([box] * len(word_tokens))
-
-            >>> # add cls + sep tokens
-            >>> tokens = [tokenizer.cls_token] + tokens + [tokenizer.sep_token]
+            >>> # add bounding boxes of cls + sep tokens
             >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
 
-            >>> input_ids = torch.tensor(tokenizer.convert_tokens_to_ids(tokens)).unsqueeze(0) # batch size of 1
-            >>> bbox = torch.tensor(token_boxes).unsqueeze(0) # batch size of 1
-            >>> attention_mask = torch.tensor([1] * len(tokens)).unsqueeze(0) # batch size of 1
-            >>> token_type_ids = torch.tensor([0] * len(tokens)).unsqueeze(0) # batch size of 1
+            >>> encoding = tokenizer(' '.join(words), return_tensors="pt")
+            >>> input_ids = encoding["input_ids"]
+            >>> attention_mask = encoding["attention_mask"]
+            >>> token_type_ids = encoding["token_type_ids"]
+            >>> bbox = torch.tensor([token_boxes])
 
             >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids)
 
@@ -884,21 +881,18 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
             >>> words = ["Hello", "[MASK]"]
             >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
 
-            >>> tokens = []
             >>> token_boxes = []
             >>> for word, box in zip(words, normalized_word_boxes):
             ...     word_tokens = tokenizer.tokenize(word)
-            ...     tokens.extend(word_tokens)
             ...     token_boxes.extend([box] * len(word_tokens))
-
-            >>> # add cls + sep tokens
-            >>> tokens = [tokenizer.cls_token] + tokens + [tokenizer.sep_token]
+            >>> # add bounding boxes of cls + sep tokens
             >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
 
-            >>> input_ids = torch.tensor(tokenizer.convert_tokens_to_ids(tokens)).unsqueeze(0) # batch size of 1
-            >>> bbox = torch.tensor(token_boxes).unsqueeze(0) # batch size of 1
-            >>> attention_mask = torch.tensor([1] * len(tokens)).unsqueeze(0) # batch size of 1
-            >>> token_type_ids = torch.tensor([0] * len(tokens)).unsqueeze(0) # batch size of 1
+            >>> encoding = tokenizer(' '.join(words), return_tensors="pt")
+            >>> input_ids = encoding["input_ids"]
+            >>> attention_mask = encoding["attention_mask"]
+            >>> token_type_ids = encoding["token_type_ids"]
+            >>> bbox = torch.tensor([token_boxes])
 
             >>> labels = tokenizer("Hello world", return_tensors="pt")["input_ids"]
 
@@ -1002,22 +996,18 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
             >>> words = ["Hello", "world"]
             >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
 
-            >>> tokens = []
             >>> token_boxes = []
             >>> for word, box in zip(words, normalized_word_boxes):
             ...     word_tokens = tokenizer.tokenize(word)
-            ...     tokens.extend(word_tokens)
             ...     token_boxes.extend([box] * len(word_tokens))
-
-            >>> # add cls + sep tokens
-            >>> tokens = [tokenizer.cls_token] + tokens + [tokenizer.sep_token]
+            >>> # add bounding boxes of cls + sep tokens
             >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
 
-            >>> input_ids = torch.tensor(tokenizer.convert_tokens_to_ids(tokens)).unsqueeze(0) # batch size of 1
-            >>> bbox = torch.tensor(token_boxes).unsqueeze(0) # batch size of 1
-            >>> attention_mask = torch.tensor([1] * len(tokens)).unsqueeze(0) # batch size of 1
-            >>> token_type_ids = torch.tensor([0] * len(tokens)).unsqueeze(0) # batch size of 1
-
+            >>> encoding = tokenizer(' '.join(words), return_tensors="pt")
+            >>> input_ids = encoding["input_ids"]
+            >>> attention_mask = encoding["attention_mask"]
+            >>> token_type_ids = encoding["token_type_ids"]
+            >>> bbox = torch.tensor([token_boxes])
             >>> sequence_label = torch.tensor([1])
 
             >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
@@ -1123,21 +1113,18 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
             >>> words = ["Hello", "world"]
             >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
 
-            >>> tokens = []
             >>> token_boxes = []
             >>> for word, box in zip(words, normalized_word_boxes):
             ...     word_tokens = tokenizer.tokenize(word)
-            ...     tokens.extend(word_tokens)
             ...     token_boxes.extend([box] * len(word_tokens))
-
-            >>> # add cls + sep tokens
-            >>> tokens = [tokenizer.cls_token] + tokens + [tokenizer.sep_token]
+            >>> # add bounding boxes of cls + sep tokens
             >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
 
-            >>> input_ids = torch.tensor(tokenizer.convert_tokens_to_ids(tokens)).unsqueeze(0) # batch size of 1
-            >>> bbox = torch.tensor(token_boxes).unsqueeze(0) # batch size of 1
-            >>> attention_mask = torch.tensor([1] * len(tokens)).unsqueeze(0) # batch size of 1
-            >>> token_type_ids = torch.tensor([0] * len(tokens)).unsqueeze(0) # batch size of 1
+            >>> encoding = tokenizer(' '.join(words), return_tensors="pt")
+            >>> input_ids = encoding["input_ids"]
+            >>> attention_mask = encoding["attention_mask"]
+            >>> token_type_ids = encoding["token_type_ids"]
+            >>> bbox = torch.tensor([token_boxes])
             >>> token_labels = torch.tensor([1,1,0,0]).unsqueeze(0) # batch size of 1
 
             >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
