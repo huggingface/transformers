@@ -868,7 +868,10 @@ if is_tf_available():
             "TFBertPreTrainedModel",
         ]
     )
-    _import_structure["models.blenderbot"].append("TFBlenderbotForConditionalGeneration")
+    _import_structure["models.blenderbot"].extend(["TFBlenderbotForConditionalGeneration", "TFBlenderbotModel"])
+    _import_structure["models.blenderbot_small"].extend(
+        ["TFBlenderbotSmallForConditionalGeneration", "TFBlenderbotSmallModel"]
+    )
     _import_structure["models.camembert"].extend(
         [
             "TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -986,8 +989,8 @@ if is_tf_available():
             "TFLxmertVisualFeatureEncoder",
         ]
     )
-    _import_structure["models.marian"].append("TFMarianMTModel")
-    _import_structure["models.mbart"].append("TFMBartForConditionalGeneration")
+    _import_structure["models.marian"].extend(["TFMarianMTModel", "TFMarianModel"])
+    _import_structure["models.mbart"].extend(["TFMBartForConditionalGeneration", "TFMBartModel"])
     _import_structure["models.mobilebert"].extend(
         [
             "TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1028,7 +1031,7 @@ if is_tf_available():
             "TFOpenAIGPTPreTrainedModel",
         ]
     )
-    _import_structure["models.pegasus"].append("TFPegasusForConditionalGeneration")
+    _import_structure["models.pegasus"].extend(["TFPegasusForConditionalGeneration", "TFPegasusModel"])
     _import_structure["models.roberta"].extend(
         [
             "TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1855,7 +1858,8 @@ if TYPE_CHECKING:
             TFBertModel,
             TFBertPreTrainedModel,
         )
-        from .models.blenderbot import TFBlenderbotForConditionalGeneration
+        from .models.blenderbot import TFBlenderbotForConditionalGeneration, TFBlenderbotModel
+        from .models.blenderbot_small import TFBlenderbotSmallForConditionalGeneration, TFBlenderbotSmallModel
         from .models.camembert import (
             TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFCamembertForMaskedLM,
@@ -1953,8 +1957,8 @@ if TYPE_CHECKING:
             TFLxmertPreTrainedModel,
             TFLxmertVisualFeatureEncoder,
         )
-        from .models.marian import TFMarianMTModel
-        from .models.mbart import TFMBartForConditionalGeneration
+        from .models.marian import TFMarian, TFMarianMTModel
+        from .models.mbart import TFMBartForConditionalGeneration, TFMBartModel
         from .models.mobilebert import (
             TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFMobileBertForMaskedLM,
@@ -1989,7 +1993,7 @@ if TYPE_CHECKING:
             TFOpenAIGPTModel,
             TFOpenAIGPTPreTrainedModel,
         )
-        from .models.pegasus import TFPegasusForConditionalGeneration
+        from .models.pegasus import TFPegasusForConditionalGeneration, TFPegasusModel
         from .models.roberta import (
             TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFRobertaForMaskedLM,
