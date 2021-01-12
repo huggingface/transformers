@@ -82,13 +82,13 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
     }
     pretrained_vocab_files_map = {
         "vocab_file": {
-            "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/blob/main/vocab.json"
+            "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/vocab.json"
         },
         "merges_file": {
-            "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/blob/main/merges.txt"
+            "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/merges.txt"
         },
         "tokenizer_config_file": {
-            "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/blob/main/tokenizer.json"
+            "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/tokenizer.json"
         },
     }
     max_model_input_sizes = {"facebook/blenderbot_small-90M": 512}
