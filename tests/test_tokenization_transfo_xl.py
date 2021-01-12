@@ -26,6 +26,7 @@ class TransfoXLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = TransfoXLTokenizer
     test_rust_tokenizer = False
+    test_seq2seq = False
 
     def setUp(self):
         super().setUp()

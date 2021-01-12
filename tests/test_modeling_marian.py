@@ -508,12 +508,6 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
     def test_batch_generation_en_ROMANCE_multi(self):
         self._assert_generated_batch_equal_expected()
 
-    def test_tokenizer_handles_empty(self):
-        normalized = self.tokenizer.normalize("")
-        self.assertIsInstance(normalized, str)
-        with self.assertRaises(ValueError):
-            self.tokenizer.prepare_seq2seq_batch([""], return_tensors="pt")
-
     @slow
     def test_pipeline(self):
         device = 0 if torch_device == "cuda" else -1
