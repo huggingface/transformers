@@ -48,9 +48,11 @@ class BlenderbotTokenizer(RobertaTokenizer):
         "tokenizer_config_file": "tokenizer_config.json",
     }
     pretrained_vocab_files_map = {
-        "vocab_file": {CKPT_3B: "https://cdn.huggingface.co/facebook/blenderbot-3B/vocab.json"},
-        "merges_file": {CKPT_3B: "https://cdn.huggingface.co/facebook/blenderbot-3B/merges.txt"},
-        "tokenizer_config_file": {CKPT_3B: "https://cdn.huggingface.co/facebook/blenderbot-3B/tokenizer_config.json"},
+        "vocab_file": {CKPT_3B: "https://huggingface.co/facebook/blenderbot-3B/resolve/main/vocab.json"},
+        "merges_file": {CKPT_3B: "https://huggingface.co/facebook/blenderbot-3B/resolve/main/merges.txt"},
+        "tokenizer_config_file": {
+            CKPT_3B: "https://huggingface.co/facebook/blenderbot-3B/resolve/main/tokenizer_config.json"
+        },
     }
     max_model_input_sizes = {"facebook/blenderbot-3B": 128}
 
