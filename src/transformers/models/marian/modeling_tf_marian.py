@@ -444,11 +444,13 @@ class TFMarianPreTrainedModel(TFPreTrainedModel):
         }
         return dummy_inputs
 
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartPretrainedModel.get_input_embeddings
     def get_input_embeddings(self):
         base_model = getattr(self, self.base_model_prefix, self)
 
         return base_model.shared
 
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartPretrainedModel.set_input_embeddings
     def set_input_embeddings(self, value):
         base_model = getattr(self, self.base_model_prefix, self)
 
@@ -477,6 +479,7 @@ class TFMarianPreTrainedModel(TFPreTrainedModel):
             }
         ]
     )
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartPretrainedModel.serving
     def serving(self, inputs):
         output = self.call(inputs)
 
@@ -1074,6 +1077,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
             encoder_attentions=inputs["encoder_outputs"].attentions,
         )
 
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartModel.serving_output
     def serving_output(self, output):
         pkv = (tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,)
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
@@ -1219,6 +1223,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel):
             encoder_attentions=outputs.encoder_attentions,  # 2 of e out
         )
 
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration.serving_output
     def serving_output(self, output):
         pkv = (tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,)
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
@@ -1236,6 +1241,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel):
             encoder_attentions=enc_attns,
         )
 
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration.prepare_inputs_for_generation
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs) -> Dict:
         assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
         if len(past) == 1:
@@ -1272,6 +1278,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel):
         }
 
     @staticmethod
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration._reorder_cache
     def _reorder_cache(past, beam_idx):
         if len(past) == 1:
             return past
@@ -1294,6 +1301,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel):
             logits = tf.where(vocab_range != self.config.eos_token_id, LARGE_NEGATIVE, logits)
         return logits
 
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration.compute_loss
     def compute_loss(self, labels, logits):
         """CrossEntropyLoss that ignores pad tokens"""
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(

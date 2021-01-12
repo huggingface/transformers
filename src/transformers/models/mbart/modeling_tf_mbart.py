@@ -452,6 +452,7 @@ class TFMBartPreTrainedModel(TFPreTrainedModel):
             }
         ]
     )
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartPretrainedModel.serving
     def serving(self, inputs):
         output = self.call(inputs)
 
@@ -1263,8 +1264,8 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel):
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
-    # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration._reordered_past
     @staticmethod
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration._reorder_cache
     def _reorder_cache(past, beam_idx):
         if len(past) == 1:
             return past
