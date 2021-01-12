@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright Iz Beltagy, Matthew E. Peters, Arman Cohan and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,8 +16,9 @@
 
 import unittest
 
-from transformers import LEDConfig, is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers import BlenderbotSmallConfig, BlenderbotSmallTokenizer, is_tf_available
+from transformers.file_utils import cached_property
+from transformers.testing_utils import require_tf, require_tokenizers, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -26,12 +27,12 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFLEDForConditionalGeneration, TFLEDModel
+    from transformers import TFAutoModelForSeq2SeqLM, TFBlenderbotSmallForConditionalGeneration, TFBlenderbotSmallModel
 
 
 @require_tf
-class TFLEDModelTester:
-    config_cls = LEDConfig
+class TFBlenderbotSmallModelTester:
+    config_cls = BlenderbotSmallConfig
     config_updates = {}
     hidden_act = "gelu"
 
@@ -53,7 +54,6 @@ class TFLEDModelTester:
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
-        attention_window=4,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -72,19 +72,6 @@ class TFLEDModelTester:
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
-        self.attention_window = attention_window
-
-        # `ModelTesterMixin.test_attention_outputs` is expecting attention tensors to be of size
-        # [num_attention_heads, encoder_seq_length, encoder_key_length], but TFLongformerSelfAttention
-        # returns attention of shape [num_attention_heads, encoder_seq_length, self.attention_window + 1]
-        # because its local attention only attends to `self.attention_window` and one before and one after
-        self.key_length = self.attention_window + 1
-
-        # because of padding `encoder_seq_length`, is different from `seq_length`. Relevant for
-        # the `test_attention_outputs` and `test_hidden_states_output` tests
-        self.encoder_seq_length = (
-            self.seq_length + (self.attention_window - self.seq_length % self.attention_window) % self.attention_window
-        )
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
@@ -109,19 +96,13 @@ class TFLEDModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
             decoder_start_token_id=self.pad_token_id,
-            attention_window=self.attention_window,
             **self.config_updates,
         )
-        inputs_dict = prepare_led_inputs_dict(config, input_ids, decoder_input_ids)
-        global_attention_mask = tf.concat(
-            [tf.zeros_like(input_ids)[:, :-1], tf.ones_like(input_ids)[:, -1:]],
-            axis=-1,
-        )
-        inputs_dict["global_attention_mask"] = global_attention_mask
+        inputs_dict = prepare_blenderbot_small_inputs_dict(config, input_ids, decoder_input_ids)
         return config, inputs_dict
 
     def check_decoder_model_past_large_inputs(self, config, inputs_dict):
-        model = TFLEDModel(config=config).get_decoder()
+        model = TFBlenderbotSmallModel(config=config).get_decoder()
         input_ids = inputs_dict["input_ids"]
 
         input_ids = input_ids[:1, :]
@@ -156,7 +137,7 @@ class TFLEDModelTester:
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
 
-def prepare_led_inputs_dict(
+def prepare_blenderbot_small_inputs_dict(
     config,
     input_ids,
     decoder_input_ids,
@@ -175,22 +156,24 @@ def prepare_led_inputs_dict(
         )
     return {
         "input_ids": input_ids,
-        "attention_mask": attention_mask,
         "decoder_input_ids": decoder_input_ids,
+        "attention_mask": attention_mask,
         "decoder_attention_mask": decoder_attention_mask,
     }
 
 
 @require_tf
-class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TFLEDForConditionalGeneration, TFLEDModel) if is_tf_available() else ()
-    all_generative_model_classes = (TFLEDForConditionalGeneration,) if is_tf_available() else ()
+class TFBlenderbotSmallModelTest(TFModelTesterMixin, unittest.TestCase):
+    all_model_classes = (
+        (TFBlenderbotSmallForConditionalGeneration, TFBlenderbotSmallModel) if is_tf_available() else ()
+    )
+    all_generative_model_classes = (TFBlenderbotSmallForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
 
     def setUp(self):
-        self.model_tester = TFLEDModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LEDConfig)
+        self.model_tester = TFBlenderbotSmallModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=BlenderbotSmallConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -205,19 +188,28 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config)
             assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+            x = model.get_output_layer_with_bias()
+            assert x is None
+            name = model.get_prefix_bias_name()
+            assert name is None
 
-            if model_class in self.all_generative_model_classes:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert isinstance(name, dict)
-                for k, v in name.items():
-                    assert isinstance(v, tf.Variable)
-            else:
-                x = model.get_output_embeddings()
-                assert x is None
-                name = model.get_bias()
-                assert name is None
+    @slow
+    def test_saved_model_with_hidden_states_output(self):
+        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
+        pass
+
+    @slow
+    def test_saved_model_with_attentions_output(self):
+        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
+        pass
+
+    def test_saved_model_creation(self):
+        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
+        pass
+
+    def test_saved_model_creation_extended(self):
+        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
+        pass
 
     def test_resize_token_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -282,102 +274,6 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
                                 models_equal = False
                     self.assertTrue(models_equal)
 
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        inputs_dict["global_attention_mask"] = tf.zeros_like(inputs_dict["attention_mask"])
-        num_global_attn_indices = 2
-        inputs_dict["global_attention_mask"] = tf.where(
-            tf.range(self.model_tester.seq_length)[None, :] < num_global_attn_indices,
-            1,
-            inputs_dict["global_attention_mask"],
-        )
-
-        config.return_dict = True
-        seq_length = self.model_tester.seq_length
-        encoder_seq_length = self.model_tester.encoder_seq_length
-
-        def check_decoder_attentions_output(outputs):
-            decoder_attentions = outputs.decoder_attentions
-            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, seq_length, seq_length],
-            )
-
-        def check_encoder_attentions_output(outputs):
-            attentions = [t.numpy() for t in outputs.encoder_attentions]
-            global_attentions = [t.numpy() for t in outputs.encoder_global_attentions]
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-            self.assertEqual(len(global_attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, seq_length],
-            )
-            self.assertListEqual(
-                list(global_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, num_global_attn_indices],
-            )
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["use_cache"] = False
-            config.output_hidden_states = False
-            model = model_class(config)
-            outputs = model(self._prepare_for_class(inputs_dict, model_class))
-            out_len = len(outputs)
-            self.assertEqual(config.output_hidden_states, False)
-            check_encoder_attentions_output(outputs)
-
-            if self.is_encoder_decoder:
-                model = model_class(config)
-                outputs = model(self._prepare_for_class(inputs_dict, model_class))
-                self.assertEqual(config.output_hidden_states, False)
-                check_decoder_attentions_output(outputs)
-
-            # Check that output attentions can also be changed via the config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            model = model_class(config)
-            outputs = model(self._prepare_for_class(inputs_dict, model_class))
-            self.assertEqual(config.output_hidden_states, False)
-            check_encoder_attentions_output(outputs)
-
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            config.output_hidden_states = True
-            model = model_class(config)
-            outputs = model(self._prepare_for_class(inputs_dict, model_class))
-
-            self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
-            self.assertEqual(model.config.output_hidden_states, True)
-            check_encoder_attentions_output(outputs)
-
-    @slow
-    def test_saved_model_with_attentions_output(self):
-        # longformer has special attentions which are not
-        # compatible in graph mode
-        pass
-
-    @slow
-    def test_saved_model_with_hidden_states_output(self):
-        # TODO(JPLU, PVP) this test should pass!!! PVP:
-        # IMO there is a problem with the signature check.
-        # Test passes for TFLEDModel, but not for TFLEDForConditionalGeneration
-        # IMO the reason is that the tensor variable name cannot be changed
-        # from decoder_input_ids -> input_ids, which poses a BIG restrictions
-        pass
-
-    @slow
-    def test_saved_model_creation_extended(self):
-        # All the tests about building a saved model
-        # fails because the Seq2Seq models uses model in a model
-        # as a layer.
-        # TODO(JPLU) WARNING: NEED TO BE FIXED ASAP
-        pass
-
-    def test_saved_model_creation(self):
-        pass
-
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
     """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
@@ -398,40 +294,35 @@ def _long_tensor(tok_lst):
     return tf.constant(tok_lst, dtype=tf.int32)
 
 
-TOLERANCE = 1e-4
+@require_tokenizers
+class TFBlenderbot90MIntegrationTests(unittest.TestCase):
+    src_text = [
+        "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like   i'm going to throw up.\nand why is that?"
+    ]
+    model_name = "facebook/blenderbot_small-90M"
 
+    @cached_property
+    def tokenizer(self):
+        # use "old" tokenizer here because of bug when downloading new tokenizer
+        return BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot-90M")
 
-@slow
-@require_tf
-class TFLEDModelIntegrationTest(unittest.TestCase):
-    def test_inference_no_head(self):
-        model = TFLEDForConditionalGeneration.from_pretrained("allenai/led-base-16384").led
+    @cached_property
+    def model(self):
+        model = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name)
+        return model
 
-        # change to intended input here
-        input_ids = _long_tensor([512 * [0, 31414, 232, 328, 740, 1140, 12695, 69]])
-        decoder_input_ids = _long_tensor([128 * [0, 31414, 232, 328, 740, 1140, 12695, 69]])
-        inputs_dict = prepare_led_inputs_dict(model.config, input_ids, decoder_input_ids)
-        output = model(**inputs_dict)[0]
-        expected_shape = (1, 1024, 768)
-        self.assertEqual(output.shape, expected_shape)
-        # change to expected output here
-        expected_slice = tf.convert_to_tensor(
-            [[2.3050, 2.8279, 0.6531], [-1.8457, -0.1455, -3.5661], [-1.0186, 0.4586, -2.2043]],
+    @slow
+    def test_90_generation_from_long_input(self):
+        model_inputs = self.tokenizer(self.src_text, return_tensors="tf")
+        generated_ids = self.model.generate(
+            model_inputs.input_ids,
+            attention_mask=model_inputs.attention_mask,
+            num_beams=2,
+            use_cache=True,
         )
-        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE)
-
-    def test_inference_with_head(self):
-        model = TFLEDForConditionalGeneration.from_pretrained("allenai/led-base-16384")
-
-        # change to intended input here
-        input_ids = _long_tensor([512 * [0, 31414, 232, 328, 740, 1140, 12695, 69]])
-        decoder_input_ids = _long_tensor([128 * [0, 31414, 232, 328, 740, 1140, 12695, 69]])
-        inputs_dict = prepare_led_inputs_dict(model.config, input_ids, decoder_input_ids)
-        output = model(**inputs_dict)[0]
-        expected_shape = (1, 1024, model.config.vocab_size)
-        self.assertEqual(output.shape, expected_shape)
-        # change to expected output here
-        expected_slice = tf.convert_to_tensor(
-            [[33.6507, 6.4572, 16.8089], [5.8739, -2.4238, 11.2902], [-3.2139, -4.3149, 4.2783]],
+        generated_words = self.tokenizer.batch_decode(generated_ids.numpy(), skip_special_tokens=True)[0]
+        assert generated_words in (
+            "i don't know. i just feel like i'm going to throw up. it's not fun.",
+            "i'm not sure. i just feel like i've been feeling like i have to be in a certain place",
+            "i'm not sure. i just feel like i've been in a bad situation.",
         )
-        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE)
