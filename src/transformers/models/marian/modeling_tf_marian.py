@@ -615,7 +615,7 @@ class TFMarianEncoder(tf.keras.layers.Layer):
         self.layerdrop = config.encoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
-        self.embed_scale = tf.math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        self.embed_scale = tf.math.sqrt(float(config.d_model)) if config.scale_embedding else 1.0
 
         self.embed_tokens = embed_tokens
         self.embed_positions = TFMarianSinusoidalPositionalEmbedding(
@@ -756,7 +756,7 @@ class TFMarianDecoder(tf.keras.layers.Layer):
             config.d_model,
             name="embed_positions",
         )
-        self.embed_scale = tf.math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        self.embed_scale = tf.math.sqrt(float(config.d_model)) if config.scale_embedding else 1.0
         self.layers = [TFMarianDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
