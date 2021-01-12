@@ -60,7 +60,7 @@ if TYPE_CHECKING:
         )
 
     if is_tf_available():
-        from .modeling_tf_marian import TFMarianMTModel
+        from .modeling_tf_marian import TFMarianModel, TFMarianMTModel
 
 else:
     import importlib

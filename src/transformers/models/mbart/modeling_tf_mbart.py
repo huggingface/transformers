@@ -15,7 +15,6 @@
 """ TF 2.0 MBart model. """
 
 
-import math
 import random
 from typing import Dict, Optional, Tuple, Union
 
@@ -418,11 +417,13 @@ class TFMBartPreTrainedModel(TFPreTrainedModel):
         }
         return dummy_inputs
 
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartPretrainedModel.get_input_embeddings
     def get_input_embeddings(self):
         base_model = getattr(self, self.base_model_prefix, self)
 
         return base_model.shared
 
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartPretrainedModel.set_input_embeddings
     def set_input_embeddings(self, value):
         base_model = getattr(self, self.base_model_prefix, self)
 
@@ -497,7 +498,7 @@ MBART_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`tf.Tensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
+            Indices can be obtained using :class:`~transformers.MBartTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -546,7 +547,7 @@ MBART_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
             more detail.
         return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.TFModelOutput` instead of a plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
         training (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -600,7 +601,7 @@ class TFMBartEncoder(tf.keras.layers.Layer):
         self.layerdrop = config.encoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        self.embed_scale = tf.math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
         self.embed_tokens = embed_tokens
         self.embed_positions = TFMBartLearnedPositionalEmbedding(
@@ -681,14 +682,10 @@ class TFMBartEncoder(tf.keras.layers.Layer):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs["inputs_embeds"] is None:
-            inputs_embeds = self.embed_tokens(inputs["input_ids"]) * self.embed_scale
-        else:
-            inputs_embeds = inputs["inputs_embeds"]
-
-        inputs_embeds = inputs_embeds
+            inputs["inputs_embeds"] = self.embed_tokens(inputs["input_ids"]) * self.embed_scale
 
         embed_pos = self.embed_positions(input_shape)
-        hidden_states = inputs_embeds + embed_pos
+        hidden_states = inputs["inputs_embeds"] + embed_pos
         hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = self.dropout(hidden_states, training=inputs["training"])
 
@@ -752,7 +749,7 @@ class TFMBartDecoder(tf.keras.layers.Layer):
             self.padding_idx,
             name="embed_positions",
         )
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        self.embed_scale = tf.math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.layers = [TFMBartDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
@@ -1068,6 +1065,7 @@ class TFMBartModel(TFMBartPreTrainedModel):
             encoder_attentions=inputs["encoder_outputs"].attentions,
         )
 
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartModel.serving_output
     def serving_output(self, output):
         pkv = (tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,)
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
@@ -1211,6 +1209,7 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel):
             encoder_attentions=outputs.encoder_attentions,  # 2 of e out
         )
 
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration.serving_output
     def serving_output(self, output):
         pkv = (tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,)
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
@@ -1228,6 +1227,7 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel):
             encoder_attentions=enc_attns,
         )
 
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration.prepare_inputs_for_generation
     def prepare_inputs_for_generation(self, decoder_input_ids, past, attention_mask, use_cache, **kwargs) -> Dict:
         assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
         if len(past) == 1:
@@ -1263,6 +1263,7 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel):
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration._reordered_past
     @staticmethod
     def _reorder_cache(past, beam_idx):
         if len(past) == 1:
@@ -1285,6 +1286,7 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel):
         else:
             return logits
 
+    # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration.compute_loss
     def compute_loss(self, labels, logits):
         """CrossEntropyLoss that ignores pad tokens"""
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(

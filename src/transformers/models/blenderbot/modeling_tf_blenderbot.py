@@ -15,7 +15,6 @@
 """ TF 2.0 Blenderbot model. """
 
 
-import math
 import os
 import random
 import warnings
@@ -521,7 +520,7 @@ BLENDERBOT_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`tf.Tensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
+            Indices can be obtained using :class:`~transformers.BlenderbotTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -565,7 +564,7 @@ BLENDERBOT_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
             more detail.
         return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.TFModelOutput` instead of a plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
         training (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -590,7 +589,7 @@ class TFBlenderbotEncoder(tf.keras.layers.Layer):
         self.layerdrop = config.encoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        self.embed_scale = tf.math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
         self.embed_tokens = embed_tokens
         self.embed_positions = TFBlenderbotLearnedPositionalEmbedding(
@@ -670,14 +669,10 @@ class TFBlenderbotEncoder(tf.keras.layers.Layer):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs["inputs_embeds"] is None:
-            inputs_embeds = self.embed_tokens(inputs["input_ids"]) * self.embed_scale
-        else:
-            inputs_embeds = inputs["inputs_embeds"]
-
-        inputs_embeds = inputs_embeds
+            inputs["inputs_embeds"] = self.embed_tokens(inputs["input_ids"]) * self.embed_scale
 
         embed_pos = self.embed_positions(input_shape)
-        hidden_states = inputs_embeds + embed_pos
+        hidden_states = inputs["inputs_embeds"] + embed_pos
         hidden_states = self.dropout(hidden_states, training=inputs["training"])
 
         # check attention mask and invert
@@ -740,7 +735,7 @@ class TFBlenderbotDecoder(tf.keras.layers.Layer):
             self.padding_idx,
             name="embed_positions",
         )
-        self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+        self.embed_scale = tf.math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.layers = [TFBlenderbotDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
