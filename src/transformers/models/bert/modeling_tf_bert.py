@@ -583,7 +583,7 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
         return self.input_embeddings
 
     def set_output_embeddings(self, value):
-        self.input_embeddings.word_embeddings = value
+        self.input_embeddings.weight = value
         self.input_embeddings.vocab_size = shape_list(value)[0]
 
     def get_bias(self):

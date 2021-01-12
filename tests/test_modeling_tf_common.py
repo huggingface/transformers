@@ -807,24 +807,39 @@ class TFModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         def _get_word_embedding_weight(model, embedding_layer):
-            if hasattr(embedding_layer, "word_embeddings"):
-                return embedding_layer.word_embeddings
-            elif hasattr(embedding_layer, "weight"):
-                return embedding_layer.weight
-            elif hasattr(embedding_layer, "decoder"):
-                return embedding_layer.decoder
-            else:
-                # Here we build the word embeddings weights if not exists.
-                # And then we retry to get the attribute once built.
-                model(model.dummy_inputs)
-                if hasattr(embedding_layer, "word_embeddings"):
-                    return embedding_layer.word_embeddings
-                elif hasattr(embedding_layer, "weight"):
-                    return embedding_layer.weight
-                elif hasattr(embedding_layer, "decoder"):
-                    return embedding_layer.decoder
-                else:
-                    return None
+            embeds = getattr(embedding_layer, "word_embeddings", None)
+            
+            if embeds is not None:
+                return embeds
+            
+            embeds = getattr(embedding_layer, "weight", None)
+
+            if embeds is not None:
+                return embeds
+            
+            embeds = getattr(embedding_layer, "decoder", None)
+
+            if embeds is not None:
+                return embeds
+
+            model(model.dummy_inputs)
+
+            embeds = getattr(embedding_layer, "word_embeddings", None)
+            
+            if embeds is not None:
+                return embeds
+            
+            embeds = getattr(embedding_layer, "weight", None)
+
+            if embeds is not None:
+                return embeds
+            
+            embeds = getattr(embedding_layer, "decoder", None)
+
+            if embeds is not None:
+                return embeds
+
+            return None
 
         for model_class in self.all_model_classes:
             for size in [config.vocab_size - 10, config.vocab_size + 10, None]:

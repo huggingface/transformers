@@ -795,10 +795,10 @@ class TFMPNetLMHead(tf.keras.layers.Layer):
         self.bias = value["bias"]
         self.vocab_size = shape_list(value["bias"])[0]
 
-    def call(self, features):
-        x = self.dense(features)
-        x = self.act(x)
-        x = self.layer_norm(x)
+    def call(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
 
         # project back to size of vocabulary with bias
         seq_length = shape_list(tensor=hidden_states)[1]
