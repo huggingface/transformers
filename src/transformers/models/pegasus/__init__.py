@@ -45,7 +45,7 @@ if is_torch_available():
     ]
 
 if is_tf_available():
-    _import_structure["modeling_tf_pegasus"] = ["TFPegasusForConditionalGeneration"]
+    _import_structure["modeling_tf_pegasus"] = ["TFPegasusForConditionalGeneration", "TFPegasusModel"]
 
 
 if TYPE_CHECKING:
@@ -66,7 +66,7 @@ if TYPE_CHECKING:
         )
 
     if is_tf_available():
-        from .modeling_tf_pegasus import TFPegasusForConditionalGeneration
+        from .modeling_tf_pegasus import TFPegasusForConditionalGeneration, TFPegasusModel
 
 else:
     import importlib

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright {{cookiecutter.authors}} and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 
 import unittest
 
-from transformers import {{cookiecutter.camelcase_modelname}}Config, is_tf_available
+from transformers import is_tf_available, {{cookiecutter.camelcase_modelname}}Config
 from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
@@ -28,12 +28,12 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import (
+        TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
         TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
         TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
         TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
         TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
         TF{{cookiecutter.camelcase_modelname}}ForTokenClassification,
-        TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
         TF{{cookiecutter.camelcase_modelname}}Model,
     )
 
@@ -323,8 +323,12 @@ class TF{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.TestCa
 {% else %}
 import unittest
 
-from transformers import {{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}Tokenizer, is_tf_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_tf, slow
+from transformers import (
+    is_tf_available,
+    {{cookiecutter.camelcase_modelname}}Config,
+    {{cookiecutter.camelcase_modelname}}Tokenizer,
+)
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -333,7 +337,10 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration, TF{{cookiecutter.camelcase_modelname}}Model
+    from transformers import (
+        TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+        TF{{cookiecutter.camelcase_modelname}}Model,
+    )
 
 
 @require_tf
@@ -453,7 +460,7 @@ def prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(
     if attention_mask is None:
         attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
     if decoder_attention_mask is None:
-        decoder_attention_mask = tf.cast(tf.math.not_equal(decoder_input_ids, config.pad_token_id), tf.int8)
+        decoder_attention_mask = tf.concat([tf.ones(decoder_input_ids[:, :1].shape, dtype=tf.int8), tf.cast(tf.math.not_equal(decoder_input_ids[:, 1:], config.pad_token_id), tf.int8)], axis=-1)
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,

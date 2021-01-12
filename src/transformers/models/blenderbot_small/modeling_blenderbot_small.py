@@ -866,6 +866,7 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
         all_self_attns = () if output_attentions else None
         all_cross_attentions = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
+
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:

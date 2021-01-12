@@ -68,3 +68,17 @@ BlenderbotSmallForConditionalGeneration
 
 .. autoclass:: transformers.BlenderbotSmallForConditionalGeneration
     :members: forward
+
+
+TFBlenderbotSmallModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFBlenderbotSmallModel
+    :members: call
+
+
+TFBlenderbotSmallForConditionalGeneration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFBlenderbotSmallForConditionalGeneration
+    :members: call

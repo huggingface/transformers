@@ -369,6 +369,33 @@ class TFBlenderbotForConditionalGeneration:
         requires_tf(self)
 
 
+class TFBlenderbotModel:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFBlenderbotSmallForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFBlenderbotSmallModel:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
 TF_CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -952,6 +979,11 @@ class TFLxmertVisualFeatureEncoder:
         requires_tf(self)
 
 
+class TFMarian:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+
 class TFMarianMTModel:
     def __init__(self, *args, **kwargs):
         requires_tf(self)
@@ -962,6 +994,15 @@ class TFMarianMTModel:
 
 
 class TFMBartForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFMBartModel:
     def __init__(self, *args, **kwargs):
         requires_tf(self)
 
@@ -1203,6 +1244,15 @@ class TFOpenAIGPTPreTrainedModel:
 
 
 class TFPegasusForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFPegasusModel:
     def __init__(self, *args, **kwargs):
         requires_tf(self)
 

@@ -30,7 +30,7 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
     "merges_file": "merges.txt",
-    # "tokenizer_config_file": "tokenizer_config.json",
+    "tokenizer_config_file": "tokenizer_config.json",
 }
 
 
@@ -75,13 +75,20 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
             Additional keyword arguments passed along to :class:`~transformers.PreTrainedTokenizer`
     """
 
-    vocab_files_names = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
+    vocab_files_names = {
+        "vocab_file": "vocab.json",
+        "merges_file": "merges.txt",
+        "tokenizer_config": "tokenizer_config.json",
+    }
     pretrained_vocab_files_map = {
         "vocab_file": {
-            "facebook/blenderbot_small-90M": "https://cdn.huggingface.co/facebook/blenderbot_small-90M/vocab.json"
+            "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/blob/main/vocab.json"
         },
         "merges_file": {
-            "facebook/blenderbot_small-90M": "https://cdn.huggingface.co/facebook/blenderbot_small-90M/merges.txt"
+            "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/blob/main/merges.txt"
+        },
+        "tokenizer_config_file": {
+            "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/blob/main/tokenizer.json"
         },
     }
     max_model_input_sizes = {"facebook/blenderbot_small-90M": 512}

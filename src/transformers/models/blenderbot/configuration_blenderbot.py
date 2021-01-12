@@ -161,17 +161,6 @@ class BlenderbotConfig(PretrainedConfig):
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
-        # IMPORTANT
-        # DELETE ALL OF THE FOLLOWING LINES AS SOON AS TF IS READY
-        self.extra_pos_embeddings = 0
-        self.normalize_before = True
-        self.add_final_layer_norm = True
-        self.do_blenderbot_90_layernorm = True
-        self.normalize_embedding = False
-        self.static_position_embeddings = False
-        self.add_bias_logits = False
-        self.force_bos_token_to_be_generated = False
-
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads

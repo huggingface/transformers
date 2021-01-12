@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The Huggingface Inc. team
+# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,14 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import unittest
 
 import numpy as np
 
 from transformers import BartConfig, BartTokenizer, is_tf_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import is_pt_tf_cross_test, require_tf, slow
+from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -30,7 +29,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFBartForConditionalGeneration, TFBartModel
-    from transformers.models.bart.modeling_tf_bart import TFBartSinusoidalPositionalEmbedding
 
 
 @require_tf
@@ -39,30 +37,49 @@ class TFBartModelTester:
     config_updates = {}
     hidden_act = "gelu"
 
-    def __init__(self, parent):
+    def __init__(
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_labels=False,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=20,
+        eos_token_id=2,
+        pad_token_id=1,
+        bos_token_id=0,
+    ):
         self.parent = parent
-        self.batch_size = 13
-        self.seq_length = 7
-        self.is_training = True
-        self.use_labels = False
-        self.vocab_size = 99
-        self.hidden_size = 32
-        self.num_hidden_layers = 5
-        self.num_attention_heads = 4
-        self.intermediate_size = 37
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_labels = use_labels
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
 
-        self.hidden_dropout_prob = 0.1
-        self.attention_probs_dropout_prob = 0.1
-        self.max_position_embeddings = 20
-        self.eos_token_ids = [2]
-        self.pad_token_id = 1
-        self.bos_token_id = 0
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
-        eos_tensor = tf.expand_dims(tf.constant([2] * self.batch_size), 1)
+        eos_tensor = tf.expand_dims(tf.constant([self.eos_token_id] * self.batch_size), 1)
         input_ids = tf.concat([input_ids, eos_tensor], axis=1)
-        input_ids = tf.clip_by_value(input_ids, 3, self.vocab_size + 1)
+
+        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         config = self.config_cls(
             vocab_size=self.vocab_size,
@@ -82,7 +99,7 @@ class TFBartModelTester:
             decoder_start_token_id=self.pad_token_id,
             **self.config_updates,
         )
-        inputs_dict = prepare_bart_inputs_dict(config, input_ids)
+        inputs_dict = prepare_bart_inputs_dict(config, input_ids, decoder_input_ids)
         return config, inputs_dict
 
     def check_decoder_model_past_large_inputs(self, config, inputs_dict):
@@ -124,14 +141,25 @@ class TFBartModelTester:
 def prepare_bart_inputs_dict(
     config,
     input_ids,
+    decoder_input_ids,
     attention_mask=None,
+    decoder_attention_mask=None,
 ):
     if attention_mask is None:
         attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
+    if decoder_attention_mask is None:
+        decoder_attention_mask = tf.concat(
+            [
+                tf.ones(decoder_input_ids[:, :1].shape, dtype=tf.int8),
+                tf.cast(tf.math.not_equal(decoder_input_ids[:, 1:], config.pad_token_id), tf.int8),
+            ],
+            axis=-1,
+        )
     return {
         "input_ids": input_ids,
-        "decoder_input_ids": input_ids,
+        "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
+        "decoder_attention_mask": decoder_attention_mask,
     }
 
 
@@ -236,14 +264,46 @@ class TFBartModelTest(TFModelTesterMixin, unittest.TestCase):
                                 models_equal = False
                     self.assertTrue(models_equal)
 
-    def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
+    @slow
+    def test_saved_model_with_hidden_states_output(self):
+        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
         pass
+
+    @slow
+    def test_saved_model_with_attentions_output(self):
+        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
+        pass
+
+    def test_saved_model_creation(self):
+        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
+        pass
+
+    def test_saved_model_creation_extended(self):
+        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
+        pass
+
+
+def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
+    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
+    if a is None and b is None:
+        return True
+    try:
+        if tf.debugging.assert_near(a, b, atol=atol):
+            return True
+        raise
+    except Exception:
+        msg = "{} != {}".format(a, b)
+        if prefix:
+            msg = prefix + ": " + msg
+        raise AssertionError(msg)
+
+
+def _long_tensor(tok_lst):
+    return tf.constant(tok_lst, dtype=tf.int32)
 
 
 @require_tf
 class TFBartHeadTests(unittest.TestCase):
-
     vocab_size = 99
 
     def _get_config_and_data(self):
@@ -295,33 +355,10 @@ class TFBartHeadTests(unittest.TestCase):
         self.assertEqual(outputs.logits.shape, expected_shape)
 
 
-def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
-    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
-    if a is None and b is None:
-        return True
-    try:
-        if tf.debugging.assert_near(a, b, atol=atol):
-            return True
-        raise
-    except Exception:
-        msg = "{} != {}".format(a, b)
-        if prefix:
-            msg = prefix + ": " + msg
-        raise AssertionError(msg)
-
-
-def _long_tensor(tok_lst):
-    return tf.constant(tok_lst, dtype=tf.int32)
-
-
-TOLERANCE = 1e-4
-
-
-@is_pt_tf_cross_test
 @slow
 class TFBartModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head(self):
-        model = TFBartModel.from_pretrained("facebook/bart-large", from_pt=True)
+        model = TFBartForConditionalGeneration.from_pretrained("facebook/bart-large").model
 
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         attention_mask = tf.cast(tf.math.not_equal(input_ids, model.config.pad_token_id), tf.int8)
@@ -331,10 +368,10 @@ class TFBartModelIntegrationTest(unittest.TestCase):
         expected_slice = tf.convert_to_tensor(
             [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],
         )
-        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE)
+        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-3)
 
     def test_cnn_summarization_same_as_fairseq_hard(self):
-        hf = TFBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn", from_pt=True)
+        hf = TFBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
         tok = self.tok
 
         FRANCE_ARTICLE = ' Marseille, France (CNN)The French prosecutor leading an investigation into the crash of Germanwings Flight 9525 insisted Wednesday that he was not aware of any video footage from on board the plane. Marseille prosecutor Brice Robin told CNN that "so far no videos were used in the crash investigation." He added, "A person who has such a video needs to immediately give it to the investigators." Robin\'s comments follow claims by two magazines, German daily Bild and French Paris Match, of a cell phone video showing the harrowing final seconds from on board Germanwings Flight 9525 as it crashed into the French Alps. All 150 on board were killed. Paris Match and Bild reported that the video was recovered from a phone at the wreckage site. The two publications described the supposed video, but did not post it on their websites. The publications said that they watched the video, which was found by a source close to the investigation. "One can hear cries of \'My God\' in several languages," Paris Match reported. "Metallic banging can also be heard more than three times, perhaps of the pilot trying to open the cockpit door with a heavy object.  Towards the end, after a heavy shake, stronger than the others, the screaming intensifies. Then nothing." "It is a very disturbing scene," said Julian Reichelt, editor-in-chief of Bild online. An official with France\'s accident investigation agency, the BEA, said the agency is not aware of any such video. Lt. Col. Jean-Marc Menichini, a French Gendarmerie spokesman in charge of communications on rescue efforts around the Germanwings crash site, told CNN that the reports were "completely wrong" and "unwarranted." Cell phones have been collected at the site, he said, but that they "hadn\'t been exploited yet." Menichini said he believed the cell phones would need to be sent to the Criminal Research Institute in Rosny sous-Bois, near Paris, in order to be analyzed by specialized technicians working hand-in-hand with investigators. But none of the cell phones found so far have been sent to the institute, Menichini said. Asked whether staff involved in the search could have leaked a memory card to the media, Menichini answered with a categorical "no." Reichelt told "Erin Burnett: Outfront" that he had watched the video and stood by the report, saying Bild and Paris Match are "very confident" that the clip is real. He noted that investigators only revealed they\'d recovered cell phones from the crash site after Bild and Paris Match published their reports. "That is something we did not know before. ... Overall we can say many things of the investigation weren\'t revealed by the investigation at the beginning," he said. What was mental state of Germanwings co-pilot? German airline Lufthansa confirmed Tuesday that co-pilot Andreas Lubitz had battled depression years before he took the controls of Germanwings Flight 9525, which he\'s accused of deliberately crashing last week in the French Alps. Lubitz told his Lufthansa flight training school in 2009 that he had a "previous episode of severe depression," the airline said Tuesday. Email correspondence between Lubitz and the school discovered in an internal investigation, Lufthansa said, included medical documents he submitted in connection with resuming his flight training. The announcement indicates that Lufthansa, the parent company of Germanwings, knew of Lubitz\'s battle with depression, allowed him to continue training and ultimately put him in the cockpit. Lufthansa, whose CEO Carsten Spohr previously said Lubitz was 100% fit to fly, described its statement Tuesday as a "swift and seamless clarification" and said it was sharing the information and documents -- including training and medical records -- with public prosecutors. Spohr traveled to the crash site Wednesday, where recovery teams have been working for the past week to recover human remains and plane debris scattered across a steep mountainside. He saw the crisis center set up in Seyne-les-Alpes, laid a wreath in the village of Le Vernet, closer to the crash site, where grieving families have left flowers at a simple stone memorial. Menichini told CNN late Tuesday that no visible human remains were left at the site but recovery teams would keep searching. French President Francois Hollande, speaking Tuesday, said that it should be possible to identify all the victims using DNA analysis by the end of the week, sooner than authorities had previously suggested. In the meantime, the recovery of the victims\' personal belongings will start Wednesday, Menichini said. Among those personal belongings could be more cell phones belonging to the 144 passengers and six crew on board. Check out the latest from our correspondents . The details about Lubitz\'s correspondence with the flight school during his training were among several developments as investigators continued to delve into what caused the crash and Lubitz\'s possible motive for downing the jet. A Lufthansa spokesperson told CNN on Tuesday that Lubitz had a valid medical certificate, had passed all his examinations and "held all the licenses required." Earlier, a spokesman for the prosecutor\'s office in Dusseldorf, Christoph Kumpa, said medical records reveal Lubitz suffered from suicidal tendencies at some point before his aviation career and underwent psychotherapy before he got his pilot\'s license. Kumpa emphasized there\'s no evidence suggesting Lubitz was suicidal or acting aggressively before the crash. Investigators are looking into whether Lubitz feared his medical condition would cause him to lose his pilot\'s license, a European government official briefed on the investigation told CNN on Tuesday. While flying was "a big part of his life," the source said, it\'s only one theory being considered. Another source, a law enforcement official briefed on the investigation, also told CNN that authorities believe the primary motive for Lubitz to bring down the plane was that he feared he would not be allowed to fly because of his medical problems. Lubitz\'s girlfriend told investigators he had seen an eye doctor and a neuropsychologist, both of whom deemed him unfit to work recently and concluded he had psychological issues, the European government official said. But no matter what details emerge about his previous mental health struggles, there\'s more to the story, said Brian Russell, a forensic psychologist. "Psychology can explain why somebody would turn rage inward on themselves about the fact that maybe they weren\'t going to keep doing their job and they\'re upset about that and so they\'re suicidal," he said. "But there is no mental illness that explains why somebody then feels entitled to also take that rage and turn it outward on 149 other people who had nothing to do with the person\'s problems." Germanwings crash compensation: What we know . Who was the captain of Germanwings Flight 9525? CNN\'s Margot Haddad reported from Marseille and Pamela Brown from Dusseldorf, while Laura Smith-Spark wrote from London. CNN\'s Frederik Pleitgen, Pamela Boykoff, Antonia Mortensen, Sandrine Amiel and Anna-Maja Rappard contributed to this report.'  # @noqa
@@ -437,27 +474,3 @@ class FasterTFBartModelIntegrationTests(unittest.TestCase):
 
         expected = np.array([[-0.0828, -0.0251, -0.0674], [0.1277, 0.3311, -0.0255], [0.2613, -0.0840, -0.2763]])
         assert np.allclose(features[0, :3, :3].numpy(), expected, atol=1e-3)
-
-
-@require_tf
-class TestTFSinusoidalPositionalEmbeddings(unittest.TestCase):
-    desired_weights = [
-        [0, 0, 0, 0, 0],
-        [0.84147096, 0.82177866, 0.80180490, 0.78165019, 0.76140374],
-        [0.90929741, 0.93651021, 0.95829457, 0.97505713, 0.98720258],
-    ]
-
-    def test_positional_emb_cache_logic(self):
-        emb1 = TFBartSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=6)
-        no_cache = emb1((4, 10), past_key_values_length=0)
-        yes_cache = emb1((4, 10), past_key_values_length=2)
-        self.assertTrue(no_cache.shape == yes_cache.shape == (10, 6))
-        self.assertListEqual(no_cache[2:].numpy().tolist(), yes_cache[:-2].numpy().tolist())
-
-    def test_positional_emb_weights_against_marian(self):
-        emb1 = TFBartSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512)
-        emb1.build(None)
-        weights = emb1.embeddings.numpy()
-        for i, (expected_weight, actual_weight) in enumerate(zip(self.desired_weights, weights)):
-            for j in range(5):
-                self.assertAlmostEqual(expected_weight[j], actual_weight[j], places=3)

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The Facebook, Inc and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TF 2.0 MBart model. """
+""" TF 2.0 BlenderbotSmall model. """
 
 
 import random
@@ -22,7 +22,6 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
-    add_code_sample_docstrings,
     add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -46,36 +45,35 @@ from ...modeling_tf_utils import (
     shape_list,
 )
 from ...utils import logging
-from .configuration_mbart import MBartConfig
+from .configuration_blenderbot_small import BlenderbotSmallConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "MBartConfig"
-_TOKENIZER_FOR_DOC = "MBartTokenizer"
+_CONFIG_FOR_DOC = "BlenderbotSmallConfig"
+_TOKENIZER_FOR_DOC = "BlenderbotSmallTokenizer"
 
 
 LARGE_NEGATIVE = -1e8
 
 
-def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int):
-    """
-    Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that MBart does not
-    have a single `decoder_start_token_id` in contrast to other Bart-like models.
-    """
-    prev_output_tokens = tf.cast(input_ids, tf.int32)
-    assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+# Copied from transformers.models.bart.modeling_tf_bart.shift_tokens_right
+def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
+    shifted_input_ids = tf.cast(input_ids, tf.int32)
+    shifted_input_ids = tf.roll(shifted_input_ids, 1, axis=-1)
+    start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), decoder_start_token_id)
+    shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, 1:]], -1)
     # replace possible -100 values in labels by `pad_token_id`
-    prev_output_tokens = tf.where(
-        prev_output_tokens == -100, tf.fill(shape_list(prev_output_tokens), pad_token_id), prev_output_tokens
+    shifted_input_ids = tf.where(
+        shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
     )
-    language_id_index = (
-        tf.reduce_sum(tf.cast(tf.math.not_equal(prev_output_tokens, pad_token_id), tf.int32), axis=-1) - 1
-    )
-    language_id_index = tf.stack([tf.range(shape_list(input_ids)[0]), language_id_index], axis=-1)
-    languages_ids = tf.gather_nd(prev_output_tokens, language_id_index)
 
-    shifted_input_ids = tf.concat([tf.expand_dims(languages_ids, axis=-1), prev_output_tokens[:, :-1]], axis=-1)
+    # "Verify that `labels` has only positive values and -100"
+    assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.cast(0, tf.int32))
+
+    # Make sure the assertion op is called by wrapping the result in an identity no-op
+    with tf.control_dependencies([assert_gte0]):
+        shifted_input_ids = tf.identity(shifted_input_ids)
 
     return shifted_input_ids
 
@@ -110,18 +108,15 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     return (1.0 - expanded_mask) * LARGE_NEGATIVE
 
 
-# Copied from transformers.models.bart.modeling_tf_bart.TFBartLearnedPositionalEmbedding with Bart->MBart
-class TFMBartLearnedPositionalEmbedding(TFSharedEmbeddings):
+# Copied from transformers.models.blenderbot.modeling_tf_blenderbot.TFBlenderbotLearnedPositionalEmbedding with Blenderbot->BlenderbotSmall
+class TFBlenderbotSmallLearnedPositionalEmbedding(TFSharedEmbeddings):
     """
     This module learns positional embeddings up to a fixed maximum size.
     """
 
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, **kwargs):
         assert padding_idx is not None, "padding_idx cannot be None"
-        # MBart is set up so that if padding_idx is specified then offset the embedding ids by 2
-        # and adjust num_embeddings appropriately. Other models dont have this hack
-        self.offset = 2
-        super().__init__(num_embeddings + self.offset, embedding_dim, **kwargs)
+        super().__init__(num_embeddings, embedding_dim, **kwargs)
 
     def call(self, input_shape: tf.TensorShape, past_key_values_length: int = 0):
         """Input is expected to be of size [bsz x seqlen]."""
@@ -130,11 +125,11 @@ class TFMBartLearnedPositionalEmbedding(TFSharedEmbeddings):
         positions = tf.range(
             past_key_values_length, seq_len + past_key_values_length, delta=1, dtype=tf.int32, name="range"
         )
-        return super().call(positions + self.offset)
+        return super().call(positions)
 
 
-# Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->MBart
-class TFMBartAttention(tf.keras.layers.Layer):
+# Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->BlenderbotSmall
+class TFBlenderbotSmallAttention(tf.keras.layers.Layer):
     """Multi-headed attention from "Attention Is All You Need"""
 
     def __init__(
@@ -257,11 +252,12 @@ class TFMBartAttention(tf.keras.layers.Layer):
         return attn_output, attn_weights, past_key_value
 
 
-class TFMBartEncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, config: MBartConfig, **kwargs):
+# Copied from transformers.models.bart.modeling_tf_bart.TFBartEncoderLayer with Bart->BlenderbotSmall
+class TFBlenderbotSmallEncoderLayer(tf.keras.layers.Layer):
+    def __init__(self, config: BlenderbotSmallConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
-        self.self_attn = TFMBartAttention(
+        self.self_attn = TFBlenderbotSmallAttention(
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, name="self_attn"
         )
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
@@ -280,7 +276,6 @@ class TFMBartEncoderLayer(tf.keras.layers.Layer):
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
         """
         residual = hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
         hidden_states, self_attn_weights, _ = self.self_attn(
             hidden_states=hidden_states, attention_mask=attention_mask
         )
@@ -291,23 +286,25 @@ class TFMBartEncoderLayer(tf.keras.layers.Layer):
         )
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = self.activation_dropout(hidden_states, training=training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
 
         return hidden_states, self_attn_weights
 
 
-class TFMBartDecoderLayer(tf.keras.layers.Layer):
-    def __init__(self, config: MBartConfig, **kwargs):
+# Copied from transformers.models.bart.modeling_tf_bart.TFBartDecoderLayer with Bart->BlenderbotSmall
+class TFBlenderbotSmallDecoderLayer(tf.keras.layers.Layer):
+    def __init__(self, config: BlenderbotSmallConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_dim = config.d_model
-        self.self_attn = TFMBartAttention(
+        self.self_attn = TFBlenderbotSmallAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -319,7 +316,7 @@ class TFMBartDecoderLayer(tf.keras.layers.Layer):
         self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
 
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
-        self.encoder_attn = TFMBartAttention(
+        self.encoder_attn = TFBlenderbotSmallAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -351,7 +348,6 @@ class TFMBartDecoderLayer(tf.keras.layers.Layer):
             past_key_value (:obj:`Tuple(tf.Tensor)`): cached past key and value projection states
         """
         residual = hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
@@ -364,12 +360,12 @@ class TFMBartDecoderLayer(tf.keras.layers.Layer):
         )
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
         cross_attn_present_key_value = None
         if encoder_hidden_states is not None:
             residual = hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -381,18 +377,19 @@ class TFMBartDecoderLayer(tf.keras.layers.Layer):
             )
             hidden_states = self.dropout(hidden_states, training=training)
             hidden_states = residual + hidden_states
+            hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # add cross-attn to positions 3,4 of present_key_value tuple
             present_key_value = present_key_value + cross_attn_present_key_value
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = self.activation_dropout(hidden_states, training=training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
 
         return (
             hidden_states,
@@ -401,8 +398,8 @@ class TFMBartDecoderLayer(tf.keras.layers.Layer):
         )
 
 
-class TFMBartPreTrainedModel(TFPreTrainedModel):
-    config_class = MBartConfig
+class TFBlenderbotSmallPreTrainedModel(TFPreTrainedModel):
+    config_class = BlenderbotSmallConfig
     base_model_prefix = "model"
 
     @property
@@ -459,7 +456,7 @@ class TFMBartPreTrainedModel(TFPreTrainedModel):
         return self.serving_output(output)
 
 
-MBART_START_DOCSTRING = r"""
+BLENDERBOT_SMALL_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
@@ -488,18 +485,49 @@ MBART_START_DOCSTRING = r"""
           :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
 
     Args:
-        config (:class:`~transformers.MBartConfig`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.BlenderbotSmallConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.TFPreTrainedModel.from_pretrained` method to load the
             model weights.
 """
 
-MBART_INPUTS_DOCSTRING = r"""
+BLENDERBOT_SMALL_GENERATION_EXAMPLE = r"""
+    Conversation example::
+
+        >>> from transformers import BlenderbotSmallTokenizer, TFBlenderbotSmallForConditionalGeneration
+        >>> mname = 'facebook/blenderbot_small-90M'
+        >>> model = BlenderbotSmallForConditionalGeneration.from_pretrained(mname)
+        >>> tokenizer = TFBlenderbotSmallTokenizer.from_pretrained(mname)
+
+        >>> UTTERANCE = "My friends are cool but they eat too many carbs."
+        >>> print("Human: ", UTTERANCE)
+        >>> inputs = tokenizer([UTTERANCE], return_tensors='tf')
+        >>> inputs.pop("token_type_ids")
+
+        >>> reply_ids = model.generate(**inputs)
+        >>> print("Bot: ", tokenizer.batch_decode(reply_ids, skip_special_tokens=True)[0])
+        what kind of carbs do they eat? i don't know much about carbs.
+
+        >>> REPLY = "I'm not sure"
+        >>> print("Human: ", REPLY)
+        >>> NEXT_UTTERANCE = (
+        ... "My friends are cool but they eat too many carbs.</s> "
+        ... "<s>what kind of carbs do they eat? i don't know much about carbs.</s> "
+        ... "<s>I'm not sure."
+        ... )
+
+        >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors='tf')
+        >>> inputs.pop("token_type_ids")
+        >>> next_reply_ids = model.generate(**inputs)
+        >>> print("Bot: ", tokenizer.batch_decode(next_reply_ids, skip_special_tokens=True)[0])
+"""
+
+BLENDERBOT_SMALL_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`tf.Tensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.MBartTokenizer`. See
+            Indices can be obtained using :class:`~transformers.BlenderbotSmallTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -514,20 +542,15 @@ MBART_INPUTS_DOCSTRING = r"""
         decoder_input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.MBartTokenizer`. See
+            Indices can be obtained using :class:`~transformers.BlenderbotSmallTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
 
-            MBart uses a specific language id token as the starting token for :obj:`decoder_input_ids` generation that
-            varies according to source and target language, *e.g.* 25004 for `en_XX`, and 25003 for `de_DE`. If
-            :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
+            BlenderbotSmall uses the :obj:`bos_token_id` as the starting token for :obj:`decoder_input_ids` generation.
+            If :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
             :obj:`past_key_values`).
-
-            For translation and summarization training, :obj:`decoder_input_ids` should be provided. If no
-            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`input_ids` to
-            the right for denoising pre-training following the paper.
         decoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             will be made by default and ignore pad tokens. It is not recommended to set this for most use cases.
         encoder_outputs (:obj:`tf.FloatTensor`, `optional`):
@@ -554,48 +577,19 @@ MBART_INPUTS_DOCSTRING = r"""
             behaviors between training and evaluation).
 """
 
-MBART_GENERATION_EXAMPLE = r"""
-    Summarization example::
-
-        >>> from transformers import MBartTokenizer, TFMBartForConditionalGeneration, MBartConfig
-
-        >>> model = MBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25')
-        >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
-
-        >>> ARTICLE_TO_SUMMARIZE = "Meine Freunde sind cool, aber sie essen zu viel Kuchen."
-        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='tf')
-
-        >>> # Generate Summary
-        >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
-        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
-
-    Mask filling example::
-
-        >>> from transformers import MBartTokenizer, TFMBartForConditionalGeneration
-        >>> tokenizer = MBartTokenizer.from_pretrained('facebook/mbart-large-cc25')
-        >>> # de_DE is the language symbol id <LID> for German
-        >>> TXT = "</s> Meine Freunde sind <mask> nett aber sie essen zu viel Kuchen. </s> de_DE"
-
-        >>> model = MBartForConditionalGeneration.from_pretrained('facebook/mbart-large-cc25')
-        >>> input_ids = tokenizer([TXT], add_special_tokens=False, return_tensors='tf')['input_ids']
-        >>> logits = model(input_ids).logits
-        >>> probs = tf.nn.softmax(logits[0])
-        >>> # probs[5] is associated with the mask token
-"""
-
 
 @keras_serializable
-class TFMBartEncoder(tf.keras.layers.Layer):
-    config_class = MBartConfig
+class TFBlenderbotSmallEncoder(tf.keras.layers.Layer):
+    config_class = BlenderbotSmallConfig
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    :class:`TFMBartEncoderLayer`.
+    :class:`TFBlenderbotSmallEncoderLayer`.
 
     Args:
-        config: MBartConfig
+        config: BlenderbotSmallConfig
     """
 
-    def __init__(self, config: MBartConfig, embed_tokens: Optional[TFSharedEmbeddings] = None, **kwargs):
+    def __init__(self, config: BlenderbotSmallConfig, embed_tokens: Optional[TFSharedEmbeddings] = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.dropout = tf.keras.layers.Dropout(config.dropout)
@@ -605,15 +599,14 @@ class TFMBartEncoder(tf.keras.layers.Layer):
         self.embed_scale = tf.math.sqrt(float(config.d_model)) if config.scale_embedding else 1.0
 
         self.embed_tokens = embed_tokens
-        self.embed_positions = TFMBartLearnedPositionalEmbedding(
+        self.embed_positions = TFBlenderbotSmallLearnedPositionalEmbedding(
             config.max_position_embeddings,
             config.d_model,
             self.padding_idx,
             name="embed_positions",
         )
-        self.layers = [TFMBartEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
+        self.layers = [TFBlenderbotSmallEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
@@ -635,7 +628,7 @@ class TFMBartEncoder(tf.keras.layers.Layer):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.MBartTokenizer`. See
+                Indices can be obtained using :class:`~transformers.BlenderbotSmallTokenizer`. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -715,8 +708,6 @@ class TFMBartEncoder(tf.keras.layers.Layer):
             if inputs["output_attentions"]:
                 all_attentions += (attn,)
 
-        hidden_states = self.layer_norm(hidden_states)
-
         if inputs["output_hidden_states"]:
             encoder_states = encoder_states + (hidden_states,)
 
@@ -728,32 +719,32 @@ class TFMBartEncoder(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFMBartDecoder(tf.keras.layers.Layer):
-    config_class = MBartConfig
+class TFBlenderbotSmallDecoder(tf.keras.layers.Layer):
+    config_class = BlenderbotSmallConfig
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`TFMBartDecoderLayer`
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a
+    :class:`TFBlenderbotSmallDecoderLayer`
 
     Args:
-        config: MBartConfig
+        config: BlenderbotSmallConfig
         embed_tokens: output embedding
     """
 
-    def __init__(self, config: MBartConfig, embed_tokens: Optional[TFSharedEmbeddings] = None, **kwargs):
+    def __init__(self, config: BlenderbotSmallConfig, embed_tokens: Optional[TFSharedEmbeddings] = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.padding_idx = config.pad_token_id
         self.embed_tokens = embed_tokens
         self.layerdrop = config.decoder_layerdrop
-        self.embed_positions = TFMBartLearnedPositionalEmbedding(
+        self.embed_positions = TFBlenderbotSmallLearnedPositionalEmbedding(
             config.max_position_embeddings,
             config.d_model,
             self.padding_idx,
             name="embed_positions",
         )
         self.embed_scale = tf.math.sqrt(float(config.d_model)) if config.scale_embedding else 1.0
-        self.layers = [TFMBartDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
+        self.layers = [TFBlenderbotSmallDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
@@ -781,7 +772,7 @@ class TFMBartDecoder(tf.keras.layers.Layer):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.MBartTokenizer`. See
+                Indices can be obtained using :class:`~transformers.BlenderbotSmallTokenizer`. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -855,13 +846,8 @@ class TFMBartDecoder(tf.keras.layers.Layer):
             shape_list(inputs["past_key_values"][0][0])[2] if inputs["past_key_values"] is not None else 0
         )
 
-        # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
-
         if inputs["inputs_embeds"] is None:
             inputs["inputs_embeds"] = self.embed_tokens(inputs["input_ids"]) * self.embed_scale
-
-        hidden_states = inputs["inputs_embeds"]
 
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         if input_shape[-1] > 1:
@@ -880,13 +866,17 @@ class TFMBartDecoder(tf.keras.layers.Layer):
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             inputs["encoder_attention_mask"] = _expand_mask(inputs["encoder_attention_mask"], tgt_len=input_shape[-1])
 
-        hidden_states = self.layernorm_embedding(hidden_states + positions)
+        # embed positions
+        positions = self.embed_positions(input_shape, past_key_values_length)
+
+        hidden_states = self.layernorm_embedding(inputs["inputs_embeds"]) + positions
         hidden_states = self.dropout(hidden_states, training=inputs["training"])
 
         # decoder layers
         all_hidden_states = ()
         all_self_attns = ()
         present_key_values = ()
+
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if inputs["output_hidden_states"]:
@@ -912,8 +902,6 @@ class TFMBartDecoder(tf.keras.layers.Layer):
             if inputs["output_attentions"]:
                 all_self_attns += (layer_self_attn,)
 
-        hidden_states = self.layer_norm(hidden_states)
-
         if inputs["output_hidden_states"]:
             all_hidden_states += (hidden_states,)
         else:
@@ -935,14 +923,14 @@ class TFMBartDecoder(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    "The bare MBART Model outputting raw hidden-states without any specific head on top.",
-    MBART_START_DOCSTRING,
+    "The bare BLENDERBOT_SMALL Model outputting raw hidden-states without any specific head on top.",
+    BLENDERBOT_SMALL_START_DOCSTRING,
 )
 @keras_serializable
-class TFMBartModel(TFMBartPreTrainedModel):
+class TFBlenderbotSmallModel(TFBlenderbotSmallPreTrainedModel):
     base_model_prefix = "model"
 
-    def __init__(self, config: MBartConfig, *inputs, **kwargs):
+    def __init__(self, config: BlenderbotSmallConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, config.pad_token_id, name="model.shared")
 
@@ -954,8 +942,8 @@ class TFMBartModel(TFMBartPreTrainedModel):
         embed_tokens.vocab_size = self.shared.vocab_size
         embed_tokens.hidden_size = self.shared.hidden_size
 
-        self.encoder = TFMBartEncoder(config, embed_tokens, name="encoder")
-        self.decoder = TFMBartDecoder(config, embed_tokens, name="decoder")
+        self.encoder = TFBlenderbotSmallEncoder(config, embed_tokens, name="encoder")
+        self.decoder = TFBlenderbotSmallDecoder(config, embed_tokens, name="decoder")
 
     def get_encoder(self):
         return self.encoder
@@ -963,13 +951,8 @@ class TFMBartModel(TFMBartPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    @add_start_docstrings_to_model_forward(MBART_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="facebook/mbart-large-cc25",
-        output_type=TFSeq2SeqModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @add_start_docstrings_to_model_forward(BLENDERBOT_SMALL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=TFSeq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids=None,
@@ -987,6 +970,22 @@ class TFMBartModel(TFMBartPreTrainedModel):
         training=False,
         **kwargs
     ):
+        r"""
+        Returns:
+
+        Example::
+
+            >>> from transformers import BlenderbotSmallTokenizer, TFBlenderbotSmallModel
+
+            >>> model = TFBlenderbotSmallModel.from_pretrained("facebook/blenderbot_small-90M")
+            >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot_small-90M")
+
+            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="tf").input_ids  # Batch size 1
+            >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="tf").input_ids  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+
+            >>> last_hidden_states = outputs.last_hidden_state
+        """
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1006,17 +1005,11 @@ class TFMBartModel(TFMBartPreTrainedModel):
             kwargs_call=kwargs,
         )
 
-        if inputs["decoder_input_ids"] is None and inputs["decoder_inputs_embeds"] is None:
-            inputs["use_cache"] = False
-
         inputs["output_hidden_states"] = (
             inputs["output_hidden_states"]
             if inputs["output_hidden_states"] is not None
             else self.config.output_hidden_states
         )
-
-        if inputs["decoder_input_ids"] is None and inputs["input_ids"] is not None:
-            inputs["decoder_input_ids"] = shift_tokens_right(inputs["input_ids"], self.config.pad_token_id)
 
         if inputs["encoder_outputs"] is None:
             inputs["encoder_outputs"] = self.encoder(
@@ -1086,10 +1079,10 @@ class TFMBartModel(TFMBartPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The MBART Model with a language modeling head. Can be used for summarization.",
-    MBART_START_DOCSTRING,
+    "The BLENDERBOT_SMALL Model with a language modeling head. Can be used for summarization.",
+    BLENDERBOT_SMALL_START_DOCSTRING,
 )
-class TFMBartForConditionalGeneration(TFMBartPreTrainedModel):
+class TFBlenderbotSmallForConditionalGeneration(TFBlenderbotSmallPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [
         r"model.encoder.embed_tokens.weight",
         r"model.decoder.embed_tokens.weight",
@@ -1097,7 +1090,7 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel):
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.model = TFMBartModel(config, name="model")
+        self.model = TFBlenderbotSmallModel(config, name="model")
         self.use_cache = config.use_cache
         # final_bias_logits is registered as a buffer in pytorch, so not trainable for the the sake of consistency.
         self.final_logits_bias = self.add_weight(
@@ -1122,9 +1115,9 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel):
     def set_bias(self, value):
         self.final_logits_bias = value["final_logits_bias"]
 
-    @add_start_docstrings_to_model_forward(MBART_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(BLENDERBOT_SMALL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    @add_end_docstrings(MBART_GENERATION_EXAMPLE)
+    @add_end_docstrings(BLENDERBOT_SMALL_GENERATION_EXAMPLE)
     def call(
         self,
         input_ids=None,
@@ -1143,8 +1136,8 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel):
         training=False,
         **kwargs,
     ):
-        """
-        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the masked language modeling loss. Indices should either be in ``[0, ...,
             config.vocab_size]`` or -100 (see ``input_ids`` docstring). Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
@@ -1173,9 +1166,10 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel):
         )
 
         if inputs["labels"] is not None:
-            inputs["use_cache"] = False
             if inputs["decoder_input_ids"] is None:
-                inputs["decoder_input_ids"] = shift_tokens_right(inputs["labels"], self.config.pad_token_id)
+                inputs["decoder_input_ids"] = shift_tokens_right(
+                    inputs["labels"], self.config.pad_token_id, self.config.decoder_start_token_id
+                )
 
         outputs = self.model(
             inputs["input_ids"],

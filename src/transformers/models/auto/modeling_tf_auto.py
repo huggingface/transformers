@@ -44,7 +44,11 @@ from ..bert.modeling_tf_bert import (
     TFBertLMHeadModel,
     TFBertModel,
 )
-from ..blenderbot.modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration
+from ..blenderbot.modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration, TFBlenderbotModel
+from ..blenderbot_small.modeling_tf_blenderbot_small import (
+    TFBlenderbotSmallForConditionalGeneration,
+    TFBlenderbotSmallModel,
+)
 from ..camembert.modeling_tf_camembert import (
     TFCamembertForMaskedLM,
     TFCamembertForMultipleChoice,
@@ -100,8 +104,8 @@ from ..longformer.modeling_tf_longformer import (
     TFLongformerModel,
 )
 from ..lxmert.modeling_tf_lxmert import TFLxmertForPreTraining, TFLxmertModel
-from ..marian.modeling_tf_marian import TFMarianMTModel
-from ..mbart.modeling_tf_mbart import TFMBartForConditionalGeneration
+from ..marian.modeling_tf_marian import TFMarianModel, TFMarianMTModel
+from ..mbart.modeling_tf_mbart import TFMBartForConditionalGeneration, TFMBartModel
 from ..mobilebert.modeling_tf_mobilebert import (
     TFMobileBertForMaskedLM,
     TFMobileBertForMultipleChoice,
@@ -122,7 +126,7 @@ from ..mpnet.modeling_tf_mpnet import (
 )
 from ..mt5.modeling_tf_mt5 import TFMT5ForConditionalGeneration, TFMT5Model
 from ..openai.modeling_tf_openai import TFOpenAIGPTForSequenceClassification, TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
-from ..pegasus.modeling_tf_pegasus import TFPegasusForConditionalGeneration
+from ..pegasus.modeling_tf_pegasus import TFPegasusForConditionalGeneration, TFPegasusModel
 from ..roberta.modeling_tf_roberta import (
     TFRobertaForMaskedLM,
     TFRobertaForMultipleChoice,
@@ -167,6 +171,7 @@ from .configuration_auto import (
     BartConfig,
     BertConfig,
     BlenderbotConfig,
+    BlenderbotSmallConfig,
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
@@ -225,6 +230,12 @@ TF_MODEL_MAPPING = OrderedDict(
         (FunnelConfig, TFFunnelModel),
         (DPRConfig, TFDPRQuestionEncoder),
         (MPNetConfig, TFMPNetModel),
+        (BartConfig, TFBartModel),
+        (MBartConfig, TFMBartModel),
+        (MarianConfig, TFMarianModel),
+        (PegasusConfig, TFPegasusModel),
+        (BlenderbotConfig, TFBlenderbotModel),
+        (BlenderbotSmallConfig, TFBlenderbotSmallModel),
     ]
 )
 
@@ -328,6 +339,7 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
         (MBartConfig, TFMBartForConditionalGeneration),
         (PegasusConfig, TFPegasusForConditionalGeneration),
         (BlenderbotConfig, TFBlenderbotForConditionalGeneration),
+        (BlenderbotSmallConfig, TFBlenderbotSmallForConditionalGeneration),
         (BartConfig, TFBartForConditionalGeneration),
     ]
 )
