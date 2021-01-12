@@ -288,8 +288,6 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
 
         model_inputs = self.tokenizer(src_text, return_tensors="pt").to(torch_device)
 
-        # model does not have "token_type_ids"
-        model_inputs.pop("token_type_ids")
         assert isinstance(self.tokenizer, BlenderbotSmallTokenizer)
         generated_ids = self.model.generate(**model_inputs)[0]
         reply = self.tokenizer.decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True)
