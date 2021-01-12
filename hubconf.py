@@ -28,9 +28,10 @@ from transformers import (
     AutoTokenizer,
     add_start_docstrings,
 )
+from transformers.dependency_versions_table import deps
 
-
-dependencies = ["torch", "numpy", "tokenizers", "filelock", "requests", "tqdm", "regex", "sentencepiece", "sacremoses", "importlib_metadata"]
+dependencies = ["torch", "numpy", "filelock", "requests", "tqdm", "regex", "sentencepiece", "sacremoses", "importlib_metadata"]
+dependencies += deps["tokenizers"]
 
 
 @add_start_docstrings(AutoConfig.__doc__)
