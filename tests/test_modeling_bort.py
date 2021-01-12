@@ -30,9 +30,8 @@ if is_torch_available():
 @require_tokenizers
 class BortModelIntegrationTest(unittest.TestCase):
     @slow
-    @unittest.skip("temporarily skipped, until BORT model is on model hub")
     def test_output_embeds_base_model(self):
-        model = BortModel.from_pretrained("/home/stefan/Repositories/bort-to-transformers/bort-export")
+        model = BortModel.from_pretrained("amazon/bort")
         model.to(torch_device)
 
         input_ids = torch.tensor(

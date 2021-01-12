@@ -31,9 +31,8 @@ if is_tf_available():
 @require_tokenizers
 class TFBortModelIntegrationTest(unittest.TestCase):
     @slow
-    @unittest.skip("temporarily skipped, until BORT model is on model hub")
     def test_output_embeds_base_model(self):
-        model = TFBortModel.from_pretrained("bort")
+        model = TFBortModel.from_pretrained("amazon/bort")
 
         input_ids = tf.convert_to_tensor(
             [[0, 18077, 4082, 7804, 8606, 6195, 2457, 3321, 11, 10489, 16, 269, 2579, 328, 2]],
