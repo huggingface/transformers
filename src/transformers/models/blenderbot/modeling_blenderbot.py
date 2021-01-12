@@ -364,9 +364,9 @@ class BlenderbotDecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
         encoder_layer_head_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
@@ -377,11 +377,11 @@ class BlenderbotDecoderLayer(nn.Module):
             hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (:obj:`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(config.encoder_attention_heads,)`.
             encoder_hidden_states (:obj:`torch.FloatTensor`): cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
             encoder_attention_mask (:obj:`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            layer_head_mask (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
+                `(config.encoder_attention_heads,)`.
             encoder_layer_head_mask (:obj:`torch.FloatTensor`): mask for encoder attention heads in a given layer of
             size `(config.encoder_attention_heads,)`.
             past_key_value (:obj:`Tuple(torch.FloatTensor)`): cached past key and value projection states
@@ -535,12 +535,6 @@ BLENDERBOT_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the heas is **masked**.
-
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Indices of decoder input sequence tokens in the vocabulary.
 
@@ -560,6 +554,12 @@ BLENDERBOT_INPUTS_DOCSTRING = r"""
             If you want to change padding behavior, you should read :func:`modeling_blenderbot._prepare_decoder_inputs`
             and modify to your needs. See diagram 1 in `the paper <https://arxiv.org/abs/1910.13461>`__ for more
             information on the default strategy.
+        head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the heas is **masked**.
+
         decoder_head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in ``[0, 1]``:
 
@@ -971,9 +971,9 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
                     create_custom_forward(decoder_layer),
                     hidden_states,
                     combined_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    head_mask[idx] if head_mask is not None else None,
                     encoder_head_mask[idx] if encoder_head_mask is not None else None,
                     None,
                 )
@@ -1069,9 +1069,9 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        head_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        head_mask=None,
         decoder_head_mask=None,
         encoder_outputs=None,
         past_key_values=None,
@@ -1127,9 +1127,9 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
-            head_mask=decoder_head_mask,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
+            head_mask=decoder_head_mask,
             encoder_head_mask=head_mask,
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
@@ -1220,9 +1220,9 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        head_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        head_mask=None,
         decoder_head_mask=None,
         encoder_outputs=None,
         past_key_values=None,
@@ -1253,10 +1253,10 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel):
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
-            head_mask=head_mask,
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
+            head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,

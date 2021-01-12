@@ -1182,6 +1182,15 @@ class LayoutLMForMaskedLM:
         requires_pytorch(self)
 
 
+class LayoutLMForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class LayoutLMForTokenClassification:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)

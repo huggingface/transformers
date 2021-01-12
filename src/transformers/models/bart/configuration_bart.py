@@ -170,16 +170,6 @@ class BartConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.force_bos_token_to_be_generated = force_bos_token_to_be_generated  # only relevant for CNN
 
-        # IMPORTANT
-        # DELETE ALL OF THE FOLLOWING LINES AS SOON AS TF IS READY
-        self.extra_pos_embeddings = 2
-        self.normalize_before = False
-        self.add_final_layer_norm = False
-        self.do_blenderbot_90_layernorm = False
-        self.normalize_embedding = True
-        self.static_position_embeddings = False
-        self.add_bias_logits = False
-
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads
