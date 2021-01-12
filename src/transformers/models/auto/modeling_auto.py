@@ -460,6 +460,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (LongformerConfig, LongformerForSequenceClassification),
         (RobertaConfig, RobertaForSequenceClassification),
         (SqueezeBertConfig, SqueezeBertForSequenceClassification),
+        (LayoutLMConfig, LayoutLMForSequenceClassification),
         (BertConfig, BertForSequenceClassification),
         (XLNetConfig, XLNetForSequenceClassification),
         (MobileBertConfig, MobileBertForSequenceClassification),
@@ -475,7 +476,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (TransfoXLConfig, TransfoXLForSequenceClassification),
         (MPNetConfig, MPNetForSequenceClassification),
         (TapasConfig, TapasForSequenceClassification),
-        (LayoutLMConfig, LayoutLMForSequenceClassification),
     ]
 )
 
