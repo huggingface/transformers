@@ -13,12 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
+
 import unittest
 
-from transformers import AutoTokenizer, PegasusConfig, is_tf_available
+from transformers import BlenderbotSmallConfig, BlenderbotSmallTokenizer, is_tf_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.testing_utils import require_tf, require_tokenizers, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -27,12 +27,12 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFAutoModelForSeq2SeqLM, TFPegasusForConditionalGeneration, TFPegasusModel
+    from transformers import TFAutoModelForSeq2SeqLM, TFBlenderbotSmallForConditionalGeneration, TFBlenderbotSmallModel
 
 
 @require_tf
-class TFPegasusModelTester:
-    config_cls = PegasusConfig
+class TFBlenderbotSmallModelTester:
+    config_cls = BlenderbotSmallConfig
     config_updates = {}
     hidden_act = "gelu"
 
@@ -98,11 +98,11 @@ class TFPegasusModelTester:
             decoder_start_token_id=self.pad_token_id,
             **self.config_updates,
         )
-        inputs_dict = prepare_pegasus_inputs_dict(config, input_ids, decoder_input_ids)
+        inputs_dict = prepare_blenderbot_small_inputs_dict(config, input_ids, decoder_input_ids)
         return config, inputs_dict
 
     def check_decoder_model_past_large_inputs(self, config, inputs_dict):
-        model = TFPegasusModel(config=config).get_decoder()
+        model = TFBlenderbotSmallModel(config=config).get_decoder()
         input_ids = inputs_dict["input_ids"]
 
         input_ids = input_ids[:1, :]
@@ -137,7 +137,7 @@ class TFPegasusModelTester:
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
 
-def prepare_pegasus_inputs_dict(
+def prepare_blenderbot_small_inputs_dict(
     config,
     input_ids,
     decoder_input_ids,
@@ -163,15 +163,17 @@ def prepare_pegasus_inputs_dict(
 
 
 @require_tf
-class TFPegasusModelTest(TFModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TFPegasusForConditionalGeneration, TFPegasusModel) if is_tf_available() else ()
-    all_generative_model_classes = (TFPegasusForConditionalGeneration,) if is_tf_available() else ()
+class TFBlenderbotSmallModelTest(TFModelTesterMixin, unittest.TestCase):
+    all_model_classes = (
+        (TFBlenderbotSmallForConditionalGeneration, TFBlenderbotSmallModel) if is_tf_available() else ()
+    )
+    all_generative_model_classes = (TFBlenderbotSmallForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
 
     def setUp(self):
-        self.model_tester = TFPegasusModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PegasusConfig)
+        self.model_tester = TFBlenderbotSmallModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=BlenderbotSmallConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -180,56 +182,16 @@ class TFPegasusModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_compile_tf_model(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
-        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
-
-        model_class = self.all_generative_model_classes[0]
-        input_ids = {
-            "decoder_input_ids": tf.keras.Input(batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"),
-            "input_ids": tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32"),
-        }
-
-        # Prepare our model
-        model = model_class(config)
-        model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
-        # Let's load it from the disk to be sure we can use pretrained weights
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname)
-            model = model_class.from_pretrained(tmpdirname)
-
-        outputs_dict = model(input_ids)
-        hidden_states = outputs_dict[0]
-
-        # Add a dense layer on top to test integration with other keras modules
-        outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
-
-        # Compile extended model
-        extended_model = tf.keras.Model(inputs=[input_ids], outputs=[outputs])
-        extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
-
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
             assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-
-            if model_class in self.all_generative_model_classes:
-                x = model.get_output_embeddings()
-                assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_bias()
-                assert isinstance(name, dict)
-                for k, v in name.items():
-                    assert isinstance(v, tf.Variable)
-            else:
-                x = model.get_output_embeddings()
-                assert x is None
-                name = model.get_bias()
-                assert name is None
+            x = model.get_output_layer_with_bias()
+            assert x is None
+            name = model.get_prefix_bias_name()
+            assert name is None
 
     @slow
     def test_saved_model_with_hidden_states_output(self):
@@ -332,45 +294,35 @@ def _long_tensor(tok_lst):
     return tf.constant(tok_lst, dtype=tf.int32)
 
 
-@require_sentencepiece
 @require_tokenizers
-class TFPegasusIntegrationTests(unittest.TestCase):
+class TFBlenderbot90MIntegrationTests(unittest.TestCase):
     src_text = [
-        """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow.""",
-        """ The London trio are up for best UK act and best album, as well as getting two nominations in the best song category."We got told like this morning 'Oh I think you're nominated'", said Dappy."And I was like 'Oh yeah, which one?' And now we've got nominated for four awards. I mean, wow!"Bandmate Fazer added: "We thought it's best of us to come down and mingle with everyone and say hello to the cameras. And now we find we've got four nominations."The band have two shots at the best song prize, getting the nod for their Tynchy Stryder collaboration Number One, and single Strong Again.Their album Uncle B will also go up against records by the likes of Beyonce and Kanye West.N-Dubz picked up the best newcomer Mobo in 2007, but female member Tulisa said they wouldn't be too disappointed if they didn't win this time around."At the end of the day we're grateful to be where we are in our careers."If it don't happen then it don't happen - live to fight another day and keep on making albums and hits for the fans."Dappy also revealed they could be performing live several times on the night.The group will be doing Number One and also a possible rendition of the War Child single, I Got Soul.The charity song is a  re-working of The Killers' All These Things That I've Done and is set to feature artists like Chipmunk, Ironik and Pixie Lott.This year's Mobos will be held outside of London for the first time, in Glasgow on 30 September.N-Dubz said they were looking forward to performing for their Scottish fans and boasted about their recent shows north of the border."We just done Edinburgh the other day," said Dappy."We smashed up an N-Dubz show over there. We done Aberdeen about three or four months ago - we smashed up that show over there! Everywhere we go we smash it up!" """,
+        "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like   i'm going to throw up.\nand why is that?"
     ]
-    expected_text = [
-        "California's largest electricity provider has cut power to hundreds of thousands of customers in an effort to reduce the risk of wildfires.",
-        'N-Dubz have revealed they\'re "grateful" to have been nominated for four Mobo Awards.',
-    ]  # differs slightly from pytorch, likely due to numerical differences in linear layers
-    model_name = "google/pegasus-xsum"
+    model_name = "facebook/blenderbot_small-90M"
 
     @cached_property
     def tokenizer(self):
-        return AutoTokenizer.from_pretrained(self.model_name)
+        # use "old" tokenizer here because of bug when downloading new tokenizer
+        return BlenderbotSmallTokenizer.from_pretrained("facebook/blenderbot-90M")
 
     @cached_property
     def model(self):
         model = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name)
         return model
 
-    def _assert_generated_batch_equal_expected(self, **tokenizer_kwargs):
-        generated_words = self.translate_src_text(**tokenizer_kwargs)
-        assert self.expected_text == generated_words
-
-    def translate_src_text(self, **tokenizer_kwargs):
-        model_inputs = self.tokenizer.prepare_seq2seq_batch(
-            src_texts=self.src_text, **tokenizer_kwargs, return_tensors="tf"
-        )
+    @slow
+    def test_90_generation_from_long_input(self):
+        model_inputs = self.tokenizer(self.src_text, return_tensors="tf")
         generated_ids = self.model.generate(
             model_inputs.input_ids,
             attention_mask=model_inputs.attention_mask,
             num_beams=2,
             use_cache=True,
         )
-        generated_words = self.tokenizer.batch_decode(generated_ids.numpy(), skip_special_tokens=True)
-        return generated_words
-
-    @slow
-    def test_batch_generation(self):
-        self._assert_generated_batch_equal_expected()
+        generated_words = self.tokenizer.batch_decode(generated_ids.numpy(), skip_special_tokens=True)[0]
+        assert generated_words in (
+            "i don't know. i just feel like i'm going to throw up. it's not fun.",
+            "i'm not sure. i just feel like i've been feeling like i have to be in a certain place",
+            "i'm not sure. i just feel like i've been in a bad situation.",
+        )
