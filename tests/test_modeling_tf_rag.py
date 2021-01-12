@@ -12,7 +12,7 @@ from transformers.testing_utils import require_sentencepiece, require_tf, requir
 from transformers.models.bert.tokenization_bert import VOCAB_FILES_NAMES as DPR_VOCAB_FILES_NAMES
 from transformers.models.dpr.tokenization_dpr import DPRQuestionEncoderTokenizer
 from transformers.models.roberta.tokenization_roberta import VOCAB_FILES_NAMES as BART_VOCAB_FILES_NAMES
-from transformers import BartTokenizer, T5Tokenizer
+from transformers import BartTokenizer
 
 if is_tf_available() and is_datasets_available() and is_faiss_available():
     import tensorflow as tf
@@ -39,12 +39,8 @@ if is_tf_available() and is_datasets_available() and is_faiss_available():
 
 from .test_modeling_tf_bart import TFBartModelTester
 from .test_modeling_tf_dpr import TFDPRModelTester
-from .test_modeling_tf_t5 import TFT5ModelTester
 
 TOLERANCE = 1e-3
-
-T5_SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
-
 
 def require_retrieval(test_case):
     """
@@ -136,10 +132,6 @@ class TFRagTestMixin:
         with open(self.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 
-        t5_tokenizer = T5Tokenizer(T5_SAMPLE_VOCAB)
-        t5_tokenizer_path = os.path.join(self.tmpdirname, "t5_tokenizer")
-        t5_tokenizer.save_pretrained(t5_tokenizer_path)
-
     @cached_property
     def dpr_tokenizer(self) -> DPRQuestionEncoderTokenizer:
         return DPRQuestionEncoderTokenizer.from_pretrained(os.path.join(self.tmpdirname, "dpr_tokenizer"))
@@ -147,10 +139,6 @@ class TFRagTestMixin:
     @cached_property
     def bart_tokenizer(self) -> BartTokenizer:
         return BartTokenizer.from_pretrained(os.path.join(self.tmpdirname, "bart_tokenizer"))
-
-    @cached_property
-    def t5_tokenizer(self) -> BartTokenizer:
-        return T5Tokenizer.from_pretrained(os.path.join(self.tmpdirname, "t5_tokenizer"))
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -169,7 +157,7 @@ class TFRagTestMixin:
             }
         )
         dataset.add_faiss_index("embeddings", string_factory="Flat", metric_type=faiss.METRIC_INNER_PRODUCT)
-        tokenizer = self.bart_tokenizer if config.generator.model_type == "bart" else self.t5_tokenizer
+        tokenizer = self.bart_tokenizer
         with patch("transformers.models.rag.retrieval_rag.load_dataset") as mock_load_dataset:
             mock_load_dataset.return_value = dataset
             retriever = RagRetriever(
@@ -548,38 +536,6 @@ class TFRagDPRBartTest(TFRagTestMixin, unittest.TestCase):
             "attention_mask": input_mask,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
-        }
-
-
-@require_tf
-@require_retrieval
-class TFRagDPRT5Test(TFRagTestMixin, unittest.TestCase):
-    @cached_property
-    def config_and_inputs(self):
-        question_encoder_tester = TFDPRModelTester(self)
-        dpr_config_and_inputs = question_encoder_tester.prepare_config_and_inputs()
-        generator_tester = TFT5ModelTester(self, 
-                                          #  vocab_size=1100 # unlike torch, TF version don't have this arg
-                                           )
-        t5_config_and_inputs = generator_tester.prepare_config_and_inputs()
-
-        (question_encoder_config, input_ids, _, input_mask, _, _, _) = dpr_config_and_inputs
-        # (generator_config, _, decoder_input_ids, _, decoder_attention_mask, _) = t5_config_and_inputs # torch
-        (generator_config, _, _, _) = t5_config_and_inputs
-        config = RagConfig.from_question_encoder_generator_configs(
-            question_encoder_config,
-            generator_config,
-            n_docs=self.n_docs,
-            retrieval_vector_size=self.retrieval_vector_size,
-            max_combined_length=self.max_combined_length,
-        )
-
-        return {
-            "config": config,
-            "input_ids": input_ids,
-            "attention_mask": input_mask,
-            "decoder_input_ids": input_ids, #decoder_input_ids,
-            "decoder_attention_mask": input_mask, #decoder_attention_mask,
         }
 
 @require_tf
