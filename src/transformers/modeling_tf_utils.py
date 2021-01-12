@@ -811,7 +811,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
     def _get_word_embedding_weight(model, embedding_layer):
         embeds = getattr(embedding_layer, "weight", None)
-
         if embeds is not None:
             return embeds
 
