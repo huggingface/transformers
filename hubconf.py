@@ -30,7 +30,7 @@ from transformers import (
 )
 # from transformers.dependency_versions_table import deps
 
-dependencies = ["torch", "numpy", "tokenizers==0.9.4", "filelock", "requests", "tqdm", "regex", "sentencepiece", "sacremoses", "importlib_metadata"]
+dependencies = ["torch", "numpy", "tokenizers", "filelock", "requests", "tqdm", "regex", "sentencepiece", "sacremoses", "importlib_metadata"]
 
 
 @add_start_docstrings(AutoConfig.__doc__)
