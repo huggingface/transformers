@@ -44,7 +44,6 @@ from ...modeling_tf_utils import (
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
-    WordEmbeddings,
     get_initializer,
     input_processing,
     keras_serializable,
@@ -87,6 +86,86 @@ class TFMPNetPreTrainedModel(TFPreTrainedModel):
         return self.serving_output(output)
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertWordEmbeddings
+class TFMPNetWordEmbeddings(tf.keras.layers.Layer):
+    def __init__(self, vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
+        super().__init__(**kwargs)
+
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
+
+    def build(self, input_shape):
+        self.weight = self.add_weight(
+            name="weight",
+            shape=[self.vocab_size, self.hidden_size],
+            initializer=get_initializer(initializer_range=self.initializer_range),
+        )
+
+        super().build(input_shape=input_shape)
+
+    def get_config(self):
+        config = {
+            "vocab_size": self.vocab_size,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def call(self, input_ids):
+        flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
+        embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
+        embeddings = tf.reshape(
+            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=input_ids), [self.hidden_size]], axis=0)
+        )
+
+        embeddings.set_shape(shape=input_ids.shape.as_list() + [self.hidden_size])
+
+        return embeddings
+
+
+# Copied from transformers.models.longformer.modeling_tf_longformer.TFLongformerWordEmbeddings
+class TFMPNetPositionEmbeddings(tf.keras.layers.Layer):
+    def __init__(self, max_position_embeddings: int, hidden_size: int, initializer_range: float, **kwargs):
+        super().__init__(**kwargs)
+
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
+
+    def build(self, input_shape):
+        self.position_embeddings = self.add_weight(
+            name="embeddings",
+            shape=[self.max_position_embeddings, self.hidden_size],
+            initializer=get_initializer(initializer_range=self.initializer_range),
+        )
+
+        super().build(input_shape)
+
+    def get_config(self):
+        config = {
+            "max_position_embeddings": self.max_position_embeddings,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def call(self, position_ids):
+        flat_position_ids = tf.reshape(tensor=position_ids, shape=[-1])
+        embeddings = tf.gather(params=self.position_embeddings, indices=flat_position_ids)
+        embeddings = tf.reshape(
+            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=position_ids), [self.hidden_size]], axis=0)
+        )
+
+        embeddings.set_shape(shape=position_ids.shape.as_list() + [self.hidden_size])
+
+        return embeddings
+
+
 class TFMPNetEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position embeddings."""
 
@@ -94,16 +173,16 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.padding_idx = 1
-        self.word_embeddings = WordEmbeddings(
+        self.word_embeddings = TFMPNetWordEmbeddings(
             vocab_size=config.vocab_size,
             hidden_size=config.hidden_size,
             initializer_range=config.initializer_range,
             name="word_embeddings",
         )
-        self.position_embeddings = tf.keras.layers.Embedding(
-            config.max_position_embeddings,
-            config.hidden_size,
-            embeddings_initializer=get_initializer(config.initializer_range),
+        self.position_embeddings = TFMPNetPositionEmbeddings(
+            max_position_embeddings=config.max_position_embeddings,
+            hidden_size=config.hidden_size,
+            initializer_range=config.initializer_range,
             name="position_embeddings",
         )
         self.embeddings_sum = tf.keras.layers.Add()
@@ -166,7 +245,7 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
             else:
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds=inputs_embeds)
 
-        position_embeds = self.position_embeddings(inputs=position_ids)
+        position_embeds = self.position_embeddings(position_ids=position_ids)
         final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds])
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
@@ -489,8 +568,8 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.set_input_embeddings
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.word_embeddings.weight = value
+        self.embeddings.word_embeddings.vocab_size = shape_list(value)[0]
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer._prune_heads
     def _prune_heads(self, heads_to_prune):
@@ -785,7 +864,7 @@ class TFMPNetLMHead(tf.keras.layers.Layer):
         return self.decoder
 
     def set_output_embeddings(self, value):
-        self.decoder.word_embeddings = value
+        self.decoder.weight = value
         self.decoder.vocab_size = shape_list(value)[0]
 
     def get_bias(self):
@@ -803,7 +882,7 @@ class TFMPNetLMHead(tf.keras.layers.Layer):
         # project back to size of vocabulary with bias
         seq_length = shape_list(tensor=hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
-        hidden_states = tf.matmul(a=hidden_states, b=self.decoder.word_embeddings, transpose_b=True)
+        hidden_states = tf.matmul(a=hidden_states, b=self.decoder.weight, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
