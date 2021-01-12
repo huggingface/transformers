@@ -211,13 +211,3 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(token_ids_0 + eos) * [0]
         return len(token_ids_0 + eos + token_ids_1 + eos) * [0]
-
-    @contextmanager
-    def as_target_tokenizer(self):
-        """
-        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
-        sequence-to-sequence models that need a slightly different processing for the labels.
-        """
-        self.prefix_tokens = [self.pad_token_id]
-        yield
-        self.prefix_tokens = []

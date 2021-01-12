@@ -294,13 +294,3 @@ class T5Tokenizer(PreTrainedTokenizer):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
-
-    @contextmanager
-    def as_target_tokenizer(self):
-        """
-        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
-        sequence-to-sequence models that need a slightly different processing for the labels.
-        """
-        self.prefix_tokens = [self.pad_token_id]
-        yield
-        self.prefix_tokens = []
