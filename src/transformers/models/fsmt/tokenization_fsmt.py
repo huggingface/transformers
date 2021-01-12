@@ -23,7 +23,7 @@ from typing import Dict, List, Optional, Tuple
 
 import sacremoses as sm
 
-from ...tokenization_utils import BatchEncoding, PreTrainedTokenizer
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -481,13 +481,6 @@ class FSMTTokenizer(PreTrainedTokenizer):
         if token_ids_1 is None:
             return len(token_ids_0 + sep) * [0]
         return len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
-
-    def prepare_seq2seq_batch(self, src_texts: List[str], **kwargs) -> BatchEncoding:
-        if type(src_texts) is not list:
-            raise ValueError("src_texts is expected to be a list")
-        if "" in src_texts:
-            raise ValueError(f"found empty string in src_texts: {src_texts}")
-        return super().prepare_seq2seq_batch(src_texts, **kwargs)
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):

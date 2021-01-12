@@ -19,7 +19,6 @@ from typing import Dict, List, Optional, Tuple
 import sentencepiece as spm
 
 from ...tokenization_utils import PreTrainedTokenizer
-from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
 
 
@@ -248,11 +247,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
             return token_ids_0 + [self.eos_token_id]
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
-
-    def prepare_seq2seq_batch(self, src_texts: List[str], **kwargs) -> BatchEncoding:
-        if "" in src_texts:
-            raise ValueError(f"found empty string in src_texts: {src_texts}")
-        return super().prepare_seq2seq_batch(src_texts, **kwargs)
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
