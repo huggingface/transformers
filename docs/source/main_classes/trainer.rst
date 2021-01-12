@@ -374,8 +374,9 @@ no equivalent command line arguments.
 
 **Optimizer:**
 
-DeepSpeed has several tested with ZeRO optimizers, which are Adam, OneBitAdam, and Lamb. It, however, can import other
-optimizers from torch. The full documentation is `here
+
+DeepSpeed's main optimizers are Adam, OneBitAdam, and Lamb. These have been thoroughly tested with ZeRO and are thus
+recommended to be used. It, however, can import other optimizers from ``torch``. The full documentation is `here
 <https://www.deepspeed.ai/docs/config-json/#optimizer-parameters>`__.
 
 If you don't configure the ``optimizer`` entry in the configuration file, the :class:`~transformers.Trainer` will
