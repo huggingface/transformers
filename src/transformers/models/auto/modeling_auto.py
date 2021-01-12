@@ -321,7 +321,6 @@ MODEL_MAPPING = OrderedDict(
         (MPNetConfig, MPNetModel),
         (TapasConfig, TapasModel),
         (MarianConfig, MarianModel),
-        (BortConfig, BortModel),
     ]
 )
 
@@ -355,7 +354,6 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForPreTraining),
         (MPNetConfig, MPNetForMaskedLM),
         (TapasConfig, TapasForMaskedLM),
-        (BortConfig, BortForMaskedLM),
     ]
 )
 
@@ -392,7 +390,6 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForMaskedLM),
         (MPNetConfig, MPNetForMaskedLM),
         (TapasConfig, TapasForMaskedLM),
-        (BortConfig, BortForMaskedLM),
     ]
 )
 
@@ -441,7 +438,6 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForMaskedLM),
         (MPNetConfig, MPNetForMaskedLM),
         (TapasConfig, TapasForMaskedLM),
-        (BortConfig, BortForMaskedLM),
     ]
 )
 
@@ -494,7 +490,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (TransfoXLConfig, TransfoXLForSequenceClassification),
         (MPNetConfig, MPNetForSequenceClassification),
         (TapasConfig, TapasForSequenceClassification),
-        (BortConfig, BortForSequenceClassification),
     ]
 )
 
