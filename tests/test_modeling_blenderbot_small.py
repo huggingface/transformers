@@ -302,8 +302,6 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
     def test_90_generation_from_short_input(self):
         model_inputs = self.tokenizer(["sam"], return_tensors="pt").to(torch_device)
 
-        # model does not have "token_type_ids"
-        model_inputs.pop("token_type_ids")
         generated_utterances = self.model.generate(**model_inputs)
 
         clean_txt = self.tokenizer.decode(
