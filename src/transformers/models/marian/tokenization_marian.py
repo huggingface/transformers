@@ -15,15 +15,14 @@
 import json
 import re
 import warnings
+from contextlib import contextmanager
 from pathlib import Path
 from shutil import copyfile
 from typing import Dict, List, Optional, Tuple, Union
 
 import sentencepiece
 
-from ...file_utils import add_start_docstrings
-from ...tokenization_utils import BatchEncoding, PreTrainedTokenizer
-from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
+from ...tokenization_utils import PreTrainedTokenizer
 
 
 vocab_files_names = {
@@ -182,40 +181,15 @@ class MarianTokenizer(PreTrainedTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
-    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
-    def prepare_seq2seq_batch(
-        self,
-        src_texts: List[str],
-        tgt_texts: Optional[List[str]] = None,
-        max_length: Optional[int] = None,
-        max_target_length: Optional[int] = None,
-        return_tensors: Optional[str] = None,
-        truncation=True,
-        padding="longest",
-        **unused,
-    ) -> BatchEncoding:
-        if "" in src_texts:
-            raise ValueError(f"found empty string in src_texts: {src_texts}")
-        self.current_spm = self.spm_source
-        src_texts = [self.normalize(t) for t in src_texts]  # this does not appear to do much
-        tokenizer_kwargs = dict(
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            max_length=max_length,
-            truncation=truncation,
-            padding=padding,
-        )
-        model_inputs: BatchEncoding = self(src_texts, **tokenizer_kwargs)
-
-        if tgt_texts is None:
-            return model_inputs
-        if max_target_length is not None:
-            tokenizer_kwargs["max_length"] = max_target_length
-
+    @contextmanager
+    def as_target_tokenizer(self):
+        """
+        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
+        sequence-to-sequence models that need a slightly different processing for the labels.
+        """
         self.current_spm = self.spm_target
-        model_inputs["labels"] = self(tgt_texts, **tokenizer_kwargs)["input_ids"]
+        yield
         self.current_spm = self.spm_source
-        return model_inputs
 
     @property
     def vocab_size(self) -> int:
