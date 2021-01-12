@@ -66,6 +66,122 @@ TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertWordEmbeddings
+class TF{{cookiecutter.camelcase_modelname}}WordEmbeddings(tf.keras.layers.Layer):
+    def __init__(self, vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
+        super().__init__(**kwargs)
+
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
+
+    def build(self, input_shape):
+        self.weight = self.add_weight(
+            name="weight",
+            shape=[self.vocab_size, self.hidden_size],
+            initializer=get_initializer(initializer_range=self.initializer_range),
+        )
+
+        super().build(input_shape=input_shape)
+
+    def get_config(self):
+        config = {
+            "vocab_size": self.vocab_size,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def call(self, input_ids):
+        flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
+        embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
+        embeddings = tf.reshape(
+            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=input_ids), [self.hidden_size]], axis=0)
+        )
+
+        embeddings.set_shape(shape=input_ids.shape.as_list() + [self.hidden_size])
+
+        return embeddings
+
+
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertTokenTypeEmbeddings
+class TF{{cookiecutter.camelcase_modelname}}TokenTypeEmbeddings(tf.keras.layers.Layer):
+    def __init__(self, type_vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
+        super().__init__(**kwargs)
+
+        self.type_vocab_size = type_vocab_size
+        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
+
+    def build(self, input_shape):
+        self.token_type_embeddings = self.add_weight(
+            name="embeddings",
+            shape=[self.type_vocab_size, self.hidden_size],
+            initializer=get_initializer(initializer_range=self.initializer_range),
+        )
+
+        super().build(input_shape=input_shape)
+
+    def get_config(self):
+        config = {
+            "type_vocab_size": self.type_vocab_size,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def call(self, token_type_ids):
+        flat_token_type_ids = tf.reshape(tensor=token_type_ids, shape=[-1])
+        one_hot_data = tf.one_hot(indices=flat_token_type_ids, depth=self.type_vocab_size, dtype=self._compute_dtype)
+        embeddings = tf.matmul(a=one_hot_data, b=self.token_type_embeddings)
+        embeddings = tf.reshape(
+            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=token_type_ids), [self.hidden_size]], axis=0)
+        )
+
+        embeddings.set_shape(shape=token_type_ids.shape.as_list() + [self.hidden_size])
+
+        return embeddings
+
+
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPositionEmbeddings
+class TF{{cookiecutter.camelcase_modelname}}PositionEmbeddings(tf.keras.layers.Layer):
+    def __init__(self, max_position_embeddings: int, hidden_size: int, initializer_range: float, **kwargs):
+        super().__init__(**kwargs)
+
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
+
+    def build(self, input_shape):
+        self.position_embeddings = self.add_weight(
+            name="embeddings",
+            shape=[self.max_position_embeddings, self.hidden_size],
+            initializer=get_initializer(initializer_range=self.initializer_range),
+        )
+
+        super().build(input_shape)
+
+    def get_config(self):
+        config = {
+            "max_position_embeddings": self.max_position_embeddings,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def call(self, position_ids):
+        input_shape = shape_list(tensor=position_ids)
+        position_embeddings = self.position_embeddings[: input_shape[1], :]
+
+        return tf.broadcast_to(input=position_embeddings, shape=input_shape)
+
+
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings with Bert->{{cookiecutter.camelcase_modelname}}
 class TF{{cookiecutter.camelcase_modelname}}Embeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
@@ -73,19 +189,19 @@ class TF{{cookiecutter.camelcase_modelname}}Embeddings(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.word_embeddings = WordEmbeddings(
+        self.word_embeddings = TF{{cookiecutter.camelcase_modelname}}WordEmbeddings(
             vocab_size=config.vocab_size,
             hidden_size=config.hidden_size,
             initializer_range=config.initializer_range,
             name="word_embeddings",
         )
-        self.position_embeddings = PositionEmbeddings(
+        self.position_embeddings = TF{{cookiecutter.camelcase_modelname}}PositionEmbeddings(
             max_position_embeddings=config.max_position_embeddings,
             hidden_size=config.hidden_size,
             initializer_range=config.initializer_range,
             name="position_embeddings",
         )
-        self.token_type_embeddings = TokenTypeEmbeddings(
+        self.token_type_embeddings = TF{{cookiecutter.camelcase_modelname}}TokenTypeEmbeddings(
             type_vocab_size=config.type_vocab_size,
             hidden_size=config.hidden_size,
             initializer_range=config.initializer_range,
@@ -125,7 +241,7 @@ class TF{{cookiecutter.camelcase_modelname}}Embeddings(tf.keras.layers.Layer):
 
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->{{cookiecutter.camelcase_modelname}}
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention
 class TF{{cookiecutter.camelcase_modelname}}SelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -136,8 +252,8 @@ class TF{{cookiecutter.camelcase_modelname}}SelfAttention(tf.keras.layers.Layer)
                 f"of attention heads ({config.num_attention_heads})"
             )
 
-        self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+
         self.query = tf.keras.layers.experimental.EinsumDense(
             equation="abc,cde->abde",
             output_shape=(None, config.num_attention_heads, self.attention_head_size),
@@ -204,9 +320,9 @@ class TF{{cookiecutter.camelcase_modelname}}SelfOutput(tf.keras.layers.Layer):
                 f"of attention heads ({config.num_attention_heads})"
             )
 
-        self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.all_head_size = config.num_attention_heads * self.attention_head_size
+
         self.dense = tf.keras.layers.experimental.EinsumDense(
             equation="abcd,cde->abe",
             output_shape=(None, self.all_head_size),
@@ -389,6 +505,7 @@ class TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(tf.keras.layers.Lay
 
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
+        
         self.transform = TF{{cookiecutter.camelcase_modelname}}PredictionHeadTransform(config, name="transform")
 
         # The output weights are the same as the input embeddings, but there is
@@ -404,7 +521,7 @@ class TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(tf.keras.layers.Lay
         return self.input_embeddings
 
     def set_output_embeddings(self, value):
-        self.input_embeddings.word_embeddings = value
+        self.input_embeddings.weight = value
         self.input_embeddings.vocab_size = shape_list(value)[0]
 
     def get_bias(self):
@@ -418,7 +535,7 @@ class TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(tf.keras.layers.Lay
         hidden_states = self.transform(hidden_states=hidden_states)
         seq_length = shape_list(tensor=hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
-        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.word_embeddings, transpose_b=True)
+        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
@@ -459,7 +576,7 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
         return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings.word_embeddings = value
+        self.embeddings.word_embeddings.weight = value
         self.embeddings.word_embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
