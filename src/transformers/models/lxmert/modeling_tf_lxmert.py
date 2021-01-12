@@ -30,13 +30,7 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_tf_utils import (
-    TFPreTrainedModel,
-    get_initializer,
-    input_processing,
-    keras_serializable,
-    shape_list,
-)
+from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, input_processing, keras_serializable, shape_list
 from ...utils import logging
 from .configuration_lxmert import LxmertConfig
 
@@ -1164,6 +1158,7 @@ class TFLxmertLMPredictionHead(tf.keras.layers.Layer):
 
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
+
         self.transform = TFLxmertPredictionHeadTransform(config, name="transform")
 
         # The output weights are the same as the input embeddings, but there is

@@ -672,14 +672,14 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
         if token_type_ids is None:
             input_shape = shape_list(tensor=inputs_embeds)[:-1]
             token_type_ids = tf.fill(dims=input_shape, value=0)
-        
+
         if position_ids is None:
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
                 position_ids = self.create_position_ids_from_input_ids(input_ids=input_ids)
             else:
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds=inputs_embeds)
-            
+
         position_embeds = self.position_embeddings(position_ids=position_ids)
         token_type_embeds = self.token_type_embeddings(token_type_ids=token_type_ids)
         final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds, token_type_embeds])

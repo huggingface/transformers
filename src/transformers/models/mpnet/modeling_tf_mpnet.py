@@ -126,7 +126,7 @@ class TFMPNetWordEmbeddings(tf.keras.layers.Layer):
         return embeddings
 
 
-# Copied from transformers.models.longformer.modeling_tf_longformer.TFLongformerWordEmbeddings
+# Copied from transformers.models.longformer.modeling_tf_longformer.TFLongformerPositionEmbeddings
 class TFMPNetPositionEmbeddings(tf.keras.layers.Layer):
     def __init__(self, max_position_embeddings: int, hidden_size: int, initializer_range: float, **kwargs):
         super().__init__(**kwargs)
