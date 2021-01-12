@@ -106,7 +106,7 @@ Trainer Integrations
 The :class:`~transformers.Trainer` has been extended to support libraries that may dramatically improve your training
 time and fit much bigger models.
 
-Currently it support third party solutions, `DeepSpeed <https://github.com/microsoft/DeepSpeed>`__ and `FairScale
+Currently it supports third party solutions, `DeepSpeed <https://github.com/microsoft/DeepSpeed>`__ and `FairScale
 <https://github.com/facebookresearch/fairscale/>`__, which implement parts of the paper `ZeRO: Memory Optimizations
 Toward Training Trillion Parameter Models, by Samyam Rajbhandari, Jeff Rasley, Olatunji Ruwase, Yuxiong He
 <https://arxiv.org/abs/1910.02054>`__.
@@ -157,7 +157,7 @@ Notes:
 - It is not implemented for TPUs.
 - It works with ``--fp16`` too, to make things even faster.
 - One of the main benefits of enabling ``--sharded_ddp`` is that it uses a lot less GPU memory, so you should be able
-  to use significantly larger batch sizes using the same hardware (e.g. 3x and even bigger) which should leave to
+  to use significantly larger batch sizes using the same hardware (e.g. 3x and even bigger) which should lead to
   significantly shorter training time.
 
 
