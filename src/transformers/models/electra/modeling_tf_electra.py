@@ -186,7 +186,7 @@ class TFElectraPositionEmbeddings(tf.keras.layers.Layer):
         return tf.broadcast_to(input=position_embeddings, shape=input_shape)
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->Electra
 class TFElectraSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
