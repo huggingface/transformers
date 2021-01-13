@@ -310,6 +310,7 @@ TOLERANCE = 1e-4
 
 @require_sentencepiece
 @require_tokenizers
+@require_tf
 class TFMBartModelIntegrationTest(unittest.TestCase):
     src_text = [
         " UN Chief Says There Is No Military Solution in Syria",
