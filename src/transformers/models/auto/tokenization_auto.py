@@ -199,7 +199,6 @@ TOKENIZER_MAPPING = OrderedDict(
         (AlbertConfig, (AlbertTokenizer, AlbertTokenizerFast)),
         (CamembertConfig, (CamembertTokenizer, CamembertTokenizerFast)),
         (PegasusConfig, (PegasusTokenizer, PegasusTokenizerFast)),
-        (MBartConfig, (BarthezTokenizer, BarthezTokenizerFast)),
         (MBartConfig, (MBartTokenizer, MBartTokenizerFast)),
         (XLMRobertaConfig, (XLMRobertaTokenizer, XLMRobertaTokenizerFast)),
         (MarianConfig, (MarianTokenizer, None)),
@@ -243,6 +242,7 @@ NO_CONFIG_TOKENIZER = [
     HerbertTokenizer,
     HerbertTokenizerFast,
     PhobertTokenizer,
+    BarthezTokenizer,
 ]
 
 
