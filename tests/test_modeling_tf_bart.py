@@ -356,6 +356,7 @@ class TFBartHeadTests(unittest.TestCase):
 
 
 @slow
+@require_tf
 class TFBartModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head(self):
         model = TFBartForConditionalGeneration.from_pretrained("facebook/bart-large").model
