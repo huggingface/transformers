@@ -18,7 +18,6 @@
 
 import math
 import warnings
-from logging import warning
 
 import torch
 from torch import nn
