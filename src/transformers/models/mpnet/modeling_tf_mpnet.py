@@ -551,7 +551,6 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
         """
         raise NotImplementedError
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.call
     def call(
         self,
         input_ids=None,
