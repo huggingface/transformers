@@ -13,10 +13,9 @@
 Pretrained models
 =======================================================================================================================
 
-Here is the full list of the currently provided pretrained models together with a short presentation of each model.
+Here is a partial list of some of the available pretrained models together with a short presentation of each model.
 
-For a list that includes all community-uploaded models, refer to `https://huggingface.co/models
-<https://huggingface.co/models>`__.
+For the full list, refer to `https://huggingface.co/models <https://huggingface.co/models>`__.
 
 +--------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 | Architecture       | Model id                                                   | Details of the model                                                                                                                  |
