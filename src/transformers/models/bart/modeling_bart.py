@@ -1598,7 +1598,7 @@ class BartForCausalLM(BartPretrainedModel):
         )
 
         predict_logits = self.lm_head(outputs[0])
-      
+
         loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
@@ -1631,6 +1631,7 @@ class BartForCausalLM(BartPretrainedModel):
             "past_key_values": past,
             "use_cache": use_cache,
         }
+
     @staticmethod
     def _reorder_cache(past, beam_idx):
         reordered_past = ()
