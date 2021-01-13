@@ -29,6 +29,7 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_torch_multi_gpu,
     slow,
 )
 from transformers.utils.hp_naming import TrialShortNamer
@@ -373,6 +374,22 @@ class TrainerIntegrationTest(unittest.TestCase):
         # Check passing a new dataset for evaluation works
         new_eval_dataset = RegressionDataset(length=128)
         self.assertEqual(len(trainer.get_eval_dataloader(new_eval_dataset)), 128 // (32 * n_gpu))
+
+    @require_torch_multi_gpu
+    def test_data_is_not_parallelized_when_model_is_parallel(self):
+        model = RegressionModel()
+        # Make the Trainer believe it's a parallelized model
+        model.is_parallelizable = True
+        model.model_parallel = True
+        trainer = Trainer(model=model, train_dataset=RegressionDataset(), eval_dataset=RegressionDataset())
+        # Check the Trainer was fooled
+        self.assertTrue(trainer.is_model_parallel)
+
+        # The batch size of the training and evaluation dataloaders should be 16, not 16 * n_gpu
+        self.assertEqual(trainer.get_train_dataloader().batch_size, 16)
+        self.assertEqual(len(trainer.get_train_dataloader()), 64 // 16)
+        self.assertEqual(trainer.get_eval_dataloader().batch_size, 16)
+        self.assertEqual(len(trainer.get_eval_dataloader()), 64 // 16)
 
     def test_evaluate(self):
         trainer = get_regression_trainer(a=1.5, b=2.5, compute_metrics=AlmostAccuracy())
