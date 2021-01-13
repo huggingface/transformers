@@ -1,6 +1,6 @@
 name: Torch hub integration
 
-on: 
+on:
   push:
     branches:
       - "*"
@@ -32,8 +32,10 @@ jobs:
     - name: Install dependencies
       run: |
         pip install --upgrade pip
-        pip install torch
-        pip install numpy filelock protobuf requests tqdm regex sentencepiece sacremoses tokenizers==0.9.4 packaging importlib_metadata
+        # install torch-hub specific dependencies
+        pip install -e git+https://github.com/huggingface/transformers.git#egg=transformers[torchhub]
+        # no longer needed
+        pip uninstall -y transformers
 
     - name: Torch hub list
       run: |

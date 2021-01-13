@@ -229,6 +229,8 @@ extras["dev"] = (
     + extras["modelcreation"]
 )
 
+extras["torchhub"] = deps_list("filelock", "importlib_metadata", "numpy", "packaging", "protobuf", "regex",
+                               "requests", "sacremoses", "sentencepiece", "torch", "tokenizers", "tqdm")
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
