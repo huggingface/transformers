@@ -26,6 +26,11 @@ class Seq2seqTrainerTester(TestCasePlus):
     @slow
     @require_datasets
     def test_finetune_bert2bert(self):
+        """
+        Currently fails with:
+
+        ImportError: To be able to use this metric, you need to install the following dependencies['absl', 'nltk', 'rouge_score']
+        """
 
         bert2bert = EncoderDecoderModel.from_encoder_decoder_pretrained("prajjwal1/bert-tiny", "prajjwal1/bert-tiny")
         tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
