@@ -29,7 +29,7 @@ if is_torch_available():
         DistributedLengthGroupedSampler,
         DistributedTensorGatherer,
         LabelSmoother,
-        get_length_grouped_indices,
+        LengthGroupedSampler,
     )
 
 
@@ -99,7 +99,7 @@ class TrainerUtilsTest(unittest.TestCase):
         # Put one bigger than the others to check it ends up in first position
         lengths[32] = 50
 
-        indices = get_length_grouped_indices(lengths, 4)
+        indices = list(LengthGroupedSampler(lengths, 4, lengths=lengths))
         # The biggest element should be first
         self.assertEqual(lengths[indices[0]], 50)
         # The indices should be a permutation of range(100)

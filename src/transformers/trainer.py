@@ -73,10 +73,10 @@ from .trainer_pt_utils import (
     DistributedLengthGroupedSampler,
     DistributedTensorGatherer,
     LabelSmoother,
+    LengthGroupedSampler,
     SequentialDistributedSampler,
     distributed_broadcast_scalars,
     distributed_concat,
-    get_length_grouped_indices,
     nested_concat,
     nested_detach,
     nested_numpify,
@@ -464,8 +464,7 @@ class Trainer:
         # Build the sampler.
         if self.args.group_by_length:
             if num_processes <= 1:
-                lengths = [len(feature["input_ids"]) for feature in self.train_dataset]
-                return get_length_grouped_indices(lengths, self.args.train_batch_size)
+                return LengthGroupedSampler(self.train_dataset, self.args.train_batch_size)
             else:
                 return DistributedLengthGroupedSampler(
                     self.train_dataset, self.args.train_batch_size, num_replicas=num_processes, rank=process_index

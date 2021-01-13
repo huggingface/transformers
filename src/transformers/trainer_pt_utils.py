@@ -428,6 +428,32 @@ def get_length_grouped_indices(lengths, batch_size, mega_batch_mult=None, genera
     return sum(megabatches, [])
 
 
+class LengthGroupedSampler(Sampler):
+    r"""
+    Sampler that samples indices in a way that groups together features of the dataset of roughly the same length while
+    keeping a bit of randomness.
+    """
+
+    def __init__(self, dataset: Dataset, batch_size: int, lengths: Optional[List[int]] = None):
+        self.dataset = dataset
+        self.batch_size = batch_size
+        if lengths is None:
+            if not isinstance(dataset[0], dict) or "input_ids" not in dataset[0]:
+                raise ValueError(
+                    "Can only automatically infer lengths for datasets whose items are dictionaries with an "
+                    "'input_ids' key."
+                )
+            lengths = [len(feature["input_ids"]) for feature in dataset]
+        self.lengths = lengths
+
+    def __len__(self):
+        return len(self.lengths)
+
+    def __iter__(self):
+        indices = get_length_grouped_indices(self.lengths, self.batch_size)
+        return iter(indices)
+
+
 class DistributedLengthGroupedSampler(DistributedSampler):
     r"""
     Distributed Sampler that samples indices in a way that groups together features of the dataset of roughly the same
