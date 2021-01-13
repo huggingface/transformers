@@ -169,7 +169,7 @@ class TestFinetuneTrainer(TestCasePlus):
             --logging_steps 0
             --save_steps {str(eval_steps)}
             --eval_steps {str(eval_steps)}
-            --group_by_length
+            --sortish_sampler
             --label_smoothing_factor 0.1
             --adafactor
             --task translation
