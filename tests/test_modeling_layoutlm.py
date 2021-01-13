@@ -325,7 +325,7 @@ class LayoutLMModelIntegrationTest(unittest.TestCase):
         )
 
         # test the loss calculation to be around 2.65
-        expected_loss = torch.tensor(2.65, device=torch_device)
+        # expected_loss = torch.tensor(2.65, device=torch_device)
 
         # The loss is currently somewhat random and can vary between 0.1-0.3 atol.
         # self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=0.1))
