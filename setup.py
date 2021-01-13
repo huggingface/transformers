@@ -154,11 +154,11 @@ deps = {b: a for a, b in (re.findall(r"^(([^!=<>]+)(?:[!=<>].*)?$)", x)[0] for x
 # python -c 'import sys; from transformers.dependency_versions_table import deps; \
 # print(" ".join([ deps[x] for x in sys.argv[1:]]))' tokenizers datasets
 #
-# just pass the desired package names to that script as it's shown with 2 packages above
+# Just pass the desired package names to that script as it's shown with 2 packages above.
 #
 # If transformers is not yet installed remember and the work is done from the cloned repo add `PYTHONPATH=src to the script above`
 #
-# you can then feed this for example to `pip`
+# You can then feed this for example to `pip`:
 #
 # pip install -U $(python -c 'import sys; from transformers.dependency_versions_table import deps; \
 # print(" ".join([ deps[x] for x in sys.argv[1:]]))' tokenizers datasets)
