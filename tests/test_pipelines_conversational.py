@@ -277,8 +277,8 @@ class ConversationalPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCas
     @slow
     def test_integration_torch_conversation_encoder_decoder(self):
         # When
-        tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-90M")
-        model = AutoModelForSeq2SeqLM.from_pretrained("facebook/blenderbot-90M")
+        tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot_small-90M")
+        model = AutoModelForSeq2SeqLM.from_pretrained("facebook/blenderbot_small-90M")
         nlp = ConversationalPipeline(model=model, tokenizer=tokenizer, device=DEFAULT_DEVICE_NUM)
 
         conversation_1 = Conversation("My name is Sarah and I live in London")

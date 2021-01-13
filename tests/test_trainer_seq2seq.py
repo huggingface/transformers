@@ -15,7 +15,7 @@
 
 from transformers import BertTokenizer, EncoderDecoderModel, Seq2SeqTrainer, Seq2SeqTrainingArguments
 from transformers.file_utils import is_datasets_available
-from transformers.testing_utils import TestCasePlus, require_datasets, slow
+from transformers.testing_utils import TestCasePlus, require_datasets, require_torch, slow
 
 
 if is_datasets_available():
@@ -25,7 +25,13 @@ if is_datasets_available():
 class Seq2seqTrainerTester(TestCasePlus):
     @slow
     @require_datasets
+    @require_torch
     def test_finetune_bert2bert(self):
+        """
+        Currently fails with:
+
+        ImportError: To be able to use this metric, you need to install the following dependencies['absl', 'nltk', 'rouge_score']
+        """
 
         bert2bert = EncoderDecoderModel.from_encoder_decoder_pretrained("prajjwal1/bert-tiny", "prajjwal1/bert-tiny")
         tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")

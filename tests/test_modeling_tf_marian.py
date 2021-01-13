@@ -334,6 +334,7 @@ def _long_tensor(tok_lst):
     return tf.constant(tok_lst, dtype=tf.int32)
 
 
+@require_tf
 class AbstractMarianIntegrationTest(unittest.TestCase):
     maxDiff = 1000  # show more chars for failing integration tests
 
@@ -378,6 +379,7 @@ class AbstractMarianIntegrationTest(unittest.TestCase):
 
 @require_sentencepiece
 @require_tokenizers
+@require_tf
 class TestMarian_MT_EN(AbstractMarianIntegrationTest):
     """Cover low resource/high perplexity setting. This breaks if pad_token_id logits not set to LARGE_NEGATIVE."""
 
@@ -393,6 +395,7 @@ class TestMarian_MT_EN(AbstractMarianIntegrationTest):
 
 @require_sentencepiece
 @require_tokenizers
+@require_tf
 class TestMarian_en_zh(AbstractMarianIntegrationTest):
     src = "en"
     tgt = "zh"
@@ -406,6 +409,7 @@ class TestMarian_en_zh(AbstractMarianIntegrationTest):
 
 @require_sentencepiece
 @require_tokenizers
+@require_tf
 class TestMarian_en_ROMANCE(AbstractMarianIntegrationTest):
     """Multilingual on target side."""
 

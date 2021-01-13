@@ -302,6 +302,7 @@ def _long_tensor(tok_lst):
 
 
 @require_tokenizers
+@require_tf
 class TFBlenderbot400MIntegrationTests(unittest.TestCase):
     src_text = ["My friends are cool but they eat too many carbs."]
     model_name = "facebook/blenderbot-400M-distill"
