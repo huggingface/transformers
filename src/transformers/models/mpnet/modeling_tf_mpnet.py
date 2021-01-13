@@ -221,12 +221,12 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
 
         Returns: tf.Tensor
         """
-        bsz, seq_length = shape_list(tensor=inputs_embeds)[:2]
+        batch_size, seq_length = shape_list(tensor=inputs_embeds)[:2]
         position_ids = tf.range(start=self.padding_idx + 1, limit=seq_length + self.padding_idx + 1)[tf.newaxis, :]
 
-        return tf.tile(input=position_ids, multiples=(bsz, 1))
+        return tf.tile(input=position_ids, multiples=(batch_size, 1))
 
-    def call(self, input_ids=None, position_ids=None, inputs_embeds=None, training=False):
+    def call(self, input_ids=None, position_ids=None, token_type_ids=None, inputs_embeds=None, training=False):
         """
         Applies embedding based on inputs tensor.
 
@@ -583,6 +583,7 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
         self,
         input_ids=None,
         attention_mask=None,
+        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -597,6 +598,7 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
             config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -619,9 +621,13 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
         if inputs["attention_mask"] is None:
             inputs["attention_mask"] = tf.fill(input_shape, 1)
 
+        if inputs["token_type_ids"] is None:
+            inputs["token_type_ids"] = tf.fill(input_shape, 0)
+
         embedding_output = self.embeddings(
             inputs["input_ids"],
             inputs["position_ids"],
+            inputs["token_type_ids"],
             inputs["inputs_embeds"],
             training=inputs["training"],
         )
@@ -788,6 +794,7 @@ class TFMPNetModel(TFMPNetPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
+        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -802,6 +809,7 @@ class TFMPNetModel(TFMPNetPreTrainedModel):
             config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -814,6 +822,7 @@ class TFMPNetModel(TFMPNetPreTrainedModel):
         outputs = self.mpnet(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
             position_ids=inputs["position_ids"],
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
@@ -918,6 +927,7 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
         self,
         input_ids=None,
         attention_mask=None,
+        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -939,6 +949,7 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
             config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -952,6 +963,7 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
         outputs = self.mpnet(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
             position_ids=inputs["position_ids"],
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
@@ -1038,6 +1050,7 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
         self,
         input_ids=None,
         attention_mask=None,
+        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -1059,6 +1072,7 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
             config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1072,6 +1086,7 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
         outputs = self.mpnet(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
             position_ids=inputs["position_ids"],
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
@@ -1143,6 +1158,7 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
         self,
         input_ids=None,
         attention_mask=None,
+        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -1164,6 +1180,7 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
             config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1186,6 +1203,9 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
         flat_attention_mask = (
             tf.reshape(inputs["attention_mask"], (-1, seq_length)) if inputs["attention_mask"] is not None else None
         )
+        flat_token_type_ids = (
+            tf.reshape(inputs["token_type_ids"], (-1, seq_length)) if inputs["token_type_ids"] is not None else None
+        )
         flat_position_ids = (
             tf.reshape(inputs["position_ids"], (-1, seq_length)) if inputs["position_ids"] is not None else None
         )
@@ -1197,6 +1217,7 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
         outputs = self.mpnet(
             flat_input_ids,
             flat_attention_mask,
+            flat_token_type_ids,
             flat_position_ids,
             inputs["head_mask"],
             flat_inputs_embeds,
@@ -1275,6 +1296,7 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
         self,
         input_ids=None,
         attention_mask=None,
+        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -1295,6 +1317,7 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
             config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1308,6 +1331,7 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
         outputs = self.mpnet(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
             position_ids=inputs["position_ids"],
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
@@ -1373,6 +1397,7 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
         self,
         input_ids=None,
         attention_mask=None,
+        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -1399,6 +1424,7 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
             config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1413,6 +1439,7 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
         outputs = self.mpnet(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
             position_ids=inputs["position_ids"],
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],

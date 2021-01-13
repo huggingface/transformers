@@ -652,10 +652,10 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
 
         Returns: tf.Tensor
         """
-        bsz, seq_length = shape_list(tensor=inputs_embeds)[:2]
+        batch_size, seq_length = shape_list(tensor=inputs_embeds)[:2]
         position_ids = tf.range(start=self.padding_idx + 1, limit=seq_length + self.padding_idx + 1)[tf.newaxis, :]
 
-        return tf.tile(input=position_ids, multiples=(bsz, 1))
+        return tf.tile(input=position_ids, multiples=(batch_size, 1))
 
     def call(self, input_ids=None, position_ids=None, token_type_ids=None, inputs_embeds=None, training=False):
         """

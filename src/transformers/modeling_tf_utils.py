@@ -815,19 +815,19 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             return embeds
 
         embeds = getattr(embedding_layer, "decoder", None)
-
         if embeds is not None:
             return embeds
 
+        # The reason why the attributes don't exist might be
+        # because the model is not built, so retry getting
+        # the argument after building the model
         model(model.dummy_inputs)
 
         embeds = getattr(embedding_layer, "weight", None)
-
         if embeds is not None:
             return embeds
 
         embeds = getattr(embedding_layer, "decoder", None)
-
         if embeds is not None:
             return embeds
 
