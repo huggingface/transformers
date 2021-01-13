@@ -467,14 +467,14 @@ class TrainingArguments:
 
     @cached_property
     @torch_required
-    def _setup_devices(self) -> Tuple["torch.device", int]:
+    def _setup_devices(self) -> "torch.device":
         logger.info("PyTorch: setting up devices")
         if self.no_cuda:
             device = torch.device("cpu")
-            n_gpu = 0
+            self._n_gpu = 0
         elif is_torch_tpu_available():
             device = xm.xla_device()
-            n_gpu = 0
+            self._n_gpu = 0
         elif self.local_rank == -1:
             # if n_gpu is > 1 we'll use nn.DataParallel.
             # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
@@ -485,9 +485,7 @@ class TrainingArguments:
             device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
             # Sometimes the line in the postinit has not been run before we end up here, so just checking we're not at
             # the default value.
-            if self._n_gpu == -1:
-                self._n_gpu = torch.cuda.device_count()
-            n_gpu = self._n_gpu
+            self._n_gpu = torch.cuda.device_count()
         else:
             # Here, we'll use torch.distributed.
             # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
@@ -507,12 +505,12 @@ class TrainingArguments:
             else:
                 torch.distributed.init_process_group(backend="nccl")
             device = torch.device("cuda", self.local_rank)
-            n_gpu = 1
+            self._n_gpu = 1
 
         if device.type == "cuda":
             torch.cuda.set_device(device)
 
-        return device, n_gpu
+        return device
 
     @property
     @torch_required
@@ -520,7 +518,7 @@ class TrainingArguments:
         """
         The device used by this process.
         """
-        return self._setup_devices[0]
+        return self._setup_devices
 
     @property
     @torch_required
@@ -532,7 +530,9 @@ class TrainingArguments:
             This will only be greater than one when you have multiple GPUs available but are not using distributed
             training. For distributed training, it will always be 1.
         """
-        return self._setup_devices[1]
+        # Make sure `self._n_gpu` is properly setup.
+        _ = self._setup_devices
+        return self._n_gpu
 
     @property
     @torch_required
