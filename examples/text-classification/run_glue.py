@@ -283,11 +283,9 @@ def main():
     # Padding strategy
     if data_args.pad_to_max_length:
         padding = "max_length"
-        max_length = data_args.max_seq_length
     else:
         # We will pad later, dynamically at batch creation, to the max sequence length in each batch
         padding = False
-        max_length = None
 
     # Some models have set the order of the labels to use, so let's make sure we do use it.
     label_to_id = None
@@ -314,7 +312,7 @@ def main():
         args = (
             (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
         )
-        result = tokenizer(*args, padding=padding, max_length=max_length, truncation=True)
+        result = tokenizer(*args, padding=padding, max_length=data_args.max_seq_length, truncation=True)
 
         # Map labels to IDs (not necessary for GLUE tasks)
         if label_to_id is not None and "label" in examples:
