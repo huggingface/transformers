@@ -4,7 +4,7 @@ import random
 import unittest
 from dataclasses import fields
 from itertools import product
-from transformers.testing_utils import parse_flag_from_env
+from transformers.testing_utils import parse_flag_from_env, require_tf, require_torch
 from transformers import (
     PerformerAttentionConfig, PerformerKernel, OrthogonalFeatureAlgorithm, performer_supporting_models_and_configs,
     is_torch_available, is_tf_available
@@ -45,11 +45,11 @@ class PerformerAttentionTest(unittest.TestCase):
                     if not _model_is_tf(model_class):
                         self.assertTrue(any((isinstance(module, PerformerAttention) for module in model.modules())))
 
-    @unittest.skipIf(not is_torch_available(), "PyTorch not available")
+    @require_torch
     def test_output_shape_pytorch(self):
         self._test_output_shape_for_library('pt')
 
-    @unittest.skipIf(not is_tf_available(), "TensorFlow not available")
+    @require_tf
     def test_output_shape_tensorflow(self):
         self._test_output_shape_for_library('tf')
 

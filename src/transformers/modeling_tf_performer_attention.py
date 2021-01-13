@@ -4,7 +4,7 @@ import random
 import tensorflow as tf
 
 from .configuration_performer_attention import PerformerAttentionConfig, PerformerKernel, OrthogonalFeatureAlgorithm
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 KERNEL_CALLABLES = {
     PerformerKernel.cosh: lambda x, h: tf.concat((tf.exp(h + x), tf.exp(h - x)), axis=-1),
@@ -56,8 +56,11 @@ class TFPerformerAttention(tf.keras.layers.Layer):
             self.s = None
             self.z = None
 
-        self.kernel_type = resolve_enum(PerformerKernel, self.kernel_type)
-        self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
+        if isinstance(self.kernel_type, Callable):
+            self.kernel_fn = self.kernel_type   # Allow for custom kernel types
+        else:
+            self.kernel_type = resolve_enum(PerformerKernel, self.kernel_type)
+            self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
         if self.use_linear_layers:
             for name in self.linear_layer_names:

@@ -1,6 +1,6 @@
 from itertools import count
 from torch import nn
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 import logging
 import math
 import random
@@ -67,8 +67,11 @@ class PerformerAttention(nn.Module):
             # another Markov chain on the first redraw if needed.
             self.random_feature_chain = None
 
-        self.kernel_type = resolve_enum(PerformerKernel, self.kernel_type)
-        self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
+        if isinstance(self.kernel_type, Callable):
+            self.kernel_fn = self.kernel_type   # Allow for custom kernel types
+        else:
+            self.kernel_type = resolve_enum(PerformerKernel, self.kernel_type)
+            self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
         if self.use_linear_layers:
             for name in self.linear_layer_names:

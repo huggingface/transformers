@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Sequence, Optional, Union
+from typing import Callable, Sequence, Optional, Union
 from enum import Enum
 
 
@@ -79,7 +79,7 @@ class PerformerAttentionConfig:
     """
 
     attention_dropout: float = 0.1
-    kernel_type: Union[str, PerformerKernel] = PerformerKernel.exp
+    kernel_type: Union[str, Callable, PerformerKernel] = PerformerKernel.exp
 
     causal: bool = False
     use_recurrent_decoding: bool = False
