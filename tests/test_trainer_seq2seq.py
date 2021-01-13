@@ -15,7 +15,7 @@
 
 from transformers import BertTokenizer, EncoderDecoderModel, Seq2SeqTrainer, Seq2SeqTrainingArguments
 from transformers.file_utils import is_datasets_available
-from transformers.testing_utils import TestCasePlus, require_datasets, slow
+from transformers.testing_utils import TestCasePlus, require_datasets, require_torch, slow
 
 
 if is_datasets_available():
@@ -25,6 +25,7 @@ if is_datasets_available():
 class Seq2seqTrainerTester(TestCasePlus):
     @slow
     @require_datasets
+    @require_torch
     def test_finetune_bert2bert(self):
         """
         Currently fails with:
