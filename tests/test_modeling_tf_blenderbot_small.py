@@ -295,6 +295,7 @@ def _long_tensor(tok_lst):
 
 
 @require_tokenizers
+@require_tf
 class TFBlenderbot90MIntegrationTests(unittest.TestCase):
     src_text = [
         "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel like   i'm going to throw up.\nand why is that?"

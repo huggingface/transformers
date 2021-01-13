@@ -32,7 +32,14 @@ from transformers.models.tapas.tokenization_tapas import (
     _is_punctuation,
     _is_whitespace,
 )
-from transformers.testing_utils import is_pt_tf_cross_test, require_pandas, require_tokenizers, require_torch, slow
+from transformers.testing_utils import (
+    is_pt_tf_cross_test,
+    require_pandas,
+    require_scatter,
+    require_tokenizers,
+    require_torch,
+    slow,
+)
 
 from .test_tokenization_common import TokenizerTesterMixin, filter_non_english, merge_model_tokenizer_mappings
 
@@ -984,6 +991,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @require_torch
     @slow
+    @require_scatter
     def test_torch_encode_plus_sent_to_model(self):
         import torch
 
@@ -1188,4 +1196,8 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @unittest.skip("Skip this test while all models are still to be uploaded.")
     def test_pretrained_model_lists(self):
+        pass
+
+    @unittest.skip("Doesn't support another framework than PyTorch")
+    def test_np_encode_plus_sent_to_model(self):
         pass
