@@ -25,8 +25,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
-from datasets import ClassLabel, load_dataset
-from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_score
+from datasets import ClassLabel, load_dataset, load_metric
 
 import transformers
 from transformers import (
@@ -323,6 +322,8 @@ def main():
     data_collator = DataCollatorForTokenClassification(tokenizer)
 
     # Metrics
+    metric = load_metric("seqeval")
+
     def compute_metrics(p):
         predictions, labels = p
         predictions = np.argmax(predictions, axis=2)
@@ -337,11 +338,12 @@ def main():
             for prediction, label in zip(predictions, labels)
         ]
 
+        results = metric.compute(predictions=true_predictions, references=true_labels)
         return {
-            "accuracy_score": accuracy_score(true_labels, true_predictions),
-            "precision": precision_score(true_labels, true_predictions),
-            "recall": recall_score(true_labels, true_predictions),
-            "f1": f1_score(true_labels, true_predictions),
+            "precision": results["overall_precision"],
+            "recall": results["overall_recall"],
+            "f1": results["overall_f1"],
+            "accuracy": results["overall_accuracy"],
         }
 
     # Initialize our Trainer
