@@ -16,7 +16,7 @@ import json
 import os
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from .file_utils import cached_property, is_torch_available, is_torch_tpu_available, torch_required
 from .trainer_utils import EvaluationStrategy, SchedulerType
@@ -426,7 +426,6 @@ class TrainingArguments:
 
         if is_torch_available() and self.device.type != "cuda" and self.fp16:
             raise ValueError("Mixed precision training with AMP or APEX (`--fp16`) can only be used on CUDA devices.")
-        self._n_gpu = torch.cuda.device_count()
 
     def __repr__(self):
         # We override the default repr to remove deprecated arguments from the repr. This method should be removed once
