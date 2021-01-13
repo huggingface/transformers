@@ -526,7 +526,7 @@ class MPNetModel(MPNetPreTrainedModel):
     ):
         if "token_type_ids" in kwargs:
             warnings.warn(
-                "The argument `token_type_ids` is not used is this model and will be ignored. It will also be removed in a next release."
+                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
             )
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -620,7 +620,7 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
         """
         if token_type_ids is not None:
             warnings.warn(
-                "The argument `token_type_ids` is not used is this model and will be ignored. It will also be removed in a next release."
+                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
             )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -728,7 +728,7 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
         """
         if token_type_ids is not None:
             warnings.warn(
-                "The argument `token_type_ids` is not used is this model and will be ignored. It will also be removed in a next release."
+                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
             )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -815,7 +815,7 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
         """
         if token_type_ids is not None:
             warnings.warn(
-                "The argument `token_type_ids` is not used is this model and will be ignored. It will also be removed in a next release."
+                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
             )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -911,7 +911,7 @@ class MPNetForTokenClassification(MPNetPreTrainedModel):
         """
         if token_type_ids is not None:
             warnings.warn(
-                "The argument `token_type_ids` is not used is this model and will be ignored. It will also be removed in a next release."
+                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
             )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1031,7 +1031,7 @@ class MPNetForQuestionAnswering(MPNetPreTrainedModel):
 
         if token_type_ids is not None:
             warnings.warn(
-                "The argument `token_type_ids` is not used is this model and will be ignored. It will also be removed in a next release."
+                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
             )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

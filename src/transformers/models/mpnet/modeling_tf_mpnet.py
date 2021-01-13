@@ -556,7 +556,6 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
         self,
         input_ids=None,
         attention_mask=None,
-        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -566,11 +565,6 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
         training=False,
         **kwargs,
     ):
-        if token_type_ids is not None:
-            warnings.warn(
-                "The argument `token_type_ids` is not used is this model and will be ignored. It will also be removed in a next release."
-            )
-
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -585,6 +579,7 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
             training=training,
             kwargs_call=kwargs,
         )
+        print(inputs)
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif inputs["input_ids"] is not None:
@@ -770,7 +765,7 @@ class TFMPNetModel(TFMPNetPreTrainedModel):
     ):
         if token_type_ids is not None:
             warnings.warn(
-                "The argument `token_type_ids` is not used is this model and will be ignored. It will also be removed in a next release."
+                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
             )
 
         inputs = input_processing(
@@ -908,7 +903,7 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
         """
         if token_type_ids is not None:
             warnings.warn(
-                "The argument `token_type_ids` is not used is this model and will be ignored. It will also be removed in a next release."
+                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
             )
 
         inputs = input_processing(
@@ -1034,7 +1029,7 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
         """
         if token_type_ids is not None:
             warnings.warn(
-                "The argument `token_type_ids` is not used is this model and will be ignored. It will also be removed in a next release."
+                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
             )
 
         inputs = input_processing(
@@ -1278,7 +1273,7 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
         """
         if token_type_ids is not None:
             warnings.warn(
-                "The argument `token_type_ids` is not used is this model and will be ignored. It will also be removed in a next release."
+                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
             )
 
         inputs = input_processing(
@@ -1388,7 +1383,7 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
         """
         if token_type_ids is not None:
             warnings.warn(
-                "The argument `token_type_ids` is not used is this model and will be ignored. It will also be removed in a next release."
+                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
             )
 
         inputs = input_processing(
