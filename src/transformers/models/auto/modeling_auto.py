@@ -33,6 +33,7 @@ from ..albert.modeling_albert import (
     AlbertModel,
 )
 from ..bart.modeling_bart import (
+    BartForCausalLM,
     BartForConditionalGeneration,
     BartForQuestionAnswering,
     BartForSequenceClassification,
@@ -124,6 +125,7 @@ from ..longformer.modeling_longformer import (
 from ..lxmert.modeling_lxmert import LxmertForPreTraining, LxmertForQuestionAnswering, LxmertModel
 from ..marian.modeling_marian import MarianModel, MarianMTModel
 from ..mbart.modeling_mbart import (
+    MBartForCausalLM,
     MBartForConditionalGeneration,
     MBartForQuestionAnswering,
     MBartForSequenceClassification,
@@ -401,6 +403,8 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
         (BertGenerationConfig, BertGenerationDecoder),
         (XLMProphetNetConfig, XLMProphetNetForCausalLM),
         (ProphetNetConfig, ProphetNetForCausalLM),
+        (BartConfig, BartForCausalLM),
+        (MBartConfig, MBartForCausalLM),
     ]
 )
 

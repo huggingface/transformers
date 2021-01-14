@@ -27,7 +27,7 @@ from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
-from .test_modeling_common import ModelTesterMixin, ids_tensor
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -36,11 +36,11 @@ if is_torch_available():
     from transformers import (
         AutoModelForSequenceClassification,
         BartConfig,
+        BartForCausalLM,
         BartForConditionalGeneration,
         BartForQuestionAnswering,
         BartForSequenceClassification,
         BartModel,
-        BartForCausalLM,
         BartTokenizer,
         BartTokenizerFast,
         pipeline,
@@ -722,7 +722,6 @@ class BartStandaloneDecoderModelTester:
         batch_size=13,
         d_model=16,
         decoder_seq_length=7,
-        # For common tests
         is_training=True,
         is_decoder=True,
         use_attention_mask=True,
@@ -731,6 +730,7 @@ class BartStandaloneDecoderModelTester:
         decoder_start_token_id=2,
         decoder_ffn_dim=32,
         decoder_layers=4,
+        encoder_attention_heads=4,
         decoder_attention_heads=4,
         max_position_embeddings=30,
         is_encoder_decoder=False,
@@ -750,11 +750,13 @@ class BartStandaloneDecoderModelTester:
 
         self.vocab_size = vocab_size
         self.d_model = d_model
+        self.hidden_size = d_model
         self.num_hidden_layers = decoder_layers
         self.decoder_layers = decoder_layers
         self.decoder_ffn_dim = decoder_ffn_dim
-        self.num_attention_heads = decoder_attention_heads
+        self.encoder_attention_heads = encoder_attention_heads
         self.decoder_attention_heads = decoder_attention_heads
+        self.num_attention_heads = decoder_attention_heads
         self.eos_token_id = eos_token_id
         self.bos_token_id = bos_token_id
         self.pad_token_id = pad_token_id
@@ -766,7 +768,6 @@ class BartStandaloneDecoderModelTester:
         self.scope = None
         self.decoder_key_length = decoder_seq_length
         self.base_model_out_len = 2
-        self.num_hidden_states_types = 2  # decoder_main, decoder_ngram
         self.decoder_attention_idx = 1
 
     def prepare_config_and_inputs(self):
@@ -785,6 +786,7 @@ class BartStandaloneDecoderModelTester:
             d_model=self.d_model,
             decoder_layers=self.decoder_layers,
             decoder_ffn_dim=self.decoder_ffn_dim,
+            encoder_attention_heads=self.encoder_attention_heads,
             decoder_attention_heads=self.decoder_attention_heads,
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
@@ -799,6 +801,26 @@ class BartStandaloneDecoderModelTester:
             config,
             input_ids,
             attention_mask,
+            lm_labels,
+        )
+
+    def prepare_config_and_inputs_for_decoder(self):
+        (
+            config,
+            input_ids,
+            attention_mask,
+            lm_labels,
+        ) = self.prepare_config_and_inputs()
+
+        encoder_hidden_states = floats_tensor([self.batch_size, self.encoder_seq_length, self.hidden_size])
+        encoder_attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
+
+        return (
+            config,
+            input_ids,
+            attention_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
             lm_labels,
         )
 
@@ -909,16 +931,18 @@ class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, un
     test_headmasking = False
     is_encoder_decoder = False
 
-    def setUp(self,):
-        self.model_tester = BartStandaloneDecoderModelTester()
+    def setUp(
+        self,
+    ):
+        self.model_tester = BartStandaloneDecoderModelTester(self, is_training=False)
         self.config_tester = ConfigTester(self, config_class=BartConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
     def test_decoder_model_past(self):
-        config_and_inputs = self.model_test.prepare_config_and_inputs()
-        self.model_tester.create_and_checK_decoder_model_past(config_and_inputs)
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_decoder_model_past(*config_and_inputs)
 
     def test_decoder_model_attn_mask_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

@@ -426,6 +426,11 @@ class AutoModelWithLMHead:
 BART_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class BartForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class BartForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -1372,6 +1377,11 @@ class MarianMTModel:
 
     @classmethod
     def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MBartForCausalLM:
+    def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
 

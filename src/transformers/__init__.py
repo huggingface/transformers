@@ -404,6 +404,7 @@ if is_torch_available():
     _import_structure["models.bart"].extend(
         [
             "BART_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BartForCausalLM",
             "BartForConditionalGeneration",
             "BartForQuestionAnswering",
             "BartForSequenceClassification",
@@ -601,6 +602,7 @@ if is_torch_available():
     _import_structure["models.marian"].extend(["MarianModel", "MarianMTModel"])
     _import_structure["models.mbart"].extend(
         [
+            "MBartForCausalLM",
             "MBartForConditionalGeneration",
             "MBartForQuestionAnswering",
             "MBartForSequenceClassification",
@@ -1469,6 +1471,7 @@ if TYPE_CHECKING:
         )
         from .models.bart import (
             BART_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BartForCausalLM,
             BartForConditionalGeneration,
             BartForQuestionAnswering,
             BartForSequenceClassification,
@@ -1630,6 +1633,7 @@ if TYPE_CHECKING:
         )
         from .models.marian import MarianModel, MarianMTModel
         from .models.mbart import (
+            MBartForCausalLM,
             MBartForConditionalGeneration,
             MBartForQuestionAnswering,
             MBartForSequenceClassification,
