@@ -419,7 +419,7 @@ def get_length_grouped_indices(lengths, batch_size, mega_batch_mult=None, genera
     megabatches = [list(sorted(megabatch, key=lambda i: lengths[i], reverse=True)) for megabatch in megabatches]
 
     # The rest is to get the biggest batch first.
-    # Since each meagbatch is sorted by descending length, the longest element is the first
+    # Since each megabatch is sorted by descending length, the longest element is the first
     megabatch_maximums = [lengths[megabatch[0]] for megabatch in megabatches]
     max_idx = torch.argmax(torch.tensor(megabatch_maximums)).item()
     # Switch to put the longest element in first position
