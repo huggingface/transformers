@@ -851,67 +851,6 @@ if is_tf_available():
             "TFAutoModelWithLMHead",
         ]
     )
-<<<<<<< HEAD
-    from .models.bert import (
-        BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        BertForMaskedLM,
-        BertForMultipleChoice,
-        BertForNextSentencePrediction,
-        BertForPreTraining,
-        BertForQuestionAnswering,
-        BertForSequenceClassification,
-        BertForTokenClassification,
-        BertLayer,
-        BertLMHeadModel,
-        BertModel,
-        BertPreTrainedModel,
-        load_tf_weights_in_bert,
-    )
-    from .models.bert_generation import (
-        BertGenerationDecoder,
-        BertGenerationEncoder,
-        load_tf_weights_in_bert_generation,
-    )
-    from .models.blenderbot import BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST, BlenderbotForConditionalGeneration
-    from .models.camembert import (
-        CAMEMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        CamembertForCausalLM,
-        CamembertForMaskedLM,
-        CamembertForMultipleChoice,
-        CamembertForQuestionAnswering,
-        CamembertForSequenceClassification,
-        CamembertForTokenClassification,
-        CamembertModel,
-    )
-    from .models.conv_bert import (
-        CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        ConvBertForMaskedLM,
-        ConvBertForMultipleChoice,
-        ConvBertForQuestionAnswering,
-        ConvBertForSequenceClassification,
-        ConvBertForTokenClassification,
-        ConvBertLayer,
-        ConvBertModel,
-        ConvBertPreTrainedModel,
-        load_tf_weights_in_conv_bert,
-    )
-    from .models.ctrl import CTRL_PRETRAINED_MODEL_ARCHIVE_LIST, CTRLLMHeadModel, CTRLModel, CTRLPreTrainedModel
-    from .models.deberta import (
-        DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
-        DebertaForSequenceClassification,
-        DebertaModel,
-        DebertaPreTrainedModel,
-    )
-    from .models.distilbert import (
-        DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        DistilBertForMaskedLM,
-        DistilBertForMultipleChoice,
-        DistilBertForQuestionAnswering,
-        DistilBertForSequenceClassification,
-        DistilBertForTokenClassification,
-        DistilBertModel,
-        DistilBertPreTrainedModel,
-=======
     _import_structure["models.bart"].extend(["TFBartForConditionalGeneration", "TFBartModel", "TFBartPretrainedModel"])
     _import_structure["models.bert"].extend(
         [
@@ -929,7 +868,6 @@ if is_tf_available():
             "TFBertModel",
             "TFBertPreTrainedModel",
         ]
->>>>>>> master
     )
     _import_structure["models.blenderbot"].extend(["TFBlenderbotForConditionalGeneration", "TFBlenderbotModel"])
     _import_structure["models.blenderbot_small"].extend(
