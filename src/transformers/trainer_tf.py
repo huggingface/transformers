@@ -654,10 +654,10 @@ class TFTrainer:
 
                 labels = {
                     k: tf.concat(
-                        [ft[self.args.train_batch_size // self.args.n_replicas :], reduced_labels[k]],
+                        [lbl[self.args.train_batch_size // self.args.n_replicas :], reduced_labels[k]],
                         axis=0,
                     )
-                    for k, ft in labels.items()
+                    for k, lbl in labels.items()
                 }
 
             gradients = self.gradient_accumulator.gradients
