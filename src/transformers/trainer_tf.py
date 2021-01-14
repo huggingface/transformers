@@ -639,7 +639,7 @@ class TFTrainer:
                     k: ft[: self.args.train_batch_size // self.args.n_replicas] for k, ft in features.items()
                 }
                 reduced_labels = {
-                    k: ft[: self.args.train_batch_size // self.args.n_replicas] for k, ft in labels.items()
+                    k: lbl[: self.args.train_batch_size // self.args.n_replicas] for k, lbl in labels.items()
                 }
 
                 self.training_step(reduced_features, reduced_labels, nb_instances_in_global_batch)
