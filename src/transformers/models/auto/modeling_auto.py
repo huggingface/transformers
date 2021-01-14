@@ -67,7 +67,6 @@ from ..conv_bert.modeling_conv_bert import (
     ConvBertForTokenClassification,
     ConvBertModel,
 )
-from ..ctrl.modeling_ctrl import CTRLLMHeadModel, CTRLModel
 from ..ctrl.modeling_ctrl import CTRLForSequenceClassification, CTRLLMHeadModel, CTRLModel
 from ..deberta.modeling_deberta import DebertaForSequenceClassification, DebertaModel
 from ..distilbert.modeling_distilbert import (
