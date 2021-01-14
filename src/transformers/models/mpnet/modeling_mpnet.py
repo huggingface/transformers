@@ -524,11 +524,6 @@ class MPNetModel(MPNetPreTrainedModel):
         return_dict=None,
         **kwargs,
     ):
-        if "token_type_ids" in kwargs:
-            warnings.warn(
-                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
-            )
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -603,7 +598,6 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -618,11 +612,6 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
             config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
         """
-        if token_type_ids is not None:
-            warnings.warn(
-                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
-            )
-
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.mpnet(
@@ -711,7 +700,6 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -726,10 +714,6 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        if token_type_ids is not None:
-            warnings.warn(
-                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
-            )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -797,7 +781,6 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
     def forward(
         self,
         input_ids=None,
-        token_type_ids=None,
         attention_mask=None,
         position_ids=None,
         head_mask=None,
@@ -813,11 +796,7 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
             num_choices-1]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
             :obj:`input_ids` above)
         """
-        if token_type_ids is not None:
-            warnings.warn(
-                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
-            )
-
+        
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
@@ -895,7 +874,6 @@ class MPNetForTokenClassification(MPNetPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -909,11 +887,7 @@ class MPNetForTokenClassification(MPNetPreTrainedModel):
             Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
             1]``.
         """
-        if token_type_ids is not None:
-            warnings.warn(
-                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
-            )
-
+        
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.mpnet(
@@ -1008,7 +982,6 @@ class MPNetForQuestionAnswering(MPNetPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -1028,11 +1001,6 @@ class MPNetForQuestionAnswering(MPNetPreTrainedModel):
             Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
         """
-
-        if token_type_ids is not None:
-            warnings.warn(
-                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
-            )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

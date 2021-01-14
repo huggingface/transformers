@@ -752,7 +752,6 @@ class TFMPNetModel(TFMPNetPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -762,11 +761,6 @@ class TFMPNetModel(TFMPNetPreTrainedModel):
         training=False,
         **kwargs,
     ):
-        if token_type_ids is not None:
-            warnings.warn(
-                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
-            )
-
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -883,7 +877,6 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
         self,
         input_ids=None,
         attention_mask=None,
-        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -900,11 +893,7 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
             config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
         """
-        if token_type_ids is not None:
-            warnings.warn(
-                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
-            )
-
+        
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1009,7 +998,6 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
         self,
         input_ids=None,
         attention_mask=None,
-        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -1026,11 +1014,7 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        if token_type_ids is not None:
-            warnings.warn(
-                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
-            )
-
+        
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1120,7 +1104,6 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
         self,
         input_ids=None,
         attention_mask=None,
-        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -1142,7 +1125,6 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
             config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1254,7 +1236,6 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
         self,
         input_ids=None,
         attention_mask=None,
-        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -1270,11 +1251,7 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
             Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
             1]``.
         """
-        if token_type_ids is not None:
-            warnings.warn(
-                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
-            )
-
+        
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1358,7 +1335,6 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
         self,
         input_ids=None,
         attention_mask=None,
-        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -1380,11 +1356,7 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
             Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
             sequence are not taken into account for computing the loss.
         """
-        if token_type_ids is not None:
-            warnings.warn(
-                "The argument `token_type_ids` is not used in this model and will be ignored. It will also be removed in a next release."
-            )
-
+        
         inputs = input_processing(
             func=self.call,
             config=self.config,
