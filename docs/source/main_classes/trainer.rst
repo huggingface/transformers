@@ -116,10 +116,10 @@ This provided support is new and experimental as of this writing.
 Installation Notes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-As of this writing, both, FairScale and Deepspeed, require compilation of CUDA C++ code, before they can be used.
+As of this writing, both FairScale and Deepspeed require compilation of CUDA C++ code, before they can be used.
 
 While all installation issues should be dealt with through the corresponding github Issues of FairScale and DeepSpeed,
-there are a few common issues that one may encounter while building any pytorch extension that needs to build CUDA
+there are a few common issues that one may encounter while building any PyTorch extension that needs to build CUDA
 extensions.
 
 Therefore, if you encounter a CUDA-related build issue while doing one of the following or both:
@@ -220,7 +220,7 @@ As always make sure to edit the paths in the example to match your situation.
 
 **If still unsuccessful:**
 
-If after addressing these you still encounter build issues, please, proceed with the github Issue of `FairScale
+If after addressing these you still encounter build issues, please, proceed with the GitHub Issue of `FairScale
 <https://github.com/facebookresearch/fairscale/issues>`__ and `Deepspeed
 <https://github.com/microsoft/DeepSpeed/issues>`__, depending on the project you have the problem with.
 
@@ -234,7 +234,7 @@ provides support for the following features from `the ZeRO paper <https://arxiv.
 1. Optimizer State Sharding
 2. Gradient Sharding
 
-You will need at least 2 GPUs to use this feature.
+You will need at least two GPUs to use this feature.
 
 To deploy this feature:
 
@@ -292,7 +292,7 @@ Install the library via pypi:
 
     pip install deepspeed
 
-or find more details on `the DeepSpeed's github page <https://github.com/microsoft/deepspeed#installation>`__.
+or find more details on `the DeepSpeed's GitHub page <https://github.com/microsoft/deepspeed#installation>`__.
 
 Deployment with multiple GPUs
 =======================================================================================================================
@@ -342,10 +342,10 @@ For some practical usage examples, please, see this `post
 
 
 
-Deployment with 1 GPU
+Deployment with one GPU
 =======================================================================================================================
 
-To deploy DeepSpeed with 1 GPUs adjust the :class:`~transformers.Trainer` command line arguments as following:
+To deploy DeepSpeed with one GPU adjust the :class:`~transformers.Trainer` command line arguments as following:
 
 .. code-block:: bash
 
@@ -362,7 +362,7 @@ DeepSpeed deploys all GPUs it can see. If you have only 1 GPU to start with, the
 following `documentation <https://www.deepspeed.ai/getting-started/#resource-configuration-multi-node>`__ discusses the
 launcher options.
 
-Why would you want to use DeepSpeed with just 1 GPU?
+Why would you want to use DeepSpeed with just one GPU?
 
 1. It has a ZeRO-offload feature which can delegate some computations and memory to the host's CPU and RAM, and thus
    leave more GPU resources for model's needs - e.g. larger batch size, or enabling a fitting of a very big model which
