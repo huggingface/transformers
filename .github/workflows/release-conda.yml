@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - v*
-    branches:
-      - fix-conda*
 
 env:
   ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_API_TOKEN }}
@@ -34,7 +32,7 @@ jobs:
           conda install -c defaults anaconda-client conda-build
 
       - name: Extract version
-        run: echo "TRANSFORMERS_VERSION=4.2.0" >> $GITHUB_ENV
+        run: echo "TRANSFORMERS_VERSION=`python setup.py --version`" >> $GITHUB_ENV
 
       - name: Build conda packages
         run: |
