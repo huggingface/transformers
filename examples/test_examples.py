@@ -184,7 +184,7 @@ class ExamplesTests(TestCasePlus):
 
         with patch.object(sys, "argv", testargs):
             result = run_ner.main()
-            self.assertGreaterEqual(result["eval_accuracy_score"], 0.75)
+            self.assertGreaterEqual(result["eval_accuracy"], 0.75)
             self.assertGreaterEqual(result["eval_precision"], 0.75)
             self.assertLess(result["eval_loss"], 0.5)
 
