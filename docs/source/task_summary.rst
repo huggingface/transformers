@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Summary of the tasks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -315,7 +327,7 @@ Masked Language Modeling
 Masked language modeling is the task of masking tokens in a sequence with a masking token, and prompting the model to
 fill that mask with an appropriate token. This allows the model to attend to both the right context (tokens on the
 right of the mask) and the left context (tokens on the left of the mask). Such a training creates a strong basis for
-downstream tasks, requiring bi-directional context such as SQuAD (question answering, see `Lewis, Lui, Goyal et al.
+downstream tasks requiring bi-directional context, such as SQuAD (question answering, see `Lewis, Lui, Goyal et al.
 <https://arxiv.org/abs/1910.13461>`__, part 4.2).
 
 Here is an example of using pipelines to replace a mask from a sequence:
@@ -645,7 +657,7 @@ Here are the expected results:
         {'word': 'Bridge', 'score': 0.990249514579773, 'entity': 'I-LOC'}
     ]
 
-Note, how the tokens of the sequence "Hugging Face" have been identified as an organisation, and "New York City",
+Note how the tokens of the sequence "Hugging Face" have been identified as an organisation, and "New York City",
 "DUMBO" and "Manhattan Bridge" have been identified as locations.
 
 Here is an example of doing named entity recognition, using a model and a tokenizer. The process is the following:
@@ -738,8 +750,7 @@ Summarization is the task of summarizing a document or an article into a shorter
 
 An example of a summarization dataset is the CNN / Daily Mail dataset, which consists of long news articles and was
 created for the task of summarization. If you would like to fine-tune a model on a summarization task, various
-approaches are described in this `document
-<https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`__.
+approaches are described in this :prefix_link:`document <examples/seq2seq/README.md>`.
 
 Here is an example of using the pipelines to do summarization. It leverages a Bart model that was fine-tuned on the CNN
 / Daily Mail data set.
@@ -817,8 +828,7 @@ Translation is the task of translating a text from one language to another.
 
 An example of a translation dataset is the WMT English to German dataset, which has sentences in English as the input
 data and the corresponding sentences in German as the target data. If you would like to fine-tune a model on a
-translation task, various approaches are described in this `document
-<https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`__.
+translation task, various approaches are described in this :prefix_link:`document <examples/seq2seq/README.md>`.
 
 Here is an example of using the pipelines to do translation. It leverages a T5 model that was only pre-trained on a
 multi-task mixture dataset (including WMT), yet, yielding impressive translation results.

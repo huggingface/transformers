@@ -48,7 +48,8 @@ from ..bert.modeling_bert import (
     BertModel,
 )
 from ..bert_generation.modeling_bert_generation import BertGenerationDecoder, BertGenerationEncoder
-from ..blenderbot.modeling_blenderbot import BlenderbotForConditionalGeneration
+from ..blenderbot.modeling_blenderbot import BlenderbotForConditionalGeneration, BlenderbotModel
+from ..blenderbot_small.modeling_blenderbot_small import BlenderbotSmallForConditionalGeneration, BlenderbotSmallModel
 from ..camembert.modeling_camembert import (
     CamembertForCausalLM,
     CamembertForMaskedLM,
@@ -67,6 +68,7 @@ from ..conv_bert.modeling_conv_bert import (
     ConvBertModel,
 )
 from ..ctrl.modeling_ctrl import CTRLLMHeadModel, CTRLModel
+from ..ctrl.modeling_ctrl import CTRLForSequenceClassification, CTRLLMHeadModel, CTRLModel
 from ..deberta.modeling_deberta import DebertaForSequenceClassification, DebertaModel
 from ..distilbert.modeling_distilbert import (
     DistilBertForMaskedLM,
@@ -106,7 +108,18 @@ from ..funnel.modeling_funnel import (
     FunnelModel,
 )
 from ..gpt2.modeling_gpt2 import GPT2ForSequenceClassification, GPT2LMHeadModel, GPT2Model
-from ..layoutlm.modeling_layoutlm import LayoutLMForMaskedLM, LayoutLMForTokenClassification, LayoutLMModel
+from ..layoutlm.modeling_layoutlm import (
+    LayoutLMForMaskedLM,
+    LayoutLMForSequenceClassification,
+    LayoutLMForTokenClassification,
+    LayoutLMModel,
+)
+from ..led.modeling_led import (
+    LEDForConditionalGeneration,
+    LEDForQuestionAnswering,
+    LEDForSequenceClassification,
+    LEDModel,
+)
 from ..longformer.modeling_longformer import (
     LongformerForMaskedLM,
     LongformerForMultipleChoice,
@@ -116,8 +129,13 @@ from ..longformer.modeling_longformer import (
     LongformerModel,
 )
 from ..lxmert.modeling_lxmert import LxmertForPreTraining, LxmertForQuestionAnswering, LxmertModel
-from ..marian.modeling_marian import MarianMTModel
-from ..mbart.modeling_mbart import MBartForConditionalGeneration
+from ..marian.modeling_marian import MarianModel, MarianMTModel
+from ..mbart.modeling_mbart import (
+    MBartForConditionalGeneration,
+    MBartForQuestionAnswering,
+    MBartForSequenceClassification,
+    MBartModel,
+)
 from ..mobilebert.modeling_mobilebert import (
     MobileBertForMaskedLM,
     MobileBertForMultipleChoice,
@@ -128,9 +146,17 @@ from ..mobilebert.modeling_mobilebert import (
     MobileBertForTokenClassification,
     MobileBertModel,
 )
+from ..mpnet.modeling_mpnet import (
+    MPNetForMaskedLM,
+    MPNetForMultipleChoice,
+    MPNetForQuestionAnswering,
+    MPNetForSequenceClassification,
+    MPNetForTokenClassification,
+    MPNetModel,
+)
 from ..mt5.modeling_mt5 import MT5ForConditionalGeneration, MT5Model
 from ..openai.modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
-from ..pegasus.modeling_pegasus import PegasusForConditionalGeneration
+from ..pegasus.modeling_pegasus import PegasusForConditionalGeneration, PegasusModel
 from ..prophetnet.modeling_prophetnet import ProphetNetForCausalLM, ProphetNetForConditionalGeneration, ProphetNetModel
 from ..rag.modeling_rag import (  # noqa: F401 - need to import all RagModels to be in globals() function
     RagModel,
@@ -163,7 +189,13 @@ from ..squeezebert.modeling_squeezebert import (
     SqueezeBertModel,
 )
 from ..t5.modeling_t5 import T5ForConditionalGeneration, T5Model
-from ..transfo_xl.modeling_transfo_xl import TransfoXLLMHeadModel, TransfoXLModel
+from ..tapas.modeling_tapas import (
+    TapasForMaskedLM,
+    TapasForQuestionAnswering,
+    TapasForSequenceClassification,
+    TapasModel,
+)
+from ..transfo_xl.modeling_transfo_xl import TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
 from ..xlm.modeling_xlm import (
     XLMForMultipleChoice,
     XLMForQuestionAnsweringSimple,
@@ -201,6 +233,7 @@ from .configuration_auto import (
     BertConfig,
     BertGenerationConfig,
     BlenderbotConfig,
+    BlenderbotSmallConfig,
     CamembertConfig,
     ConvBertConfig,
     CTRLConfig,
@@ -214,11 +247,13 @@ from .configuration_auto import (
     FunnelConfig,
     GPT2Config,
     LayoutLMConfig,
+    LEDConfig,
     LongformerConfig,
     LxmertConfig,
     MarianConfig,
     MBartConfig,
     MobileBertConfig,
+    MPNetConfig,
     MT5Config,
     OpenAIGPTConfig,
     PegasusConfig,
@@ -228,6 +263,7 @@ from .configuration_auto import (
     RobertaConfig,
     SqueezeBertConfig,
     T5Config,
+    TapasConfig,
     TransfoXLConfig,
     XLMConfig,
     XLMProphetNetConfig,
@@ -240,7 +276,6 @@ from .configuration_auto import (
 # Add modeling imports here
 
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -248,9 +283,15 @@ MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
         (ConvBertConfig, ConvBertModel),
+        (LEDConfig, LEDModel),
+        (BlenderbotSmallConfig, BlenderbotSmallModel),
         (RetriBertConfig, RetriBertModel),
         (MT5Config, MT5Model),
         (T5Config, T5Model),
+        (PegasusConfig, PegasusModel),
+        (MarianConfig, MarianMTModel),
+        (MBartConfig, MBartModel),
+        (BlenderbotConfig, BlenderbotModel),
         (DistilBertConfig, DistilBertModel),
         (AlbertConfig, AlbertModel),
         (CamembertConfig, CamembertModel),
@@ -279,6 +320,9 @@ MODEL_MAPPING = OrderedDict(
         (DPRConfig, DPRQuestionEncoder),
         (XLMProphetNetConfig, XLMProphetNetModel),
         (ProphetNetConfig, ProphetNetModel),
+        (MPNetConfig, MPNetModel),
+        (TapasConfig, TapasModel),
+        (MarianConfig, MarianModel),
     ]
 )
 
@@ -309,6 +353,8 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForPreTraining),
         (LxmertConfig, LxmertForPreTraining),
         (FunnelConfig, FunnelForPreTraining),
+        (MPNetConfig, MPNetForMaskedLM),
+        (TapasConfig, TapasForMaskedLM),
     ]
 )
 
@@ -316,6 +362,8 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
         (ConvBertConfig, ConvBertForMaskedLM),
+        (LEDConfig, LEDForConditionalGeneration),
+        (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
         (LayoutLMConfig, LayoutLMForMaskedLM),
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
@@ -341,6 +389,8 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (EncoderDecoderConfig, EncoderDecoderModel),
         (ReformerConfig, ReformerModelWithLMHead),
         (FunnelConfig, FunnelForMaskedLM),
+        (MPNetConfig, MPNetForMaskedLM),
+        (TapasConfig, TapasForMaskedLM),
     ]
 )
 
@@ -387,12 +437,16 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForMaskedLM),
         (ReformerConfig, ReformerForMaskedLM),
         (FunnelConfig, FunnelForMaskedLM),
+        (MPNetConfig, MPNetForMaskedLM),
+        (TapasConfig, TapasForMaskedLM),
     ]
 )
 
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        (LEDConfig, LEDForConditionalGeneration),
+        (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
         (MT5Config, MT5ForConditionalGeneration),
         (T5Config, T5ForConditionalGeneration),
         (PegasusConfig, PegasusForConditionalGeneration),
@@ -411,14 +465,17 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
         (ConvBertConfig, ConvBertForSequenceClassification),
+        (LEDConfig, LEDForSequenceClassification),
         (DistilBertConfig, DistilBertForSequenceClassification),
         (AlbertConfig, AlbertForSequenceClassification),
         (CamembertConfig, CamembertForSequenceClassification),
         (XLMRobertaConfig, XLMRobertaForSequenceClassification),
+        (MBartConfig, MBartForSequenceClassification),
         (BartConfig, BartForSequenceClassification),
         (LongformerConfig, LongformerForSequenceClassification),
         (RobertaConfig, RobertaForSequenceClassification),
         (SqueezeBertConfig, SqueezeBertForSequenceClassification),
+        (LayoutLMConfig, LayoutLMForSequenceClassification),
         (BertConfig, BertForSequenceClassification),
         (XLNetConfig, XLNetForSequenceClassification),
         (MobileBertConfig, MobileBertForSequenceClassification),
@@ -430,6 +487,10 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (GPT2Config, GPT2ForSequenceClassification),
         (OpenAIGPTConfig, OpenAIGPTForSequenceClassification),
         (ReformerConfig, ReformerForSequenceClassification),
+        (CTRLConfig, CTRLForSequenceClassification),
+        (TransfoXLConfig, TransfoXLForSequenceClassification),
+        (MPNetConfig, MPNetForSequenceClassification),
+        (TapasConfig, TapasForSequenceClassification),
     ]
 )
 
@@ -437,10 +498,12 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
         (ConvBertConfig, ConvBertForQuestionAnswering),
+        (LEDConfig, LEDForQuestionAnswering),
         (DistilBertConfig, DistilBertForQuestionAnswering),
         (AlbertConfig, AlbertForQuestionAnswering),
         (CamembertConfig, CamembertForQuestionAnswering),
         (BartConfig, BartForQuestionAnswering),
+        (MBartConfig, MBartForQuestionAnswering),
         (LongformerConfig, LongformerForQuestionAnswering),
         (XLMRobertaConfig, XLMRobertaForQuestionAnswering),
         (RobertaConfig, RobertaForQuestionAnswering),
@@ -454,6 +517,14 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (ReformerConfig, ReformerForQuestionAnswering),
         (FunnelConfig, FunnelForQuestionAnswering),
         (LxmertConfig, LxmertForQuestionAnswering),
+        (MPNetConfig, MPNetForQuestionAnswering),
+    ]
+)
+
+MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
+    [
+        # Model for Table Question Answering mapping
+        (TapasConfig, TapasForQuestionAnswering),
     ]
 )
 
@@ -477,6 +548,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (ElectraConfig, ElectraForTokenClassification),
         (FlaubertConfig, FlaubertForTokenClassification),
         (FunnelConfig, FunnelForTokenClassification),
+        (MPNetConfig, MPNetForTokenClassification),
     ]
 )
 
@@ -498,6 +570,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (XLMConfig, XLMForMultipleChoice),
         (FlaubertConfig, FlaubertForMultipleChoice),
         (FunnelConfig, FunnelForMultipleChoice),
+        (MPNetConfig, MPNetForMultipleChoice),
     ]
 )
 
@@ -1366,6 +1439,106 @@ class AutoModelForQuestionAnswering:
                 config.__class__,
                 cls.__name__,
                 ", ".join(c.__name__ for c in MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys()),
+            )
+        )
+
+
+class AutoModelForTableQuestionAnswering:
+    r"""
+    This is a generic model class that will be instantiated as one of the model classes of the library---with a table
+    question answering head---when created with the when created with the
+    :meth:`~transformers.AutoModeForTableQuestionAnswering.from_pretrained` class method or the
+    :meth:`~transformers.AutoModelForTableQuestionAnswering.from_config` class method.
+
+    This class cannot be instantiated directly using ``__init__()`` (throws an error).
+    """
+
+    def __init__(self):
+        raise EnvironmentError(
+            "AutoModelForQuestionAnswering is designed to be instantiated "
+            "using the `AutoModelForTableQuestionAnswering.from_pretrained(pretrained_model_name_or_path)` or "
+            "`AutoModelForTableQuestionAnswering.from_config(config)` methods."
+        )
+
+    @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING, use_model_types=False)
+    def from_config(cls, config):
+        r"""
+        Instantiates one of the model classes of the library---with a table question answering head---from a
+        configuration.
+
+        Note:
+            Loading a model from its configuration file does **not** load the model weights. It only affects the
+            model's configuration. Use :meth:`~transformers.AutoModelForTableQuestionAnswering.from_pretrained` to load
+            the model weights.
+
+        Args:
+            config (:class:`~transformers.PretrainedConfig`):
+                The model class to instantiate is selected based on the configuration class:
+
+                List options
+
+        Examples::
+
+            >>> from transformers import AutoConfig, AutoModelForTableQuestionAnswering
+            >>> # Download configuration from huggingface.co and cache.
+            >>> config = AutoConfig.from_pretrained('google/tapas-base-finetuned-wtq')
+            >>> model = AutoModelForTableQuestionAnswering.from_config(config)
+        """
+        if type(config) in MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING.keys():
+            return MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING[type(config)](config)
+
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__,
+                cls.__name__,
+                ", ".join(c.__name__ for c in MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING.keys()),
+            )
+        )
+
+    @classmethod
+    @replace_list_option_in_docstrings(MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING)
+    @add_start_docstrings(
+        "Instantiate one of the model classes of the library---with a table question answering head---from a "
+        "pretrained model.",
+        AUTO_MODEL_PRETRAINED_DOCSTRING,
+    )
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        r"""
+        Examples::
+
+            >>> from transformers import AutoConfig, AutoModelForTableQuestionAnswering
+
+            >>> # Download model and configuration from huggingface.co and cache.
+            >>> model = AutoModelForTableQuestionAnswering.from_pretrained('google/tapas-base-finetuned-wtq')
+
+            >>> # Update configuration during loading
+            >>> model = AutoModelForTableQuestionAnswering.from_pretrained('google/tapas-base-finetuned-wtq', output_attentions=True)
+            >>> model.config.output_attentions
+            True
+
+            >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
+            >>> config = AutoConfig.from_json_file('./tf_model/tapas_tf_checkpoint.json')
+            >>> model = AutoModelForQuestionAnswering.from_pretrained('./tf_model/tapas_tf_checkpoint.ckpt.index', from_tf=True, config=config)
+        """
+        config = kwargs.pop("config", None)
+        if not isinstance(config, PretrainedConfig):
+            config, kwargs = AutoConfig.from_pretrained(
+                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+            )
+
+        if type(config) in MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING.keys():
+            return MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING[type(config)].from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **kwargs
+            )
+
+        raise ValueError(
+            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
+            "Model type should be one of {}.".format(
+                config.__class__,
+                cls.__name__,
+                ", ".join(c.__name__ for c in MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING.keys()),
             )
         )
 

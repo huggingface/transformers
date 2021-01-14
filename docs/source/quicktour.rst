@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Quick tour
 =======================================================================================================================
 
@@ -146,7 +158,7 @@ Using the tokenizer
 
 We mentioned the tokenizer is responsible for the preprocessing of your texts. First, it will split a given text in
 words (or part of words, punctuation symbols, etc.) usually called `tokens`. There are multiple rules that can govern
-that process (you can learn more about them in the :doc:`tokenizer summary <tokenizer_summary>`, which is why we need
+that process (you can learn more about them in the :doc:`tokenizer summary <tokenizer_summary>`), which is why we need
 to instantiate the tokenizer using the name of the model, to make sure we use the same rules as when the model was
 pretrained.
 
@@ -182,6 +194,7 @@ and get tensors back. You can specify all of that to the tokenizer:
     ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
     ...     padding=True,
     ...     truncation=True,
+    ...     max_length=512,
     ...     return_tensors="pt"
     ... )
     >>> ## TENSORFLOW CODE
@@ -189,6 +202,7 @@ and get tensors back. You can specify all of that to the tokenizer:
     ...     ["We are very happy to show you the 🤗 Transformers library.", "We hope you don't hate it."],
     ...     padding=True,
     ...     truncation=True,
+    ...     max_length=512,
     ...     return_tensors="tf"
     ... )
 

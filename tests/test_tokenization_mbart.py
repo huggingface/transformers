@@ -1,23 +1,33 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import tempfile
 import unittest
 
 from transformers import SPIECE_UNDERLINE, BatchEncoding, MBartTokenizer, MBartTokenizerFast, is_torch_available
-from transformers.testing_utils import (
-    _sentencepiece_available,
-    require_sentencepiece,
-    require_tokenizers,
-    require_torch,
-)
+from transformers.file_utils import is_sentencepiece_available
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
-if _sentencepiece_available:
+if is_sentencepiece_available():
     from .test_tokenization_xlm_roberta import SAMPLE_VOCAB
 
 
 if is_torch_available():
-    from transformers.models.bart.modeling_bart import shift_tokens_right
+    from transformers.models.mbart.modeling_mbart import shift_tokens_right
 
 EN_CODE = 250004
 RO_CODE = 250020
@@ -182,6 +192,7 @@ class MBartEnroIntegrationTest(unittest.TestCase):
             self.src_text, tgt_texts=self.tgt_text, return_tensors="pt"
         )
         batch["decoder_input_ids"] = shift_tokens_right(batch.labels, self.tokenizer.pad_token_id)
+
         for k in batch:
             batch[k] = batch[k].tolist()
         # batch = {k: v.tolist() for k,v in batch.items()}

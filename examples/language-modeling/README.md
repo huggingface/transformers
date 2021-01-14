@@ -1,3 +1,19 @@
+<!---
+Copyright 2020 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
 ## Language model training
 
 Fine-tuning (or training from scratch) the library models for language modeling on a text dataset for GPT, GPT-2,
@@ -9,8 +25,7 @@ objectives in our [model summary](https://huggingface.co/transformers/model_summ
 These scripts leverage the 🤗 Datasets library and the Trainer API. You can easily customize them to your needs if you
 need extra processing on your datasets.
 
-**Note:** The old script `run_language_modeling.py` is still available
-[here](https://github.com/huggingface/transformers/blob/master/examples/contrib/legacy/run_language_modeling.py).
+**Note:** The old script `run_language_modeling.py` is still available [here](https://github.com/huggingface/transformers/blob/master/examples/legacy/run_language_modeling.py).
 
 The following examples, will run on a datasets hosted on our [hub](https://huggingface.co/datasets) or with your own
 text files for training and validation. We give examples of both below.

@@ -33,7 +33,7 @@ from ...file_utils import (
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithPastAndCrossAttentions,
+    CausalLMOutputWithCrossAttentions,
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_utils import (
@@ -184,9 +184,9 @@ class Attention(nn.Module):
         if head_mask is not None:
             w = w * head_mask
 
-        outputs = [torch.matmul(w, v)]
+        outputs = (torch.matmul(w, v),)
         if output_attentions:
-            outputs.append(w)
+            outputs += (w,)
         return outputs
 
     def merge_heads(self, x):
@@ -234,7 +234,7 @@ class Attention(nn.Module):
         if use_cache is True:
             present = torch.stack((key.transpose(-2, -1), value))  # transpose to have same shapes for stacking
         else:
-            present = (None,)
+            present = None
 
         attn_outputs = self._attn(query, key, value, attention_mask, head_mask, output_attentions)
         a = attn_outputs[0]
@@ -243,8 +243,7 @@ class Attention(nn.Module):
         a = self.c_proj(a)
         a = self.resid_dropout(a)
 
-        outputs = [a, present] + attn_outputs[1:]
-        return outputs  # a, present, (attentions)
+        return (a, present) + attn_outputs[1:]  # a, present, (attentions)
 
 
 class MLP(nn.Module):
@@ -321,7 +320,11 @@ class Block(nn.Module):
         # residual connection
         hidden_states = hidden_states + feed_forward_hidden_states
 
-        outputs = [hidden_states] + outputs
+        if use_cache:
+            outputs = (hidden_states,) + outputs
+        else:
+            outputs = (hidden_states,) + outputs[1:]
+
         return outputs  # hidden_states, present, (attentions, cross_attentions)
 
 
@@ -334,6 +337,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
     config_class = GPT2Config
     load_tf_weights = load_tf_weights_in_gpt2
     base_model_prefix = "transformer"
+    is_parallelizable = True
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -476,6 +480,8 @@ GPT2_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 PARALLELIZE_DOCSTRING = r"""
+    This is an experimental feature and is a subject to change at a moment's notice.
+
     Uses a device map to distribute attention modules of the model across several devices. If no device map is given,
     it will evenly distribute blocks across all devices.
 
@@ -740,14 +746,14 @@ class GPT2Model(GPT2PreTrainedModel):
                     output_attentions=output_attentions,
                 )
 
-            hidden_states, present = outputs[:2]
+            hidden_states = outputs[0]
             if use_cache is True:
-                presents = presents + (present,)
+                presents = presents + (outputs[1],)
 
             if output_attentions:
-                all_self_attentions = all_self_attentions + (outputs[2],)
+                all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
                 if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (outputs[3],)
+                    all_cross_attentions = all_cross_attentions + (outputs[3 if use_cache else 2],)
 
             # Model Parallel: If it's the last layer for that device, put things on the next device
             if self.model_parallel:
@@ -816,6 +822,9 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     def get_output_embeddings(self):
         return self.lm_head
 
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
     def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
@@ -848,7 +857,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="gpt2",
-        output_type=CausalLMOutputWithPastAndCrossAttentions,
+        output_type=CausalLMOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -913,7 +922,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             output = (lm_logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return CausalLMOutputWithPastAndCrossAttentions(
+        return CausalLMOutputWithCrossAttentions(
             loss=loss,
             logits=lm_logits,
             past_key_values=transformer_outputs.past_key_values,
@@ -944,6 +953,9 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
 
     def get_output_embeddings(self):
         return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
 
     def prepare_inputs_for_generation(self, input_ids, past=None, **kwargs):
         token_type_ids = kwargs.get("token_type_ids", None)
@@ -1030,7 +1042,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             >>> mc_token_ids = torch.tensor([cls_token_location])  # Batch size: 1
 
             >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
-            >>> lm_logits = outputs.lm_logits
+            >>> lm_logits = outputs.logits
             >>> mc_logits = outputs.mc_logits
 
         """

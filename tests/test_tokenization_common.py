@@ -83,6 +83,7 @@ class TokenizerTesterMixin:
     from_pretrained_kwargs = None
     from_pretrained_filter = None
     from_pretrained_vocab_key = "vocab_file"
+    test_seq2seq = True
 
     def setUp(self) -> None:
         # Tokenizer.filter makes it possible to filter which Tokenizer to case based on all the
@@ -584,7 +585,7 @@ class TokenizerTesterMixin:
 
                 # We want to have sequence 0 and sequence 1 are tagged
                 # respectively with 0 and 1 token_ids
-                # (regardeless of weither the model use token type ids)
+                # (regardless of whether the model use token type ids)
                 # We use this assumption in the QA pipeline among other place
                 output = tokenizer(seq_0, return_token_type_ids=True)
                 self.assertIn(0, output["token_type_ids"])
@@ -600,7 +601,7 @@ class TokenizerTesterMixin:
 
                 # We want to have sequence 0 and sequence 1 are tagged
                 # respectively with 0 and 1 token_ids
-                # (regardeless of weither the model use token type ids)
+                # (regardless of whether the model use token type ids)
                 # We use this assumption in the QA pipeline among other place
                 output = tokenizer(seq_0)
                 self.assertIn(0, output.sequence_ids())
@@ -666,11 +667,28 @@ class TokenizerTesterMixin:
                                 self.assertEqual(len(output["input_ids"][0]), model_max_length)
 
                         # Simple with no truncation
-                        output = tokenizer(seq_1, padding=padding_state, truncation=False)
-                        self.assertNotEqual(len(output["input_ids"]), model_max_length)
+                        # Reset warnings
+                        tokenizer.deprecation_warnings = {}
+                        with self.assertLogs("transformers", level="WARNING") as cm:
+                            output = tokenizer(seq_1, padding=padding_state, truncation=False)
+                            self.assertNotEqual(len(output["input_ids"]), model_max_length)
+                        self.assertEqual(len(cm.records), 1)
+                        self.assertTrue(
+                            cm.records[0].message.startswith(
+                                "Token indices sequence length is longer than the specified maximum sequence length for this model"
+                            )
+                        )
 
-                        output = tokenizer([seq_1], padding=padding_state, truncation=False)
-                        self.assertNotEqual(len(output["input_ids"][0]), model_max_length)
+                        tokenizer.deprecation_warnings = {}
+                        with self.assertLogs("transformers", level="WARNING") as cm:
+                            output = tokenizer([seq_1], padding=padding_state, truncation=False)
+                            self.assertNotEqual(len(output["input_ids"][0]), model_max_length)
+                        self.assertEqual(len(cm.records), 1)
+                        self.assertTrue(
+                            cm.records[0].message.startswith(
+                                "Token indices sequence length is longer than the specified maximum sequence length for this model"
+                            )
+                        )
 
                 # Overflowing tokens
                 stride = 2
@@ -770,11 +788,28 @@ class TokenizerTesterMixin:
                         self.assertEqual(len(output["input_ids"][0]), model_max_length)
 
                         # Simple with no truncation
-                        output = tokenizer(seq_1, seq_2, padding=padding_state, truncation=False)
-                        self.assertNotEqual(len(output["input_ids"]), model_max_length)
+                        # Reset warnings
+                        tokenizer.deprecation_warnings = {}
+                        with self.assertLogs("transformers", level="WARNING") as cm:
+                            output = tokenizer(seq_1, seq_2, padding=padding_state, truncation=False)
+                            self.assertNotEqual(len(output["input_ids"]), model_max_length)
+                        self.assertEqual(len(cm.records), 1)
+                        self.assertTrue(
+                            cm.records[0].message.startswith(
+                                "Token indices sequence length is longer than the specified maximum sequence length for this model"
+                            )
+                        )
 
-                        output = tokenizer([seq_1], [seq_2], padding=padding_state, truncation=False)
-                        self.assertNotEqual(len(output["input_ids"][0]), model_max_length)
+                        tokenizer.deprecation_warnings = {}
+                        with self.assertLogs("transformers", level="WARNING") as cm:
+                            output = tokenizer([seq_1], [seq_2], padding=padding_state, truncation=False)
+                            self.assertNotEqual(len(output["input_ids"][0]), model_max_length)
+                        self.assertEqual(len(cm.records), 1)
+                        self.assertTrue(
+                            cm.records[0].message.startswith(
+                                "Token indices sequence length is longer than the specified maximum sequence length for this model"
+                            )
+                        )
 
                 truncated_first_sequence = tokenizer.encode(seq_0, add_special_tokens=False)[:-2] + tokenizer.encode(
                     seq_1, add_special_tokens=False
@@ -1765,10 +1800,11 @@ class TokenizerTesterMixin:
 
     @require_torch
     def test_prepare_seq2seq_batch(self):
+        if not self.test_seq2seq:
+            return
+
         tokenizer = self.get_tokenizer()
 
-        if not hasattr(tokenizer, "prepare_seq2seq_batch"):
-            return
         # Longer text that will definitely require truncation.
         src_text = [
             " UN Chief Says There Is No Military Solution in Syria",

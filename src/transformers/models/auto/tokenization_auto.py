@@ -24,7 +24,8 @@ from ..bart.tokenization_bart import BartTokenizer
 from ..bert.tokenization_bert import BertTokenizer
 from ..bert_japanese.tokenization_bert_japanese import BertJapaneseTokenizer
 from ..bertweet.tokenization_bertweet import BertweetTokenizer
-from ..blenderbot.tokenization_blenderbot import BlenderbotSmallTokenizer
+from ..blenderbot.tokenization_blenderbot import BlenderbotTokenizer
+from ..blenderbot_small.tokenization_blenderbot_small import BlenderbotSmallTokenizer
 from ..ctrl.tokenization_ctrl import CTRLTokenizer
 from ..deberta.tokenization_deberta import DebertaTokenizer
 from ..distilbert.tokenization_distilbert import DistilBertTokenizer
@@ -36,9 +37,11 @@ from ..funnel.tokenization_funnel import FunnelTokenizer
 from ..gpt2.tokenization_gpt2 import GPT2Tokenizer
 from ..herbert.tokenization_herbert import HerbertTokenizer
 from ..layoutlm.tokenization_layoutlm import LayoutLMTokenizer
+from ..led.tokenization_led import LEDTokenizer
 from ..longformer.tokenization_longformer import LongformerTokenizer
 from ..lxmert.tokenization_lxmert import LxmertTokenizer
 from ..mobilebert.tokenization_mobilebert import MobileBertTokenizer
+from ..mpnet.tokenization_mpnet import MPNetTokenizer
 from ..openai.tokenization_openai import OpenAIGPTTokenizer
 from ..phobert.tokenization_phobert import PhobertTokenizer
 from ..prophetnet.tokenization_prophetnet import ProphetNetTokenizer
@@ -46,6 +49,7 @@ from ..rag.tokenization_rag import RagTokenizer
 from ..retribert.tokenization_retribert import RetriBertTokenizer
 from ..roberta.tokenization_roberta import RobertaTokenizer
 from ..squeezebert.tokenization_squeezebert import SqueezeBertTokenizer
+from ..tapas.tokenization_tapas import TapasTokenizer
 from ..transfo_xl.tokenization_transfo_xl import TransfoXLTokenizer
 from ..xlm.tokenization_xlm import XLMTokenizer
 from .configuration_auto import (
@@ -55,6 +59,7 @@ from .configuration_auto import (
     BertConfig,
     BertGenerationConfig,
     BlenderbotConfig,
+    BlenderbotSmallConfig,
     CamembertConfig,
     CTRLConfig,
     DebertaConfig,
@@ -67,11 +72,13 @@ from .configuration_auto import (
     FunnelConfig,
     GPT2Config,
     LayoutLMConfig,
+    LEDConfig,
     LongformerConfig,
     LxmertConfig,
     MarianConfig,
     MBartConfig,
     MobileBertConfig,
+    MPNetConfig,
     MT5Config,
     OpenAIGPTConfig,
     PegasusConfig,
@@ -82,6 +89,7 @@ from .configuration_auto import (
     RobertaConfig,
     SqueezeBertConfig,
     T5Config,
+    TapasConfig,
     TransfoXLConfig,
     XLMConfig,
     XLMProphetNetConfig,
@@ -98,6 +106,7 @@ if is_sentencepiece_available():
     from ..camembert.tokenization_camembert import CamembertTokenizer
     from ..marian.tokenization_marian import MarianTokenizer
     from ..mbart.tokenization_mbart import MBartTokenizer
+    from ..mt5 import MT5Tokenizer
     from ..pegasus.tokenization_pegasus import PegasusTokenizer
     from ..reformer.tokenization_reformer import ReformerTokenizer
     from ..t5.tokenization_t5 import T5Tokenizer
@@ -111,6 +120,7 @@ else:
     CamembertTokenizer = None
     MarianTokenizer = None
     MBartTokenizer = None
+    MT5Tokenizer = None
     PegasusTokenizer = None
     ReformerTokenizer = None
     T5Tokenizer = None
@@ -131,10 +141,13 @@ if is_tokenizers_available():
     from ..gpt2.tokenization_gpt2_fast import GPT2TokenizerFast
     from ..herbert.tokenization_herbert_fast import HerbertTokenizerFast
     from ..layoutlm.tokenization_layoutlm_fast import LayoutLMTokenizerFast
+    from ..led.tokenization_led_fast import LEDTokenizerFast
     from ..longformer.tokenization_longformer_fast import LongformerTokenizerFast
     from ..lxmert.tokenization_lxmert_fast import LxmertTokenizerFast
     from ..mbart.tokenization_mbart_fast import MBartTokenizerFast
     from ..mobilebert.tokenization_mobilebert_fast import MobileBertTokenizerFast
+    from ..mpnet.tokenization_mpnet_fast import MPNetTokenizerFast
+    from ..mt5 import MT5TokenizerFast
     from ..openai.tokenization_openai_fast import OpenAIGPTTokenizerFast
     from ..pegasus.tokenization_pegasus_fast import PegasusTokenizerFast
     from ..reformer.tokenization_reformer_fast import ReformerTokenizerFast
@@ -161,6 +174,8 @@ else:
     LxmertTokenizerFast = None
     MBartTokenizerFast = None
     MobileBertTokenizerFast = None
+    MPNetTokenizerFast = None
+    MT5TokenizerFast = None
     OpenAIGPTTokenizerFast = None
     PegasusTokenizerFast = None
     ReformerTokenizerFast = None
@@ -178,7 +193,7 @@ TOKENIZER_MAPPING = OrderedDict(
     [
         (RetriBertConfig, (RetriBertTokenizer, RetriBertTokenizerFast)),
         (T5Config, (T5Tokenizer, T5TokenizerFast)),
-        (MT5Config, (T5Tokenizer, T5TokenizerFast)),
+        (MT5Config, (MT5Tokenizer, MT5TokenizerFast)),
         (MobileBertConfig, (MobileBertTokenizer, MobileBertTokenizerFast)),
         (DistilBertConfig, (DistilBertTokenizer, DistilBertTokenizerFast)),
         (AlbertConfig, (AlbertTokenizer, AlbertTokenizerFast)),
@@ -187,9 +202,9 @@ TOKENIZER_MAPPING = OrderedDict(
         (MBartConfig, (MBartTokenizer, MBartTokenizerFast)),
         (XLMRobertaConfig, (XLMRobertaTokenizer, XLMRobertaTokenizerFast)),
         (MarianConfig, (MarianTokenizer, None)),
-        (BlenderbotConfig, (BlenderbotSmallTokenizer, None)),
+        (BlenderbotSmallConfig, (BlenderbotSmallTokenizer, None)),
+        (BlenderbotConfig, (BlenderbotTokenizer, None)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
-        (BartConfig, (BarthezTokenizer, BarthezTokenizerFast)),
         (BartConfig, (BartTokenizer, BartTokenizerFast)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
@@ -214,6 +229,9 @@ TOKENIZER_MAPPING = OrderedDict(
         (RagConfig, (RagTokenizer, None)),
         (XLMProphetNetConfig, (XLMProphetNetTokenizer, None)),
         (ProphetNetConfig, (ProphetNetTokenizer, None)),
+        (MPNetConfig, (MPNetTokenizer, MPNetTokenizerFast)),
+        (TapasConfig, (TapasTokenizer, None)),
+        (LEDConfig, (LEDTokenizer, LEDTokenizerFast)),
     ]
 )
 
@@ -224,6 +242,7 @@ NO_CONFIG_TOKENIZER = [
     HerbertTokenizer,
     HerbertTokenizerFast,
     PhobertTokenizer,
+    BarthezTokenizer,
 ]
 
 
@@ -365,7 +384,13 @@ class AutoTokenizer:
             if tokenizer_class_fast and (use_fast or tokenizer_class_py is None):
                 return tokenizer_class_fast.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
             else:
-                return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                if tokenizer_class_py is not None:
+                    return tokenizer_class_py.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+                else:
+                    raise ValueError(
+                        "This tokenizer cannot be instantiated. Please make sure you have `sentencepiece` installed "
+                        "in order to use this tokenizer."
+                    )
 
         raise ValueError(
             "Unrecognized configuration class {} to build an AutoTokenizer.\n"

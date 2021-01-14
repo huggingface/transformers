@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Converting Tensorflow Checkpoints
 =======================================================================================================================
 
@@ -15,9 +27,8 @@ BERT
 
 You can convert any TensorFlow checkpoint for BERT (in particular `the pre-trained models released by Google
 <https://github.com/google-research/bert#pre-trained-models>`_\ ) in a PyTorch save file by using the
-`convert_bert_original_tf_checkpoint_to_pytorch.py
-<https://github.com/huggingface/transformers/blob/master/src/transformers/convert_bert_original_tf_checkpoint_to_pytorch.py>`_
-script.
+:prefix_link:`convert_bert_original_tf_checkpoint_to_pytorch.py
+<src/transformers/convert_bert_original_tf_checkpoint_to_pytorch.py>` script.
 
 This CLI takes as input a TensorFlow checkpoint (three files starting with ``bert_model.ckpt``\ ) and the associated
 configuration file (\ ``bert_config.json``\ ), and creates a PyTorch model for this configuration, loads the weights
@@ -54,9 +65,8 @@ ALBERT
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Convert TensorFlow model checkpoints of ALBERT to PyTorch using the
-`convert_albert_original_tf_checkpoint_to_pytorch.py
-<https://github.com/huggingface/transformers/blob/master/src/transformers/convert_bert_original_tf_checkpoint_to_pytorch.py>`_
-script.
+:prefix_link:`convert_albert_original_tf_checkpoint_to_pytorch.py
+<src/transformers/convert_bert_original_tf_checkpoint_to_pytorch.py>` script.
 
 The CLI takes as input a TensorFlow checkpoint (three files starting with ``model.ckpt-best``\ ) and the accompanying
 configuration file (\ ``albert_config.json``\ ), then creates and saves a PyTorch model. To run this conversion you

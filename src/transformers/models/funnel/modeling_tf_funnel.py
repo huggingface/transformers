@@ -14,6 +14,7 @@
 # limitations under the License.
 """ TF 2.0 Funnel model. """
 
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -185,7 +186,7 @@ class TFFunnelAttentionStructure:
         # inputs_embeds has shape batch_size x seq_len x d_model
         # attention_mask and token_type_ids have shape batch_size x seq_len
         self.pooling_mult = 1
-        self.seq_len = seq_len = inputs_embeds.shape[1]
+        self.seq_len = seq_len = shape_list(inputs_embeds)[1]
         position_embeds = self.get_position_embeds(seq_len, dtype=inputs_embeds.dtype, training=training)
         token_type_mat = self.token_type_ids_to_mat(token_type_ids) if token_type_ids is not None else None
         cls_mask = (
@@ -241,7 +242,7 @@ class TFFunnelAttentionStructure:
             inv_freq = 1 / (10000 ** (freq_seq / (self.d_model // 2)))
             # Maximum relative positions for the first input
             rel_pos_id = tf.range(-seq_len * 2, seq_len * 2, 1.0, dtype=dtype)
-            zero_offset = seq_len * 2
+            zero_offset = seq_len * tf.constant(2)
             sinusoid = tf.einsum("i,d->id", rel_pos_id, inv_freq)
             sin_embed = self.sin_dropout(tf.sin(sinusoid), training=training)
             cos_embed = self.cos_dropout(tf.cos(sinusoid), training=training)
@@ -257,9 +258,9 @@ class TFFunnelAttentionStructure:
                 # For block_index = 0 we only need the second one and leave the first one as None.
 
                 # First type
-                if block_index == 0:
-                    position_embeds_pooling = None
-                else:
+                position_embeds_pooling = tf.fill([1], value=-1.0)
+
+                if block_index != 0:
                     pooled_pos = self.stride_pool_pos(pos, block_index)
 
                     # construct rel_pos_id
@@ -267,6 +268,7 @@ class TFFunnelAttentionStructure:
                     rel_pos = self.relative_pos(pos, stride, pooled_pos, shift=2)
                     # rel_pos = tf.expand_dims(rel_pos,1) + zero_offset
                     # rel_pos = tf.broadcast_to(rel_pos, (rel_pos.shape[0], self.d_model))
+                    rel_pos = tf.cast(rel_pos, dtype=zero_offset.dtype)
                     rel_pos = rel_pos + zero_offset
                     position_embeds_pooling = tf.gather(pos_embed, rel_pos, axis=0)
 
@@ -277,6 +279,7 @@ class TFFunnelAttentionStructure:
 
                 # rel_pos = tf.expand_dims(rel_pos,1) + zero_offset
                 # rel_pos = tf.broadcast_to(rel_pos, (rel_pos.shape[0], self.d_model))
+                rel_pos = tf.cast(rel_pos, dtype=zero_offset.dtype)
                 rel_pos = rel_pos + zero_offset
                 position_embeds_no_pooling = tf.gather(pos_embed, rel_pos, axis=0)
 
@@ -298,7 +301,7 @@ class TFFunnelAttentionStructure:
         else:
             return pos_id[::2]
 
-    def relative_pos(self, pos, stride, pooled_pos=None, shift=1):
+    def relative_pos(self, pos, stride, pooled_pos=None, shift=1.0):
         """
         Build the relative positional vector between `pos` and `pooled_pos`.
         """
@@ -306,11 +309,11 @@ class TFFunnelAttentionStructure:
             pooled_pos = pos
 
         ref_point = pooled_pos[0] - pos[0]
-        num_remove = shift * pooled_pos.shape[0]
+        num_remove = shift * tf.cast(shape_list(pooled_pos)[0], dtype=ref_point.dtype)
         max_dist = ref_point + num_remove * stride
         min_dist = pooled_pos[0] - pos[-1]
 
-        return tf.range(max_dist, min_dist - 1, -stride, dtype=tf.int64)
+        return tf.range(max_dist, min_dist - 1, -stride)
 
     def stride_pool(self, tensor, axis):
         """
@@ -330,7 +333,7 @@ class TFFunnelAttentionStructure:
             return type(tensor)(self.stride_pool(x, axis) for x in tensor)
 
         # Deal with negative axis
-        axis %= tensor.shape.ndims
+        axis %= len(shape_list(tensor))
 
         axis_slice = slice(None, -1, 2) if self.separate_cls and self.truncate_seq else slice(None, None, 2)
         enc_slice = [slice(None)] * axis + [axis_slice]
@@ -352,7 +355,7 @@ class TFFunnelAttentionStructure:
             suffix = tensor[:, :-1] if self.truncate_seq else tensor
             tensor = tf.concat([tensor[:, :1], suffix], axis=1)
 
-        ndim = tensor.shape.ndims
+        ndim = len(shape_list(tensor))
         if ndim == 2:
             tensor = tensor[:, :, None]
 
@@ -485,10 +488,14 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
                 "bind,jd->bnij", q_r_attention_2, omega
             )
         else:
-            shift = 2 if q_head.shape[1] != context_len else 1
             # Notations from the paper, appending A.2.1, final formula (https://arxiv.org/abs/2006.03236)
             # Grab the proper positional encoding, shape max_rel_len x d_model
-            r = position_embeds[self.block_index][shift - 1]
+            if shape_list(q_head)[1] != context_len:
+                shift = 2
+                r = position_embeds[self.block_index][1]
+            else:
+                shift = 1
+                r = position_embeds[self.block_index][0]
             # Shape n_head x d_head
             v = self.r_r_bias * self.scale
             # Shape d_model x n_head x d_head
@@ -517,7 +524,7 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
         # Shape batch_size x n_head x seq_len x 2
         token_type_bias = tf.einsum("bind,snd->bnis", q_head + r_s_bias, self.seg_embed)
         # Shape batch_size x n_head x seq_len x context_len
-        new_shape = [batch_size, q_head.shape[2], seq_len, context_len]
+        new_shape = [batch_size, shape_list(q_head)[2], seq_len, context_len]
         token_type_mat = tf.broadcast_to(token_type_mat[:, None], new_shape)
         # Shapes batch_size x n_head x seq_len
         diff_token_type, same_token_type = tf.split(token_type_bias, 2, axis=-1)
@@ -536,7 +543,7 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
         position_embeds, token_type_mat, attention_mask, cls_mask = attention_inputs
 
         batch_size, seq_len, _ = shape_list(query)
-        context_len = key.shape[1]
+        context_len = shape_list(key)[1]
         n_head, d_head = self.n_head, self.d_head
 
         # Shape batch_size x seq_len x n_head x d_head
@@ -652,10 +659,13 @@ class TFFunnelEncoder(tf.keras.layers.Layer):
         for block_index, block in enumerate(self.blocks):
             pooling_flag = shape_list(hidden)[1] > (2 if self.separate_cls else 1)
             pooling_flag = pooling_flag and block_index > 0
+            pooled_hidden = tf.zeros(shape_list(hidden))
+
             if pooling_flag:
                 pooled_hidden, attention_inputs = self.attention_structure.pre_attention_pooling(
                     hidden, attention_inputs
                 )
+
             for (layer_index, layer) in enumerate(block):
                 for repeat_index in range(self.block_repeats[block_index]):
                     do_pooling = (repeat_index == 0) and (layer_index == 0) and pooling_flag
@@ -724,7 +734,7 @@ class TFFunnelDecoder(tf.keras.layers.Layer):
         upsampled_hidden = upsample(
             final_hidden,
             stride=self.stride,
-            target_len=first_block_hidden.shape[1],
+            target_len=shape_list(first_block_hidden)[1],
             separate_cls=self.separate_cls,
             truncate_seq=self.truncate_seq,
         )
@@ -764,6 +774,8 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
+        self.config = config
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.return_dict = config.use_return_dict
@@ -776,7 +788,7 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.shape[0]
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
@@ -795,6 +807,7 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -805,13 +818,6 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
             training=training,
             kwargs_call=kwargs,
         )
-        output_attentions = (
-            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        )
-        output_hidden_states = (
-            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
-        )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -835,9 +841,9 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
             inputs["inputs_embeds"],
             attention_mask=inputs["attention_mask"],
             token_type_ids=inputs["token_type_ids"],
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
 
@@ -852,6 +858,8 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
+        self.config = config
         self.block_sizes = config.block_sizes
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
@@ -866,7 +874,7 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.shape[0]
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
@@ -885,6 +893,7 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -895,13 +904,6 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
             training=training,
             kwargs_call=kwargs,
         )
-        output_attentions = (
-            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        )
-        output_hidden_states = (
-            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
-        )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -925,9 +927,9 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
             inputs["inputs_embeds"],
             attention_mask=inputs["attention_mask"],
             token_type_ids=inputs["token_type_ids"],
-            output_attentions=output_attentions,
+            output_attentions=inputs["output_attentions"],
             output_hidden_states=True,
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
 
@@ -936,18 +938,19 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
             first_block_hidden=encoder_outputs[1][self.block_sizes[0]],
             attention_mask=inputs["attention_mask"],
             token_type_ids=inputs["token_type_ids"],
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
         )
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             idx = 0
             outputs = (decoder_outputs[0],)
-            if output_hidden_states:
+            if inputs["output_hidden_states"]:
                 idx += 1
                 outputs = outputs + (encoder_outputs[1] + decoder_outputs[idx],)
-            if output_attentions:
+            if inputs["output_attentions"]:
                 idx += 1
                 outputs = outputs + (encoder_outputs[2] + decoder_outputs[idx],)
             return outputs
@@ -955,9 +958,11 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
         return TFBaseModelOutput(
             last_hidden_state=decoder_outputs[0],
             hidden_states=(encoder_outputs.hidden_states + decoder_outputs.hidden_states)
-            if output_hidden_states
+            if inputs["output_hidden_states"]
             else None,
-            attentions=(encoder_outputs.attentions + decoder_outputs.attentions) if output_attentions else None,
+            attentions=(encoder_outputs.attentions + decoder_outputs.attentions)
+            if inputs["output_attentions"]
+            else None,
         )
 
 
@@ -987,6 +992,20 @@ class TFFunnelMaskedLMHead(tf.keras.layers.Layer):
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
         super().build(input_shape)
+
+    def get_output_embeddings(self):
+        return self.input_embeddings
+
+    def set_output_embeddings(self, value):
+        self.input_embeddings.word_embeddings = value
+        self.input_embeddings.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states, training=False):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
@@ -1162,6 +1181,7 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1172,7 +1192,6 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.funnel.return_dict
 
         return self.funnel(
             input_ids=inputs["input_ids"],
@@ -1181,9 +1200,16 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
+
+    # Copied from transformers.models.distilbert.modeling_tf_distilbert.TFDistilBertModel.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1216,6 +1242,7 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1237,6 +1264,13 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
+
+    # Copied from transformers.models.distilbert.modeling_tf_distilbert.TFDistilBertModel.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1282,6 +1316,7 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1292,7 +1327,6 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.funnel.return_dict
         discriminator_hidden_states = self.funnel(
             inputs["input_ids"],
             inputs["attention_mask"],
@@ -1300,13 +1334,13 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
             inputs["inputs_embeds"],
             inputs["output_attentions"],
             inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         discriminator_sequence_output = discriminator_hidden_states[0]
         logits = self.discriminator_predictions(discriminator_sequence_output)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return (logits,) + discriminator_hidden_states[1:]
 
         return TFFunnelForPreTrainingOutput(
@@ -1314,6 +1348,12 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
             hidden_states=discriminator_hidden_states.hidden_states,
             attentions=discriminator_hidden_states.attentions,
         )
+
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFFunnelForPreTrainingOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings("""Funnel Model with a `language modeling` head on top. """, FUNNEL_START_DOCSTRING)
@@ -1323,6 +1363,13 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
 
         self.funnel = TFFunnelMainLayer(config, name="funnel")
         self.lm_head = TFFunnelMaskedLMHead(config, self.funnel.embeddings, name="lm_head")
+
+    def get_lm_head(self):
+        return self.lm_head
+
+    def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
+        return self.name + "/" + self.lm_head.name
 
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1352,6 +1399,7 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1363,7 +1411,6 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.funnel.return_dict
         outputs = self.funnel(
             inputs["input_ids"],
             inputs["attention_mask"],
@@ -1379,7 +1426,7 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], prediction_scores)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (prediction_scores,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1389,6 +1436,13 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1434,6 +1488,7 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1445,7 +1500,6 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.funnel.return_dict
         outputs = self.funnel(
             inputs["input_ids"],
             inputs["attention_mask"],
@@ -1453,17 +1507,16 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
             inputs["inputs_embeds"],
             inputs["output_attentions"],
             inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
         last_hidden_state = outputs[0]
         pooled_output = last_hidden_state[:, 0]
         logits = self.classifier(pooled_output, training=inputs["training"])
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1473,6 +1526,13 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1527,6 +1587,7 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1538,7 +1599,6 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.funnel.return_dict
 
         if inputs["input_ids"] is not None:
             num_choices = shape_list(inputs["input_ids"])[1]
@@ -1567,7 +1627,7 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
             inputs_embeds=flat_inputs_embeds,
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
 
@@ -1578,7 +1638,7 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], reshaped_logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (reshaped_logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1588,6 +1648,27 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1635,6 +1716,7 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1646,7 +1728,6 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.funnel.return_dict
         outputs = self.funnel(
             inputs["input_ids"],
             inputs["attention_mask"],
@@ -1654,10 +1735,9 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
             inputs["inputs_embeds"],
             inputs["output_attentions"],
             inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
         sequence_output = outputs[0]
 
         sequence_output = self.dropout(sequence_output, training=inputs["training"])
@@ -1665,7 +1745,7 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1675,6 +1755,13 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1727,6 +1814,7 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1739,7 +1827,6 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.funnel.return_dict
         outputs = self.funnel(
             inputs["input_ids"],
             inputs["attention_mask"],
@@ -1747,10 +1834,9 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
             inputs["inputs_embeds"],
             inputs["output_attentions"],
             inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
         sequence_output = outputs[0]
 
         logits = self.qa_outputs(sequence_output)
@@ -1763,7 +1849,7 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
             labels = {"start_position": inputs["start_positions"], "end_position": inputs["end_positions"]}
             loss = self.compute_loss(labels, (start_logits, end_logits))
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (start_logits, end_logits) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1773,4 +1859,13 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
             end_logits=end_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFQuestionAnsweringModelOutput(
+            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
         )

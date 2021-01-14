@@ -15,15 +15,19 @@
 # limitations under the License.
 """ TF 2.0 CTRL model."""
 
+import warnings
+
 import numpy as np
 import tensorflow as tf
 
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
-from ...modeling_tf_outputs import TFBaseModelOutputWithPast, TFCausalLMOutputWithPast
+from ...modeling_tf_outputs import TFBaseModelOutputWithPast, TFCausalLMOutputWithPast, TFSequenceClassifierOutput
 from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
+    TFSequenceClassificationLoss,
     TFSharedEmbeddings,
+    get_initializer,
     input_processing,
     keras_serializable,
     shape_list,
@@ -204,6 +208,8 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
+        self.config = config
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
         self.use_cache = config.use_cache
@@ -238,10 +244,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.w.weight = value
-        self.w.vocab_size = value.shape[0]
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+        self.w.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -267,6 +270,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             past=past,
             attention_mask=attention_mask,
@@ -281,14 +285,6 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             training=training,
             kwargs_call=kwargs,
         )
-        output_attentions = (
-            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        )
-        output_hidden_states = (
-            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
-        )
-        use_cache = inputs["use_cache"] if inputs["use_cache"] is not None else self.use_cache
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
         # If using past key value states, only the last tokens
         # should be given as an input
@@ -375,10 +371,10 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
 
         output_shape = input_shape + [shape_list(hidden_states)[-1]]
         presents = () if inputs["use_cache"] else None
-        all_hidden_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
+        all_hidden_states = () if inputs["output_hidden_states"] else None
+        all_attentions = () if inputs["output_attentions"] else None
         for i, (h, layer_past) in enumerate(zip(self.h, inputs["past"])):
-            if output_hidden_states:
+            if inputs["output_hidden_states"]:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
             outputs = h(
                 hidden_states,
@@ -387,7 +383,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
                 inputs["attention_mask"],
                 inputs["head_mask"][i],
                 inputs["use_cache"],
-                output_attentions,
+                inputs["output_attentions"],
                 training=inputs["training"],
             )
             hidden_states, present = outputs[:2]
@@ -395,20 +391,20 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             if inputs["use_cache"]:
                 presents = presents + (present,)
 
-            if output_attentions:
+            if inputs["output_attentions"]:
                 all_attentions = all_attentions + (outputs[2],)
 
         hidden_states = self.layernorm(hidden_states)
         hidden_states = tf.reshape(hidden_states, output_shape)
-        if output_hidden_states:
+        if inputs["output_hidden_states"]:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if output_attentions:
+        if inputs["output_attentions"]:
             # let the number of heads free (-1) so we can extract attention even after head pruning
             attention_output_shape = input_shape[:-1] + [-1] + shape_list(all_attentions[0])[-2:]
             all_attentions = tuple(tf.reshape(t, attention_output_shape) for t in all_attentions)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return tuple(v for v in [hidden_states, presents, all_hidden_states, all_attentions] if v is not None)
 
         return TFBaseModelOutputWithPast(
@@ -566,6 +562,7 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             past=past,
             attention_mask=attention_mask,
@@ -596,6 +593,16 @@ class TFCTRLModel(TFCTRLPreTrainedModel):
         )
         return outputs
 
+    # Copied from transformers.models.gpt2.modeling_tf_gpt2.TFGPT2Model.serving_output
+    def serving_output(self, output):
+        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutputWithPast(
+            last_hidden_state=output.last_hidden_state, past_key_values=pkv, hidden_states=hs, attentions=attns
+        )
+
 
 class TFCTRLLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
@@ -609,6 +616,20 @@ class TFCTRLLMHead(tf.keras.layers.Layer):
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
         super().build(input_shape)
+
+    def get_output_embeddings(self):
+        return self.input_embeddings
+
+    def set_output_embeddings(self, value):
+        self.input_embeddings.weight = value
+        self.input_embeddings.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
@@ -630,8 +651,12 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
 
         self.lm_head = TFCTRLLMHead(config, self.transformer.w, name="lm_head")
 
-    def get_output_embeddings(self):
-        return self.lm_head.input_embeddings
+    def get_lm_head(self):
+        return self.lm_head
+
+    def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
+        return self.name + "/" + self.lm_head.name
 
     def prepare_inputs_for_generation(self, inputs, past, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
@@ -671,6 +696,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             past=past,
             attention_mask=attention_mask,
@@ -686,7 +712,6 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.transformer.return_dict
         transformer_outputs = self.transformer(
             input_ids=inputs["input_ids"],
             past=inputs["past"],
@@ -698,7 +723,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
             use_cache=inputs["use_cache"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
 
@@ -713,7 +738,7 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
             labels = inputs["labels"][:, 1:]
             loss = self.compute_loss(labels, logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -724,3 +749,175 @@ class TFCTRLLMHeadModel(TFCTRLPreTrainedModel, TFCausalLanguageModelingLoss):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+    # Copied from transformers.models.gpt2.modeling_tf_gpt2.TFGPT2LMHeadModel.serving_output
+    def serving_output(self, output):
+        pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFCausalLMOutputWithPast(logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns)
+
+
+@add_start_docstrings(
+    """
+    The CTRL Model transformer with a sequence classification head on top (linear layer).
+
+    :class:`~transformers.TFCTRLForSequenceClassification` uses the last token in order to do the classification, as
+    other causal models (e.g. GPT-1, GPT-2) do.
+
+    Since it does classification on the last token, it requires to know the position of the last token. If a
+    :obj:`pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each
+    row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot
+    guess the padding tokens when :obj:`inputs_embeds` are passed instead of :obj:`input_ids`, it does the same (take
+    the last value in each row of the batch).
+    """,
+    CTRL_START_DOCSTRING,
+)
+class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassificationLoss):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+        self.classifier = tf.keras.layers.Dense(
+            config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="classifier",
+            use_bias=False,
+        )
+        self.transformer = TFCTRLMainLayer(config, name="transformer")
+
+    def get_output_embeddings(self):
+        return self.transformer.w
+
+    @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="ctrl",
+        output_type=TFSequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(
+        self,
+        input_ids=None,
+        past=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        labels=None,
+        training=False,
+        **kwargs,
+    ):
+        r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the cross entropy classification loss. Indices should be in ``[0, ...,
+            config.vocab_size - 1]``.
+        """
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
+            past=past,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            labels=labels,
+            training=training,
+            kwargs_call=kwargs,
+        )
+
+        transformer_outputs = self.transformer(
+            input_ids=inputs["input_ids"],
+            past=inputs["past"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            position_ids=inputs["position_ids"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            use_cache=inputs["use_cache"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
+
+        hidden_states = transformer_outputs[0]
+        logits = self.classifier(hidden_states)
+        logits_shape = shape_list(logits)
+        in_logits = None
+        if self.config.pad_token_id is None:
+            sequence_lengths = -1
+        else:
+            if inputs["input_ids"] is not None:
+                sequence_lengths = (
+                    tf.reduce_sum(
+                        tf.cast(tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id), tf.int32),
+                        -1,
+                        keepdims=False,
+                    )
+                    - 1
+                )
+
+                def get_seq_element(sequence_position, input_batch):
+                    return tf.strided_slice(
+                        input_batch, [sequence_position, 0], [sequence_position + 1, input_batch.shape[-1]], [1, 1]
+                    )
+
+                result = tf.map_fn(
+                    fn=lambda t: get_seq_element(t[0], t[1]), elems=[sequence_lengths, logits], dtype="float"
+                )
+                in_logits = tf.reshape(result, [logits_shape[0], logits_shape[-1]])
+            else:
+                sequence_lengths = -1
+                logger.warning(
+                    f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                    f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+                )
+        loss = None
+
+        if inputs["labels"] is not None:
+            if input_ids is not None:
+                batch_size, sequence_length = shape_list(inputs["input_ids"])[:2]
+            else:
+                batch_size, sequence_length = shape_list(inputs["inputs_embeds"])[:2]
+            assert (
+                self.config.pad_token_id is not None or batch_size == 1
+            ), "Cannot handle batch sizes > 1 if no padding token is defined."
+
+            if not tf.is_tensor(sequence_lengths):
+                in_logits = logits[0:batch_size, sequence_lengths]
+
+            loss = self.compute_loss(
+                tf.reshape(inputs["labels"], [-1, 1]), tf.reshape(in_logits, [-1, self.num_labels])
+            )
+
+        pooled_logits = in_logits if in_logits is not None else logits
+
+        if not inputs["return_dict"]:
+            output = (pooled_logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFSequenceClassifierOutput(
+            loss=loss,
+            logits=pooled_logits,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
