@@ -34,7 +34,7 @@ jobs:
           conda install -c defaults anaconda-client conda-build
 
       - name: Extract version
-        run: echo "TRANSFORMERS_VERSION=`python setup.py --version`" >> $GITHUB_ENV
+        run: echo "TRANSFORMERS_VERSION=4.2.0" >> $GITHUB_ENV
 
       - name: Build conda packages
         run: |
@@ -43,4 +43,4 @@ jobs:
           conda-build .github/conda
 
       - name: Upload to Anaconda
-        run: anaconda upload `conda build .github/conda --output` --force
+        run: anaconda upload `conda-build .github/conda --output` --force
